@@ -1,0 +1,30 @@
+[package]
+name = "rust-app-template"
+version = "0.1.0"
+authors = ["Remco Bloemen <remco@wicked.ventures>"]
+edition = "2018"
+build = "build.rs"
+homepage = "https://github.com/Recmo/rust-app-template"
+repository = "https://github.com/Recmo/rust-app-template"
+description = "Template for running Rust in GKE"
+readme = "Readme.md"
+
+[dependencies]
+anyhow = "1.0"
+env_logger = "0.8"
+futures = "0.3"
+hyper = "0.13"
+log = "0.4"
+tokio = { version = "0.3", features = ["macros", "rt-multi-thread", "signal"] }
+tokio-compat-02 = "0.1"
+structopt = "0.3"
+
+[build-dependencies]
+anyhow = "1.0"
+chrono = "0.4"
+
+# Compilation profile for any non-workspace member.
+# Dependencies are optimized, even in a dev build. This improves dev performance
+# while having neglible impact on incremental build times.
+[profile.dev.package."*"]
+opt-level = 3

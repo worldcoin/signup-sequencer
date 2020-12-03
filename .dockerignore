@@ -1,0 +1,5 @@
+.cargo/
+.git/
+target/
+
+# TODO: Ignoring .git breaks vergen in build.rs.

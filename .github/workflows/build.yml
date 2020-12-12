@@ -28,10 +28,16 @@ jobs:
         with:
           toolchain: nightly
           override: true
-      - uses: actions-rs/cargo@v1
+      - name: Build and run tests
+        uses: actions-rs/cargo@v1
         with:
           command: test
           args: --all-features --all-targets
+      - name: Build and test benchmarks
+        uses: actions-rs/cargo@v1
+        with:
+          command: bench
+          args: --bench criterion --features bench -- --test
 
   rustfmt:
     name: Rustfmt

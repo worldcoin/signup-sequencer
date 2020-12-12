@@ -2,7 +2,7 @@ on: [push, pull_request]
 name: build
 jobs:
   build:
-    name: Build release
+    name: Build (release)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -11,7 +11,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           override: true
       - uses: actions-rs/cargo@v1
         with:
@@ -19,7 +18,7 @@ jobs:
           args: --all-features --all-targets --release
 
   test:
-    name: Test Suite
+    name: Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -28,7 +27,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           override: true
       - uses: actions-rs/cargo@v1
         with:
@@ -45,7 +43,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           override: true
           components: rustfmt
       - name: Check formatting
@@ -64,7 +61,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           override: true
           components: clippy
       - uses: actions-rs/clippy-check@v1

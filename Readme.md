@@ -1,9 +1,10 @@
 # Rust project template
 
-![Lines of code](https://img.shields.io/tokei/lines/github/recmo/rust-app-template)
+![lines of code](https://img.shields.io/tokei/lines/github/recmo/rust-app-template)
 [![dependency status](https://deps.rs/repo/github/recmo/rust-app-template/status.svg)](https://deps.rs/repo/github/recmo/rust-app-template)
-[![Codecov](https://img.shields.io/codecov/c/github/recmo/rust-app-template)](https://codecov.io/gh/Recmo/rust-app-template)
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/recmo/rust-app-template/Build%20and%20Deploy%20to%20GKE?label=deploy)](https://github.com/Recmo/rust-app-template/actions?query=workflow%3A%22Build+and+Deploy+to+GKE%22)
+[![codecov](https://img.shields.io/codecov/c/github/recmo/rust-app-template)](https://codecov.io/gh/Recmo/rust-app-template)
+[![build](https://img.shields.io/github/workflow/status/recmo/rust-app-template/build)](https://github.com/Recmo/rust-app-template/actions?query=workflow%3Abuild)
+[![deploy-gke](https://img.shields.io/github/workflow/status/recmo/rust-app-template/deploy-gke)](https://github.com/Recmo/rust-app-template/actions?query=workflow%3Adeploy-gke)
 
 
 *Template to run a Rust executable in Google Kubernetes Engine using Github Actions for deployment.*

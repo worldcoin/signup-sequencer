@@ -1,6 +1,6 @@
 # See https://github.com/marketplace/actions/rust-clippy-check
 on: push
-name: Clippy check
+name: build
 jobs:
   clippy_check:
     runs-on: ubuntu-latest

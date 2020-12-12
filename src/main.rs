@@ -80,3 +80,29 @@ fn main() -> Result<()> {
     info!("program stopping normally");
     Ok(())
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use float_eq::assert_float_eq;
+    use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
+
+    #[test]
+    fn parse_args() {
+        let cmd = "hello -vvv";
+        let options = Options::from_iter_safe(cmd.split(' ')).unwrap();
+        assert_eq!(options, Options {
+            verbose: 3,
+            command: None,
+        });
+    }
+
+    #[test]
+    fn add_commutative() {
+        proptest!(|(a in 0.0..1.0, b in 0.0..1.0)| {
+            let first: f64 = a + b; 
+            assert_float_eq!(first, b + a, ulps <= 0);
+        })
+    }
+}

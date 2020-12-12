@@ -1,5 +1,6 @@
 .cargo/
 .git/
 target/
+*.profraw
 
 # TODO: Ignoring .git breaks vergen in build.rs.

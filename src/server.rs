@@ -43,3 +43,28 @@ pub async fn async_main() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use float_eq::assert_float_eq;
+    use futures::stream::{self, StreamExt, TryStreamExt};
+    use hyper::{
+        body::{to_bytes, HttpBody},
+        Request,
+    };
+    use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
+
+    #[tokio::test]
+    async fn test_hello_world() {
+        let request = Request::builder()
+            .uri("https://www.rust-lang.org/")
+            .header("User-Agent", "my-awesome-agent/1.0")
+            .body(Body::empty())
+            .unwrap();
+        let response = hello_world(request).await.unwrap();
+        let bytes = to_bytes(response.into_body()).await.unwrap();
+        assert_eq!(bytes.as_ref(), b"Hello, World!\n");
+    }
+}

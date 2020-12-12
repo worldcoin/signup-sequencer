@@ -63,7 +63,7 @@ fn main() -> Result<()> {
     // Log version
     info!(
         "{name} {version} {commit}",
-        name = env!("CARGO_BIN_NAME"),
+        name = env!("CARGO_CRATE_NAME"),
         version = env!("CARGO_PKG_VERSION"),
         commit = &env!("COMMIT_SHA")[..8],
     );
@@ -105,4 +105,9 @@ mod test {
             assert_float_eq!(first, b + a, ulps <= 0);
         })
     }
+}
+
+#[cfg(feature = "bench")]
+pub fn bench_main(c: &mut criterion::Criterion) {
+    server::bench::group(c);
 }

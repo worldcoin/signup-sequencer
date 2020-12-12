@@ -58,13 +58,33 @@ mod test {
 
     #[tokio::test]
     async fn test_hello_world() {
-        let request = Request::builder()
-            .uri("https://www.rust-lang.org/")
-            .header("User-Agent", "my-awesome-agent/1.0")
-            .body(Body::empty())
-            .unwrap();
+        let request = Request::new(Body::empty());
         let response = hello_world(request).await.unwrap();
         let bytes = to_bytes(response.into_body()).await.unwrap();
         assert_eq!(bytes.as_ref(), b"Hello, World!\n");
+    }
+}
+#[cfg(feature = "bench")]
+pub(crate) mod bench {
+    use super::*;
+    use criterion::{black_box, Criterion};
+    use futures::executor::block_on;
+    use hyper::body::to_bytes;
+
+    pub(crate) fn group(c: &mut Criterion) {
+        bench_hello_world(c);
+    }
+
+    fn bench_hello_world(c: &mut Criterion) {
+        c.bench_function("bench_hello_world", |b| {
+            b.iter(|| {
+                block_on(async {
+                    let request = Request::new(Body::empty());
+                    let response = hello_world(request).await.unwrap();
+                    let bytes = to_bytes(response.into_body()).await.unwrap();
+                    drop(black_box(bytes));
+                })
+            })
+        });
     }
 }

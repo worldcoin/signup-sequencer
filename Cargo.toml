@@ -9,6 +9,18 @@ repository = "https://github.com/Recmo/rust-app-template"
 description = "Template for running Rust in GKE"
 readme = "Readme.md"
 
+[features]
+features = [ "bench" ]
+bench = [ "criterion" ]
+
+[lib]
+path = "src/main.rs"
+
+[[bench]]
+name = "criterion"
+harness = false
+required-features = ["bench"]
+
 [dependencies]
 anyhow = "1.0"
 env_logger = "0.8"
@@ -18,11 +30,13 @@ log = "0.4"
 tokio = { version = "0.3", features = ["macros", "rt-multi-thread", "signal"] }
 tokio-compat-02 = "0.1"
 structopt = "0.3"
+criterion = { version = "0.3", optional = true }
 
 [dev-dependencies]
-proptest = "0.10.1"
-float_eq = "0.5.0"
-pretty_assertions = "0.6.1"
+proptest = "0.10"
+float_eq = "0.5"
+pretty_assertions = "0.6"
+criterion = "0.3"
 
 [build-dependencies]
 anyhow = "1.0"

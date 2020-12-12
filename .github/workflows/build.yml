@@ -92,11 +92,13 @@ jobs:
         with:
           crate: rustfilt
           version: latest
+          use-tool-cache: true
       - name: Install cargo-binutils
         uses: actions-rs/install@v0.1
         with:
           crate: cargo-binutils
           version: latest
+          use-tool-cache: true
       - name: Test with coverage
         env:
           RUSTFLAGS: -Zinstrument-coverage

@@ -101,7 +101,7 @@ mod test {
     #[test]
     fn add_commutative() {
         proptest!(|(a in 0.0..1.0, b in 0.0..1.0)| {
-            let first: f64 = a + b; 
+            let first: f64 = a + b;
             assert_float_eq!(first, b + a, ulps <= 0);
         })
     }

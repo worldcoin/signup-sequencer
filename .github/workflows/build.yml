@@ -76,7 +76,7 @@ jobs:
 
   codecov:
     # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
-    name: Code Coverage
+    name: Coverage
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -108,6 +108,21 @@ jobs:
         uses: codecov/codecov-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
+          flags: test
+          fail_ci_if_error: true
+          verbose: true
+      - name: Bench test with coverage
+        env:
+          RUSTFLAGS: -Zinstrument-coverage
+        uses: actions-rs/cargo@v1
+        with:
+          command: bench
+          args: --bench criterion --features bench -- --test
+      - name: Submit to codecov.io
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
+          flags: bench
           fail_ci_if_error: true
           verbose: true
 # TODO: Profiling

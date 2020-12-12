@@ -15,7 +15,8 @@ jobs:
           override: true
       - uses: actions-rs/cargo@v1
         with:
-          command: build --release --all-features --all-targets
+          command: build
+          args: --all-features --all-targets --release
 
   test:
     name: Test Suite
@@ -31,7 +32,8 @@ jobs:
           override: true
       - uses: actions-rs/cargo@v1
         with:
-          command: test --all-features --all-targets
+          command: test
+          args: --all-features --all-targets
 
   rustfmt:
     name: Rustfmt
@@ -65,11 +67,10 @@ jobs:
           profile: minimal
           override: true
           components: clippy
-      - name: Clippy Check
-        uses: actions-rs/cargo@v1
+      - uses: actions-rs/clippy-check@v1
         with:
-          command: clippy
-          args: -- -D warnings
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features --all-targets
 # TODO: Code coverage
 
 # TODO: Profiling

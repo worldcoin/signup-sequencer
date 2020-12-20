@@ -1348,6 +1348,7 @@ dependencies = [
  "futures",
  "hyper",
  "itertools",
+ "num_cpus",
  "pretty_assertions",
  "proptest",
  "rand 0.8.0",

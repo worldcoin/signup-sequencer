@@ -18,19 +18,6 @@
 * Dependencies build optimized, also in dev build.
 * From scratch Docker build statically linked to musl.
 * Github actions for build, test, linting and deployment to Google Kubernetes Engine.
-
-TODO:
-
-* Code coverage in CI
-* Build cache in CI
-* no_std support, CI test using no-std target.
-* To do scraper in CI.
-* `--threads` cli argument for Rayon worker pool size.
-* `--trace` cli argument for `tracing-chrome`.
-* `--seed` cli argument for deterministic `rand`.
-* Rustdocs with Katex.
-* Long running / fuzz mode for proptests.
-
 ## Setup
 
 The Google Cloud project is taken from the Github Actions secret `GKE_PROJECT`.
@@ -48,11 +35,23 @@ docker pull gcr.io/two-pi-com/rust-app-template-image:latest
 docker run --rm -ti -p 8080:8080 gcr.io/two-pi-com/rust-app-template-image:latest version
 ```
 
+Combining Tokio and Rayon:
+
+<https://www.reddit.com/r/rust/comments/gwm84y/how_can_i_mix_rayon_and_tokio_properly/>
+
 ## To do
 
-* Add badges to readme
-* Add tests and run in CI
-* Add criterion benchmarks and run in CI
+* Code coverage in CI
+* Build cache in CI
+* no_std support, CI test using no-std target.
+* To do scraper in CI.
+* `--threads` cli argument for Rayon worker pool size.
+* `--trace` cli argument for `tracing-chrome`.
+* `--seed` cli argument for deterministic `rand`.
+* Rustdocs with Katex.
+* Long running / fuzz mode for proptests.
+* [`loom`](https://crates.io/crates/loom) support for concurrency testing, maybe [`simulation`](https://github.com/tokio-rs/simulation).
+* Run benchmarks in CI on dedicated machine.
 * Generate documentation in CI
 * Add code coverage to CI
 * Add license, contributing, and other changelogs

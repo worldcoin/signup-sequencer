@@ -15,6 +15,7 @@ pub mod prelude {
 }
 
 use crate::prelude::*;
+use rayon::ThreadPoolBuilder;
 use structopt::StructOpt;
 use tracing_subscriber::FmtSubscriber;
 
@@ -23,6 +24,10 @@ struct Options {
     /// Verbose mode (-v, -vv, -vvv, etc.)
     #[structopt(short, long, parse(from_occurrences))]
     verbose: usize,
+
+    /// Number of compute threads to use (defaults to number of cores)
+    #[structopt(long)]
+    threads: Option<usize>,
 
     #[structopt(subcommand)]
     command: Option<Command>,
@@ -80,6 +85,19 @@ pub fn main() -> Result<()> {
         name = env!("CARGO_CRATE_NAME"),
         version = env!("CARGO_PKG_VERSION"),
         commit = &env!("COMMIT_SHA")[..8],
+    );
+
+    // Configure Rayon thread pool
+    if let Some(threads) = options.threads {
+        ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build_global()
+            .context("Failed to build thread pool.")?;
+    }
+    info!(
+        "Using {} compute threads on {} cores",
+        rayon::current_num_threads(),
+        num_cpus::get()
     );
 
     // Launch Tokio runtime

@@ -2,11 +2,16 @@
 
 mod server;
 
-use anyhow::{Context, Result};
+pub mod prelude {
+    pub use anyhow::{Context, Result};
+    pub use futures::prelude::*;
+    pub use log::{debug, error, info, trace, warn};
+    pub use tokio::prelude::*;
+}
+
+use crate::prelude::*;
 use env_logger;
-use log::info;
 use structopt::StructOpt;
-use tokio;
 
 #[derive(Debug, PartialEq, StructOpt)]
 struct Options {
@@ -82,11 +87,15 @@ fn main() -> Result<()> {
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
+    pub mod prelude {
+        pub use float_eq::assert_float_eq;
+        pub use pretty_assertions::{assert_eq, assert_ne};
+        pub use proptest::prelude::*;
+    }
+
     use super::*;
-    use float_eq::assert_float_eq;
-    use pretty_assertions::assert_eq;
-    use proptest::prelude::*;
+    use crate::test::prelude::{assert_eq, *};
 
     #[test]
     fn parse_args() {
@@ -108,6 +117,17 @@ mod test {
 }
 
 #[cfg(feature = "bench")]
-pub fn bench_main(c: &mut criterion::Criterion) {
-    server::bench::group(c);
+pub mod bench {
+    pub mod prelude {
+        pub use criterion::{black_box, Criterion};
+        pub use futures::executor::block_on;
+    }
+
+    use super::*;
+    use crate::bench::prelude::*;
+
+    #[cfg(feature = "bench")]
+    pub fn main(c: &mut criterion::Criterion) {
+        server::bench::group(c);
+    }
 }

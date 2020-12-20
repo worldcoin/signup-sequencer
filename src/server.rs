@@ -1,12 +1,9 @@
-use anyhow::{Context, Result};
-use futures::{Future, FutureExt as _};
+use crate::prelude::*;
 use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server,
 };
-use log::info;
 use std::{convert::Infallible, net::SocketAddr};
-use tokio;
 use tokio_compat_02::FutureExt as _;
 
 async fn hello_world(_req: Request<Body>) -> std::result::Result<Response<Body>, Infallible> {
@@ -47,14 +44,11 @@ pub async fn async_main() -> Result<()> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use float_eq::assert_float_eq;
-    use futures::stream::{self, StreamExt, TryStreamExt};
+    use crate::test::prelude::{assert_eq, *};
     use hyper::{
         body::{to_bytes, HttpBody},
         Request,
     };
-    use pretty_assertions::assert_eq;
-    use proptest::prelude::*;
 
     #[tokio::test]
     async fn test_hello_world() {
@@ -67,8 +61,7 @@ mod test {
 #[cfg(feature = "bench")]
 pub(crate) mod bench {
     use super::*;
-    use criterion::{black_box, Criterion};
-    use futures::executor::block_on;
+    use crate::bench::prelude::*;
     use hyper::body::to_bytes;
 
     pub(crate) fn group(c: &mut Criterion) {

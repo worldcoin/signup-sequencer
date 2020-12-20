@@ -1,3 +1,7 @@
+[alias]
+criterion = "bench --bench=criterion --features=bench"
+
+# Build speed hacks
 # Source: <https://github.com/bevyengine/bevy/blob/master/.cargo/config_fast_builds>
 
 # NOTE: For maximum performance, build using a nightly compiler

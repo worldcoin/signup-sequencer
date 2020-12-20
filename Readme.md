@@ -14,14 +14,17 @@
 * Logging using `tracing` with `log` and `futures` compatibility, `-v`, `-vv`, etc. command line arguments.
 * Preloaded with `serde`, `rand`, `rayon`, `itertools`.
 * Tests using `proptest`, `pretty_assertions` and `float_eq`.
-* Benchmarks using `criterion`.
+* Benchmarks using `criterion` (run `cargo criterion`).
+* Dependencies build optimized, also in dev build.
 * From scratch Docker build statically linked to musl.
 * Github actions for build, test, linting and deployment to Google Kubernetes Engine.
 
 TODO:
 
 * Code coverage in CI
-* no_std support
+* Build cache in CI
+* no_std support, CI test using no-std target.
+* To do scraper in CI.
 
 ## Setup
 

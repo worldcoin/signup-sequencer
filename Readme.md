@@ -6,12 +6,22 @@
 [![build](https://img.shields.io/github/workflow/status/recmo/rust-app-template/build)](https://github.com/Recmo/rust-app-template/actions?query=workflow%3Abuild)
 [![deploy-gke](https://img.shields.io/github/workflow/status/recmo/rust-app-template/deploy-gke)](https://github.com/Recmo/rust-app-template/actions?query=workflow%3Adeploy-gke)
 
+**Main features.** Comes with the kitchen sink. Remove what you don't need.
 
-*Template to run a Rust executable in Google Kubernetes Engine using Github Actions for deployment.*
+* Command line argument parsing using `StructOpt`.
+* Version info including commit hash.
+* Error handling using `anyhow` and `thiserror`.
+* Logging using `tracing` with `log` and `futures` compatibility, `-v`, `-vv`, etc. command line arguments.
+* Preloaded with `serde`, `rand`, `rayon`, `itertools`.
+* Tests using `proptest`, `pretty_assertions` and `float_eq`.
+* Benchmarks using `criterion`.
+* From scratch Docker build statically linked to musl.
+* Github actions for build, test, linting and deployment to Google Kubernetes Engine.
 
-**Note.** The application will be statically linked with [musl](https://musl.libc.org/) and deployed
-in an otherwise empty container. Crates that dynamically link (for example to OpenSSL) will not work
-without modifying the Dockerfile.
+TODO:
+
+* Code coverage in CI
+* no_std support
 
 ## Setup
 

@@ -5,13 +5,13 @@ mod server;
 pub mod prelude {
     pub use anyhow::{Context, Result};
     pub use futures::prelude::*;
-    pub use log::{debug, error, info, trace, warn};
     pub use tokio::prelude::*;
+    pub use tracing::{debug, error, info, trace, warn};
 }
 
 use crate::prelude::*;
-use env_logger;
 use structopt::StructOpt;
+use tracing_subscriber::FmtSubscriber;
 
 #[derive(Debug, PartialEq, StructOpt)]
 struct Options {
@@ -29,8 +29,8 @@ enum Command {
     Test,
 }
 
-fn main() -> Result<()> {
-    // Parse CLI and handle help and version.
+pub fn main() -> Result<()> {
+    // Parse CLI and handle help and version (which will stop the application).
     #[rustfmt::skip]
     let version = format!("\
         {version} {commit} ({commit_date})\n\
@@ -50,20 +50,24 @@ fn main() -> Result<()> {
     let matches = Options::clap().long_version(version.as_str()).get_matches();
     let options = Options::from_clap(&matches);
 
-    // Initialize log output (prepend verbosity to RUST_LOG)
-    let rust_log = match options.verbose {
-        0 => "error",
-        1 => "warn",
-        2 => "info",
-        3 => "debug",
+    // Initialize log output (prepend CLI verbosity to RUST_LOG)
+    let log_cli = match options.verbose {
+        0 => "info",
+        1 => "rust_app_template=debug",
+        2 => "rust_app_template=trace",
+        3 => "rust_app_template=trace,debug",
         _ => "trace",
     };
-    let rust_log_env = std::env::var("RUST_LOG").map_or_else(
-        |_| rust_log.to_string(),
-        |arg| format!("{},{}", rust_log, arg),
+    let log_filter = std::env::var("RUST_LOG").map_or_else(
+        |_| log_cli.to_string(),
+        |log_env| format!("{},{}", log_cli, log_env),
     );
-    std::env::set_var("RUST_LOG", rust_log_env);
-    env_logger::init();
+    let subscriber = FmtSubscriber::builder()
+        .with_env_filter(log_filter)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)
+        .context("setting default log subscriber")?;
+    tracing_log::LogTracer::init().context("adding log compatibility layer")?;
 
     // Log version
     info!(
@@ -82,7 +86,7 @@ fn main() -> Result<()> {
         .context("Error in main thread")?;
 
     // Terminate successfully
-    info!("program stopping normally");
+    info!("program terminating normally");
     Ok(())
 }
 

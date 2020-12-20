@@ -28,6 +28,7 @@ where
         .context("Server error")
 }
 
+#[tracing::instrument]
 pub async fn async_main() -> Result<()> {
     // Catch SIGTERM so the container can shutdown without an init process.
     let stop_signal = tokio::signal::ctrl_c().map(|_| {

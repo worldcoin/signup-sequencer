@@ -101,6 +101,7 @@ pub mod test {
         pub use float_eq::assert_float_eq;
         pub use pretty_assertions::{assert_eq, assert_ne};
         pub use proptest::prelude::*;
+        pub use tracing_test::traced_test;
     }
 
     use super::*;
@@ -122,6 +123,32 @@ pub mod test {
             let first: f64 = a + b;
             assert_float_eq!(first, b + a, ulps <= 0);
         })
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_with_log_output() {
+        error!("logged on the error level");
+        assert!(logs_contain("logged on the error level"));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn async_test_with_log() {
+        // Local log
+        info!("This is being logged on the info level");
+
+        // Log from a spawned task (which runs in a separate thread)
+        tokio::spawn(async {
+            warn!("This is being logged on the warn level from a spawned task");
+        })
+        .await
+        .unwrap();
+
+        // Ensure that `logs_contain` works as intended
+        assert!(logs_contain("logged on the info level"));
+        assert!(logs_contain("logged on the warn level"));
+        assert!(!logs_contain("logged on the error level"));
     }
 }
 

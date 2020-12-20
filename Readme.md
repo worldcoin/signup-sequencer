@@ -13,7 +13,7 @@
 * Error handling using `anyhow` and `thiserror`.
 * Logging using `tracing` with `log` and `futures` compatibility, `-v`, `-vv`, etc. command line arguments.
 * Preloaded with `serde`, `rand`, `rayon`, `itertools`.
-* Tests using `proptest`, `pretty_assertions` and `float_eq`.
+* Tests using `proptest`, `pretty_assertions` and `float_eq`. I recommend the [closure style](https://docs.rs/proptest/0.10.1/proptest/macro.proptest.html#closure-style-invocation) proptests.
 * Benchmarks using `criterion` (run `cargo criterion`).
 * Dependencies build optimized, also in dev build.
 * From scratch Docker build statically linked to musl.
@@ -25,6 +25,11 @@ TODO:
 * Build cache in CI
 * no_std support, CI test using no-std target.
 * To do scraper in CI.
+* `--threads` cli argument for Rayon worker pool size.
+* `--trace` cli argument for `tracing-chrome`.
+* `--seed` cli argument for deterministic `rand`.
+* Rustdocs with Katex.
+* Long running / fuzz mode for proptests.
 
 ## Setup
 

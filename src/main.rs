@@ -3,19 +3,23 @@
 mod server;
 
 pub mod prelude {
-    pub use anyhow::{Context as _, Result};
+    pub use anyhow::{Context as _, Result as AnyResult};
+    pub use async_trait::async_trait;
     pub use futures::prelude::*;
     pub use itertools::Itertools as _;
     pub use rand::prelude::*;
     pub use rayon::prelude::*;
     pub use serde::{Deserialize, Serialize};
+    pub use smallvec::{smallvec, SmallVec};
     pub use thiserror::Error;
     pub use tokio::prelude::*;
-    pub use tracing::{debug, error, info, trace, warn};
+    pub use tracing::{debug, error, info, instrument, trace, warn};
 }
 
 use crate::prelude::*;
-use rayon::ThreadPoolBuilder;
+use once_cell::sync::OnceCell;
+use rand_pcg::Mcg128Xsl64;
+use std::sync::{Mutex, MutexGuard};
 use structopt::StructOpt;
 use tracing_subscriber::FmtSubscriber;
 
@@ -29,6 +33,11 @@ struct Options {
     #[structopt(long)]
     threads: Option<usize>,
 
+    /// Random seed for deterministic random number generation.
+    /// If not specified a seed is periodically generated from OS entropy.
+    #[structopt(long, parse(try_from_str = parse_hex_u64))]
+    seed: Option<u64>,
+
     #[structopt(subcommand)]
     command: Option<Command>,
 }
@@ -39,7 +48,26 @@ enum Command {
     Test,
 }
 
-pub fn main() -> Result<()> {
+fn parse_hex_u64(src: &str) -> Result<u64, std::num::ParseIntError> {
+    u64::from_str_radix(src, 16)
+}
+
+static RNG: OnceCell<Mutex<Mcg128Xsl64>> = OnceCell::new();
+
+pub fn rng() -> MutexGuard<'static, Mcg128Xsl64> {
+    // RNG gets set in main before this function can be called.
+    let mutex = unsafe { RNG.get_unchecked() };
+    mutex.lock().expect("RNG mutex poisoned")
+}
+
+pub fn random<T>() -> T
+where
+    rand::distributions::Standard: rand::distributions::Distribution<T>,
+{
+    rng().gen()
+}
+
+pub fn main() -> AnyResult<()> {
     // Parse CLI and handle help and version (which will stop the application).
     #[rustfmt::skip]
     let version = format!("\
@@ -79,7 +107,7 @@ pub fn main() -> Result<()> {
         .context("setting default log subscriber")?;
     tracing_log::LogTracer::init().context("adding log compatibility layer")?;
 
-    // Log version
+    // Log version information
     info!(
         "{name} {version} {commit}",
         name = env!("CARGO_CRATE_NAME"),
@@ -87,9 +115,17 @@ pub fn main() -> Result<()> {
         commit = &env!("COMMIT_SHA")[..8],
     );
 
+    // Seed the random number generator
+    let rng_seed = options
+        .seed
+        .unwrap_or_else(|| rand::rngs::OsRng::default().next_u64());
+    info!("Using random seed {:16x}", rng_seed);
+    let rng = Mcg128Xsl64::seed_from_u64(rng_seed);
+    RNG.set(Mutex::new(rng)).expect("RNG already set.");
+
     // Configure Rayon thread pool
     if let Some(threads) = options.threads {
-        ThreadPoolBuilder::new()
+        rayon::ThreadPoolBuilder::new()
             .num_threads(threads)
             .build_global()
             .context("Failed to build thread pool.")?;
@@ -127,11 +163,13 @@ pub mod test {
 
     #[test]
     fn parse_args() {
-        let cmd = "hello -vvv";
+        let cmd = "hello -v --threads 4 -vvv --seed ffff";
         let options = Options::from_iter_safe(cmd.split(' ')).unwrap();
         assert_eq!(options, Options {
-            verbose: 3,
+            verbose: 4,
             command: None,
+            seed:    Some(0xffff),
+            threads: Some(4),
         });
     }
 

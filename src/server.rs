@@ -6,13 +6,13 @@ use hyper::{
 use std::{convert::Infallible, net::SocketAddr};
 use tokio_compat_02::FutureExt as _;
 
-async fn hello_world(_req: Request<Body>) -> std::result::Result<Response<Body>, Infallible> {
+async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, Infallible> {
     Ok(Response::new("Hello, World!\n".into()))
 }
 
 // Start server in separate function so we can call it with
 // `tokio_compat_02::FutureExt::compat` since it uses Tokio 0.2.
-async fn start_server<F>(socket_addr: &SocketAddr, stop_signal: F) -> Result<()>
+async fn start_server<F>(socket_addr: &SocketAddr, stop_signal: F) -> AnyResult<()>
 where
     F: Future<Output = ()>,
 {
@@ -28,8 +28,8 @@ where
         .context("Server error")
 }
 
-#[tracing::instrument]
-pub async fn async_main() -> Result<()> {
+#[instrument]
+pub async fn async_main() -> AnyResult<()> {
     // Catch SIGTERM so the container can shutdown without an init process.
     let stop_signal = tokio::signal::ctrl_c().map(|_| {
         info!("SIGTERM received, shutting down.");
@@ -46,10 +46,7 @@ pub async fn async_main() -> Result<()> {
 mod test {
     use super::*;
     use crate::test::prelude::{assert_eq, *};
-    use hyper::{
-        body::{to_bytes, HttpBody},
-        Request,
-    };
+    use hyper::{body::to_bytes, Request};
 
     #[tokio::test]
     async fn test_hello_world() {

@@ -4,7 +4,6 @@ use hyper::{
     Body, Request, Response, Server,
 };
 use std::{convert::Infallible, net::SocketAddr};
-use tokio_compat_02::FutureExt as _;
 
 async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, Infallible> {
     Ok(Response::new("Hello, World!\n".into()))
@@ -37,7 +36,7 @@ pub async fn async_main() -> AnyResult<()> {
 
     // List on all interfaces on port 8080
     let socket_addr = SocketAddr::from(([0, 0, 0, 0], 8080));
-    start_server(&socket_addr, stop_signal).compat().await?;
+    start_server(&socket_addr, stop_signal).await?;
 
     Ok(())
 }

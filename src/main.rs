@@ -12,7 +12,10 @@ pub mod prelude {
     pub use serde::{Deserialize, Serialize};
     pub use smallvec::{smallvec, SmallVec};
     pub use thiserror::Error;
-    pub use tokio::prelude::*;
+    pub use tokio::io::{
+        AsyncBufRead, AsyncBufReadExt as _, AsyncRead, AsyncReadExt as _, AsyncSeekExt as _,
+        AsyncWrite, AsyncWriteExt as _,
+    };
     pub use tracing::{debug, error, info, instrument, trace, warn};
 }
 

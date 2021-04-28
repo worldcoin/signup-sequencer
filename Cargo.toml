@@ -23,7 +23,7 @@ async-trait = "0.1"
 criterion = { version = "0.3", optional = true }
 futures = "0.3"
 hyper = { version = "0.14", features = [ "full" ] }
-itertools = "0.9"
+itertools = "0.10"
 num_cpus = "1.13"
 once_cell = "1.5"
 rand = "0.8"
@@ -43,9 +43,10 @@ tracing-timing = "0.4"
 
 [dev-dependencies]
 criterion = "0.3"
-float_eq = "0.5"
-pretty_assertions = "0.6"
-proptest = "0.10"
+# float_eq = "0.5"
+float_eq = { git = "https://github.com/jtempest/float_eq-rs", rev = "295a45f" }
+pretty_assertions = "0.7"
+proptest = "1.0"
 
 [build-dependencies]
 anyhow = "1.0"

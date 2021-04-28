@@ -1,4 +1,5 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
+#![allow(clippy::missing_errors_doc)]
 
 mod server;
 
@@ -63,6 +64,7 @@ pub fn rng() -> MutexGuard<'static, Mcg128Xsl64> {
     mutex.lock().expect("RNG mutex poisoned")
 }
 
+#[must_use]
 pub fn random<T>() -> T
 where
     rand::distributions::Standard: rand::distributions::Distribution<T>,
@@ -212,6 +214,7 @@ pub mod test {
 }
 
 #[cfg(feature = "bench")]
+#[allow(clippy::wildcard_imports, unused_imports)]
 pub mod bench {
     pub mod prelude {
         pub use criterion::{black_box, Criterion};

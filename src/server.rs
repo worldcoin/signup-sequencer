@@ -13,7 +13,7 @@ async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, Infallible> 
 // `tokio_compat_02::FutureExt::compat` since it uses Tokio 0.2.
 async fn start_server<F>(socket_addr: &SocketAddr, stop_signal: F) -> AnyResult<()>
 where
-    F: Future<Output = ()>,
+    F: Future<Output = ()> + Send,
 {
     // A `Service` is needed for every connection, so this
     // creates one from our `hello_world` function.
@@ -42,6 +42,7 @@ pub async fn async_main() -> AnyResult<()> {
 }
 
 #[cfg(test)]
+#[allow(unused_imports)]
 mod test {
     use super::*;
     use crate::test::prelude::{assert_eq, *};
@@ -56,12 +57,13 @@ mod test {
     }
 }
 #[cfg(feature = "bench")]
-pub(crate) mod bench {
+#[allow(clippy::wildcard_imports, unused_imports)]
+pub mod bench {
     use super::*;
     use crate::bench::prelude::*;
     use hyper::body::to_bytes;
 
-    pub(crate) fn group(c: &mut Criterion) {
+    pub fn group(c: &mut Criterion) {
         bench_hello_world(c);
     }
 

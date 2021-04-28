@@ -17,14 +17,6 @@ license-file = "mit-license.md"
 features = [ "bench" ]
 bench = [ "criterion" ]
 
-[lib]
-path = "src/main.rs"
-
-[[bench]]
-name = "criterion"
-harness = false
-required-features = ["bench"]
-
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"

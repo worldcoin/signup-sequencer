@@ -17,6 +17,16 @@ license-file = "mit-license.md"
 features = [ "bench" ]
 bench = [ "criterion" ]
 
+# Make available as `lib` for `criterion.rs`
+[lib]
+name = "lib"
+path = "src/main.rs"
+
+[[bench]]
+name = "criterion"
+harness = false
+path = "criterion.rs"
+
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
@@ -30,7 +40,7 @@ rand = "0.8"
 rand_pcg = "0.3"
 rayon = "1.5"
 serde = "1.0"
-smallvec = { version = "1.5", features = [ "serde" ] }
+smallvec = { version = "1.6", features = [ "serde" ] }
 structopt = "0.3"
 thiserror = "1.0"
 tokio = { version = "1.0", features = [ "full" ] }
@@ -43,7 +53,7 @@ tracing-timing = "0.4"
 
 [dev-dependencies]
 criterion = "0.3"
-# float_eq = "0.5"
+# float_eq = "0.5" # Wait for bugfix
 float_eq = { git = "https://github.com/jtempest/float_eq-rs", rev = "295a45f" }
 pretty_assertions = "0.7"
 proptest = "1.0"
@@ -51,6 +61,14 @@ proptest = "1.0"
 [build-dependencies]
 anyhow = "1.0"
 chrono = "0.4"
+
+# Add debug info to release mode for symbol info
+[profile.release]
+debug = true
+
+# Add debug info to release mode for symbol info
+[profile.bench]
+debug = true
 
 # Compilation profile for any non-workspace member.
 # Dependencies are optimized, even in a dev build. This improves dev performance

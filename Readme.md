@@ -18,6 +18,7 @@
 * Dependencies build optimized, also in dev build.
 * From scratch Docker build statically linked to musl.
 * Github actions for build, test, linting and deployment to Google Kubernetes Engine.
+
 ## Setup
 
 The Google Cloud project is taken from the Github Actions secret `GKE_PROJECT`.

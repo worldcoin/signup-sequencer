@@ -49,13 +49,13 @@ tracing-futures = "0.2"
 tracing-log = "0.1"
 tracing-subscriber = "0.2"
 tracing-test = "0.1"
-tracing-timing = "0.4"
+tracing-timing = "0.5"
 
 [dev-dependencies]
 criterion = "0.3"
 # float_eq = "0.5" # Wait for bugfix
 float_eq = { git = "https://github.com/jtempest/float_eq-rs", rev = "295a45f" }
-pretty_assertions = "0.7"
+pretty_assertions = "1.0"
 proptest = "1.0"
 
 [build-dependencies]

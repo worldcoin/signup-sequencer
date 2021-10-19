@@ -8,6 +8,7 @@ use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use structopt::StructOpt;
+use tokio::sync::broadcast;
 use tracing::{info, trace};
 use url::{Host, Url};
 
@@ -62,7 +63,7 @@ async fn route(request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     Ok(response)
 }
 
-pub async fn main(options: Options) -> AnyResult<()> {
+pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResult<()> {
     if options.server.scheme() != "http" {
         return Err(anyhow!("Only http:// is supported in {}", options.server));
     }
@@ -78,13 +79,15 @@ pub async fn main(options: Options) -> AnyResult<()> {
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
-    let server = Server::try_bind(&addr).context("Could not bind server port")?;
-    let server = server.serve(make_service_fn(|_| {
-        async { Ok::<_, hyper::Error>(service_fn(route)) }
-    }));
+    let server = Server::try_bind(&addr)
+        .context("Could not bind server port")?
+        .serve(make_service_fn(|_| {
+            async { Ok::<_, hyper::Error>(service_fn(route)) }
+        }))
+        .with_graceful_shutdown(async move {
+            shutdown.subscribe().recv().await.ok();
+        });
     info!(url = %options.server, "Server listening");
-
-    // TODO: with_graceful_shutdown
 
     server.await?;
     Ok(())

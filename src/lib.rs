@@ -8,7 +8,7 @@ mod utils;
 use crate::utils::spawn_or_abort;
 use anyhow::Result as AnyResult;
 use structopt::StructOpt;
-use tokio::sync::oneshot;
+use tokio::sync::broadcast;
 use tracing::info;
 
 #[derive(Debug, PartialEq, StructOpt)]
@@ -18,18 +18,23 @@ pub struct Options {
 }
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-pub async fn main(options: Options, shutdown: oneshot::Receiver<()>) -> AnyResult<()> {
+pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResult<()> {
     // Start server
-    spawn_or_abort(async move {
-        server::main(options.server).await?;
-        AnyResult::Ok(())
+    let server = spawn_or_abort({
+        let shutdown = shutdown.clone();
+        async move {
+            server::main(options.server, shutdown).await?;
+            AnyResult::Ok(())
+        }
     });
 
     // Wait for shutdown
-    info!("Server started, waiting for shutdown signal");
-    shutdown.await?;
-    // TODO: Graceful shutdown
+    info!("Program started, waiting for shutdown signal");
+    shutdown.subscribe().recv().await?;
 
+    // Wait for server
+    info!("Stopping server");
+    server.await?;
     Ok(())
 }
 

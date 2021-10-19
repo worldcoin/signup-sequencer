@@ -8,7 +8,7 @@ mod shutdown;
 use self::{allocator::Allocator, logging::LogOptions};
 use anyhow::{Context as _, Result as AnyResult};
 use structopt::StructOpt;
-use tokio::{runtime, sync::oneshot};
+use tokio::{runtime, sync::broadcast};
 use tracing::info;
 
 const VERSION: &str = concat!(
@@ -64,21 +64,33 @@ fn main() -> AnyResult<()> {
         .build()
         .context("Error creating Tokio runtime")?
         .block_on(async {
-            // Start prometheus
-            tokio::spawn(prometheus::main(options.prometheus));
-
             // Create shutdown signal
-            let (send, shutdown) = oneshot::channel();
-            tokio::spawn(async {
-                shutdown::signal_shutdown().await.unwrap();
-                let _ = send.send(());
+            // TODO: Fix minor race conditions
+            let (shutdown, _) = broadcast::channel(1);
+            tokio::spawn({
+                let shutdown = shutdown.clone();
+                async move {
+                    shutdown::signal_shutdown().await.unwrap();
+                    let _ = shutdown.send(());
+                }
             });
 
-            lib::main(options.app, shutdown).await
+            // Start prometheus
+            let prometheus = tokio::spawn(prometheus::main(options.prometheus, shutdown.clone()));
+
+            // Start main
+            lib::main(options.app, shutdown.clone()).await?;
+
+            // Send (potentially redundant) shutdown in case `lib::main` returned by itself
+            let _ = shutdown.send(());
+
+            // Stop prometheus
+            info!("Stopping metrics server");
+            prometheus.await?
         })?;
 
     // Terminate successfully
-    info!("program terminating normally");
+    info!("Program terminating normally");
     Ok(())
 }
 

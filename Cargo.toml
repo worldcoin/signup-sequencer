@@ -62,13 +62,10 @@ proptest = "1.0"
 anyhow = "1.0"
 chrono = "0.4"
 
-# Add debug info to release mode for symbol info
 [profile.release]
-debug = true
-
-# Add debug info to release mode for symbol info
-[profile.bench]
-debug = true
+codegen-units = 1
+lto = true
+panic = "abort"
 
 # Compilation profile for any non-workspace member.
 # Dependencies are optimized, even in a dev build. This improves dev performance

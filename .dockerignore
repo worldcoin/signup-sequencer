@@ -1,6 +1,8 @@
-.cargo/
-.git/
-target/
-*.profraw
+# Exclude everything
+*
 
-# TODO: Ignoring .git breaks vergen in build.rs.
+# Include the minimum for building the container image
+!Readme.md
+!Cargo.toml
+!Cargo.lock
+!src

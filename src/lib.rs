@@ -84,8 +84,6 @@ pub mod test {
 
 #[cfg(feature = "bench")]
 pub mod bench {
-    #[allow(clippy::wildcard_imports)]
-    use super::*;
     use criterion::{black_box, BatchSize, Criterion};
     use proptest::{
         strategy::{Strategy, ValueTree},

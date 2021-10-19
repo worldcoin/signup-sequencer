@@ -129,7 +129,7 @@ pub mod bench {
                     let bytes = to_bytes(response.into_body()).await.unwrap();
                     drop(black_box(bytes));
                 }
-            })
+            });
         });
     }
 }

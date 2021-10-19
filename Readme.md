@@ -19,6 +19,12 @@
 
 ## Hints
 
+Lint, build, test, run
+
+```shell
+cargo fmt && cargo clippy --all-targets --all-features && cargo build --all-targets --all-features && cargo test && cargo run --
+```
+
 Run benchmarks
 
 ```shell

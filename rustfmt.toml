@@ -1,6 +1,6 @@
 # See: https://github.com/rust-lang/rustfmt/blob/master/Configurations.md
 edition = "2018"
-merge_imports = true
+imports_granularity = "Crate"
 use_field_init_shorthand = true
 wrap_comments = true
 comment_width = 80

@@ -17,19 +17,13 @@
 * Dependencies build optimized, also in dev build.
 * From scratch Docker build statically linked to musl.
 
-## Tricks
+## Hints
 
-Run the latest container locally
+Run benchmarks
 
+```shell
+cargo bench --bench criterion --features="bench proptest"
 ```
-docker pull gcr.io/two-pi-com/rust-app-template-image:latest
-docker run --rm -ti -p 8080:8080 gcr.io/two-pi-com/rust-app-template-image:latest version
-```
-
-Combining Tokio and Rayon:
-
-<https://www.reddit.com/r/rust/comments/gwm84y/how_can_i_mix_rayon_and_tokio_properly/>
-
 ## To do
 
 * Code coverage in CI

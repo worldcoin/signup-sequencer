@@ -1,43 +1,92 @@
-use crate::prelude::*;
+use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
+use anyhow::{anyhow, Context as _, Result as AnyResult};
 use hyper::{
     service::{make_service_fn, service_fn},
-    Body, Request, Response, Server,
+    Body, Method, Request, Response, Server,
 };
-use std::{convert::Infallible, net::SocketAddr};
+use once_cell::sync::Lazy;
+use prometheus::{register_int_counter_vec, IntCounterVec};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use structopt::StructOpt;
+use tracing::{info, trace};
+use url::{Host, Url};
 
-async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, Infallible> {
+#[derive(Debug, PartialEq, StructOpt)]
+pub struct Options {
+    /// API Server url
+    #[structopt(long, env = "SERVER", default_value = "http://127.0.0.1:8080/")]
+    pub server: Url,
+}
+
+static REQUESTS: Lazy<Counter> =
+    Lazy::new(|| register_counter!(opts!("api_requests", "Number of requests received.")).unwrap());
+static STATUS: Lazy<IntCounterVec> = Lazy::new(|| {
+    register_int_counter_vec!(
+        "api_response_status",
+        "The API responses by status code.",
+        &["status_code"]
+    )
+    .unwrap()
+});
+static LATENCY: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!("api_latency_seconds", "The API latency in seconds.").unwrap()
+});
+
+#[allow(clippy::unused_async)]
+async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     Ok(Response::new("Hello, World!\n".into()))
 }
 
-// Start server in separate function so we can call it with
-// `tokio_compat_02::FutureExt::compat` since it uses Tokio 0.2.
-async fn start_server<F>(socket_addr: &SocketAddr, stop_signal: F) -> AnyResult<()>
-where
-    F: Future<Output = ()> + Send,
-{
-    // A `Service` is needed for every connection, so this
-    // creates one from our `hello_world` function.
-    let service =
-        make_service_fn(|_connection| async { Ok::<_, Infallible>(service_fn(hello_world)) });
+#[allow(clippy::unused_async)] // We are implementing an interface
+async fn route(request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    // Measure and log request
+    let _timer = LATENCY.start_timer(); // Observes on drop
+    REQUESTS.inc();
+    trace!(url = %request.uri(), "Receiving request");
 
-    Server::bind(socket_addr)
-        .serve(service)
-        .with_graceful_shutdown(stop_signal)
-        .await
-        .context("Server error")
+    // Route requests
+    let response = match (request.method(), request.uri().path()) {
+        (&Method::GET, "/") => hello_world(request).await?,
+        _ => {
+            Response::builder()
+                .status(404)
+                .body(Body::from("404"))
+                .unwrap()
+        }
+    };
+
+    // Measure result and return
+    STATUS
+        .with_label_values(&[response.status().as_str()])
+        .inc();
+    Ok(response)
 }
 
-#[instrument]
-pub async fn async_main() -> AnyResult<()> {
-    // Catch SIGTERM so the container can shutdown without an init process.
-    let stop_signal = tokio::signal::ctrl_c().map(|_| {
-        info!("SIGTERM received, shutting down.");
-    });
+pub async fn main(options: Options) -> AnyResult<()> {
+    if options.server.scheme() != "http" {
+        return Err(anyhow!("Only http:// is supported in {}", options.server));
+    }
+    if options.server.path() != "/" {
+        return Err(anyhow!("Only / is supported in {}", options.server));
+    }
+    let ip: IpAddr = match options.server.host() {
+        Some(Host::Ipv4(ip)) => ip.into(),
+        Some(Host::Ipv6(ip)) => ip.into(),
+        Some(_) => return Err(anyhow!("Cannot bind {}", options.server)),
+        None => Ipv4Addr::LOCALHOST.into(),
+    };
+    let port = options.server.port().unwrap_or(9998);
+    let addr = SocketAddr::new(ip, port);
 
-    // List on all interfaces on port 8080
-    let socket_addr = SocketAddr::from(([0, 0, 0, 0], 8080));
-    start_server(&socket_addr, stop_signal).await?;
+    let server = Server::try_bind(&addr).context("Could not bind server port")?;
+    let server = server.serve(make_service_fn(|_| {
+        async { Ok::<_, hyper::Error>(service_fn(route)) }
+    }));
+    info!(url = %options.server, "Server listening");
 
+    // TODO: with_graceful_shutdown
+
+    server.await?;
     Ok(())
 }
 
@@ -45,8 +94,8 @@ pub async fn async_main() -> AnyResult<()> {
 #[allow(unused_imports)]
 mod test {
     use super::*;
-    use crate::test::prelude::{assert_eq, *};
     use hyper::{body::to_bytes, Request};
+    use pretty_assertions::assert_eq;
 
     #[tokio::test]
     async fn test_hello_world() {
@@ -60,7 +109,8 @@ mod test {
 #[allow(clippy::wildcard_imports, unused_imports)]
 pub mod bench {
     use super::*;
-    use crate::bench::prelude::*;
+    use crate::bench::runtime;
+    use criterion::{black_box, Criterion};
     use hyper::body::to_bytes;
 
     pub fn group(c: &mut Criterion) {
@@ -69,13 +119,13 @@ pub mod bench {
 
     fn bench_hello_world(c: &mut Criterion) {
         c.bench_function("bench_hello_world", |b| {
-            b.iter(|| {
-                block_on(async {
+            b.to_async(runtime()).iter(|| {
+                async {
                     let request = Request::new(Body::empty());
                     let response = hello_world(request).await.unwrap();
                     let bytes = to_bytes(response.into_body()).await.unwrap();
                     drop(black_box(bytes));
-                })
+                }
             })
         });
     }

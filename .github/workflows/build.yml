@@ -102,10 +102,15 @@ jobs:
       - name: Test with coverage
         env:
           RUSTFLAGS: -Zinstrument-coverage
+          LLVM_PROFILE_FILE: profile-%m.profraw
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: --all-features --all-targets
+      - name: Creating coverage report
+        run: |
+          cargo profdata -- merge -sparse default.profraw -o default.profdata
+
       - name: Submit to codecov.io
         uses: codecov/codecov-action@v1
         with:

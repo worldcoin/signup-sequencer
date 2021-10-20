@@ -14,31 +14,30 @@ readme = "Readme.md"
 license-file = "mit-license.md"
 
 [features]
-features = [ "bench" ]
-bench = [ "criterion" ]
+default = []
+bench = [ "criterion", "proptest" ]
 
-# Make available as `lib` for `criterion.rs`
-[lib]
-name = "lib"
-path = "src/main.rs"
+[[bin]]
+name = "rust-app"
+path = "src/cli/main.rs"
 
 [[bench]]
 name = "criterion"
 harness = false
 path = "criterion.rs"
+required-features = [ "bench", "proptest" ]
 
 [dependencies]
 anyhow = "1.0"
-async-trait = "0.1"
 criterion = { version = "0.3", optional = true }
 futures = "0.3"
 hyper = { version = "0.14", features = [ "full" ] }
 itertools = "0.10"
+mimalloc = { version = "0.1", default-features = false, optional = true }
 num_cpus = "1.13"
-once_cell = "1.5"
-rand = "0.8"
-rand_pcg = "0.3"
-rayon = "1.5"
+once_cell = "1.8"
+prometheus = { version = "0.13", features = [ "process" ] }
+proptest = { version = "1.0", optional = true }
 serde = "1.0"
 smallvec = { version = "1.6", features = [ "serde" ] }
 structopt = "0.3"
@@ -46,29 +45,23 @@ thiserror = "1.0"
 tokio = { version = "1.0", features = [ "full" ] }
 tracing = "0.1"
 tracing-futures = "0.2"
-tracing-log = "0.1"
 tracing-subscriber = "0.2"
 tracing-test = "0.1"
-tracing-timing = "0.4"
+url = "2.2"
 
 [dev-dependencies]
-criterion = "0.3"
-# float_eq = "0.5" # Wait for bugfix
-float_eq = { git = "https://github.com/jtempest/float_eq-rs", rev = "295a45f" }
-pretty_assertions = "0.7"
-proptest = "1.0"
+criterion = { version = "0.3", features = [ "async_tokio" ] }
+pretty_assertions = "1.0"
+proptest = { version = "1.0" }
 
 [build-dependencies]
 anyhow = "1.0"
 chrono = "0.4"
 
-# Add debug info to release mode for symbol info
 [profile.release]
-debug = true
-
-# Add debug info to release mode for symbol info
-[profile.bench]
-debug = true
+codegen-units = 1
+lto = true
+panic = "abort"
 
 # Compilation profile for any non-workspace member.
 # Dependencies are optimized, even in a dev build. This improves dev performance

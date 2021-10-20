@@ -1,5 +1,7 @@
+use rust_app_template as lib;
+
 fn main() {
     let mut criterion = criterion::Criterion::default().configure_from_args();
-    lib::bench::main(&mut criterion);
+    lib::bench::group(&mut criterion);
     criterion.final_summary();
 }

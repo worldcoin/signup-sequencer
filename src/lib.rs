@@ -1,7 +1,6 @@
 #![doc = include_str!("../Readme.md")]
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
-mod logging;
 mod server;
 mod utils;
 

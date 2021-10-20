@@ -11,25 +11,26 @@ RUN sudo apt-get update && \
 ARG FEATURES="mimalloc"
 
 # Build dependencies only
-COPY --chown=rust:rust Cargo.toml ./
-COPY --chown=rust:rust Cargo.toml ./
-RUN mkdir src &&\
+COPY --chown=rust:rust Cargo.toml Cargo.lock ./
+RUN mkdir -p src/cli &&\
     echo 'fn main() { }' > build.rs &&\
-    echo 'fn main() { panic!("build failed") }' > src/main.rs &&\
+    echo 'fn main() { panic!("build failed") }' > src/cli/main.rs &&\
     echo '' > src/lib.rs &&\
-    cargo build --release --locked --features "${FEATURES}" --bin rust-app-template
+    cargo build --release --locked --features "${FEATURES}" --bin rust-app &&\
+    rm -r build.rs src
 
 # Take build identifying information as arguments
 ARG COMMIT_SHA=0000000000000000000000000000000000000000
 ARG COMMIT_DATE=0000-00-00
 ENV COMMIT_SHA $COMMIT_SHA
 ENV COMMIT_DATE $COMMIT_DATE
-ENV BIN="./target/x86_64-unknown-linux-musl/release/rust-app-template"
+ENV BIN="./target/x86_64-unknown-linux-musl/release/rust-app"
 
 # Build app
-COPY --chown=rust:rust src src
-RUN touch build.rs src/main.rs &&\
-    cargo build --release --locked --features "${FEATURES}" --bin rust-app-template &&\
+COPY --chown=rust:rust build.rs Readme.md ./
+COPY --chown=rust:rust src ./src
+RUN touch build.rs src/lib.rs src/cli/main.rs &&\
+    cargo build --release --locked --features "${FEATURES}" --bin rust-app &&\
     strip $BIN
 
 # Set capabilities
@@ -72,7 +73,7 @@ LABEL prometheus.io/path="/metrics"
 # Executable
 # TODO: --chmod=010
 COPY --from=build-env --chown=0:1000 \
-    /home/rust/src/target/x86_64-unknown-linux-musl/release/rust-app-template /
+    /home/rust/src/target/x86_64-unknown-linux-musl/release/rust-app /
 STOPSIGNAL SIGTERM
 HEALTHCHECK NONE
-ENTRYPOINT ["/rust-app-template"]
+ENTRYPOINT ["/rust-app"]

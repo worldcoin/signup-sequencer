@@ -5,4 +5,5 @@
 !Readme.md
 !Cargo.toml
 !Cargo.lock
+!build.rs
 !src

@@ -1,0 +1,135 @@
+on: [push, pull_request]
+name: build
+jobs:
+  build:
+    name: Build (release)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --all-features --all-targets --release
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+      - name: Build and run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-features --all-targets
+      - name: Build and test benchmarks
+        uses: actions-rs/cargo@v1
+        with:
+          command: bench
+          args: --bench criterion --features bench -- --test
+
+  rustfmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          components: rustfmt
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          components: clippy
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features --all-targets
+
+  codecov:
+    # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          components: llvm-tools-preview
+          override: true
+      - name: Install rustfilt
+        uses: actions-rs/install@v0.1
+        with:
+          crate: rustfilt
+          version: latest
+          use-tool-cache: true
+      - name: Install cargo-binutils
+        uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-binutils
+          version: latest
+          use-tool-cache: true
+      - name: Test with coverage
+        env:
+          RUSTFLAGS: -Zinstrument-coverage
+          LLVM_PROFILE_FILE: profile-%m.profraw
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-features --all-targets
+      - name: Creating coverage report
+        run: |
+          cargo profdata -- merge -sparse default.profraw -o default.profdata
+
+      - name: Submit to codecov.io
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
+          flags: test
+          fail_ci_if_error: true
+          verbose: true
+      - name: Bench test with coverage
+        env:
+          RUSTFLAGS: -Zinstrument-coverage
+        uses: actions-rs/cargo@v1
+        with:
+          command: bench
+          args: --bench criterion --features bench -- --test
+      - name: Submit to codecov.io
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
+          flags: bench
+          fail_ci_if_error: true
+          verbose: true
+# TODO: Profiling

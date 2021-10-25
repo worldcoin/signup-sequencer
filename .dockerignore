@@ -1,0 +1,9 @@
+# Exclude everything
+*
+
+# Include the minimum for building the container image
+!Readme.md
+!Cargo.toml
+!Cargo.lock
+!build.rs
+!src

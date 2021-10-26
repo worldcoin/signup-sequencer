@@ -41,14 +41,20 @@ async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, hyper::Error
 }
 
 #[allow(clippy::unused_async)]
-pub async fn inclusion_proof(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    inclusion_proof_helper();
-    Ok(Response::new("Inclusion Proof!\n".into()))
+pub async fn inclusion_proof(
+    _req: Request<Body>,
+    commitments: Vec<String>,
+    commitment: String,
+) -> Result<Response<Body>, hyper::Error> {
+    let index = commitments.binary_search(&commitment).unwrap();
+    let proof = inclusion_proof_helper(commitments, index).unwrap();
+    let response = format!("Inclusion Proof!\n {:?}", proof);
+    Ok(Response::new(response.into()))
 }
 
 #[allow(clippy::unused_async)]
 pub async fn insert_identity(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    insert_identity_helper("".to_string(), vec![]);
+    insert_identity_helper("".to_string(), vec![], 0);
 
     Ok(Response::new("Insert Identity!\n".into()))
 }
@@ -63,14 +69,14 @@ async fn route(request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     // Route requests
     let response = match (request.method(), request.uri().path()) {
         (&Method::GET, "/") => hello_world(request).await?,
-        (&Method::GET, "/inclusionProof") => inclusion_proof(request).await?,
-        (&Method::POST, "/insertIdentity") => insert_identity(request).await?,
-        _ => {
-            Response::builder()
-                .status(404)
-                .body(Body::from("404"))
-                .unwrap()
+        (&Method::GET, "/inclusionProof") => {
+            inclusion_proof(request, vec![], String::from("")).await?
         }
+        (&Method::POST, "/insertIdentity") => insert_identity(request).await?,
+        _ => Response::builder()
+            .status(404)
+            .body(Body::from("404"))
+            .unwrap(),
     };
 
     // Measure result and return
@@ -96,12 +102,14 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResul
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
-    let (commitments, tree) = initialize_tree();
+    // TODO how to manage and pass state?
+    let commitments = initialize_commitments();
+    let mut last_index = 0;
 
     let server = Server::try_bind(&addr)
         .context("Could not bind server port")?
-        .serve(make_service_fn(|_| {
-            async { Ok::<_, hyper::Error>(service_fn(route)) }
+        .serve(make_service_fn(|_| async {
+            Ok::<_, hyper::Error>(service_fn(route))
         }))
         .with_graceful_shutdown(async move {
             shutdown.subscribe().recv().await.ok();
@@ -141,13 +149,11 @@ pub mod bench {
 
     fn bench_hello_world(c: &mut Criterion) {
         c.bench_function("bench_hello_world", |b| {
-            b.to_async(runtime()).iter(|| {
-                async {
-                    let request = Request::new(Body::empty());
-                    let response = hello_world(request).await.unwrap();
-                    let bytes = to_bytes(response.into_body()).await.unwrap();
-                    drop(black_box(bytes));
-                }
+            b.to_async(runtime()).iter(|| async {
+                let request = Request::new(Body::empty());
+                let response = hello_world(request).await.unwrap();
+                let bytes = to_bytes(response.into_body()).await.unwrap();
+                drop(black_box(bytes));
             });
         });
     }

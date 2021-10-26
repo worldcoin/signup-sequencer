@@ -1,3 +1,5 @@
+use crate::identity::*;
+
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use anyhow::{anyhow, Context as _, Result as AnyResult};
 use hyper::{
@@ -38,6 +40,19 @@ async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, hyper::Error
     Ok(Response::new("Hello, World!\n".into()))
 }
 
+#[allow(clippy::unused_async)]
+pub async fn inclusion_proof(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    inclusion_proof_helper();
+    Ok(Response::new("Inclusion Proof!\n".into()))
+}
+
+#[allow(clippy::unused_async)]
+pub async fn insert_identity(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    insert_identity_helper("".to_string(), vec![]);
+
+    Ok(Response::new("Insert Identity!\n".into()))
+}
+
 #[allow(clippy::unused_async)] // We are implementing an interface
 async fn route(request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     // Measure and log request
@@ -48,6 +63,8 @@ async fn route(request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     // Route requests
     let response = match (request.method(), request.uri().path()) {
         (&Method::GET, "/") => hello_world(request).await?,
+        (&Method::GET, "/inclusionProof") => inclusion_proof(request).await?,
+        (&Method::POST, "/insertIdentity") => insert_identity(request).await?,
         _ => {
             Response::builder()
                 .status(404)
@@ -78,6 +95,8 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResul
     };
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
+
+    let (commitments, tree) = initialize_tree();
 
     let server = Server::try_bind(&addr)
         .context("Could not bind server port")?

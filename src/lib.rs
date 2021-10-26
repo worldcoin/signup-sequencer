@@ -3,6 +3,7 @@
 
 mod server;
 mod utils;
+mod identity;
 
 use crate::utils::spawn_or_abort;
 use anyhow::Result as AnyResult;

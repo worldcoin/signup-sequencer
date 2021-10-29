@@ -1,6 +1,6 @@
 const NUM_LEAVES: usize = 20;
 
-use std::{convert::TryInto, hash::Hasher, sync::{Arc, RwLock, atomic::AtomicUsize}};
+use std::{convert::TryInto, hash::Hasher, sync::{Arc, RwLock, atomic::{AtomicUsize, Ordering}}};
 
 use crypto::{
     digest::Digest,
@@ -75,5 +75,6 @@ pub fn insert_identity_helper(
     index: Arc<AtomicUsize>,
 ) {
     let mut identity_commitments = identity_commitments.write().unwrap().to_vec();
-    // identity_commitments[index]= identity_commitment;
+    let index: usize = index.fetch_add(1, Ordering::AcqRel);
+    identity_commitments[index]= identity_commitment;
 }

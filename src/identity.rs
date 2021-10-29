@@ -1,6 +1,6 @@
 const NUM_LEAVES: usize = 20;
 
-use std::{convert::TryInto, hash::Hasher};
+use std::{convert::TryInto, hash::Hasher, sync::{Arc, RwLock, atomic::AtomicUsize}};
 
 use crypto::{
     digest::Digest,
@@ -71,8 +71,9 @@ pub fn inclusion_proof_helper(
 
 pub fn insert_identity_helper(
     identity_commitment: String,
-    mut identity_commitments: Vec<String>,
-    index: usize,
+    identity_commitments: Arc<RwLock<Vec<String>>>,
+    index: Arc<AtomicUsize>,
 ) {
-    identity_commitments[index] = identity_commitment;
+    let mut identity_commitments = identity_commitments.write().unwrap().to_vec();
+    // identity_commitments[index]= identity_commitment;
 }

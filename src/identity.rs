@@ -1,56 +1,13 @@
 const NUM_LEAVES: usize = 20;
 
-use std::{convert::TryInto, hash::Hasher, sync::{Arc, RwLock, atomic::{AtomicUsize, Ordering}}};
+use std::{convert::TryInto, sync::{Arc, RwLock, atomic::{AtomicUsize, Ordering}}};
 
-use crypto::{
-    digest::Digest,
-    sha3::{Sha3, Sha3Mode},
-};
-use merkletree::{hash::Algorithm, merkle::MerkleTree, proof::Proof, store::VecStore};
+use merkletree::{merkle::MerkleTree, proof::Proof, store::VecStore};
 
-pub struct ExampleAlgorithm(Sha3);
-
-// TODO implement MiMC and various optimizations
-impl ExampleAlgorithm {
-    pub fn new() -> ExampleAlgorithm {
-        ExampleAlgorithm(Sha3::new(Sha3Mode::Sha3_256))
-    }
-}
-
-impl Default for ExampleAlgorithm {
-    fn default() -> ExampleAlgorithm {
-        ExampleAlgorithm::new()
-    }
-}
-
-impl Hasher for ExampleAlgorithm {
-    #[inline]
-    fn write(&mut self, msg: &[u8]) {
-        self.0.input(msg)
-    }
-
-    #[inline]
-    fn finish(&self) -> u64 {
-        unimplemented!()
-    }
-}
-
-impl Algorithm<[u8; 32]> for ExampleAlgorithm {
-    #[inline]
-    fn hash(&mut self) -> [u8; 32] {
-        let mut h = [0u8; 32];
-        self.0.result(&mut h);
-        h
-    }
-
-    #[inline]
-    fn reset(&mut self) {
-        self.0.reset();
-    }
-}
+use crate::mimc_tree::ExampleAlgorithm;
 
 pub fn initialize_commitments() -> Vec<String> {
-    let mut identity_commitments = vec![String::from(""); 2 ^ NUM_LEAVES];
+    let identity_commitments = vec![String::from(""); 2 ^ NUM_LEAVES];
     identity_commitments
 }
 

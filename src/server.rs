@@ -8,7 +8,7 @@ use hyper::{
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, sync::{Arc, RwLock, atomic::{AtomicUsize, Ordering}}};
+use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, sync::{Arc, RwLock, atomic::AtomicUsize}};
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::{info, trace};

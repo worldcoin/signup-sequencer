@@ -5,6 +5,7 @@ extern crate crypto;
 mod identity;
 mod server;
 mod utils;
+mod mimc_tree;
 
 use crate::utils::spawn_or_abort;
 use anyhow::Result as AnyResult;

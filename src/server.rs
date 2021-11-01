@@ -2,10 +2,7 @@ use crate::identity::*;
 
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use anyhow::{anyhow, Context as _, Result as AnyResult};
-use hyper::{
-    service::{make_service_fn, service_fn},
-    Body, Method, Request, Response, Server,
-};
+use hyper::{Body, Method, Request, Response, Server, StatusCode, body::Buf, service::{make_service_fn, service_fn}};
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
 use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, sync::{Arc, RwLock, atomic::AtomicUsize}};
@@ -34,6 +31,7 @@ static STATUS: Lazy<IntCounterVec> = Lazy::new(|| {
 static LATENCY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!("api_latency_seconds", "The API latency in seconds.").unwrap()
 });
+static MISSING: &[u8] = b"Missing field";
 
 #[allow(clippy::unused_async)]
 async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
@@ -54,7 +52,20 @@ pub async fn inclusion_proof(
 }
 
 #[allow(clippy::unused_async)]
-pub async fn insert_identity(_req: Request<Body>, commitments: Arc<RwLock<Vec<String>>>, last_index: Arc<AtomicUsize>) -> Result<Response<Body>, hyper::Error> {
+pub async fn insert_identity(req: Request<Body>, commitments: Arc<RwLock<Vec<String>>>, last_index: Arc<AtomicUsize>) -> Result<Response<Body>, hyper::Error> {
+    // Aggregate the body...
+    let whole_body = hyper::body::aggregate(req).await?;
+    // Decode as JSON...
+    let data: serde_json::Value = serde_json::from_reader(whole_body.reader()).unwrap();
+    let identity_commitment = &data["identityCommitment"];
+    if *identity_commitment == serde_json::Value::Null {
+        return Ok(Response::builder()
+            .status(StatusCode::UNPROCESSABLE_ENTITY)
+            .body(MISSING.into())
+            .unwrap());
+    }
+    println!("identityCommitment {:?}", identity_commitment);
+
     insert_identity_helper("".to_string(), commitments, last_index);
 
     Ok(Response::new("Insert Identity!\n".into()))

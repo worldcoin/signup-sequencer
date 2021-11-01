@@ -1295,6 +1295,7 @@ dependencies = [
  "proptest",
  "rust-crypto",
  "serde",
+ "serde_json",
  "smallvec",
  "structopt",
  "thiserror",

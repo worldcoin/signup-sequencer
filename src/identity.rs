@@ -8,7 +8,7 @@ use merkletree::{merkle::MerkleTree, proof::Proof, store::VecStore};
 use crate::mimc_tree::ExampleAlgorithm;
 
 pub fn initialize_commitments() -> Vec<String> {
-    let identity_commitments = vec![String::from(""); 2 << (NUM_LEAVES - 1)];
+    let identity_commitments = vec![String::from(""); 1 << NUM_LEAVES];
     identity_commitments
 }
 
@@ -24,13 +24,10 @@ pub fn inclusion_proof_helper(
     commitments: Arc<RwLock<Vec<String>>>,
 ) -> Result<Proof<[u8; 32]>, anyhow::Error> {
     let commitments = commitments.read().unwrap();
-    println!("First elemnt {}, commitment {}, equal? {}", commitments[0], commitment, commitments[0] == commitment);
     let index = match commitments.iter().position(|x| *x == commitment) {
         Some(index) => index,
         None => return Err(anyhow!("Commitment not found: {}", commitment)),
     };
-    println!("Index {}", index);
-    println!("Vec length {}: {} : {}", commitments.len(), 2 << (NUM_LEAVES - 1), i32::from(2).pow(20));
 
     // Convert all hex strings to [u8] for hashing -- TODO more efficient construction
     let t: MerkleTree<[u8; 32], ExampleAlgorithm, VecStore<_>> =

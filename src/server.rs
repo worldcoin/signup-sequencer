@@ -64,7 +64,6 @@ pub async fn insert_identity(req: Request<Body>, commitments: Arc<RwLock<Vec<Str
     }
 
     insert_identity_helper(identity_commitment.to_string(), commitments.clone(), last_index);
-    println!("Identity commitments {:?}", commitments.read().unwrap());
     Ok(Response::new("Insert Identity!\n".into()))
 }
 

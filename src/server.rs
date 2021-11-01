@@ -40,22 +40,20 @@ async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, hyper::Error
 
 #[allow(clippy::unused_async)]
 pub async fn inclusion_proof(
-    _req: Request<Body>,
+    req: Request<Body>,
     commitments: Arc<RwLock<Vec<String>>>,
-    commitment: String,
 ) -> Result<Response<Body>, hyper::Error> {
-    let commitments = commitments.read().unwrap();
-    let index = commitments.binary_search(&commitment).unwrap();
-    let proof = inclusion_proof_helper(commitments.to_vec(), index).unwrap();
+    let whole_body = hyper::body::aggregate(req).await?;
+    let data: serde_json::Value = serde_json::from_reader(whole_body.reader()).unwrap();
+    let commitment = data["identityCommitment"].to_string();
+    let proof = inclusion_proof_helper(commitment, commitments.clone()).unwrap();
     let response = format!("Inclusion Proof!\n {:?}", proof);
     Ok(Response::new(response.into()))
 }
 
 #[allow(clippy::unused_async)]
 pub async fn insert_identity(req: Request<Body>, commitments: Arc<RwLock<Vec<String>>>, last_index: Arc<AtomicUsize>) -> Result<Response<Body>, hyper::Error> {
-    // Aggregate the body...
     let whole_body = hyper::body::aggregate(req).await?;
-    // Decode as JSON...
     let data: serde_json::Value = serde_json::from_reader(whole_body.reader()).unwrap();
     let identity_commitment = &data["identityCommitment"];
     if *identity_commitment == serde_json::Value::Null {
@@ -64,10 +62,9 @@ pub async fn insert_identity(req: Request<Body>, commitments: Arc<RwLock<Vec<Str
             .body(MISSING.into())
             .unwrap());
     }
-    println!("identityCommitment {:?}", identity_commitment);
 
-    insert_identity_helper("".to_string(), commitments, last_index);
-
+    insert_identity_helper(identity_commitment.to_string(), commitments.clone(), last_index);
+    println!("Identity commitments {:?}", commitments.read().unwrap());
     Ok(Response::new("Insert Identity!\n".into()))
 }
 
@@ -82,7 +79,7 @@ async fn route(request: Request<Body>, commitments: Arc<RwLock<Vec<String>>>, la
     let response = match (request.method(), request.uri().path()) {
         (&Method::GET, "/") => hello_world(request).await?,
         (&Method::GET, "/inclusionProof") => {
-            inclusion_proof(request, commitments, String::from("")).await?
+            inclusion_proof(request, commitments).await?
         }
         (&Method::POST, "/insertIdentity") => insert_identity(request, commitments, last_index).await?,
         _ => Response::builder()

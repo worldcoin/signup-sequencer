@@ -6,6 +6,7 @@ mod identity;
 mod server;
 mod utils;
 mod mimc_tree;
+mod walletclaims_contract;
 
 use crate::utils::spawn_or_abort;
 use anyhow::Result as AnyResult;

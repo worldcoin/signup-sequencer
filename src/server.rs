@@ -1,11 +1,15 @@
 use crate::identity::*;
+use crate::walletclaims_contract::WalletClaims as WalletClaimsContract;
+
+use ethers::core::types::Address;
+use ethers::providers::{Provider, Http};
 
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use anyhow::{anyhow, Context as _, Result as AnyResult};
 use hyper::{Body, Method, Request, Response, Server, StatusCode, body::Buf, service::{make_service_fn, service_fn}};
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, sync::{Arc, RwLock, atomic::AtomicUsize}};
+use std::{convert::TryFrom, net::{IpAddr, Ipv4Addr, SocketAddr}, sync::{Arc, RwLock, atomic::AtomicUsize}};
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::{info, trace};
@@ -110,7 +114,19 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResul
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
-    // TODO how to manage and pass state?
+    // connect to the network
+    let provider = Provider::<Http>::try_from(
+        "http://localhost:8545"
+    ).expect("could not instantiate HTTP Provider");
+
+    // let KEY = "0xee79b5f6e221356af78cf4c36f4f7885a11b67dfcc81c34d80249947330c0f82";
+
+    // Proof of concept contract interaction
+    let CONTRACT_ADDRESS = "0xb2f8c8cf0607d1df2E2d1c37e36D4657031438AE".parse::<Address>()?;
+    let contract = WalletClaimsContract::new(CONTRACT_ADDRESS, Arc::new(provider));
+    let name = contract.name().call().await?;
+    println!("Contract name {}", name);
+
     let commitments = Arc::new(RwLock::new(initialize_commitments()));
     let last_index = Arc::new(AtomicUsize::new(0));
 

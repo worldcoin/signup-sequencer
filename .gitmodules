@@ -1,0 +1,3 @@
+[submodule "solidity/hubble-contracts"]
+	path = solidity/hubble-contracts
+	url = https://github.com/philsippl/hubble-contracts.git

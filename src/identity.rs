@@ -1,11 +1,16 @@
 const NUM_LEAVES: usize = 20;
 
 use anyhow::anyhow;
+use ethers::prelude::{Address, Http, Provider, abigen};
+use std::convert::TryFrom;
 use std::{convert::TryInto, num::ParseIntError, sync::{Arc, RwLock, atomic::{AtomicUsize, Ordering}}};
 
 use merkletree::{merkle::MerkleTree, proof::Proof, store::VecStore};
 
 use crate::mimc_tree::ExampleAlgorithm;
+
+const SEMAPHORE_ADDRESS: &str = "0xB0136923cb6295b2908618166b1b206493ce3F1a";
+const WALLET_CLAIMS_ADDRESS: &str = "0x39777E5d6bB83F4bF51fa832cD50E3c74eeA50A5";
 
 pub fn initialize_commitments() -> Vec<String> {
     let identity_commitments = vec![String::from(""); 1 << NUM_LEAVES];
@@ -47,12 +52,30 @@ pub fn inclusion_proof_helper(
     t.gen_proof(index)
 }
 
-pub fn insert_identity_helper(
+pub async fn insert_identity_helper(
     commitment: String,
     commitments: Arc<RwLock<Vec<String>>>,
     index: Arc<AtomicUsize>,
-) {
+) -> Result<bool, anyhow::Error> {
     let mut commitments = commitments.write().unwrap();
     let index: usize = index.fetch_add(1, Ordering::AcqRel);
-    commitments[index]= commitment;
+    commitments[index]= commitment.clone();
+    abigen!(
+        Semaphore,
+        "./solidity/abi/semaphore_abi.json",
+    );
+    let provider = Provider::<Http>::try_from(
+        "http://localhost:8545"
+    ).expect("could not instantiate HTTP Provider");
+    let semaphore_address = SEMAPHORE_ADDRESS.parse::<Address>().unwrap();
+    let semaphore_contract = Semaphore::new(
+        semaphore_address,
+        Arc::new(provider),
+    );
+    let decoded_commitment = hex::decode(commitment).unwrap();
+    semaphore_contract.insert_identity(
+        decoded_commitment[..].into(),
+    ).call().await?;
+    println!("Inserted identity");
+    Ok(true)
 }

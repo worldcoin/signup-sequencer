@@ -57,22 +57,37 @@ pub async fn insert_identity_helper(
     commitments: Arc<RwLock<Vec<String>>>,
     index: Arc<AtomicUsize>,
 ) -> Result<bool, anyhow::Error> {
-    let mut commitments = commitments.write().unwrap();
-    let index: usize = index.fetch_add(1, Ordering::AcqRel);
-    commitments[index]= commitment.clone();
     abigen!(
         Semaphore,
         "./solidity/abi/semaphore_abi.json",
     );
+    {
+        let mut commitments = commitments.write().unwrap();
+        let index: usize = index.fetch_add(1, Ordering::AcqRel);
+        commitments[index]= commitment.clone();
+    }
+
     let provider = Provider::<Http>::try_from(
         "http://localhost:8545"
     ).expect("could not instantiate HTTP Provider");
+
+    // TODO add signer middleware
+    // // We have to re-create the contract here with a signer instead of
+    // // provider, to submit a transaction :(
+    // let signer = SignerMiddleware::new(provider, signer);
+    // let contract = Contract::new(opts.org, abi, signer);
+    // let call = contract.method::<_, ()>("anchor", (id, tag, hash))?;
+
     let semaphore_address = SEMAPHORE_ADDRESS.parse::<Address>().unwrap();
     let semaphore_contract = Semaphore::new(
         semaphore_address,
         Arc::new(provider),
     );
+
+    let commitment = commitment.trim_matches('"');
+
     let decoded_commitment = hex::decode(commitment).unwrap();
+    println!("Starting insert {:?}", decoded_commitment);
     semaphore_contract.insert_identity(
         decoded_commitment[..].into(),
     ).call().await?;

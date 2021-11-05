@@ -48,12 +48,10 @@ async fn route(request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     // Route requests
     let response = match (request.method(), request.uri().path()) {
         (&Method::GET, "/") => hello_world(request).await?,
-        _ => {
-            Response::builder()
-                .status(404)
-                .body(Body::from("404"))
-                .unwrap()
-        }
+        _ => Response::builder()
+            .status(404)
+            .body(Body::from("404"))
+            .unwrap(),
     };
 
     // Measure result and return
@@ -81,8 +79,8 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResul
 
     let server = Server::try_bind(&addr)
         .context("Could not bind server port")?
-        .serve(make_service_fn(|_| {
-            async { Ok::<_, hyper::Error>(service_fn(route)) }
+        .serve(make_service_fn(|_| async {
+            Ok::<_, hyper::Error>(service_fn(route))
         }))
         .with_graceful_shutdown(async move {
             shutdown.subscribe().recv().await.ok();
@@ -122,13 +120,11 @@ pub mod bench {
 
     fn bench_hello_world(c: &mut Criterion) {
         c.bench_function("bench_hello_world", |b| {
-            b.to_async(runtime()).iter(|| {
-                async {
-                    let request = Request::new(Body::empty());
-                    let response = hello_world(request).await.unwrap();
-                    let bytes = to_bytes(response.into_body()).await.unwrap();
-                    drop(black_box(bytes));
-                }
+            b.to_async(runtime()).iter(|| async {
+                let request = Request::new(Body::empty());
+                let response = hello_world(request).await.unwrap();
+                let bytes = to_bytes(response.into_body()).await.unwrap();
+                drop(black_box(bytes));
             });
         });
     }

@@ -3,7 +3,7 @@
 name = "rust-app-template"
 version = "0.1.0"
 authors = ["Remco Bloemen <remco@wicked.ventures>"]
-edition = "2018"
+edition = "2021"
 build = "build.rs"
 homepage = "https://github.com/Recmo/rust-app-template"
 repository = "https://github.com/Recmo/rust-app-template"

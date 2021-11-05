@@ -9,6 +9,7 @@ use std::{
     },
 };
 
+// TODO Use real value
 const NUM_LEAVES: usize = 2;
 
 pub type Commitment = [u8; 32];
@@ -29,17 +30,17 @@ pub fn inclusion_proof_helper(
     let index = commitments
         .iter()
         .position(|x| *x == commitment)
-        .ok_or(anyhow!("Commitment not found: {:?}", commitment))?;
+        .ok_or_else(|| anyhow!("Commitment not found: {:?}", commitment))?;
 
     let t: MerkleTree<[u8; 32], ExampleAlgorithm, VecStore<_>> =
-        MerkleTree::try_from_iter(commitments.clone().into_iter().map(|x| Ok(*x))).unwrap();
+        MerkleTree::try_from_iter(commitments.iter().map(|x| Ok(*x))).unwrap();
     t.gen_proof(index)
 }
 
 pub fn insert_identity_helper(
     commitment: &str,
     commitments: &mut [Commitment],
-    index: Arc<AtomicUsize>,
+    index: &Arc<AtomicUsize>,
 ) {
     let index: usize = index.fetch_add(1, Ordering::AcqRel);
     let commitment = commitment.trim_matches('"');

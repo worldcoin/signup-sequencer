@@ -1,5 +1,6 @@
-use crate::identity::*;
-
+use crate::identity::{
+    inclusion_proof_helper, initialize_commitments, insert_identity_helper, Commitment,
+};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use anyhow::{anyhow, Context as _, Result as AnyResult};
 use hyper::{
@@ -55,6 +56,7 @@ pub async fn inclusion_proof(
     let commitment = data["identityCommitment"].to_string();
     let commitments = commitments.read().unwrap();
     let proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
+    // TODO handle commitment not found
     let response = format!("Inclusion Proof!\n {:?}", proof);
     Ok(Response::new(response.into()))
 }
@@ -78,7 +80,7 @@ pub async fn insert_identity(
     insert_identity_helper(
         &identity_commitment.to_string(),
         &mut commitments.write().unwrap(),
-        last_index,
+        &last_index,
     );
     Ok(Response::new("Insert Identity!\n".into()))
 }

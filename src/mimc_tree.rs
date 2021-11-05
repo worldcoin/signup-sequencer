@@ -10,21 +10,21 @@ pub struct ExampleAlgorithm(Sha3);
 
 // TODO implement MiMC and various optimizations
 impl ExampleAlgorithm {
-    pub fn new() -> ExampleAlgorithm {
-        ExampleAlgorithm(Sha3::new(Sha3Mode::Sha3_256))
+    pub fn new() -> Self {
+        Self(Sha3::new(Sha3Mode::Sha3_256))
     }
 }
 
 impl Default for ExampleAlgorithm {
-    fn default() -> ExampleAlgorithm {
-        ExampleAlgorithm::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl Hasher for ExampleAlgorithm {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        self.0.input(msg)
+        self.0.input(msg);
     }
 
     #[inline]
@@ -36,7 +36,7 @@ impl Hasher for ExampleAlgorithm {
 impl Algorithm<[u8; 32]> for ExampleAlgorithm {
     #[inline]
     fn hash(&mut self) -> [u8; 32] {
-        let mut h = [0u8; 32];
+        let mut h = [0_u8; 32];
         self.0.result(&mut h);
         h
     }
@@ -50,14 +50,14 @@ impl Algorithm<[u8; 32]> for ExampleAlgorithm {
 pub struct MiMCAlgorithm {}
 
 impl MiMCAlgorithm {
-    pub fn new() -> MiMCAlgorithm {
-        MiMCAlgorithm {}
+    pub const fn new() -> Self {
+        Self {}
     }
 }
 
 impl Default for MiMCAlgorithm {
-    fn default() -> MiMCAlgorithm {
-        MiMCAlgorithm::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 

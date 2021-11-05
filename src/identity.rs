@@ -1,8 +1,6 @@
 const NUM_LEAVES: usize = 20;
 
 use anyhow::anyhow;
-use ethers::core::k256::U256;
-use ethers::core::types::H256;
 use ethers::prelude::{Address, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware, abigen};
 use std::convert::TryFrom;
 use std::{convert::TryInto, num::ParseIntError, sync::{Arc, RwLock, atomic::{AtomicUsize, Ordering}}};

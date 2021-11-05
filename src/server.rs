@@ -1,12 +1,19 @@
+use crate::identity::{
+    inclusion_proof_helper, initialize_commitments, insert_identity_helper, Commitment,
+};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use anyhow::{anyhow, Context as _, Result as AnyResult};
 use hyper::{
+    body::Buf,
     service::{make_service_fn, service_fn},
-    Body, Method, Request, Response, Server,
+    Body, Method, Request, Response, Server, StatusCode,
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::{atomic::AtomicUsize, Arc, RwLock},
+};
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::{info, trace};
@@ -32,14 +39,58 @@ static STATUS: Lazy<IntCounterVec> = Lazy::new(|| {
 static LATENCY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!("api_latency_seconds", "The API latency in seconds.").unwrap()
 });
+static MISSING: &[u8] = b"Missing field";
 
 #[allow(clippy::unused_async)]
 async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     Ok(Response::new("Hello, World!\n".into()))
 }
 
+#[allow(clippy::unused_async)]
+pub async fn inclusion_proof(
+    req: Request<Body>,
+    commitments: Arc<RwLock<Vec<Commitment>>>,
+) -> Result<Response<Body>, hyper::Error> {
+    let whole_body = hyper::body::aggregate(req).await?;
+    let data: serde_json::Value = serde_json::from_reader(whole_body.reader()).unwrap();
+    let commitment = data["identityCommitment"].to_string();
+    let commitments = commitments.read().unwrap();
+    let proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
+    // TODO handle commitment not found
+    let response = format!("Inclusion Proof!\n {:?}", proof);
+    Ok(Response::new(response.into()))
+}
+
+#[allow(clippy::unused_async)]
+pub async fn insert_identity(
+    req: Request<Body>,
+    commitments: Arc<RwLock<Vec<Commitment>>>,
+    last_index: Arc<AtomicUsize>,
+) -> Result<Response<Body>, hyper::Error> {
+    let whole_body = hyper::body::aggregate(req).await?;
+    let data: serde_json::Value = serde_json::from_reader(whole_body.reader()).unwrap();
+    let identity_commitment = &data["identityCommitment"];
+    if *identity_commitment == serde_json::Value::Null {
+        return Ok(Response::builder()
+            .status(StatusCode::UNPROCESSABLE_ENTITY)
+            .body(MISSING.into())
+            .unwrap());
+    }
+
+    insert_identity_helper(
+        &identity_commitment.to_string(),
+        &mut commitments.write().unwrap(),
+        &last_index,
+    );
+    Ok(Response::new("Insert Identity!\n".into()))
+}
+
 #[allow(clippy::unused_async)] // We are implementing an interface
-async fn route(request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+async fn route(
+    request: Request<Body>,
+    commitments: Arc<RwLock<Vec<Commitment>>>,
+    last_index: Arc<AtomicUsize>,
+) -> Result<Response<Body>, hyper::Error> {
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
     REQUESTS.inc();
@@ -48,6 +99,10 @@ async fn route(request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     // Route requests
     let response = match (request.method(), request.uri().path()) {
         (&Method::GET, "/") => hello_world(request).await?,
+        (&Method::GET, "/inclusionProof") => inclusion_proof(request, commitments).await?,
+        (&Method::POST, "/insertIdentity") => {
+            insert_identity(request, commitments, last_index).await?
+        }
         _ => {
             Response::builder()
                 .status(404)
@@ -79,11 +134,27 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResul
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
+    // TODO how to manage and pass state?
+    let commitments = Arc::new(RwLock::new(initialize_commitments()));
+    let last_index = Arc::new(AtomicUsize::new(0));
+
+    let make_svc = make_service_fn(move |_| {
+        // Clone here as `make_service_fn` is called for every connection
+        let commitments = commitments.clone();
+        let last_index = last_index.clone();
+        async {
+            Ok::<_, hyper::Error>(service_fn(move |req| {
+                // Clone here as `service_fn` is called for every request
+                let commitments = commitments.clone();
+                let last_index = last_index.clone();
+                route(req, commitments, last_index)
+            }))
+        }
+    });
+
     let server = Server::try_bind(&addr)
         .context("Could not bind server port")?
-        .serve(make_service_fn(|_| {
-            async { Ok::<_, hyper::Error>(service_fn(route)) }
-        }))
+        .serve(make_svc)
         .with_graceful_shutdown(async move {
             shutdown.subscribe().recv().await.ok();
         });

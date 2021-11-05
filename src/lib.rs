@@ -1,6 +1,8 @@
 #![doc = include_str!("../Readme.md")]
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
+mod identity;
+mod mimc_tree;
 mod server;
 mod utils;
 

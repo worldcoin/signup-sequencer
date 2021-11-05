@@ -1,4 +1,4 @@
-use anyhow::Result as AnyResult;
+use eyre::Result as EyreResult;
 use tracing::info;
 
 #[cfg(unix)]
@@ -9,7 +9,7 @@ use tokio::signal::ctrl_c;
 
 #[cfg(unix)]
 #[allow(clippy::module_name_repetitions)]
-pub async fn signal_shutdown() -> AnyResult<()> {
+pub async fn signal_shutdown() -> EyreResult<()> {
     let sigint = signal(SignalKind::interrupt())?;
     let sigterm = signal(SignalKind::terminate())?;
     tokio::pin!(sigint);
@@ -23,7 +23,7 @@ pub async fn signal_shutdown() -> AnyResult<()> {
 
 #[cfg(not(unix))]
 #[allow(clippy::module_name_repetitions)]
-pub async fn signal_shutdown() -> AnyResult<()> {
+pub async fn signal_shutdown() -> EyreResult<()> {
     ctrl_c().await?;
     info!("Ctrl-C received");
     Ok(())

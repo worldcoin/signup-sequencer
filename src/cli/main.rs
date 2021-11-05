@@ -8,7 +8,7 @@ mod prometheus;
 mod shutdown;
 
 use self::{allocator::Allocator, logging::LogOptions};
-use anyhow::{Context as _, Result as AnyResult};
+use eyre::{Result as EyreResult, WrapErr as _};
 use structopt::StructOpt;
 use tokio::{runtime, sync::broadcast};
 use tracing::info;
@@ -49,7 +49,10 @@ struct Options {
     app:            lib::Options,
 }
 
-fn main() -> AnyResult<()> {
+fn main() -> EyreResult<()> {
+    // Install error handler
+    color_eyre::install()?;
+
     // Parse CLI and handle help and version (which will stop the application).
     let matches = Options::clap().long_version(VERSION).get_matches();
     let options = Options::from_clap(&matches);
@@ -64,7 +67,7 @@ fn main() -> AnyResult<()> {
     runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .context("Error creating Tokio runtime")?
+        .wrap_err("Error creating Tokio runtime")?
         .block_on(async {
             // Create shutdown signal
             // TODO: Fix minor race conditions

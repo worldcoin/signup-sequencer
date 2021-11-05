@@ -3,7 +3,7 @@
 name = "rust-app-template"
 version = "0.1.0"
 authors = ["Remco Bloemen <remco@wicked.ventures>"]
-edition = "2018"
+edition = "2021"
 build = "build.rs"
 homepage = "https://github.com/Recmo/rust-app-template"
 repository = "https://github.com/Recmo/rust-app-template"
@@ -28,8 +28,9 @@ path = "criterion.rs"
 required-features = [ "bench", "proptest" ]
 
 [dependencies]
-anyhow = "1.0"
+color-eyre = "0.5"
 criterion = { version = "0.3", optional = true }
+eyre = "0.6"
 futures = "0.3"
 hex = "0.4.3"
 hyper = { version = "0.14", features = [ "full" ] }
@@ -49,7 +50,7 @@ thiserror = "1.0"
 tokio = { version = "1.0", features = [ "full" ] }
 tracing = "0.1"
 tracing-futures = "0.2"
-tracing-subscriber = "0.2"
+tracing-subscriber = { version = "0.3", features = [ "env-filter", "json" ] }
 tracing-test = "0.1"
 url = "2.2"
 
@@ -59,7 +60,7 @@ pretty_assertions = "1.0"
 proptest = { version = "1.0" }
 
 [build-dependencies]
-anyhow = "1.0"
+eyre = "0.6"
 chrono = "0.4"
 
 [profile.release]

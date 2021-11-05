@@ -85,12 +85,10 @@ async fn route(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 
     let response = match (req.method(), req.uri().path()) {
         (&Method::GET, "/metrics") => serve_req(req).await?,
-        _ => {
-            Response::builder()
-                .status(404)
-                .body(Body::from("404"))
-                .unwrap()
-        }
+        _ => Response::builder()
+            .status(404)
+            .body(Body::from("404"))
+            .unwrap(),
     };
 
     #[allow(clippy::cast_precision_loss)]
@@ -123,8 +121,8 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResul
 
     let server = Server::try_bind(&addr)
         .context("Could not bind Prometheus server port")?
-        .serve(make_service_fn(|_| {
-            async { Ok::<_, hyper::Error>(service_fn(route)) }
+        .serve(make_service_fn(|_| async {
+            Ok::<_, hyper::Error>(service_fn(route))
         }))
         .with_graceful_shutdown(async move {
             shutdown.subscribe().recv().await.ok();

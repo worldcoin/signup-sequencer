@@ -112,7 +112,7 @@ jobs:
           cargo profdata -- merge -sparse default.profraw -o default.profdata
 
       - name: Submit to codecov.io
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v2.1.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
           flags: test
@@ -126,7 +126,7 @@ jobs:
           command: bench
           args: --bench criterion --features bench -- --test
       - name: Submit to codecov.io
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v2.1.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
           flags: bench

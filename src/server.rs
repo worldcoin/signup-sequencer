@@ -1,5 +1,6 @@
 use crate::identity::{
-    inclusion_proof_helper, initialize_commitments, insert_identity_helper, Commitment,
+    inclusion_proof_helper, initialize_commitments, insert_identity_commitment,
+    insert_identity_to_contract, Commitment,
 };
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use anyhow::{anyhow, Context as _, Result as AnyResult};
@@ -77,11 +78,18 @@ pub async fn insert_identity(
             .unwrap());
     }
 
-    insert_identity_helper(
-        &identity_commitment.to_string(),
-        commitments,
-        &last_index,
-    ).await.unwrap();
+    {
+        let mut commitments = commitments.write().unwrap();
+        insert_identity_commitment(
+            &identity_commitment.to_string(),
+            &mut commitments,
+            &last_index,
+        );
+    }
+
+    insert_identity_to_contract(&identity_commitment.to_string())
+        .await
+        .unwrap();
     Ok(Response::new("Insert Identity!\n".into()))
 }
 

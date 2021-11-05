@@ -1,6 +1,11 @@
 use anyhow::{anyhow, Context, Error, Result};
 use chrono::Utc;
-use std::{env::{var, VarError}, fs, path::{Path}, process::Command};
+use std::{
+    env::{var, VarError},
+    fs,
+    path::Path,
+    process::Command,
+};
 
 fn main() -> Result<()> {
     rerun_if_git_changes()?;

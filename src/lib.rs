@@ -5,7 +5,7 @@ mod server;
 mod utils;
 
 use crate::utils::spawn_or_abort;
-use anyhow::Result as AnyResult;
+use eyre::Result as EyreResult;
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::info;
@@ -17,13 +17,13 @@ pub struct Options {
 }
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResult<()> {
+pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<()> {
     // Start server
     let server = spawn_or_abort({
         let shutdown = shutdown.clone();
         async move {
             server::main(options.server, shutdown).await?;
-            AnyResult::Ok(())
+            EyreResult::Ok(())
         }
     });
 

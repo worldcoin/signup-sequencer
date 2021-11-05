@@ -1,5 +1,5 @@
-use anyhow::{anyhow, Context, Error, Result};
 use chrono::Utc;
+use eyre::{bail, eyre, Result, WrapErr as _};
 use std::{
     env::{var, VarError},
     fs,
@@ -38,7 +38,7 @@ fn main() -> Result<()> {
     println!("cargo:rustc-env=BUILD_DATE={}", Utc::today().naive_utc());
     println!(
         "cargo:rustc-env=TARGET={}",
-        var("TARGET").context("Fetching environment variable TARGET")?
+        var("TARGET").wrap_err("Fetching environment variable TARGET")?
     );
     Ok(())
 }
@@ -48,7 +48,7 @@ fn env_or_cmd(env: &str, cmd: &[&str]) -> Result<String> {
     match var(env) {
         Ok(s) => return Ok(s),
         Err(VarError::NotPresent) => (),
-        Err(e) => return Err(Error::new(e)),
+        Err(e) => bail!(e),
     };
 
     // Try command
@@ -66,7 +66,7 @@ fn env_or_cmd(env: &str, cmd: &[&str]) -> Result<String> {
     if output.status.success() {
         Ok(String::from_utf8(output.stdout)?.trim().to_string())
     } else {
-        Err(anyhow!(err()))
+        bail!(err())
     }
 }
 
@@ -83,13 +83,13 @@ fn rerun_if_git_changes() -> Result<Option<String>> {
     println!("cargo:rerun-if-changed=.git/HEAD");
 
     // If HEAD contains a ref, then echo that path also.
-    let contents = fs::read_to_string(git_head).context("Error reading .git/HEAD")?;
+    let contents = fs::read_to_string(git_head).wrap_err("Error reading .git/HEAD")?;
     let head_ref = contents.split(": ").collect::<Vec<_>>();
     let commit = if head_ref.len() == 2 && head_ref[0] == "ref" {
         let ref_path = Path::new(".git").join(head_ref[1].trim());
         let ref_path_str = ref_path
             .to_str()
-            .ok_or_else(|| anyhow!("Could not convert ref path {:?} to string", ref_path))?;
+            .ok_or_else(|| eyre!("Could not convert ref path {:?} to string", ref_path))?;
         println!("cargo:rerun-if-changed={}", ref_path_str);
         fs::read_to_string(&ref_path).with_context(|| format!("Error reading {}", ref_path_str))?
     } else {

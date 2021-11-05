@@ -1,10 +1,12 @@
 use std::hash::Hasher;
 
-use crypto::{digest::Digest, sha3::{Sha3, Sha3Mode}};
+use crypto::{
+    digest::Digest,
+    sha3::{Sha3, Sha3Mode},
+};
 use merkletree::hash::Algorithm;
 
 pub struct ExampleAlgorithm(Sha3);
-
 
 // TODO implement MiMC and various optimizations
 impl ExampleAlgorithm {
@@ -49,7 +51,7 @@ pub struct MiMCAlgorithm {}
 
 impl MiMCAlgorithm {
     pub fn new() -> MiMCAlgorithm {
-        MiMCAlgorithm{}
+        MiMCAlgorithm {}
     }
 }
 

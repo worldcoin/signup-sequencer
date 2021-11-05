@@ -1,11 +1,10 @@
 #![doc = include_str!("../Readme.md")]
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
-extern crate crypto;
 mod identity;
+mod mimc_tree;
 mod server;
 mod utils;
-mod mimc_tree;
 
 use crate::utils::spawn_or_abort;
 use anyhow::Result as AnyResult;
@@ -132,8 +131,10 @@ pub mod bench {
     fn bench_example_async(criterion: &mut Criterion) {
         let duration = Duration::from_micros(1);
         criterion.bench_function("example_async", move |bencher| {
-            bencher.to_async(runtime()).iter(|| async {
-                tokio::time::sleep(duration).await;
+            bencher.to_async(runtime()).iter(|| {
+                async {
+                    tokio::time::sleep(duration).await;
+                }
             });
         });
     }

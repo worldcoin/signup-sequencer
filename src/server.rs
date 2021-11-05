@@ -2,10 +2,17 @@ use crate::identity::*;
 
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use anyhow::{anyhow, Context as _, Result as AnyResult};
-use hyper::{Body, Method, Request, Response, Server, StatusCode, body::Buf, service::{make_service_fn, service_fn}};
+use hyper::{
+    body::Buf,
+    service::{make_service_fn, service_fn},
+    Body, Method, Request, Response, Server, StatusCode,
+};
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, sync::{Arc, RwLock, atomic::AtomicUsize}};
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::{atomic::AtomicUsize, Arc, RwLock},
+};
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::{info, trace};
@@ -41,18 +48,23 @@ async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, hyper::Error
 #[allow(clippy::unused_async)]
 pub async fn inclusion_proof(
     req: Request<Body>,
-    commitments: Arc<RwLock<Vec<String>>>,
+    commitments: Arc<RwLock<Vec<Commitment>>>,
 ) -> Result<Response<Body>, hyper::Error> {
     let whole_body = hyper::body::aggregate(req).await?;
     let data: serde_json::Value = serde_json::from_reader(whole_body.reader()).unwrap();
     let commitment = data["identityCommitment"].to_string();
-    let proof = inclusion_proof_helper(commitment, commitments.clone()).unwrap();
+    let commitments = commitments.read().unwrap();
+    let proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
     let response = format!("Inclusion Proof!\n {:?}", proof);
     Ok(Response::new(response.into()))
 }
 
 #[allow(clippy::unused_async)]
-pub async fn insert_identity(req: Request<Body>, commitments: Arc<RwLock<Vec<String>>>, last_index: Arc<AtomicUsize>) -> Result<Response<Body>, hyper::Error> {
+pub async fn insert_identity(
+    req: Request<Body>,
+    commitments: Arc<RwLock<Vec<Commitment>>>,
+    last_index: Arc<AtomicUsize>,
+) -> Result<Response<Body>, hyper::Error> {
     let whole_body = hyper::body::aggregate(req).await?;
     let data: serde_json::Value = serde_json::from_reader(whole_body.reader()).unwrap();
     let identity_commitment = &data["identityCommitment"];
@@ -63,12 +75,20 @@ pub async fn insert_identity(req: Request<Body>, commitments: Arc<RwLock<Vec<Str
             .unwrap());
     }
 
-    insert_identity_helper(identity_commitment.to_string(), commitments.clone(), last_index);
+    insert_identity_helper(
+        &identity_commitment.to_string(),
+        &mut commitments.write().unwrap(),
+        last_index,
+    );
     Ok(Response::new("Insert Identity!\n".into()))
 }
 
 #[allow(clippy::unused_async)] // We are implementing an interface
-async fn route(request: Request<Body>, commitments: Arc<RwLock<Vec<String>>>, last_index: Arc<AtomicUsize>) -> Result<Response<Body>, hyper::Error> {
+async fn route(
+    request: Request<Body>,
+    commitments: Arc<RwLock<Vec<Commitment>>>,
+    last_index: Arc<AtomicUsize>,
+) -> Result<Response<Body>, hyper::Error> {
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
     REQUESTS.inc();
@@ -77,14 +97,16 @@ async fn route(request: Request<Body>, commitments: Arc<RwLock<Vec<String>>>, la
     // Route requests
     let response = match (request.method(), request.uri().path()) {
         (&Method::GET, "/") => hello_world(request).await?,
-        (&Method::GET, "/inclusionProof") => {
-            inclusion_proof(request, commitments).await?
+        (&Method::GET, "/inclusionProof") => inclusion_proof(request, commitments).await?,
+        (&Method::POST, "/insertIdentity") => {
+            insert_identity(request, commitments, last_index).await?
         }
-        (&Method::POST, "/insertIdentity") => insert_identity(request, commitments, last_index).await?,
-        _ => Response::builder()
-            .status(404)
-            .body(Body::from("404"))
-            .unwrap(),
+        _ => {
+            Response::builder()
+                .status(404)
+                .body(Body::from("404"))
+                .unwrap()
+        }
     };
 
     // Measure result and return
@@ -123,7 +145,7 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResul
                 // Clone here as `service_fn` is called for every request
                 let commitments = commitments.clone();
                 let last_index = last_index.clone();
-                route(req,commitments, last_index)
+                route(req, commitments, last_index)
             }))
         }
     });
@@ -169,11 +191,13 @@ pub mod bench {
 
     fn bench_hello_world(c: &mut Criterion) {
         c.bench_function("bench_hello_world", |b| {
-            b.to_async(runtime()).iter(|| async {
-                let request = Request::new(Body::empty());
-                let response = hello_world(request).await.unwrap();
-                let bytes = to_bytes(response.into_body()).await.unwrap();
-                drop(black_box(bytes));
+            b.to_async(runtime()).iter(|| {
+                async {
+                    let request = Request::new(Body::empty());
+                    let response = hello_world(request).await.unwrap();
+                    let bytes = to_bytes(response.into_body()).await.unwrap();
+                    drop(black_box(bytes));
+                }
             });
         });
     }

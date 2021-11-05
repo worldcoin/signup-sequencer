@@ -2,7 +2,7 @@ use ::prometheus::{
     opts, register_counter, register_gauge, register_histogram, Counter, Encoder as _, Gauge,
     Histogram,
 };
-use anyhow::{anyhow, Context as _, Result as AnyResult};
+use eyre::{bail, ensure, Result as EyreResult, WrapErr as _};
 use hyper::{
     body::HttpBody,
     header::CONTENT_TYPE,
@@ -97,30 +97,28 @@ async fn route(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     Ok(response)
 }
 
-pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResult<()> {
-    if options.prometheus.scheme() != "http" {
-        return Err(anyhow!(
-            "Only http:// is supported in {}",
-            options.prometheus
-        ));
-    }
-    if options.prometheus.path() != "/metrics" {
-        return Err(anyhow!(
-            "Only /metrics is supported in {}",
-            options.prometheus
-        ));
-    }
+pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<()> {
+    ensure!(
+        options.prometheus.scheme() == "http",
+        "Only http:// is supported in {}",
+        options.prometheus
+    );
+    ensure!(
+        options.prometheus.path() == "/metrics",
+        "Only /metrics is supported in {}",
+        options.prometheus
+    );
     let ip: IpAddr = match options.prometheus.host() {
         Some(Host::Ipv4(ip)) => ip.into(),
         Some(Host::Ipv6(ip)) => ip.into(),
-        Some(_) => return Err(anyhow!("Cannot bind {}", options.prometheus)),
+        Some(_) => bail!("Cannot bind {}", options.prometheus),
         None => Ipv4Addr::LOCALHOST.into(),
     };
     let port = options.prometheus.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
     let server = Server::try_bind(&addr)
-        .context("Could not bind Prometheus server port")?
+        .wrap_err("Could not bind Prometheus server port")?
         .serve(make_service_fn(|_| async {
             Ok::<_, hyper::Error>(service_fn(route))
         }))

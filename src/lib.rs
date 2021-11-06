@@ -2,6 +2,7 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
 mod identity;
+mod mimc_hash;
 mod mimc_tree;
 mod server;
 mod utils;

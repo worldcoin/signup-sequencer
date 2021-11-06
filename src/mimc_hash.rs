@@ -33,21 +33,17 @@ static ROUND_CONSTANTS: Lazy<[U256; NUM_ROUNDS]> = Lazy::new(|| {
 fn hash(left: &U256, right: &U256) -> (U256, U256) {
     let mut left = left % &*MODULUS;
     let mut right = right % &*MODULUS;
-    for (i, round_constant) in ROUND_CONSTANTS.iter().enumerate() {
+    for round_constant in &*ROUND_CONSTANTS {
         // Modulus is less than 2**252, so addition doesn't overflow
         let t = (&left + round_constant) % &*MODULUS;
         let t2 = t.mulmod(&t, &*MODULUS);
         let t4 = t2.mulmod(&t2, &*MODULUS);
         let t5 = t.mulmod(&t4, &*MODULUS);
-        let temp = (&right + t5) % &*MODULUS;
-        if i == NUM_ROUNDS - 1 {
-            right = temp;
-        } else {
-            right = left.clone();
-            left = temp;
-        }
+        right += t5;
+        right %= &*MODULUS;
+        std::mem::swap(&mut left, &mut right);
     }
-    (left, right)
+    (right, left)
 }
 
 #[cfg(test)]

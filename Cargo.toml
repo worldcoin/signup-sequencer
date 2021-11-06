@@ -33,6 +33,7 @@ criterion = { version = "0.3", optional = true }
 ethers = "0.5"
 futures = "0.3"
 hex = "0.4.3"
+hex-literal = "0.3"
 hyper = { version = "0.14", features = [ "full" ] }
 itertools = "0.10"
 merkletree = "0.21"

@@ -30,20 +30,20 @@ static ROUND_CONSTANTS: Lazy<[U256; NUM_ROUNDS]> = Lazy::new(|| {
 });
 
 /// See <https://github.com/iden3/circomlibjs/blob/main/src/mimcsponge.js#L44>
-fn hash(left: &U256, right: &U256) -> (U256, U256) {
-    let mut left = left % &*MODULUS;
-    let mut right = right % &*MODULUS;
+fn mix(left: &mut U256, right: &mut U256) {
+    debug_assert!(*left < *MODULUS);
+    debug_assert!(*right < *MODULUS);
     for round_constant in &*ROUND_CONSTANTS {
         // Modulus is less than 2**252, so addition doesn't overflow
-        let t = (&left + round_constant) % &*MODULUS;
+        let t = (&*left + round_constant) % &*MODULUS;
         let t2 = t.mulmod(&t, &*MODULUS);
         let t4 = t2.mulmod(&t2, &*MODULUS);
         let t5 = t.mulmod(&t4, &*MODULUS);
-        right += t5;
-        right %= &*MODULUS;
-        std::mem::swap(&mut left, &mut right);
+        *right += t5;
+        *right %= &*MODULUS;
+        std::mem::swap(left, right);
     }
-    (right, left)
+    std::mem::swap(left, right);
 }
 
 #[cfg(test)]
@@ -79,10 +79,10 @@ pub mod test {
     }
 
     #[test]
-    fn test_inner_hash() {
-        let left = U256::ONE;
-        let right = U256::ZERO;
-        let (left, right) = hash(&left, &right);
+    fn test_mix() {
+        let mut left = U256::ONE;
+        let mut right = U256::ZERO;
+        mix(&mut left, &mut right);
         assert_eq!(
             left,
             U256::from_decimal_str(
@@ -97,8 +97,8 @@ pub mod test {
             )
             .unwrap()
         );
-        let left = left + U256::from(2);
-        let (left, right) = hash(&left, &right);
+        left += U256::from(2);
+        mix(&mut left, &mut right);
         assert_eq!(
             left,
             U256::from_decimal_str(

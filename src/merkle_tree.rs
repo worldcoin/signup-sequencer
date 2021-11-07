@@ -1,4 +1,9 @@
 /// Implements basic binary Merkle trees
+/// 
+/// # To do
+/// 
+/// * Batch set support
+/// * Disk based storage backend (using mmaped files should be easy)
 use std::{
     fmt::Debug,
     iter::{repeat, successors},
@@ -96,6 +101,11 @@ impl<H: Hasher> MerkleTree<H> {
             self.nodes[index] = H::hash_node(&self.nodes[child], &self.nodes[child + 1]);
         }
     }
+
+    // TODO: Batch set
+    // pub fn set_batch<I: IntoIterator<Item = H::Hash>>(&mut self, offset: usize, hashes: I) {
+    //     todo!()
+    // }
 
     pub fn proof(&self, leaf: usize) -> Proof<H> {
         let mut index = self.num_leaves() + leaf - 1;

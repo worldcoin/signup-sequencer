@@ -98,6 +98,7 @@ pub mod bench {
     pub fn group(criterion: &mut Criterion) {
         crate::server::bench::group(criterion);
         crate::mimc_hash::bench::group(criterion);
+        crate::mimc_tree::bench::group(criterion);
         bench_example_proptest(criterion);
         bench_example_async(criterion);
     }

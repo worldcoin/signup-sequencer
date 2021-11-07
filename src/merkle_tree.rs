@@ -1,9 +1,10 @@
-/// Implements basic binary Merkle trees
-///
-/// # To do
-///
-/// * Batch set support
-/// * Disk based storage backend (using mmaped files should be easy)
+//! Implements basic binary Merkle trees
+//!
+//! # To do
+//!
+//! * Batch set support
+//! * Disk based storage backend (using mmaped files should be easy)
+
 use std::{
     fmt::Debug,
     iter::{repeat, successors},

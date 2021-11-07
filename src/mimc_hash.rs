@@ -3,6 +3,10 @@
 //! See <https://github.com/appliedzkp/semaphore/blob/master/circuits/circom/semaphore-base.circom#L10>
 //! See <https://github.com/kobigurk/circomlib/blob/4284dc1ef984a204db08864f5da530c97f9376ef/circuits/mimcsponge.circom>
 //! See <https://github.com/iden3/circomlibjs/blob/main/src/mimcsponge.js>
+//! 
+//! # To do
+//! 
+//! * Instantiate a `PrimeField` to use Montgomery form.
 
 use ethers::utils::keccak256;
 use once_cell::sync::Lazy;

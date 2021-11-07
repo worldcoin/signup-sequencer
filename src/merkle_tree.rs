@@ -1,35 +1,34 @@
 use std::iter::{repeat, successors};
 
-pub trait Leaf {
+pub trait Hasher {
     type Hash: Clone + Eq;
 
-    /// Hash value of an empty leaf
-    fn empty_hash() -> Self::Hash;
-
-    /// Compute the hash of a leaf
-    fn hash_leaf(&self) -> Self::Hash;
+    /// Hash value of an initial leaf
+    fn initial_leaf() -> Self::Hash;
 
     /// Compute the hash of an intermediate node
     fn hash_node(left: &Self::Hash, right: &Self::Hash) -> Self::Hash;
 }
 
-pub struct MerkleTree<T: Leaf> {
+pub struct MerkleTree<H: Hasher> {
     /// Depth of the tree, # of layers including leaf layer
     depth: usize,
 
     /// Hash value of empty subtrees of given depth, starting at leaf level
-    empty: Vec<T::Hash>,
+    empty: Vec<H::Hash>,
 
     /// Hash values of tree nodes and leaves, breadth first order
-    nodes: Vec<T::Hash>,
+    nodes: Vec<H::Hash>,
 }
 
-impl<T: Leaf> MerkleTree<T> {
+impl<H: Hasher> MerkleTree<H> {
     pub fn new(depth: usize) -> Self {
         // Compute empty node values, leaf to root
-        let empty = successors(Some(T::empty_hash()), |prev| Some(T::hash_node(prev, prev)))
-            .take(depth)
-            .collect::<Vec<_>>();
+        let empty = successors(Some(H::initial_leaf()), |prev| {
+            Some(H::hash_node(prev, prev))
+        })
+        .take(depth)
+        .collect::<Vec<_>>();
 
         // Compute node values
         let nodes = empty
@@ -55,15 +54,13 @@ impl<T: Leaf> MerkleTree<T> {
             .unwrap_or_default()
     }
 
-    pub fn root(&self) -> T::Hash {
+    pub fn root(&self) -> H::Hash {
         self.nodes[0].clone()
     }
 
-    pub fn set(&mut self, leaf: usize, value: &T) {
-        assert!(leaf < self.num_leaves());
-        let hash = value.hash_leaf();
-
+    pub fn set(&mut self, leaf: usize, hash: H::Hash) {
         // Update leaf
+        assert!(leaf < self.num_leaves());
         let mut index = self.num_leaves() + leaf - 1;
         self.nodes[index] = hash;
 
@@ -74,7 +71,7 @@ impl<T: Leaf> MerkleTree<T> {
 
             // Recompute node hash
             let child = (index << 1) + 1; // Left child, right is +1
-            self.nodes[index] = T::hash_node(&self.nodes[child], &self.nodes[child + 1]);
+            self.nodes[index] = H::hash_node(&self.nodes[child], &self.nodes[child + 1]);
 
             // Stop if root
             if index == 0 {
@@ -91,17 +88,13 @@ pub mod test {
     use hex_literal::hex;
     use merkletree::merkle::Element;
 
-    type Hash = [u8; 32];
+    struct Keccak;
 
-    impl Leaf for Hash {
-        type Hash = Hash;
+    impl Hasher for Keccak {
+        type Hash = [u8; 32];
 
-        fn empty_hash() -> Self::Hash {
-            Self::default()
-        }
-
-        fn hash_leaf(&self) -> Self::Hash {
-            self.clone()
+        fn initial_leaf() -> Self::Hash {
+            Self::Hash::default()
         }
 
         fn hash_node(left: &Self::Hash, right: &Self::Hash) -> Self::Hash {
@@ -111,14 +104,14 @@ pub mod test {
 
     #[test]
     fn test_tree() {
-        let mut tree = MerkleTree::<Hash>::new(3);
+        let mut tree = MerkleTree::<Keccak>::new(3);
         assert_eq!(
             tree.root(),
             hex!("b4c11951957c6f8f642c4af61cd6b24640fec6dc7fc607ee8206a99e92410d30")
         );
         tree.set(
             0,
-            &hex!("0000000000000000000000000000000000000000000000000000000000000001"),
+            hex!("0000000000000000000000000000000000000000000000000000000000000001"),
         );
         assert_eq!(
             tree.root(),
@@ -126,7 +119,7 @@ pub mod test {
         );
         tree.set(
             1,
-            &hex!("0000000000000000000000000000000000000000000000000000000000000002"),
+            hex!("0000000000000000000000000000000000000000000000000000000000000002"),
         );
         assert_eq!(
             tree.root(),
@@ -134,7 +127,7 @@ pub mod test {
         );
         tree.set(
             2,
-            &hex!("0000000000000000000000000000000000000000000000000000000000000003"),
+            hex!("0000000000000000000000000000000000000000000000000000000000000003"),
         );
         assert_eq!(
             tree.root(),
@@ -142,7 +135,7 @@ pub mod test {
         );
         tree.set(
             3,
-            &hex!("0000000000000000000000000000000000000000000000000000000000000004"),
+            hex!("0000000000000000000000000000000000000000000000000000000000000004"),
         );
         assert_eq!(
             tree.root(),

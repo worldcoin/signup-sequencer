@@ -57,7 +57,7 @@ pub async fn inclusion_proof(
     let commitments = commitments.read().unwrap();
     let proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
     // TODO handle commitment not found
-    let response = format!("Inclusion Proof!\n {:?}", proof);
+    let response = format!("Inclusion Proof!\n"); // TODO {:?}", proof);
     Ok(Response::new(response.into()))
 }
 

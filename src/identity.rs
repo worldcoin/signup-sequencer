@@ -1,6 +1,5 @@
-use crate::mimc_tree::{Hash, MimcTree};
+use crate::mimc_tree::{Hash, MimcTree, Proof};
 use anyhow::anyhow;
-use merkletree::{merkle::MerkleTree, proof::Proof, store::VecStore};
 use std::{
     convert::TryInto,
     sync::{
@@ -22,7 +21,7 @@ pub fn initialize_commitments() -> Vec<Commitment> {
 pub fn inclusion_proof_helper(
     commitment: &str,
     commitments: &[Commitment],
-) -> Result<Proof<[u8; 32]>, anyhow::Error> {
+) -> Result<Proof, anyhow::Error> {
     // For some reason strings have extra `"`s on the ends
     let commitment = commitment.trim_matches('"');
     let commitment = hex::decode(commitment).unwrap();

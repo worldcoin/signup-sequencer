@@ -1,6 +1,12 @@
-use std::iter::{repeat, successors};
+/// Implements basic binary Merkle trees
+use std::{
+    fmt::Debug,
+    iter::{repeat, successors},
+};
 
+/// Hash types, values and algorithms for a Merkle tree
 pub trait Hasher {
+    /// Type of the leaf and node hashes
     type Hash: Clone + Eq;
 
     /// Hash value of an initial leaf
@@ -10,6 +16,8 @@ pub trait Hasher {
     fn hash_node(left: &Self::Hash, right: &Self::Hash) -> Self::Hash;
 }
 
+/// Merkle tree with all leaf and intermediate hashes stored
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct MerkleTree<H: Hasher> {
     /// Depth of the tree, # of layers including leaf layer
     depth: usize,
@@ -20,6 +28,20 @@ pub struct MerkleTree<H: Hasher> {
     /// Hash values of tree nodes and leaves, breadth first order
     nodes: Vec<H::Hash>,
 }
+
+/// Element of a Merkle proof
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Branch<H: Hasher> {
+    /// Left branch taken, value is the right sibling hash.
+    Left(H::Hash),
+
+    /// Right branch taken, value is the left sibling hash.
+    Right(H::Hash),
+}
+
+/// Merkle proof path, bottom to top.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Proof<H: Hasher>(Vec<Branch<H>>);
 
 impl<H: Hasher> MerkleTree<H> {
     pub fn new(depth: usize) -> Self {
@@ -65,19 +87,80 @@ impl<H: Hasher> MerkleTree<H> {
         self.nodes[index] = hash;
 
         // Update tree nodes
-        loop {
+        while index != 0 {
             // Map index to parent index
             index = ((index + 1) >> 1) - 1;
 
             // Recompute node hash
             let child = (index << 1) + 1; // Left child, right is +1
             self.nodes[index] = H::hash_node(&self.nodes[child], &self.nodes[child + 1]);
-
-            // Stop if root
-            if index == 0 {
-                break;
-            }
         }
+    }
+
+    pub fn proof(&self, leaf: usize) -> Proof<H> {
+        let mut index = self.num_leaves() + leaf - 1;
+        let mut path = Vec::with_capacity(self.depth);
+        while index != 0 {
+            // Add proof for node at index to parent
+            path.push(match index & 1 {
+                1 => Branch::Left(self.nodes[index + 1].clone()),
+                0 => Branch::Right(self.nodes[index - 1].clone()),
+                _ => unreachable!(),
+            });
+
+            // Map index to parent index
+            index = ((index + 1) >> 1) - 1;
+        }
+        Proof(path)
+    }
+
+    pub fn verify(&self, hash: H::Hash, proof: &Proof<H>) -> bool {
+        proof.root(hash) == self.root()
+    }
+}
+
+impl<H: Hasher> Proof<H> {
+    /// Compute the leaf index for this proof
+    pub fn leaf_index(&self) -> usize {
+        self.0.iter().rev().fold(0, |index, branch| {
+            match branch {
+                Branch::Left(_) => index << 1,
+                Branch::Right(_) => (index << 1) + 1,
+            }
+        })
+    }
+
+    /// Compute the Merkle root given a leaf hash
+    pub fn root(&self, hash: H::Hash) -> H::Hash {
+        self.0.iter().fold(hash, |hash, branch| {
+            match branch {
+                Branch::Left(sibbling) => H::hash_node(&hash, sibbling),
+                Branch::Right(sibbling) => H::hash_node(sibbling, &hash),
+            }
+        })
+    }
+}
+
+impl<H> Debug for Branch<H>
+where
+    H: Hasher,
+    H::Hash: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Left(arg0) => f.debug_tuple("Left").field(arg0).finish(),
+            Self::Right(arg0) => f.debug_tuple("Right").field(arg0).finish(),
+        }
+    }
+}
+
+impl<H> Debug for Proof<H>
+where
+    H: Hasher,
+    H::Hash: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Proof").field(&self.0).finish()
     }
 }
 
@@ -103,7 +186,7 @@ pub mod test {
     }
 
     #[test]
-    fn test_tree() {
+    fn test_root() {
         let mut tree = MerkleTree::<Keccak>::new(3);
         assert_eq!(
             tree.root(),
@@ -141,5 +224,37 @@ pub mod test {
             tree.root(),
             hex!("a9bb8c3f1f12e9aa903a50c47f314b57610a3ab32f2d463293f58836def38d36")
         );
+    }
+
+    #[test]
+    fn test_proof() {
+        let mut tree = MerkleTree::<Keccak>::new(3);
+        tree.set(
+            0,
+            hex!("0000000000000000000000000000000000000000000000000000000000000001"),
+        );
+        tree.set(
+            1,
+            hex!("0000000000000000000000000000000000000000000000000000000000000002"),
+        );
+        tree.set(
+            2,
+            hex!("0000000000000000000000000000000000000000000000000000000000000003"),
+        );
+        tree.set(
+            3,
+            hex!("0000000000000000000000000000000000000000000000000000000000000004"),
+        );
+
+        let proof = tree.proof(2);
+        assert_eq!(proof.leaf_index(), 2);
+        assert!(tree.verify(
+            hex!("0000000000000000000000000000000000000000000000000000000000000003"),
+            &proof
+        ));
+        assert!(!tree.verify(
+            hex!("0000000000000000000000000000000000000000000000000000000000000001"),
+            &proof
+        ));
     }
 }

@@ -2,6 +2,7 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
 mod identity;
+mod merkle_tree;
 mod mimc_hash;
 mod mimc_tree;
 mod server;
@@ -96,6 +97,7 @@ pub mod bench {
 
     pub fn group(criterion: &mut Criterion) {
         crate::server::bench::group(criterion);
+        crate::mimc_hash::bench::group(criterion);
         bench_example_proptest(criterion);
         bench_example_async(criterion);
     }

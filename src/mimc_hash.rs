@@ -46,7 +46,7 @@ fn mix(left: &mut U256, right: &mut U256) {
     std::mem::swap(left, right);
 }
 
-fn hash(values: &[U256]) -> U256 {
+pub fn hash(values: &[U256]) -> U256 {
     let mut left = U256::ZERO;
     let mut right = U256::ZERO;
     for value in values {
@@ -152,8 +152,19 @@ pub mod test {
 }
 
 #[cfg(feature = "bench")]
-pub mod bench {
+pub(crate) mod bench {
+    use super::*;
     use criterion::Criterion;
 
-    pub fn group(criterion: &mut Criterion) {}
+    pub(crate) fn group(criterion: &mut Criterion) {
+        bench_mix(criterion);
+    }
+
+    fn bench_mix(criterion: &mut Criterion) {
+        let mut left = U256::ONE;
+        let mut right = U256::ZERO;
+        criterion.bench_function("mimc_mix", move |bencher| {
+            bencher.iter(|| mix(&mut left, &mut right));
+        });
+    }
 }

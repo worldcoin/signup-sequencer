@@ -1,4 +1,4 @@
-use crate::mimc_tree::ExampleAlgorithm;
+use crate::mimc_tree::{Hash, MimcTree};
 use anyhow::anyhow;
 use merkletree::{merkle::MerkleTree, proof::Proof, store::VecStore};
 use std::{
@@ -9,10 +9,10 @@ use std::{
     },
 };
 
+pub type Commitment = Hash;
+
 // TODO Use real value
 const NUM_LEAVES: usize = 2;
-
-pub type Commitment = [u8; 32];
 
 pub fn initialize_commitments() -> Vec<Commitment> {
     let identity_commitments = vec![[0_u8; 32]; 1 << NUM_LEAVES];
@@ -32,9 +32,9 @@ pub fn inclusion_proof_helper(
         .position(|x| *x == commitment)
         .ok_or_else(|| anyhow!("Commitment not found: {:?}", commitment))?;
 
-    let t: MerkleTree<[u8; 32], ExampleAlgorithm, VecStore<_>> =
-        MerkleTree::try_from_iter(commitments.iter().map(|x| Ok(*x))).unwrap();
-    t.gen_proof(index)
+    // let t: MimcTree = MimcTree::try_from_iter(commitments.iter().map(|x|
+    // Ok(*x))).unwrap(); t.gen_proof(index)
+    todo!()
 }
 
 pub fn insert_identity_helper(

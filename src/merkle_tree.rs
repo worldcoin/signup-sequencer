@@ -1,7 +1,7 @@
 /// Implements basic binary Merkle trees
-/// 
+///
 /// # To do
-/// 
+///
 /// * Batch set support
 /// * Disk based storage backend (using mmaped files should be easy)
 use std::{
@@ -81,6 +81,7 @@ impl<H: Hasher> MerkleTree<H> {
             .unwrap_or_default()
     }
 
+    #[allow(dead_code)]
     pub fn root(&self) -> H::Hash {
         self.nodes[0].clone()
     }
@@ -103,8 +104,8 @@ impl<H: Hasher> MerkleTree<H> {
     }
 
     // TODO: Batch set
-    // pub fn set_batch<I: IntoIterator<Item = H::Hash>>(&mut self, offset: usize, hashes: I) {
-    //     todo!()
+    // pub fn set_batch<I: IntoIterator<Item = H::Hash>>(&mut self, offset: usize,
+    // hashes: I) {     todo!()
     // }
 
     pub fn proof(&self, leaf: usize) -> Proof<H> {
@@ -124,6 +125,7 @@ impl<H: Hasher> MerkleTree<H> {
         Proof(path)
     }
 
+    #[allow(dead_code)]
     pub fn verify(&self, hash: H::Hash, proof: &Proof<H>) -> bool {
         proof.root(hash) == self.root()
     }
@@ -131,6 +133,7 @@ impl<H: Hasher> MerkleTree<H> {
 
 impl<H: Hasher> Proof<H> {
     /// Compute the leaf index for this proof
+    #[allow(dead_code)]
     pub fn leaf_index(&self) -> usize {
         self.0.iter().rev().fold(0, |index, branch| {
             match branch {
@@ -141,6 +144,7 @@ impl<H: Hasher> Proof<H> {
     }
 
     /// Compute the Merkle root given a leaf hash
+    #[allow(dead_code)]
     pub fn root(&self, hash: H::Hash) -> H::Hash {
         self.0.iter().fold(hash, |hash, branch| {
             match branch {
@@ -179,7 +183,6 @@ pub mod test {
     use super::*;
     use ethers::utils::keccak256;
     use hex_literal::hex;
-    use merkletree::merkle::Element;
 
     struct Keccak;
 
@@ -191,7 +194,7 @@ pub mod test {
         }
 
         fn hash_node(left: &Self::Hash, right: &Self::Hash) -> Self::Hash {
-            keccak256([left.clone(), right.clone()].concat())
+            keccak256([*left, *right].concat())
         }
     }
 

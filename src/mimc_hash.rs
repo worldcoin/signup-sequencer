@@ -6,7 +6,7 @@
 
 use ethers::utils::keccak256;
 use once_cell::sync::Lazy;
-use zkp_u256::{Montgomery, U256};
+use zkp_u256::U256;
 
 const NUM_ROUNDS: usize = 220;
 
@@ -152,11 +152,12 @@ pub mod test {
 }
 
 #[cfg(feature = "bench")]
-pub(crate) mod bench {
+pub mod bench {
+    #[allow(clippy::wildcard_imports)]
     use super::*;
     use criterion::Criterion;
 
-    pub(crate) fn group(criterion: &mut Criterion) {
+    pub fn group(criterion: &mut Criterion) {
         bench_mix(criterion);
     }
 

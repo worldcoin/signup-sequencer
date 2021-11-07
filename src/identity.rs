@@ -1,4 +1,4 @@
-use crate::mimc_tree::{Hash, MimcTree, Proof};
+use crate::mimc_tree::{Hash, Proof};
 use anyhow::anyhow;
 use std::{
     convert::TryInto,
@@ -26,7 +26,7 @@ pub fn inclusion_proof_helper(
     let commitment = commitment.trim_matches('"');
     let commitment = hex::decode(commitment).unwrap();
     let commitment: [u8; 32] = (&commitment[..]).try_into().unwrap();
-    let index = commitments
+    let _index = commitments
         .iter()
         .position(|x| *x == commitment)
         .ok_or_else(|| anyhow!("Commitment not found: {:?}", commitment))?;

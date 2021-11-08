@@ -1,7 +1,7 @@
+use crate::mimc_tree::{Hash, Proof};
 use ethers::prelude::{
     abigen, Address, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware,
 };
-use crate::mimc_tree::{Hash, Proof};
 use eyre::{eyre, Error as EyreError};
 use std::{
     convert::{TryFrom, TryInto},

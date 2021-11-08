@@ -56,6 +56,25 @@ jobs:
         with:
           command: test
           args: --all-features --all-targets
+
+  bench:
+    name: Test benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build and test benchmarks
         uses: actions-rs/cargo@v1
         with:
@@ -144,14 +163,14 @@ jobs:
         with:
           command: test
           args: --all-features --all-targets --no-fail-fast
-      - name: Bench test with coverage
-        env:
-          RUSTFLAGS: -Zinstrument-coverage
-          LLVM_PROFILE_FILE: profile-%m.profraw
-        uses: actions-rs/cargo@v1
-        with:
-          command: bench
-          args: --bench criterion --features bench -- --test
+      # - name: Bench test with coverage
+      #   env:
+      #     RUSTFLAGS: -Zinstrument-coverage
+      #     LLVM_PROFILE_FILE: profile-%m.profraw
+      #   uses: actions-rs/cargo@v1
+      #   with:
+      #     command: bench
+      #     args: --bench criterion --features bench -- --test
       - name: Creating coverage report
         if: ${{ runner.os != 'Windows' }}
         env:

@@ -9,7 +9,7 @@ mod server;
 mod utils;
 
 use crate::utils::spawn_or_abort;
-use anyhow::Result as AnyResult;
+use eyre::Result as EyreResult;
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::info;
@@ -21,13 +21,13 @@ pub struct Options {
 }
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResult<()> {
+pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<()> {
     // Start server
     let server = spawn_or_abort({
         let shutdown = shutdown.clone();
         async move {
             server::main(options.server, shutdown).await?;
-            AnyResult::Ok(())
+            EyreResult::Ok(())
         }
     });
 
@@ -135,10 +135,8 @@ pub mod bench {
     fn bench_example_async(criterion: &mut Criterion) {
         let duration = Duration::from_micros(1);
         criterion.bench_function("example_async", move |bencher| {
-            bencher.to_async(runtime()).iter(|| {
-                async {
-                    tokio::time::sleep(duration).await;
-                }
+            bencher.to_async(runtime()).iter(|| async {
+                tokio::time::sleep(duration).await;
             });
         });
     }

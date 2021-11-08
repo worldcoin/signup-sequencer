@@ -1,7 +1,7 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
-use anyhow::{anyhow, Context as _, Error as AnyError, Result as AnyResult};
 use core::str::FromStr;
+use eyre::{bail, eyre, Error as EyreError, Result as EyreResult, WrapErr as _};
 use structopt::StructOpt;
 use tracing::info;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -14,15 +14,15 @@ enum LogFormat {
 }
 
 impl FromStr for LogFormat {
-    type Err = AnyError;
+    type Err = EyreError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "compact" => Ok(Self::Compact),
-            "pretty" => Ok(Self::Pretty),
-            "json" => Ok(Self::Json),
-            _ => Err(anyhow!("Invalid log format: {}", s)),
-        }
+        Ok(match s {
+            "compact" => Self::Compact,
+            "pretty" => Self::Pretty,
+            "json" => Self::Json,
+            _ => bail!("Invalid log format: {}", s),
+        })
     }
 }
 
@@ -43,7 +43,7 @@ pub struct LogOptions {
 
 impl LogOptions {
     #[allow(dead_code)]
-    pub fn init(&self) -> AnyResult<()> {
+    pub fn init(&self) -> EyreResult<()> {
         let log_filter = match self.verbose {
             0 => "info".to_owned(),
             1 => format!("{}=debug,lib=debug", env!("CARGO_CRATE_NAME")),
@@ -68,8 +68,8 @@ impl LogOptions {
                     .try_init()
             }
         }
-        .map_err(|err| anyhow!(err))
-        .context("setting default log collector")?;
+        .map_err(|err| eyre!(err))
+        .wrap_err("setting default log collector")?;
 
         // Log version information
         info!(

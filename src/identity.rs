@@ -1,5 +1,5 @@
 use crate::mimc_tree::{Hash, Proof};
-use anyhow::anyhow;
+use eyre::{eyre, Error as EyreError};
 use std::{
     convert::TryInto,
     sync::{
@@ -21,7 +21,7 @@ pub fn initialize_commitments() -> Vec<Commitment> {
 pub fn inclusion_proof_helper(
     commitment: &str,
     commitments: &[Commitment],
-) -> Result<Proof, anyhow::Error> {
+) -> Result<Proof, EyreError> {
     // For some reason strings have extra `"`s on the ends
     let commitment = commitment.trim_matches('"');
     let commitment = hex::decode(commitment).unwrap();
@@ -29,7 +29,7 @@ pub fn inclusion_proof_helper(
     let _index = commitments
         .iter()
         .position(|x| *x == commitment)
-        .ok_or_else(|| anyhow!("Commitment not found: {:?}", commitment))?;
+        .ok_or_else(|| eyre!("Commitment not found: {:?}", commitment))?;
 
     // let t: MimcTree = MimcTree::try_from_iter(commitments.iter().map(|x|
     // Ok(*x))).unwrap(); t.gen_proof(index)

@@ -55,9 +55,9 @@ pub async fn inclusion_proof(
     let data: serde_json::Value = serde_json::from_reader(whole_body.reader()).unwrap();
     let commitment = data["identityCommitment"].to_string();
     let commitments = commitments.read().unwrap();
-    let proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
+    let _proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
     // TODO handle commitment not found
-    let response = format!("Inclusion Proof!\n {:?}", proof);
+    let response = "Inclusion Proof!\n"; // TODO: proof
     Ok(Response::new(response.into()))
 }
 

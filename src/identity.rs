@@ -1,6 +1,5 @@
-use crate::mimc_tree::ExampleAlgorithm;
-use eyre::{eyre, Error as EyreError, WrapErr as _};
-use merkletree::{merkle::MerkleTree, proof::Proof, store::VecStore};
+use crate::mimc_tree::{Hash, Proof};
+use eyre::{eyre, Error as EyreError};
 use std::{
     convert::TryInto,
     sync::{
@@ -9,10 +8,10 @@ use std::{
     },
 };
 
+pub type Commitment = Hash;
+
 // TODO Use real value
 const NUM_LEAVES: usize = 2;
-
-pub type Commitment = [u8; 32];
 
 pub fn initialize_commitments() -> Vec<Commitment> {
     let identity_commitments = vec![[0_u8; 32]; 1 << NUM_LEAVES];
@@ -22,21 +21,19 @@ pub fn initialize_commitments() -> Vec<Commitment> {
 pub fn inclusion_proof_helper(
     commitment: &str,
     commitments: &[Commitment],
-) -> Result<Proof<[u8; 32]>, EyreError> {
+) -> Result<Proof, EyreError> {
     // For some reason strings have extra `"`s on the ends
     let commitment = commitment.trim_matches('"');
     let commitment = hex::decode(commitment).unwrap();
     let commitment: [u8; 32] = (&commitment[..]).try_into().unwrap();
-    let index = commitments
+    let _index = commitments
         .iter()
         .position(|x| *x == commitment)
         .ok_or_else(|| eyre!("Commitment not found: {:?}", commitment))?;
 
-    let t: MerkleTree<[u8; 32], ExampleAlgorithm, VecStore<_>> =
-        MerkleTree::try_from_iter(commitments.iter().map(|x| Ok(*x))).unwrap();
-    t.gen_proof(index)
-        .map_err(|e| eyre!(e))
-        .wrap_err("Error generating Merkle proof")
+    // let t: MimcTree = MimcTree::try_from_iter(commitments.iter().map(|x|
+    // Ok(*x))).unwrap(); t.gen_proof(index)
+    todo!()
 }
 
 pub fn insert_identity_helper(

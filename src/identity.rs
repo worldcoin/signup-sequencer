@@ -1,9 +1,8 @@
-use crate::mimc_tree::ExampleAlgorithm;
-use anyhow::anyhow;
 use ethers::prelude::{
     abigen, Address, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware,
 };
-use merkletree::{merkle::MerkleTree, proof::Proof, store::VecStore};
+use crate::mimc_tree::{Hash, Proof};
+use eyre::{eyre, Error as EyreError};
 use std::{
     convert::{TryFrom, TryInto},
     sync::{
@@ -12,14 +11,14 @@ use std::{
     },
 };
 
+pub type Commitment = Hash;
+
 // TODO Use real value
 const NUM_LEAVES: usize = 2;
 
 const SEMAPHORE_ADDRESS: &str = "0x1a2BdAE39EB03E1D10551866717F8631bEf6e88a";
 // const WALLET_CLAIMS_ADDRESS: &str =
 // "0x39777E5d6bB83F4bF51fa832cD50E3c74eeA50A5";
-
-pub type Commitment = [u8; 32];
 
 abigen!(
     Semaphore,
@@ -35,19 +34,19 @@ pub fn initialize_commitments() -> Vec<Commitment> {
 pub fn inclusion_proof_helper(
     commitment: &str,
     commitments: &[Commitment],
-) -> Result<Proof<[u8; 32]>, anyhow::Error> {
+) -> Result<Proof, EyreError> {
     // For some reason strings have extra `"`s on the ends
     let commitment = commitment.trim_matches('"');
     let commitment = hex::decode(commitment).unwrap();
     let commitment: [u8; 32] = (&commitment[..]).try_into().unwrap();
-    let index = commitments
+    let _index = commitments
         .iter()
         .position(|x| *x == commitment)
-        .ok_or_else(|| anyhow!("Commitment not found: {:?}", commitment))?;
+        .ok_or_else(|| eyre!("Commitment not found: {:?}", commitment))?;
 
-    let t: MerkleTree<[u8; 32], ExampleAlgorithm, VecStore<_>> =
-        MerkleTree::try_from_iter(commitments.iter().map(|x| Ok(*x))).unwrap();
-    t.gen_proof(index)
+    // let t: MimcTree = MimcTree::try_from_iter(commitments.iter().map(|x|
+    // Ok(*x))).unwrap(); t.gen_proof(index)
+    todo!()
 }
 
 pub fn insert_identity_commitment(
@@ -62,7 +61,7 @@ pub fn insert_identity_commitment(
     commitments[index] = commitment;
 }
 
-pub async fn insert_identity_to_contract(commitment: &str) -> Result<bool, anyhow::Error> {
+pub async fn insert_identity_to_contract(commitment: &str) -> Result<bool, EyreError> {
     let commitment = commitment.trim_matches('"');
     let decoded_commitment = hex::decode(commitment).unwrap();
 

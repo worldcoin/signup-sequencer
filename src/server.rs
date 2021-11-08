@@ -3,7 +3,7 @@ use crate::identity::{
     insert_identity_to_contract, Commitment,
 };
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
-use anyhow::{anyhow, Context as _, Result as AnyResult};
+use eyre::{bail, ensure, Result as EyreResult, WrapErr as _};
 use hyper::{
     body::Buf,
     service::{make_service_fn, service_fn},
@@ -56,9 +56,9 @@ pub async fn inclusion_proof(
     let data: serde_json::Value = serde_json::from_reader(whole_body.reader()).unwrap();
     let commitment = data["identityCommitment"].to_string();
     let commitments = commitments.read().unwrap();
-    let proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
+    let _proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
     // TODO handle commitment not found
-    let response = format!("Inclusion Proof!\n {:?}", proof);
+    let response = "Inclusion Proof!\n"; // TODO: proof
     Ok(Response::new(response.into()))
 }
 
@@ -111,12 +111,10 @@ async fn route(
         (&Method::POST, "/insertIdentity") => {
             insert_identity(request, commitments, last_index).await?
         }
-        _ => {
-            Response::builder()
-                .status(404)
-                .body(Body::from("404"))
-                .unwrap()
-        }
+        _ => Response::builder()
+            .status(404)
+            .body(Body::from("404"))
+            .unwrap(),
     };
 
     // Measure result and return
@@ -126,17 +124,21 @@ async fn route(
     Ok(response)
 }
 
-pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResult<()> {
-    if options.server.scheme() != "http" {
-        return Err(anyhow!("Only http:// is supported in {}", options.server));
-    }
-    if options.server.path() != "/" {
-        return Err(anyhow!("Only / is supported in {}", options.server));
-    }
+pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<()> {
+    ensure!(
+        options.server.scheme() == "http",
+        "Only http:// is supported in {}",
+        options.server
+    );
+    ensure!(
+        options.server.path() == "/",
+        "Only / is supported in {}",
+        options.server
+    );
     let ip: IpAddr = match options.server.host() {
         Some(Host::Ipv4(ip)) => ip.into(),
         Some(Host::Ipv6(ip)) => ip.into(),
-        Some(_) => return Err(anyhow!("Cannot bind {}", options.server)),
+        Some(_) => bail!("Cannot bind {}", options.server),
         None => Ipv4Addr::LOCALHOST.into(),
     };
     let port = options.server.port().unwrap_or(9998);
@@ -160,7 +162,7 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResul
     });
 
     let server = Server::try_bind(&addr)
-        .context("Could not bind server port")?
+        .wrap_err("Could not bind server port")?
         .serve(make_svc)
         .with_graceful_shutdown(async move {
             shutdown.subscribe().recv().await.ok();
@@ -200,13 +202,11 @@ pub mod bench {
 
     fn bench_hello_world(c: &mut Criterion) {
         c.bench_function("bench_hello_world", |b| {
-            b.to_async(runtime()).iter(|| {
-                async {
-                    let request = Request::new(Body::empty());
-                    let response = hello_world(request).await.unwrap();
-                    let bytes = to_bytes(response.into_body()).await.unwrap();
-                    drop(black_box(bytes));
-                }
+            b.to_async(runtime()).iter(|| async {
+                let request = Request::new(Body::empty());
+                let response = hello_world(request).await.unwrap();
+                let bytes = to_bytes(response.into_body()).await.unwrap();
+                drop(black_box(bytes));
             });
         });
     }

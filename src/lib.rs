@@ -2,12 +2,14 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
 mod identity;
+mod merkle_tree;
+mod mimc_hash;
 mod mimc_tree;
 mod server;
 mod utils;
 
 use crate::utils::spawn_or_abort;
-use anyhow::Result as AnyResult;
+use eyre::Result as EyreResult;
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::info;
@@ -19,13 +21,13 @@ pub struct Options {
 }
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> AnyResult<()> {
+pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<()> {
     // Start server
     let server = spawn_or_abort({
         let shutdown = shutdown.clone();
         async move {
             server::main(options.server, shutdown).await?;
-            AnyResult::Ok(())
+            EyreResult::Ok(())
         }
     });
 
@@ -95,6 +97,8 @@ pub mod bench {
 
     pub fn group(criterion: &mut Criterion) {
         crate::server::bench::group(criterion);
+        crate::mimc_hash::bench::group(criterion);
+        crate::mimc_tree::bench::group(criterion);
         bench_example_proptest(criterion);
         bench_example_async(criterion);
     }
@@ -131,10 +135,8 @@ pub mod bench {
     fn bench_example_async(criterion: &mut Criterion) {
         let duration = Duration::from_micros(1);
         criterion.bench_function("example_async", move |bencher| {
-            bencher.to_async(runtime()).iter(|| {
-                async {
-                    tokio::time::sleep(duration).await;
-                }
+            bencher.to_async(runtime()).iter(|| async {
+                tokio::time::sleep(duration).await;
             });
         });
     }

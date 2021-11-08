@@ -136,18 +136,6 @@ jobs:
           toolchain: nightly
           components: llvm-tools-preview
           override: true
-      - name: Install rustfilt
-        uses: actions-rs/install@v0.1
-        with:
-          crate: rustfilt
-          version: latest
-          use-tool-cache: true
-      - name: Install cargo-binutils
-        uses: actions-rs/install@v0.1
-        with:
-          crate: cargo-binutils
-          version: latest
-          use-tool-cache: true
       - uses: actions/cache@v2
         with:
           path: |
@@ -155,6 +143,16 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install rustfilt
+        uses: actions-rs/install@v0.1
+        with:
+          crate: rustfilt
+          version: latest
+      - name: Install cargo-binutils
+        uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-binutils
+          version: latest
       - name: Test with coverage
         env:
           RUSTFLAGS: -Zinstrument-coverage

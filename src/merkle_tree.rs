@@ -64,7 +64,9 @@ const fn first_child(index: usize) -> usize {
 }
 
 const fn depth(index: usize) -> usize {
-    63 - (index + 1).leading_zeros() as usize
+    // `n.next_power_of_two()` will return `n` iff `n` is a power of two.
+    // The extra offset corrects this.
+    (index + 2).next_power_of_two().trailing_zeros() as usize - 1
 }
 
 impl<H: Hasher> MerkleTree<H> {
@@ -168,8 +170,8 @@ impl<H: Hasher> Proof<H> {
     #[allow(dead_code)]
     pub fn root(&self, hash: H::Hash) -> H::Hash {
         self.0.iter().fold(hash, |hash, branch| match branch {
-            Branch::Left(sibbling) => H::hash_node(&hash, sibbling),
-            Branch::Right(sibbling) => H::hash_node(sibbling, &hash),
+            Branch::Left(sibling) => H::hash_node(&hash, sibling),
+            Branch::Right(sibling) => H::hash_node(sibling, &hash),
         })
     }
 }

@@ -158,22 +158,18 @@ impl<H: Hasher> Proof<H> {
     /// Compute the leaf index for this proof
     #[allow(dead_code)]
     pub fn leaf_index(&self) -> usize {
-        self.0.iter().rev().fold(0, |index, branch| {
-            match branch {
-                Branch::Left(_) => index << 1,
-                Branch::Right(_) => (index << 1) + 1,
-            }
+        self.0.iter().rev().fold(0, |index, branch| match branch {
+            Branch::Left(_) => index << 1,
+            Branch::Right(_) => (index << 1) + 1,
         })
     }
 
     /// Compute the Merkle root given a leaf hash
     #[allow(dead_code)]
     pub fn root(&self, hash: H::Hash) -> H::Hash {
-        self.0.iter().fold(hash, |hash, branch| {
-            match branch {
-                Branch::Left(sibbling) => H::hash_node(&hash, sibbling),
-                Branch::Right(sibbling) => H::hash_node(sibbling, &hash),
-            }
+        self.0.iter().fold(hash, |hash, branch| match branch {
+            Branch::Left(sibbling) => H::hash_node(&hash, sibbling),
+            Branch::Right(sibbling) => H::hash_node(sibbling, &hash),
         })
     }
 }

@@ -21,6 +21,13 @@ jobs:
         with:
           toolchain: nightly
           override: true
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
       - uses: actions-rs/cargo@v1
         with:
           command: build
@@ -42,6 +49,13 @@ jobs:
         with:
           command: test
           args: --all-features --all-targets
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build and test benchmarks
         uses: actions-rs/cargo@v1
         with:
@@ -78,6 +92,13 @@ jobs:
           toolchain: nightly
           override: true
           components: clippy
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -108,6 +129,13 @@ jobs:
           crate: cargo-binutils
           version: latest
           use-tool-cache: true
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Test with coverage
         env:
           RUSTFLAGS: -Zinstrument-coverage

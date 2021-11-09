@@ -50,3 +50,12 @@ cargo bench --bench criterion --features="bench proptest"
 * Add ISSUE_TEMPLATE, PR template, etc.
 * Add crates.io publishing
 * Build ARM binary
+
+
+```shell
+docker build --platform linux/arm64 --progress plain . --build-arg TARGET=aarch64-unknown-linux-musl
+```
+
+```shell
+docker build --platform linux/amd64 --progress plain . --build-arg TARGET=x86_64-unknown-linux-musl
+```

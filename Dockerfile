@@ -1,11 +1,12 @@
 FROM rust as build-env
+WORKDIR /src
 
 ARG TARGET=x86_64-unknown-linux-musl
 ENV TARGET $TARGET
 
 # Build tools for a static musl target
 RUN apt-get update &&\
-    apt-get install -yq build-essential llvm clang libcap2-bin &&\
+    apt-get install -yq build-essential llvm clang gcc libcap2-bin &&\
     apt-get clean && rm -rf /var/lib/apt/lists/* &&\
     rustup target add $TARGET
 

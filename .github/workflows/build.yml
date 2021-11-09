@@ -137,6 +137,7 @@ jobs:
           components: llvm-tools-preview
           override: true
       - uses: actions/cache@v2
+        id: cache
         with:
           path: |
             ~/.cargo/registry
@@ -145,8 +146,9 @@ jobs:
             target
           key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-v3
       - name: Install rustfilt and cargo-binutils
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          which rustfilt || cargo install rustfilt cargo-binutils
+          cargo install rustfilt cargo-binutils
       - name: Test with coverage
         env:
           RUSTFLAGS: -Zinstrument-coverage

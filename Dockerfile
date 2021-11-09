@@ -12,9 +12,6 @@ RUN apt-get update &&\
 # Use Mimalloc by default instead of the musl malloc
 ARG FEATURES="mimalloc"
 
-COPY Cargo.toml Cargo.lock build.rs Readme.md src ./
-RUN cargo test -vvv
-
 # Build dependencies only
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src/cli &&\

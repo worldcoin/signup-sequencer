@@ -1,5 +1,14 @@
-on: [push, pull_request]
 name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
     name: Build (release)
@@ -12,6 +21,13 @@ jobs:
         with:
           toolchain: nightly
           override: true
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
       - uses: actions-rs/cargo@v1
         with:
           command: build
@@ -28,11 +44,37 @@ jobs:
         with:
           toolchain: nightly
           override: true
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-v2
       - name: Build and run tests
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: --all-features --all-targets
+
+  bench:
+    name: Test benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build and test benchmarks
         uses: actions-rs/cargo@v1
         with:
@@ -69,6 +111,13 @@ jobs:
           toolchain: nightly
           override: true
           components: clippy
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -87,18 +136,23 @@ jobs:
           toolchain: nightly
           components: llvm-tools-preview
           override: true
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-v2
       - name: Install rustfilt
         uses: actions-rs/install@v0.1
         with:
           crate: rustfilt
           version: latest
-          use-tool-cache: true
       - name: Install cargo-binutils
         uses: actions-rs/install@v0.1
         with:
           crate: cargo-binutils
           version: latest
-          use-tool-cache: true
       - name: Test with coverage
         env:
           RUSTFLAGS: -Zinstrument-coverage
@@ -106,11 +160,40 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-features --all-targets
+          args: --all-features --all-targets --no-fail-fast
+      # - name: Bench test with coverage
+      #   env:
+      #     RUSTFLAGS: -Zinstrument-coverage
+      #     LLVM_PROFILE_FILE: profile-%m.profraw
+      #   uses: actions-rs/cargo@v1
+      #   with:
+      #     command: bench
+      #     args: --bench criterion --features bench -- --test
       - name: Creating coverage report
+        if: ${{ runner.os != 'Windows' }}
+        env:
+          RUSTFLAGS: -Zinstrument-coverage
         run: |
-          cargo profdata -- merge -sparse default.profraw -o default.profdata
-
+          # Show files
+          ls -lah
+          # Merge execution traces
+          cargo profdata -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata
+          # Export to lcov format for codecov
+          # NOTE: The inner cargo test command needs to be the same as above
+          cargo cov -- export \
+            --format=lcov > profile.lcov \
+            --instr-profile=profile.profdata \
+            $( \
+              for file in \
+                $( \
+                  cargo test --all-features --all-targets --no-run --message-format=json \
+                    | jq -r "select(.profile.test == true) | .filenames[]" \
+                    | grep -v dSYM - \
+                ); \
+              do \
+                printf "%s %s " -object $file; \
+              done \
+            )
       - name: Submit to codecov.io
         uses: codecov/codecov-action@v2.1.0
         with:
@@ -118,18 +201,3 @@ jobs:
           flags: test
           fail_ci_if_error: true
           verbose: true
-      - name: Bench test with coverage
-        env:
-          RUSTFLAGS: -Zinstrument-coverage
-        uses: actions-rs/cargo@v1
-        with:
-          command: bench
-          args: --bench criterion --features bench -- --test
-      - name: Submit to codecov.io
-        uses: codecov/codecov-action@v2.1.0
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
-          flags: bench
-          fail_ci_if_error: true
-          verbose: true
-# TODO: Profiling

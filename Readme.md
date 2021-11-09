@@ -1,9 +1,9 @@
 # Rust project template
 
-![lines of code](https://img.shields.io/tokei/lines/github/recmo/rust-app-template)
-[![dependency status](https://deps.rs/repo/github/recmo/rust-app-template/status.svg)](https://deps.rs/repo/github/recmo/rust-app-template)
-[![codecov](https://img.shields.io/codecov/c/github/recmo/rust-app-template)](https://codecov.io/gh/Recmo/rust-app-template)
-[![build](https://img.shields.io/github/workflow/status/recmo/rust-app-template/build)](https://github.com/Recmo/rust-app-template/actions?query=workflow%3Abuild)
+![lines of code](https://img.shields.io/tokei/lines/github/worldcoin/signup-commander-rust)
+[![dependency status](https://deps.rs/repo/github/worldcoin/signup-commander-rust/status.svg)](https://deps.rs/repo/github/worldcoin/signup-commander-rust)
+[![codecov](https://codecov.io/gh/worldcoin/signup-commander-rust/branch/main/graph/badge.svg?token=WBPZ9U4TTO)](https://codecov.io/gh/worldcoin/signup-commander-rust)
+[![build](https://github.com/worldcoin/signup-commander-rust/actions/workflows/build.yml/badge.svg)](https://github.com/worldcoin/signup-commander-rust/actions/workflows/build.yml)
 
 **Main features.** Comes with the kitchen sink. Remove what you don't need.
 

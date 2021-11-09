@@ -22,7 +22,7 @@ const SEMAPHORE_ADDRESS: &str = "0x1a2BdAE39EB03E1D10551866717F8631bEf6e88a";
 
 abigen!(
     Semaphore,
-    "./solidity/abi/semaphore_abi.json",
+    "./src/abis/semaphore_abi.json",
     event_derives(serde::Deserialize, serde::Serialize),
 );
 

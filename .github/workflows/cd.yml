@@ -6,10 +6,15 @@ on:
   pull_request: # TODO Remove
     branches: [ main ]
 
+env:
+  TAG: 
 
 jobs:
   image:
     name: Build container image
+    strategy:
+      matrix:
+        platform: [linux/amd64, linux/arm64]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -21,18 +26,43 @@ jobs:
           script: |
             const commit_details = await github.rest.git.getCommit({owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha});
             return commit_details.data.author.date
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1\
       - name: Set up Docker Buildx
-        id: buildx
         uses: docker/setup-buildx-action@v1
       - name: Cache Docker layers
         uses: actions/cache@v2
         with:
           path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-${{ github.job }}-${{ github.sha }}
-          restore-keys: ${{ runner.os }}-${{ github.job }}-
+          key: ${{ runner.os }}-${{ github.job }}-${{ matrix.platform }}-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-${{ github.job }}-${{ matrix.platform }}-
       - name: Build
         uses: docker/build-push-action@v2
         with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          tags: test-image
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            COMMIT_DATE=${{ steps.author-date.outputs.result }}
+      - name: Test
+        run:
+          docker run --platform ${{ matrix.platform }} --rm test-image --version
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1 
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:latest
+          push: true
           build-args: |
             COMMIT_SHA=${{ github.sha }}
             COMMIT_DATE=${{ steps.author-date.outputs.result }}

@@ -1,4 +1,4 @@
-use crate::mimc_tree::{Hash, Proof};
+use crate::mimc_tree::{Hash, MimcTree, Proof};
 use ethers::prelude::{
     abigen, Address, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware,
 };
@@ -32,17 +32,17 @@ pub fn initialize_commitments() -> Vec<Commitment> {
 }
 
 pub fn inclusion_proof_helper(
+    tree: &MimcTree,
     commitment: &str,
-    commitments: &[Commitment],
 ) -> Result<Proof, EyreError> {
     // For some reason strings have extra `"`s on the ends
-    let commitment = commitment.trim_matches('"');
-    let commitment = hex::decode(commitment).unwrap();
-    let commitment: [u8; 32] = (&commitment[..]).try_into().unwrap();
-    let _index = commitments
-        .iter()
-        .position(|x| *x == commitment)
-        .ok_or_else(|| eyre!("Commitment not found: {:?}", commitment))?;
+    // let commitment = commitment.trim_matches('"');
+    // let commitment = hex::decode(commitment).unwrap();
+    // let commitment: [u8; 32] = (&commitment[..]).try_into().unwrap();
+    // let _index = commitments
+    //     .iter()
+    //     .position(|x| *x == commitment)
+    //     .ok_or_else(|| eyre!("Commitment not found: {:?}", commitment))?;
 
     // let t: MimcTree = MimcTree::try_from_iter(commitments.iter().map(|x|
     // Ok(*x))).unwrap(); t.gen_proof(index)

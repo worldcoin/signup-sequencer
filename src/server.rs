@@ -1,7 +1,7 @@
-use crate::identity::{
+use crate::{identity::{
     inclusion_proof_helper, initialize_commitments, insert_identity_commitment,
     insert_identity_to_contract, Commitment,
-};
+}, merkle_tree::MerkleTree, mimc_tree::MimcTree};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use eyre::{bail, ensure, Result as EyreResult, WrapErr as _};
 use futures::Future;
@@ -13,11 +13,9 @@ use hyper::{
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use serde::de::DeserializeOwned;
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::{atomic::AtomicUsize, Arc, RwLock},
-};
+use serde::{Deserialize, Deserializer, de::{DeserializeOwned, MapAccess, Visitor}};
+use serde_json::Map;
+use std::{fmt, marker::PhantomData, net::{IpAddr, Ipv4Addr, SocketAddr}, sync::{atomic::AtomicUsize, Arc, RwLock}};
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::{info, trace};
@@ -43,8 +41,117 @@ static STATUS: Lazy<IntCounterVec> = Lazy::new(|| {
 static LATENCY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!("api_latency_seconds", "The API latency in seconds.").unwrap()
 });
-static MISSING: &[u8] = b"Missing field";
+const IDENTITY_COMMITMENT_KEY: &str = "identityCommitment";
 const CONTENT_JSON: &str = "application/json";
+const NUM_LEVELS: usize = 4;
+
+pub struct CommitmentRequest {
+    identity_commitment: String,
+}
+
+struct CommitmentRequestVisitor<K, V> {
+    marker: PhantomData<fn() -> Map<K, V>>
+}
+
+impl<K, V> CommitmentRequestVisitor<K, V> {
+    fn new() -> Self {
+        CommitmentRequestVisitor {
+            marker: PhantomData
+        }
+    }
+}
+
+
+impl<'de, K, V> Visitor<'de> for CommitmentRequestVisitor<K, V>
+where
+    K: Deserialize<'de>,
+    V: Deserialize<'de>,
+{
+    // The type that our Visitor is going to produce.
+    type Value = CommitmentRequest;
+
+    // Format a message stating what data this Visitor expects to receive.
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str(format!("a map with key {} and associated value.", IDENTITY_COMMITMENT_KEY).as_str())
+    }
+
+    fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+    where
+        M: MapAccess<'de>,
+    {
+        let mut req = CommitmentRequest{identity_commitment: String::new()};
+
+        // While there are entries remaining in the input, add them
+        // into our map.
+        // Note: we currently only expect one key so this is unnecessary, but sets us up for future use of a map struct
+        while let Some((key, value)) = access.next_entry::<String, String>()? {
+            if key == IDENTITY_COMMITMENT_KEY {
+                req.identity_commitment = value;
+            }
+        }
+
+        Ok(req)
+    }
+}
+
+// This is the trait that informs Serde how to deserialize MyMap.
+impl<'de> Deserialize<'de> for CommitmentRequest
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_map(CommitmentRequestVisitor::<String, String>::new())
+    }
+}
+
+
+pub struct App {
+    merkle_tree: MimcTree,
+}
+
+impl App {
+    pub fn new(depth: usize) -> Self {
+        App{merkle_tree: MimcTree::new(depth)}
+    }
+
+    #[allow(clippy::unused_async)]
+    pub async fn inclusion_proof(
+        &self,
+        commitment_request: CommitmentRequest,
+    ) -> Result<Response<Body>, Error> {
+        println!("Identity commitment {}", commitment_request.identity_commitment);
+        println!("Num leaves {}", self.merkle_tree.num_leaves());
+        let _proof = inclusion_proof_helper(&self.merkle_tree, &commitment_request.identity_commitment);
+        // let commitment = data["identityCommitment"].to_string();
+        // let commitments = commitments.read().unwrap();
+        // let _proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
+        // TODO handle commitment not found
+        let response = "Inclusion Proof!\n"; // TODO: proof
+        Ok(Response::new(response.into()))
+    }
+
+    #[allow(clippy::unused_async)]
+    pub async fn insert_identity(
+        &self,
+        commitment_request: CommitmentRequest,
+    ) -> Result<Response<Body>, Error> {
+
+        // {
+        //     let mut commitments = commitments.write().unwrap();
+        //     insert_identity_commitment(
+        //         &identity_commitment.to_string(),
+        //         &mut commitments,
+        //         &last_index,
+        //     );
+        // }
+
+        insert_identity_to_contract(&commitment_request.identity_commitment)
+            .await
+            .unwrap();
+        Ok(Response::new("Insert Identity!\n".into()))
+    }
+}
 
 pub enum Error {
     InvalidMethod,
@@ -52,7 +159,8 @@ pub enum Error {
 }
 
 impl From<serde_json::Error> for Error {
-    fn from(_error: serde_json::Error) -> Self {
+    fn from(error: serde_json::Error) -> Self {
+        println!("Serde error {}", error);
         todo!()
     }
 }
@@ -77,9 +185,10 @@ where
     F: FnMut(T) -> S + Send,
     S: Future<Output = Result<U, Error>> + Send,
 {
-    if request.method() != Method::POST {
-        return Err(Error::InvalidMethod);
-    }
+    // TODO seems unnecessary as the handler passing this here already qualifies the method
+    // if request.method() != Method::POST {
+    //     return Err(Error::InvalidMethod);
+    // }
     let valid_content_type = request
         .headers()
         .get(header::CONTENT_TYPE)
@@ -92,66 +201,11 @@ where
     next(value).await
 }
 
-#[allow(clippy::unused_async)]
-async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    Ok(Response::new("Hello, World!\n".into()))
-}
-
-#[allow(clippy::unused_async)]
-pub async fn inclusion_proof(
-    // TODO: type must implement deserialize (can't borrow)
-    identity_commitment: String,
-) -> Result<Response<Body>, Error> {
-    // let whole_body = hyper::body::aggregate(req).await?;
-    // let data: serde_json::Value =
-    // serde_json::from_reader(whole_body.reader()).unwrap();
-    let _proof = inclusion_proof_helper(&identity_commitment, &vec![[0_u8; 32]; 1]);
-    // let commitment = data["identityCommitment"].to_string();
-    // let commitments = commitments.read().unwrap();
-    // let _proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
-    // TODO handle commitment not found
-    let response = "Inclusion Proof!\n"; // TODO: proof
-    Ok(Response::new(response.into()))
-}
-
-#[allow(clippy::unused_async)]
-pub async fn insert_identity(
-    identity_commitment: String,
-    /* req: Request<Body>,
-     * commitments: Arc<RwLock<Vec<Commitment>>>,
-     * last_index: Arc<AtomicUsize>, */
-) -> Result<Response<Body>, Error> {
-    // let whole_body = hyper::body::aggregate(req).await?;
-    // let data: serde_json::Value =
-    // serde_json::from_reader(whole_body.reader()).unwrap();
-    // let identity_commitment = &data["identityCommitment"];
-    // if *identity_commitment == serde_json::Value::Null {
-    //     return Ok(Response::builder()
-    //         .status(StatusCode::UNPROCESSABLE_ENTITY)
-    //         .body(MISSING.into())
-    //         .unwrap());
-    // }
-
-    // {
-    //     let mut commitments = commitments.write().unwrap();
-    //     insert_identity_commitment(
-    //         &identity_commitment.to_string(),
-    //         &mut commitments,
-    //         &last_index,
-    //     );
-    // }
-
-    insert_identity_to_contract(&identity_commitment)
-        .await
-        .unwrap();
-    Ok(Response::new("Insert Identity!\n".into()))
-}
 
 #[allow(clippy::unused_async)] // We are implementing an interface
 async fn route(
     request: Request<Body>,
-    commitments: Arc<RwLock<Vec<Commitment>>>,
-    last_index: Arc<AtomicUsize>,
+    app: Arc<App>,
 ) -> Result<Response<Body>, hyper::Error> {
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
@@ -160,9 +214,8 @@ async fn route(
 
     // Route requests
     let response = match (request.method(), request.uri().path()) {
-        // (&Method::GET, "/") => json_middleware(request, hello_world).await?,
-        (&Method::GET, "/inclusionProof") => json_middleware(request, inclusion_proof).await?,
-        (&Method::POST, "/insertIdentity") => json_middleware(request, insert_identity).await?,
+        (&Method::GET, "/inclusionProof") => json_middleware(request, |c| app.inclusion_proof(c)).await?,
+        (&Method::POST, "/insertIdentity") => json_middleware(request, |c| app.insert_identity(c)).await?,
         _ => Response::builder()
             .status(404)
             .body(Body::from("404"))
@@ -196,19 +249,16 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResu
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
-    let commitments = Arc::new(RwLock::new(initialize_commitments()));
-    let last_index = Arc::new(AtomicUsize::new(0));
+    let app = Arc::new(App::new(NUM_LEVELS));
 
     let make_svc = make_service_fn(move |_| {
         // Clone here as `make_service_fn` is called for every connection
-        let commitments = commitments.clone();
-        let last_index = last_index.clone();
+        let app = app.clone();
         async {
             Ok::<_, hyper::Error>(service_fn(move |req| {
                 // Clone here as `service_fn` is called for every request
-                let commitments = commitments.clone();
-                let last_index = last_index.clone();
-                route(req, commitments, last_index)
+                let app = app.clone();
+                route(req, app)// commitments, last_index)
             }))
         }
     });
@@ -234,10 +284,10 @@ mod test {
 
     #[tokio::test]
     async fn test_hello_world() {
-        let request = Request::new(Body::empty());
-        let response = hello_world(request).await.unwrap();
-        let bytes = to_bytes(response.into_body()).await.unwrap();
-        assert_eq!(bytes.as_ref(), b"Hello, World!\n");
+        // let request = Request::new(Body::empty());
+        // let response = hello_world(request).await.unwrap();
+        // let bytes = to_bytes(response.into_body()).await.unwrap();
+        // assert_eq!(bytes.as_ref(), b"Hello, World!\n");
     }
 }
 #[cfg(feature = "bench")]

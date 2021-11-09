@@ -4,13 +4,16 @@ use crate::identity::{
 };
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use eyre::{bail, ensure, Result as EyreResult, WrapErr as _};
+use futures::Future;
 use hyper::{
     body::Buf,
+    header,
     service::{make_service_fn, service_fn},
     Body, Method, Request, Response, Server, StatusCode,
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
+use serde::de::DeserializeOwned;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::{atomic::AtomicUsize, Arc, RwLock},
@@ -41,6 +44,53 @@ static LATENCY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!("api_latency_seconds", "The API latency in seconds.").unwrap()
 });
 static MISSING: &[u8] = b"Missing field";
+const CONTENT_JSON: &str = "application/json";
+
+pub enum Error {
+    InvalidMethod,
+    InvalidContentType,
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(_error: serde_json::Error) -> Self {
+        todo!()
+    }
+}
+
+impl From<hyper::Error> for Error {
+    fn from(_error: hyper::Error) -> Self {
+        todo!()
+    }
+}
+
+impl From<Error> for hyper::Error {
+    fn from(_error: Error) -> Self {
+        todo!()
+    }
+}
+
+/// Parse a [`Request<Body>`] as JSON using Serde and handle using the provided
+/// method.
+async fn json_middleware<F, T, S, U>(request: Request<Body>, mut next: F) -> Result<U, Error>
+where
+    T: DeserializeOwned + Send,
+    F: FnMut(T) -> S + Send,
+    S: Future<Output = Result<U, Error>> + Send,
+{
+    if request.method() != Method::POST {
+        return Err(Error::InvalidMethod);
+    }
+    let valid_content_type = request
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .map_or(false, |content_type| content_type == CONTENT_JSON);
+    if !valid_content_type {
+        return Err(Error::InvalidContentType);
+    }
+    let body = hyper::body::aggregate(request).await?;
+    let value = serde_json::from_reader(body.reader())?;
+    next(value).await
+}
 
 #[allow(clippy::unused_async)]
 async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
@@ -49,14 +99,16 @@ async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, hyper::Error
 
 #[allow(clippy::unused_async)]
 pub async fn inclusion_proof(
-    req: Request<Body>,
-    commitments: Arc<RwLock<Vec<Commitment>>>,
-) -> Result<Response<Body>, hyper::Error> {
-    let whole_body = hyper::body::aggregate(req).await?;
-    let data: serde_json::Value = serde_json::from_reader(whole_body.reader()).unwrap();
-    let commitment = data["identityCommitment"].to_string();
-    let commitments = commitments.read().unwrap();
-    let _proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
+    // TODO: type must implement deserialize (can't borrow)
+    identity_commitment: String,
+) -> Result<Response<Body>, Error> {
+    // let whole_body = hyper::body::aggregate(req).await?;
+    // let data: serde_json::Value =
+    // serde_json::from_reader(whole_body.reader()).unwrap();
+    let _proof = inclusion_proof_helper(&identity_commitment, &vec![[0_u8; 32]; 1]);
+    // let commitment = data["identityCommitment"].to_string();
+    // let commitments = commitments.read().unwrap();
+    // let _proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
     // TODO handle commitment not found
     let response = "Inclusion Proof!\n"; // TODO: proof
     Ok(Response::new(response.into()))
@@ -64,30 +116,32 @@ pub async fn inclusion_proof(
 
 #[allow(clippy::unused_async)]
 pub async fn insert_identity(
-    req: Request<Body>,
-    commitments: Arc<RwLock<Vec<Commitment>>>,
-    last_index: Arc<AtomicUsize>,
-) -> Result<Response<Body>, hyper::Error> {
-    let whole_body = hyper::body::aggregate(req).await?;
-    let data: serde_json::Value = serde_json::from_reader(whole_body.reader()).unwrap();
-    let identity_commitment = &data["identityCommitment"];
-    if *identity_commitment == serde_json::Value::Null {
-        return Ok(Response::builder()
-            .status(StatusCode::UNPROCESSABLE_ENTITY)
-            .body(MISSING.into())
-            .unwrap());
-    }
+    identity_commitment: String,
+    /* req: Request<Body>,
+     * commitments: Arc<RwLock<Vec<Commitment>>>,
+     * last_index: Arc<AtomicUsize>, */
+) -> Result<Response<Body>, Error> {
+    // let whole_body = hyper::body::aggregate(req).await?;
+    // let data: serde_json::Value =
+    // serde_json::from_reader(whole_body.reader()).unwrap();
+    // let identity_commitment = &data["identityCommitment"];
+    // if *identity_commitment == serde_json::Value::Null {
+    //     return Ok(Response::builder()
+    //         .status(StatusCode::UNPROCESSABLE_ENTITY)
+    //         .body(MISSING.into())
+    //         .unwrap());
+    // }
 
-    {
-        let mut commitments = commitments.write().unwrap();
-        insert_identity_commitment(
-            &identity_commitment.to_string(),
-            &mut commitments,
-            &last_index,
-        );
-    }
+    // {
+    //     let mut commitments = commitments.write().unwrap();
+    //     insert_identity_commitment(
+    //         &identity_commitment.to_string(),
+    //         &mut commitments,
+    //         &last_index,
+    //     );
+    // }
 
-    insert_identity_to_contract(&identity_commitment.to_string())
+    insert_identity_to_contract(&identity_commitment)
         .await
         .unwrap();
     Ok(Response::new("Insert Identity!\n".into()))
@@ -106,11 +160,9 @@ async fn route(
 
     // Route requests
     let response = match (request.method(), request.uri().path()) {
-        (&Method::GET, "/") => hello_world(request).await?,
-        (&Method::GET, "/inclusionProof") => inclusion_proof(request, commitments).await?,
-        (&Method::POST, "/insertIdentity") => {
-            insert_identity(request, commitments, last_index).await?
-        }
+        // (&Method::GET, "/") => json_middleware(request, hello_world).await?,
+        (&Method::GET, "/inclusionProof") => json_middleware(request, inclusion_proof).await?,
+        (&Method::POST, "/insertIdentity") => json_middleware(request, insert_identity).await?,
         _ => Response::builder()
             .status(404)
             .body(Body::from("404"))

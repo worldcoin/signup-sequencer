@@ -1,5 +1,6 @@
 use crate::identity::{
-    inclusion_proof_helper, initialize_commitments, insert_identity_helper, Commitment,
+    inclusion_proof_helper, initialize_commitments, insert_identity_commitment,
+    insert_identity_to_contract, Commitment,
 };
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use eyre::{bail, ensure, Result as EyreResult, WrapErr as _};
@@ -77,11 +78,18 @@ pub async fn insert_identity(
             .unwrap());
     }
 
-    insert_identity_helper(
-        &identity_commitment.to_string(),
-        &mut commitments.write().unwrap(),
-        &last_index,
-    );
+    {
+        let mut commitments = commitments.write().unwrap();
+        insert_identity_commitment(
+            &identity_commitment.to_string(),
+            &mut commitments,
+            &last_index,
+        );
+    }
+
+    insert_identity_to_contract(&identity_commitment.to_string())
+        .await
+        .unwrap();
     Ok(Response::new("Insert Identity!\n".into()))
 }
 
@@ -136,7 +144,6 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResu
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
-    // TODO how to manage and pass state?
     let commitments = Arc::new(RwLock::new(initialize_commitments()));
     let last_index = Arc::new(AtomicUsize::new(0));
 

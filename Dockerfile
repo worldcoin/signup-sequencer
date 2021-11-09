@@ -6,7 +6,7 @@ ENV TARGET $TARGET
 
 # Build tools for a static musl target
 RUN apt-get update &&\
-    apt-get install -yq build-essential llvm clang gcc libcap2-bin &&\
+    apt-get install -yq build-essential musl-dev musl-tools libcap2-bin &&\
     apt-get clean && rm -rf /var/lib/apt/lists/* &&\
     rustup target add $TARGET
 

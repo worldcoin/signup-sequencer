@@ -1,11 +1,11 @@
-# This is a self build version of <https://github.com/emk/rust-musl-builder>
-# It should be replaced with `ekidd/rust-musl-builder:*` once they build images again.
-FROM remcob/rust-musl-builder:1.54@sha256:f21d804ad46de51c32e5626224994134e400d75cf9fa4287da000fb10768896c as build-env
+FROM rust as build-env
 
-#  Install setcap
-RUN sudo apt-get update && \
-    sudo apt-get install -yq libcap2-bin && \
-    sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
+# Build tools for a static musl target
+RUN apt-get update &&\
+    apt-get install -yq build-essential llvm clang libcap2-bin &&\
+    apt-get clean && rm -rf /var/lib/apt/lists/* &&\
+    rustup target add x86_64-unknown-linux-musl
+ENV CARGO_BUILD_TARGET="x86_64-unknown-linux-musl"
 
 # Use Mimalloc by default instead of the musl malloc
 ARG FEATURES="mimalloc"

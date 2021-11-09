@@ -6,9 +6,6 @@ on:
   pull_request: # TODO Remove
     branches: [ main ]
 
-env:
-  TAG: 
-
 jobs:
   image:
     name: Build container image
@@ -27,7 +24,10 @@ jobs:
             const commit_details = await github.rest.git.getCommit({owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha});
             return commit_details.data.author.date
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1\
+        id: qemu
+        uses: docker/setup-qemu-action@v1
+      - name: Available platforms
+        run: echo ${{ steps.qemu.outputs.platforms }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
       - name: Cache Docker layers

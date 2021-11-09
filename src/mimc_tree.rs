@@ -11,11 +11,14 @@ pub type Branch = merkle_tree::Branch<MimcHash>;
 pub type Proof = merkle_tree::Proof<MimcHash>;
 
 pub struct MimcHash;
+const nothing_up_my_sleeve: &str = "7d10c03d1f7884c85edee6353bd2b2ffbae9221236edde3778eac58089912bc0";
 
 impl Hasher for MimcHash {
     type Hash = Hash;
 
     fn initial_leaf() -> Self::Hash {
+        // let decoded: [u8; 32] = hex::decode(nothing_up_my_sleeve).unwrap().try_into().unwrap();
+        // decoded
         Self::Hash::default()
     }
 

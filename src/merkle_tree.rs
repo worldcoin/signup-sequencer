@@ -154,6 +154,10 @@ impl<H: Hasher> MerkleTree<H> {
     pub fn verify(&self, hash: H::Hash, proof: &Proof<H>) -> bool {
         proof.root(hash) == self.root()
     }
+
+    pub fn find(&self, leaf_hash: H::Hash) -> Option<usize> {
+        self.nodes.iter().rev().enumerate().find(|(_, hash)| **hash == leaf_hash).map(|x| x.0)
+    }
 }
 
 impl<H: Hasher> Proof<H> {

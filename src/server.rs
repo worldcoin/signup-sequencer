@@ -1,5 +1,5 @@
 use crate::{identity::{
-    inclusion_proof_helper, initialize_commitments, insert_identity_commitment,
+    inclusion_proof_helper, insert_identity_commitment,
     insert_identity_to_contract, Commitment,
 }, merkle_tree::MerkleTree, mimc_tree::MimcTree};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
@@ -14,11 +14,12 @@ use hyper::{
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
 use serde::{Deserialize, Serialize, de::{DeserializeOwned}};
-use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, sync::{atomic::AtomicUsize, Arc, RwLock}};
+use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, sync::{Arc, RwLock, atomic::{AtomicUsize, Ordering}}};
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::{info, trace};
 use url::{Host, Url};
+use zkp_u256::U256;
 
 #[derive(Debug, PartialEq, StructOpt)]
 pub struct Options {
@@ -41,7 +42,7 @@ static LATENCY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!("api_latency_seconds", "The API latency in seconds.").unwrap()
 });
 const CONTENT_JSON: &str = "application/json";
-const NUM_LEVELS: usize = 4;
+const NUM_LEVELS: usize = 20;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,12 +51,16 @@ pub struct CommitmentRequest {
 }
 
 pub struct App {
-    merkle_tree: MimcTree,
+    merkle_tree: RwLock<MimcTree>,
+    last_leaf: AtomicUsize,
 }
 
 impl App {
     pub fn new(depth: usize) -> Self {
-        App{merkle_tree: MimcTree::new(depth)}
+        App{
+            merkle_tree: RwLock::new(MimcTree::new(depth)),
+            last_leaf: AtomicUsize::new(0),
+        }
     }
 
     #[allow(clippy::unused_async)]
@@ -63,12 +68,9 @@ impl App {
         &self,
         commitment_request: CommitmentRequest,
     ) -> Result<Response<Body>, Error> {
-        println!("Identity commitment {}", commitment_request.identity_commitment);
-        println!("Num leaves {}", self.merkle_tree.num_leaves());
-        let _proof = inclusion_proof_helper(&self.merkle_tree, &commitment_request.identity_commitment);
-        // let commitment = data["identityCommitment"].to_string();
-        // let commitments = commitments.read().unwrap();
-        // let _proof = inclusion_proof_helper(&commitment, &commitments).unwrap();
+        let merkle_tree = self.merkle_tree.read().unwrap();
+        let proof = inclusion_proof_helper(&merkle_tree, &commitment_request.identity_commitment);
+        println!("Proof: {:?}", proof);
         // TODO handle commitment not found
         let response = "Inclusion Proof!\n"; // TODO: proof
         Ok(Response::new(response.into()))
@@ -80,18 +82,26 @@ impl App {
         commitment_request: CommitmentRequest,
     ) -> Result<Response<Body>, Error> {
 
-        // {
-        //     let mut commitments = commitments.write().unwrap();
-        //     insert_identity_commitment(
-        //         &identity_commitment.to_string(),
-        //         &mut commitments,
-        //         &last_index,
-        //     );
-        // }
+        {
+            let mut merkle_tree = self.merkle_tree.write().unwrap();
+            let last_leaf = self.last_leaf.fetch_add(1, Ordering::AcqRel);
+            let root = merkle_tree.root();
+            let root = U256::from_bytes_be(&root);
+            // let root = hex::encode(root);
+            println!("Merkle tree root {:?}", root);
+            insert_identity_commitment(
+                &mut merkle_tree,
+                &commitment_request.identity_commitment,
+                last_leaf,
+            );
+            let root = merkle_tree.root();
+            let root = hex::encode(root);
+            println!("After Merkle tree root {:?}", root);
+        }
 
-        insert_identity_to_contract(&commitment_request.identity_commitment)
-            .await
-            .unwrap();
+        // insert_identity_to_contract(&commitment_request.identity_commitment)
+        //     .await
+        //     .unwrap();
         Ok(Response::new("Insert Identity!\n".into()))
     }
 }

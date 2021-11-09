@@ -13,9 +13,8 @@ use hyper::{
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use serde::{Deserialize, Deserializer, de::{DeserializeOwned, MapAccess, Visitor}};
-use serde_json::Map;
-use std::{fmt, marker::PhantomData, net::{IpAddr, Ipv4Addr, SocketAddr}, sync::{atomic::AtomicUsize, Arc, RwLock}};
+use serde::{Deserialize, Serialize, de::{DeserializeOwned}};
+use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, sync::{atomic::AtomicUsize, Arc, RwLock}};
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::{info, trace};
@@ -41,70 +40,14 @@ static STATUS: Lazy<IntCounterVec> = Lazy::new(|| {
 static LATENCY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!("api_latency_seconds", "The API latency in seconds.").unwrap()
 });
-const IDENTITY_COMMITMENT_KEY: &str = "identityCommitment";
 const CONTENT_JSON: &str = "application/json";
 const NUM_LEVELS: usize = 4;
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CommitmentRequest {
     identity_commitment: String,
 }
-
-struct CommitmentRequestVisitor<K, V> {
-    marker: PhantomData<fn() -> Map<K, V>>
-}
-
-impl<K, V> CommitmentRequestVisitor<K, V> {
-    fn new() -> Self {
-        CommitmentRequestVisitor {
-            marker: PhantomData
-        }
-    }
-}
-
-
-impl<'de, K, V> Visitor<'de> for CommitmentRequestVisitor<K, V>
-where
-    K: Deserialize<'de>,
-    V: Deserialize<'de>,
-{
-    // The type that our Visitor is going to produce.
-    type Value = CommitmentRequest;
-
-    // Format a message stating what data this Visitor expects to receive.
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str(format!("a map with key {} and associated value.", IDENTITY_COMMITMENT_KEY).as_str())
-    }
-
-    fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
-    where
-        M: MapAccess<'de>,
-    {
-        let mut req = CommitmentRequest{identity_commitment: String::new()};
-
-        // While there are entries remaining in the input, add them
-        // into our map.
-        // Note: we currently only expect one key so this is unnecessary, but sets us up for future use of a map struct
-        while let Some((key, value)) = access.next_entry::<String, String>()? {
-            if key == IDENTITY_COMMITMENT_KEY {
-                req.identity_commitment = value;
-            }
-        }
-
-        Ok(req)
-    }
-}
-
-// This is the trait that informs Serde how to deserialize MyMap.
-impl<'de> Deserialize<'de> for CommitmentRequest
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_map(CommitmentRequestVisitor::<String, String>::new())
-    }
-}
-
 
 pub struct App {
     merkle_tree: MimcTree,

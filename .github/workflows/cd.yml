@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - uses: actions/github-script@v4.1
+      - uses: actions/github-script@v5
         id: author-date
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -35,5 +35,5 @@ jobs:
         with:
           file: order-watcher/Dockerfile
           build-args: |
-            COMMIT_SHA="${{ github.sha }}"
-            COMMIT_DATE=${{ steps.author-date.outputs.result }}"
+            COMMIT_SHA=${{ github.sha }}
+            COMMIT_DATE=${{ steps.author-date.outputs.result }}

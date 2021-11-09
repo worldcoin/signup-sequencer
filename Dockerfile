@@ -1,22 +1,27 @@
 FROM rust as build-env
 
+ARG TARGET=x86_64-unknown-linux-musl
+ENV TARGET $TARGET
+
 # Build tools for a static musl target
 RUN apt-get update &&\
     apt-get install -yq build-essential llvm clang libcap2-bin &&\
     apt-get clean && rm -rf /var/lib/apt/lists/* &&\
-    rustup target add x86_64-unknown-linux-musl
-ENV CARGO_BUILD_TARGET="x86_64-unknown-linux-musl"
+    rustup target add $TARGET
 
 # Use Mimalloc by default instead of the musl malloc
 ARG FEATURES="mimalloc"
 
+COPY Cargo.toml Cargo.lock build.rs Readme.md src ./
+RUN cargo test -vvv
+
 # Build dependencies only
-COPY --chown=rust:rust Cargo.toml Cargo.lock ./
+COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src/cli &&\
     echo 'fn main() { }' > build.rs &&\
     echo 'fn main() { panic!("build failed") }' > src/cli/main.rs &&\
     echo '' > src/lib.rs &&\
-    cargo build --release --locked --features "${FEATURES}" --bin rust-app &&\
+    cargo build --release --locked --target $TARGET --features "${FEATURES}" --bin rust-app &&\
     rm -r build.rs src
 
 # Take build identifying information as arguments
@@ -24,13 +29,13 @@ ARG COMMIT_SHA=0000000000000000000000000000000000000000
 ARG COMMIT_DATE=0000-00-00
 ENV COMMIT_SHA $COMMIT_SHA
 ENV COMMIT_DATE $COMMIT_DATE
-ENV BIN="./target/x86_64-unknown-linux-musl/release/rust-app"
+ENV BIN="./target/$TARGET/release/rust-app"
 
 # Build app
-COPY --chown=rust:rust build.rs Readme.md ./
-COPY --chown=rust:rust src ./src
+COPY build.rs Readme.md ./
+COPY src ./src
 RUN touch build.rs src/lib.rs src/cli/main.rs &&\
-    cargo build --release --locked --features "${FEATURES}" --bin rust-app &&\
+    cargo build --release --locked --target $TARGET --features "${FEATURES}" --bin rust-app &&\
     strip $BIN
 
 # Set capabilities

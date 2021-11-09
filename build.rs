@@ -40,6 +40,7 @@ fn main() -> Result<()> {
         "cargo:rustc-env=TARGET={}",
         var("TARGET").wrap_err("Fetching environment variable TARGET")?
     );
+
     Ok(())
 }
 

@@ -3,6 +3,8 @@ name: cd
 on:
   push:
     branches: [ main ]
+  pull_request: # TODO Revert
+    branches: [ main ]
 
 jobs:
   image:
@@ -10,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [linux/amd64, linux/arm64]
+        platform: [linux/arm64] # TODO Revert
     runs-on: ubuntu-latest
     steps:
 

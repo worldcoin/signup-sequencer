@@ -65,7 +65,7 @@ ENV BIN="./target/$TARGET/release/rust-app"
 COPY build.rs Readme.md ./
 COPY src ./src
 RUN touch build.rs src/lib.rs src/cli/main.rs &&\
-    cargo build --release --locked --target $TARGET --features "${FEATURES}" --bin rust-app &&\
+    cargo build --release --locked --target $TARGET --features "${FEATURES}" --bin rust-app --jobs 1 &&\
     strip $BIN
 
 # Set capabilities
@@ -74,7 +74,7 @@ RUN setcap cap_net_bind_service=+ep $BIN
 # Make sure it is statically linked
 RUN ldd $BIN ; file $BIN
 RUN ldd $BIN | grep "statically linked"
-RUN file $BIN | grep "statically linked"
+# RUN file $BIN | grep "statically linked"
 
 # Make sure it runs
 RUN $BIN --version

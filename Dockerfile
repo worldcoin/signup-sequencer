@@ -2,15 +2,14 @@ FROM rust as build-env
 WORKDIR /src
 
 RUN case $(dpkg --print-architecture) in \
-    amd64) export TARGET=x86_64-unknown-linux-musl ;;\
-    arm64) export TARGET=aarch64-unknown-linux-musl ;;\
+    amd64) echo TARGET=x86_64-unknown-linux-musl >> ~/.env ;;\
+    arm64) echo TARGET=aarch64-unknown-linux-musl >> ~/.env ;;\
     *) echo Unsupported architecture && false ;;\
-    esac &&\
-    env > ~/.profile
-RUN . ~/.profile && env
+    esac
 
 # Build tools for a static musl target
-RUN apt-get update &&\
+RUN export $(xargs < ~/.env) &&\
+    apt-get update &&\
     apt-get install -yq build-essential musl-dev musl-tools libcap2-bin &&\
     apt-get clean && rm -rf /var/lib/apt/lists/* &&\
     rustup target add $TARGET
@@ -23,13 +22,7 @@ ARG OPENSSL_VERSION=1.1.1l
 RUN cd /tmp && \
     curl -fLO "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" && \
     tar xzf "openssl-$OPENSSL_VERSION.tar.gz" && cd "openssl-$OPENSSL_VERSION" && \
-    echo
-RUN apt-get update
-RUN uname -a
-# RUN apt-get install -yq linux-headers-generic
-RUN apt-get install -yq linux-libc-dev xutils-dev
-# ENV CFLAGS "-C link-arg=/usr/lib/aarch64-linux-musl/libc.a"
-RUN echo && cd /tmp/openssl-$OPENSSL_VERSION &&\
+    cd /tmp/openssl-$OPENSSL_VERSION &&\
     ln -s /usr/include/linux /usr/local/musl/include/linux &&\
     ln -s /usr/include/aarch64-linux-musl/asm /usr/local/musl/include/asm &&\
     ln -s /usr/include/asm-generic /usr/local/musl/include/asm-generic &&\

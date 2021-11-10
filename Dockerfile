@@ -65,7 +65,7 @@ ENV BIN="./target/$TARGET/release/rust-app"
 COPY build.rs Readme.md ./
 COPY src ./src
 RUN touch build.rs src/lib.rs src/cli/main.rs &&\
-    cargo build --release --locked --target $TARGET --features "${FEATURES}" --bin rust-app --jobs 1 &&\
+    cargo build --release --locked --target $TARGET --features "${FEATURES}" --bin rust-app &&\
     strip $BIN
 
 # Set capabilities

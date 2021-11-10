@@ -3,8 +3,6 @@ name: cd
 on:
   push:
     branches: [ main ]
-  pull_request: # TODO Remove
-    branches: [ main ]
 
 jobs:
   image:

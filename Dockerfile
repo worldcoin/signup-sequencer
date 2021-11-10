@@ -10,29 +10,29 @@ RUN apt-get update &&\
     apt-get clean && rm -rf /var/lib/apt/lists/* &&\
     rustup target add $TARGET
 
+RUN mkdir -p /usr/local/musl/include
+ENV C_INCLUDE_PATH=/usr/local/musl/include
+ENV CC=musl-gcc
+
 # Build a static library version of OpenSSL using musl-libc.
 ARG OPENSSL_VERSION=1.1.1l
-RUN mkdir -p /usr/local/musl/include && \
+RUN cd /tmp && \
+    curl -fLO "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" && \
+    tar xzf "openssl-$OPENSSL_VERSION.tar.gz" && cd "openssl-$OPENSSL_VERSION" && \
     ln -s /usr/include/linux /usr/local/musl/include/linux && \
     ln -s /usr/include/x86_64-linux-gnu/asm /usr/local/musl/include/asm && \
     ln -s /usr/include/asm-generic /usr/local/musl/include/asm-generic && \
-    cd /tmp && \
-    short_version="$(echo "$OPENSSL_VERSION" | sed s'/[a-z]$//' )" && \
-    curl -fLO "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" || \
-    curl -fLO "https://www.openssl.org/source/old/$short_version/openssl-$OPENSSL_VERSION.tar.gz" && \
-    tar xvzf "openssl-$OPENSSL_VERSION.tar.gz" && cd "openssl-$OPENSSL_VERSION" && \
-    env CC=musl-gcc ./Configure no-shared no-zlib -fPIC --prefix=/usr/local/musl -DOPENSSL_NO_SECURE_MEMORY linux-x86_64 && \
-    env C_INCLUDE_PATH=/usr/local/musl/include/ make depend && \
-    env C_INCLUDE_PATH=/usr/local/musl/include/ make && \
-    make install && \
+    ./Configure no-shared no-zlib -fPIC --prefix=/usr/local/musl -DOPENSSL_NO_SECURE_MEMORY linux-x86_64 && \
+    make depend && make && make install && \
     rm /usr/local/musl/include/linux /usr/local/musl/include/asm /usr/local/musl/include/asm-generic && \
     rm -r /tmp/*
 
 # Build zlib
+ARG ZLIB_VERSION=1.2.11
 RUN cd /tmp && \
     curl -fLO "http://zlib.net/zlib-$ZLIB_VERSION.tar.gz" && \
     tar xzf "zlib-$ZLIB_VERSION.tar.gz" && cd "zlib-$ZLIB_VERSION" && \
-    CC=musl-gcc ./configure --static --prefix=/usr/local/musl && \
+    ./configure --static --prefix=/usr/local/musl && \
     make && make install && \
     rm -r /tmp/*
 

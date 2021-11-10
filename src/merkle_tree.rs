@@ -14,9 +14,6 @@ pub trait Hasher {
     /// Type of the leaf and node hashes
     type Hash: Clone + Eq;
 
-    /// Hash value of an initial leaf
-    fn initial_leaf() -> Self::Hash;
-
     /// Compute the hash of an intermediate node
     fn hash_node(left: &Self::Hash, right: &Self::Hash) -> Self::Hash;
 }
@@ -70,13 +67,11 @@ const fn depth(index: usize) -> usize {
 }
 
 impl<H: Hasher> MerkleTree<H> {
-    pub fn new(depth: usize) -> Self {
+    pub fn new(depth: usize, initial_leaf: H::Hash) -> Self {
         // Compute empty node values, leaf to root
-        let empty = successors(Some(H::initial_leaf()), |prev| {
-            Some(H::hash_node(prev, prev))
-        })
-        .take(depth)
-        .collect::<Vec<_>>();
+        let empty = successors(Some(initial_leaf), |prev| Some(H::hash_node(prev, prev)))
+            .take(depth)
+            .collect::<Vec<_>>();
 
         // Compute node values
         let nodes = empty
@@ -210,10 +205,6 @@ pub mod test {
     impl Hasher for Keccak {
         type Hash = [u8; 32];
 
-        fn initial_leaf() -> Self::Hash {
-            Self::Hash::default()
-        }
-
         fn hash_node(left: &Self::Hash, right: &Self::Hash) -> Self::Hash {
             keccak256([*left, *right].concat())
         }
@@ -239,7 +230,7 @@ pub mod test {
 
     #[test]
     fn test_root() {
-        let mut tree = MerkleTree::<Keccak>::new(3);
+        let mut tree = MerkleTree::<Keccak>::new(3, [0; 32]);
         assert_eq!(
             tree.root(),
             hex!("b4c11951957c6f8f642c4af61cd6b24640fec6dc7fc607ee8206a99e92410d30")
@@ -280,7 +271,7 @@ pub mod test {
 
     #[test]
     fn test_proof() {
-        let mut tree = MerkleTree::<Keccak>::new(3);
+        let mut tree = MerkleTree::<Keccak>::new(3, [0; 32]);
         tree.set(
             0,
             hex!("0000000000000000000000000000000000000000000000000000000000000001"),

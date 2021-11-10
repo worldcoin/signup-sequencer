@@ -9,12 +9,11 @@ RUN apt-get update &&\
     apt-get install -yq build-essential musl-dev musl-tools libcap2-bin &&\
     apt-get clean && rm -rf /var/lib/apt/lists/* &&\
     rustup target add $TARGET
-
 RUN mkdir -p /usr/local/musl/include
 ENV C_INCLUDE_PATH=/usr/local/musl/include
 ENV CC=musl-gcc
 
-# Build a static library version of OpenSSL using musl-libc.
+# Build OpenSSL
 ARG OPENSSL_VERSION=1.1.1l
 RUN cd /tmp && \
     curl -fLO "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" && \
@@ -23,7 +22,7 @@ RUN cd /tmp && \
     ln -s /usr/include/x86_64-linux-gnu/asm /usr/local/musl/include/asm && \
     ln -s /usr/include/asm-generic /usr/local/musl/include/asm-generic && \
     ./Configure no-shared no-zlib -fPIC --prefix=/usr/local/musl -DOPENSSL_NO_SECURE_MEMORY linux-x86_64 && \
-    make depend && make && make install && \
+    make depend && make && make install_sw && \
     rm /usr/local/musl/include/linux /usr/local/musl/include/asm /usr/local/musl/include/asm-generic && \
     rm -r /tmp/*
 
@@ -41,8 +40,7 @@ ENV X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_DIR=/usr/local/musl/ \
     PG_CONFIG_X86_64_UNKNOWN_LINUX_GNU=/usr/bin/pg_config \
     PKG_CONFIG_ALLOW_CROSS=true \
     PKG_CONFIG_ALL_STATIC=true \
-    LIBZ_SYS_STATIC=1 \
-    TARGET=musl
+    LIBZ_SYS_STATIC=1
 
 # Use Mimalloc by default instead of the musl malloc
 ARG FEATURES="mimalloc"

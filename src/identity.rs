@@ -2,12 +2,10 @@ use crate::mimc_tree::{Hash, MimcTree, Proof};
 use ethers::prelude::{
     abigen, Address, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware,
 };
-use eyre::{Error as EyreError, bail, eyre};
+use eyre::{bail, Error as EyreError};
 use std::{
     convert::{TryFrom, TryInto},
-    sync::{
-        Arc,
-    },
+    sync::Arc,
 };
 
 pub type Commitment = Hash;
@@ -25,24 +23,17 @@ abigen!(
     event_derives(serde::Deserialize, serde::Serialize),
 );
 
-pub fn inclusion_proof_helper(
-    tree: &MimcTree,
-    commitment: &str,
-) -> Result<Proof, EyreError> {
+pub fn inclusion_proof_helper(tree: &MimcTree, commitment: &str) -> Result<Proof, EyreError> {
     let decoded_commitment = hex::decode(commitment).unwrap();
     let decoded_commitment: [u8; 32] = (&decoded_commitment[..]).try_into().unwrap();
     if let Some(index) = tree.find(decoded_commitment) {
-        return Ok(tree.proof(index))
+        return Ok(tree.proof(index));
     } else {
         bail!("Commitment not found {}", commitment);
     }
 }
 
-pub fn insert_identity_commitment(
-    tree: &mut MimcTree,
-    commitment: &str,
-    index: usize,
-) {
+pub fn insert_identity_commitment(tree: &mut MimcTree, commitment: &str, index: usize) {
     // let commitment = commitment.trim_matches('"');
     let decoded_commitment = hex::decode(commitment).unwrap();
     let commitment: [u8; 32] = (&decoded_commitment[..]).try_into().unwrap();

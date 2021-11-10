@@ -108,7 +108,7 @@ LABEL prometheus.io/path="/metrics"
 # Executable
 # TODO: --chmod=010
 COPY --from=build-env --chown=0:1000 \
-    /home/rust/src/target/x86_64-unknown-linux-musl/release/rust-app /
+    /src/target/x86_64-unknown-linux-musl/release/rust-app /
 STOPSIGNAL SIGTERM
 HEALTHCHECK NONE
 ENTRYPOINT ["/rust-app"]

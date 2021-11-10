@@ -1,8 +1,13 @@
 FROM rust as build-env
 WORKDIR /src
 
-ARG TARGET=x86_64-unknown-linux-musl
-ENV TARGET $TARGET
+RUN case $(dpkg --print-architecture) in \
+    amd64) export TARGET=x86_64-unknown-linux-musl ;;\
+    arm64) export TARGET=aarch64-unknown-linux-musl ;;\
+    *) echo Unsupported architecture && false ;;\
+    esac &&\
+    env > ~/.profile
+RUN . ~/.profile && env
 
 # Build tools for a static musl target
 RUN apt-get update &&\
@@ -18,12 +23,22 @@ ARG OPENSSL_VERSION=1.1.1l
 RUN cd /tmp && \
     curl -fLO "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" && \
     tar xzf "openssl-$OPENSSL_VERSION.tar.gz" && cd "openssl-$OPENSSL_VERSION" && \
-    ln -s /usr/include/linux /usr/local/musl/include/linux && \
-    ln -s /usr/include/x86_64-linux-gnu/asm /usr/local/musl/include/asm && \
-    ln -s /usr/include/asm-generic /usr/local/musl/include/asm-generic && \
-    ./Configure no-shared no-zlib -fPIC --prefix=/usr/local/musl -DOPENSSL_NO_SECURE_MEMORY linux-x86_64 && \
-    make depend && make && make install_sw && \
-    rm /usr/local/musl/include/linux /usr/local/musl/include/asm /usr/local/musl/include/asm-generic && \
+    echo
+RUN apt-get update
+RUN uname -a
+# RUN apt-get install -yq linux-headers-generic
+RUN apt-get install -yq linux-libc-dev xutils-dev
+# ENV CFLAGS "-C link-arg=/usr/lib/aarch64-linux-musl/libc.a"
+RUN echo && cd /tmp/openssl-$OPENSSL_VERSION &&\
+    ln -s /usr/include/linux /usr/local/musl/include/linux &&\
+    ln -s /usr/include/aarch64-linux-musl/asm /usr/local/musl/include/asm &&\
+    ln -s /usr/include/asm-generic /usr/local/musl/include/asm-generic &&\
+    ls -l /usr/local/musl/include &&\
+    ls -l /usr/local/musl/include/linux &&\
+    cat /usr/local/musl/include/linux/version.h &&\
+    ./Configure no-shared no-zlib -fPIC --prefix=/usr/local/musl -DOPENSSL_NO_SECURE_MEMORY linux-aarch64 &&\
+    make depend && make && make install_sw &&\
+    rm /usr/local/musl/include/linux /usr/local/musl/include/asm /usr/local/musl/include/asm-generic &&\
     rm -r /tmp/*
 
 # Build zlib

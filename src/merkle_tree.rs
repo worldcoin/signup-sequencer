@@ -43,7 +43,7 @@ pub enum Branch<H: Hasher> {
 
 /// Merkle proof path, bottom to top.
 #[derive(Clone, PartialEq, Eq)]
-pub struct Proof<H: Hasher>(Vec<Branch<H>>);
+pub struct Proof<H: Hasher>(pub Vec<Branch<H>>);
 
 /// For a given node index, return the parent node index
 /// Returns None if there is no parent (root node)

@@ -69,7 +69,7 @@ RUN touch build.rs src/lib.rs src/cli/main.rs &&\
     strip $BIN
 
 # Set capabilities
-RUN sudo setcap cap_net_bind_service=+ep $BIN
+RUN setcap cap_net_bind_service=+ep $BIN
 
 # Make sure it is statically linked
 RUN ! ldd $BIN
@@ -79,7 +79,7 @@ RUN file $BIN | grep "statically linked"
 RUN $BIN --version
 
 # Fetch latest certificates
-RUN sudo update-ca-certificates --verbose
+RUN update-ca-certificates --verbose
 
 ################################################################################
 # Create minimal docker image for our app

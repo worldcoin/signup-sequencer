@@ -63,7 +63,6 @@ proptest = { version = "1.0" }
 [build-dependencies]
 eyre = "0.6"
 chrono = "0.4"
-ethers = "0.5.4"
 
 [profile.release]
 codegen-units = 1

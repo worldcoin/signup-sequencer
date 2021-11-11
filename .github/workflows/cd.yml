@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [linux/arm64] # TODO Revert
+        platform: [linux/amd64,linux/arm64]
     runs-on: ubuntu-latest
     steps:
 
@@ -70,7 +70,7 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.sha }}
             ghcr.io/${{ github.repository }}:latest
-          push: true
+          push: false # TODO Revert
           build-args: |
             COMMIT_SHA=${{ github.sha }}
             COMMIT_DATE=${{ steps.author-date.outputs.result }}

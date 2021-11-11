@@ -3,10 +3,9 @@ use crate::{
         inclusion_proof_helper, insert_identity_commitment, insert_identity_to_contract, Commitment,
     },
     mimc_tree::MimcTree,
-    solidity::{initialize_semaphore, SemaphoreContract},
+    solidity::{initialize_semaphore, ContractSigner, SemaphoreContract},
 };
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
-use ethers::prelude::{Http, Provider};
 use eyre::{bail, ensure, Result as EyreResult, WrapErr as _};
 use futures::Future;
 use hex_literal::hex;
@@ -30,7 +29,6 @@ use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::{info, trace};
 use url::{Host, Url};
-use zkp_u256::U256;
 
 #[derive(Debug, PartialEq, StructOpt)]
 pub struct Options {
@@ -53,7 +51,8 @@ static LATENCY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!("api_latency_seconds", "The API latency in seconds.").unwrap()
 });
 const CONTENT_JSON: &str = "application/json";
-const NUM_LEVELS: usize = 20;
+/// `NUM_LEVELS` must be +1 to `treeLevels` argument in `Semaphore.sol`
+const NUM_LEVELS: usize = 21;
 const NOTHING_UP_MY_SLEEVE: Commitment =
     hex!("1c4823575d154474ee3e5ac838d002456a815181437afd14f126da58a9912bbe");
 
@@ -66,21 +65,20 @@ pub struct CommitmentRequest {
 pub struct App {
     merkle_tree:        RwLock<MimcTree>,
     last_leaf:          AtomicUsize,
-    provider:           Provider<Http>,
+    signer:             Arc<ContractSigner>,
     semaphore_contract: SemaphoreContract,
 }
 
 impl App {
     pub async fn new(depth: usize) -> Self {
-        let x = initialize_semaphore().await;
-        let (provider, semaphore) = match initialize_semaphore().await {
-            Ok((provider, semaphore)) => (provider, semaphore),
-            Err(e) => panic!("Error building app"),
+        let (signer, semaphore) = match initialize_semaphore().await {
+            Ok((signer, semaphore)) => (signer, semaphore),
+            Err(_) => panic!("Error building app"),
         };
         Self {
-            merkle_tree:        RwLock::new(MimcTree::new(depth, NOTHING_UP_MY_SLEEVE)),
-            last_leaf:          AtomicUsize::new(0),
-            provider,
+            merkle_tree: RwLock::new(MimcTree::new(depth, NOTHING_UP_MY_SLEEVE)),
+            last_leaf: AtomicUsize::new(0),
+            signer,
             semaphore_contract: semaphore,
         }
     }
@@ -106,23 +104,20 @@ impl App {
         {
             let mut merkle_tree = self.merkle_tree.write().unwrap();
             let last_leaf = self.last_leaf.fetch_add(1, Ordering::AcqRel);
-            let root = merkle_tree.root();
-            let root = U256::from_bytes_be(&root);
-            // let root = hex::encode(root);
-            println!("Merkle tree root {:?}", root);
             insert_identity_commitment(
                 &mut merkle_tree,
                 &commitment_request.identity_commitment,
                 last_leaf,
             );
-            let root = merkle_tree.root();
-            let root = hex::encode(root);
-            println!("After Merkle tree root {:?}", root);
         }
 
-        insert_identity_to_contract(&commitment_request.identity_commitment)
-            .await
-            .unwrap();
+        insert_identity_to_contract(
+            &self.semaphore_contract,
+            self.signer.clone(),
+            &commitment_request.identity_commitment,
+        )
+        .await
+        .unwrap();
         Ok(Response::new("Insert Identity!\n".into()))
     }
 }

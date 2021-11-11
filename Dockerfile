@@ -1,7 +1,10 @@
 FROM rust as build-env
 WORKDIR /src
 
-RUN apt-get update && apt-get install -y texinfo
+RUN apt-get update &&\
+    apt-get install -y texinfo libcap2-bin &&\
+    apt-get clean && rm -rf /var/lib/apt/lists/* &&\
+    rustup target add $(uname -m)-unknown-linux-musl
 
 # Build {x86_64,aarch64}-linux-musl toolchain
 # This is required to build zlib, openssl and other C dependencies
@@ -19,8 +22,6 @@ RUN curl -fL "http://zlib.net/zlib-$ZLIB_VERSION.tar.gz" | tar xz && cd "zlib-$Z
     rm -r "/src/zlib-$ZLIB_VERSION"
 
 # Build OpenSSL
-# See <https://github.com/openssl/openssl/issues/7207>
-# -fPIC -DOPENSSL_NO_SECURE_MEMORY 
 ARG OPENSSL_VERSION=1.1.1l
 RUN curl -fL "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" | tar xz &&\
     cd "openssl-$OPENSSL_VERSION" &&\
@@ -34,8 +35,6 @@ ENV OPENSSL_STATIC=1
 # Use Mimalloc by default instead of the musl malloc
 # TODO ARG FEATURES="mimalloc"
 ARG FEATURES=""
-
-RUN rustup target add $(uname -m)-unknown-linux-musl
 
 # Build dependencies only
 COPY Cargo.toml Cargo.lock ./
@@ -52,25 +51,25 @@ ARG COMMIT_SHA=0000000000000000000000000000000000000000
 ARG COMMIT_DATE=0000-00-00
 ENV COMMIT_SHA $COMMIT_SHA
 ENV COMMIT_DATE $COMMIT_DATE
-ENV BIN="./target/$(uname -m)-unknown-linux-musl/release/rust-app"
 
 # Build app
+ARG BIN=rust-app
 COPY build.rs Readme.md ./
 COPY src ./src
 RUN touch build.rs src/lib.rs src/cli/main.rs &&\
-    cargo build --locked --release --target $(uname -m)-unknown-linux-musl --features "${FEATURES}" --bin rust-app &&\
-    strip $BIN
+    cargo build --locked --release --target $(uname -m)-unknown-linux-musl --features "${FEATURES}" --bin $BIN &&\
+    cp ./target/$(uname -m)-unknown-linux-musl/release/$BIN ./bin &&\
+    strip ./bin
 
 # Set capabilities
-RUN setcap cap_net_bind_service=+ep $BIN
+RUN setcap cap_net_bind_service=+ep ./bin
 
 # Make sure it is statically linked
-RUN ldd $BIN ; file $BIN
-RUN ldd $BIN | grep "statically linked"
-# RUN file $BIN | grep "statically linked"
+RUN ! ldd ./bin
+RUN file ./bin | grep "statically linked"
 
 # Make sure it runs
-RUN $BIN --version
+RUN ./bin --version
 
 # Fetch latest certificates
 RUN update-ca-certificates --verbose
@@ -101,8 +100,7 @@ LABEL prometheus.io/path="/metrics"
 
 # Executable
 # TODO: --chmod=010
-COPY --from=build-env --chown=0:1000 \
-    /src/target/x86_64-unknown-linux-musl/release/rust-app /
+COPY --from=build-env --chown=0:1000 /src/bin /bin
 STOPSIGNAL SIGTERM
 HEALTHCHECK NONE
-ENTRYPOINT ["/rust-app"]
+ENTRYPOINT ["/bin"]

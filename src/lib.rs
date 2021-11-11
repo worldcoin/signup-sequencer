@@ -1,11 +1,11 @@
 #![doc = include_str!("../Readme.md")]
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
-mod identity;
-mod merkle_tree;
-mod mimc_hash;
-mod mimc_tree;
-mod server;
+// mod identity;
+// mod merkle_tree;
+// mod mimc_hash;
+// mod mimc_tree;
+// mod server;
 mod utils;
 
 use crate::utils::spawn_or_abort;
@@ -16,8 +16,8 @@ use tracing::info;
 
 #[derive(Debug, PartialEq, StructOpt)]
 pub struct Options {
-    #[structopt(flatten)]
-    server: server::Options,
+    // #[structopt(flatten)]
+// server: server::Options,
 }
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
@@ -26,7 +26,7 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResu
     let server = spawn_or_abort({
         let shutdown = shutdown.clone();
         async move {
-            server::main(options.server, shutdown).await?;
+            // server::main(options.server, shutdown).await?;
             EyreResult::Ok(())
         }
     });
@@ -96,9 +96,9 @@ pub mod bench {
     use tokio::runtime;
 
     pub fn group(criterion: &mut Criterion) {
-        crate::server::bench::group(criterion);
-        crate::mimc_hash::bench::group(criterion);
-        crate::mimc_tree::bench::group(criterion);
+        // crate::server::bench::group(criterion);
+        // crate::mimc_hash::bench::group(criterion);
+        // crate::mimc_tree::bench::group(criterion);
         bench_example_proptest(criterion);
         bench_example_async(criterion);
     }

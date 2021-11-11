@@ -33,8 +33,7 @@ ENV OPENSSL_DIR=/usr/local/musl
 ENV OPENSSL_STATIC=1
 
 # Use Mimalloc by default instead of the musl malloc
-# TODO ARG FEATURES="mimalloc"
-ARG FEATURES=""
+ARG FEATURES="mimalloc"
 
 # Build dependencies only
 COPY Cargo.toml Cargo.lock ./
@@ -64,12 +63,18 @@ RUN touch build.rs src/lib.rs src/cli/main.rs &&\
 # Set capabilities
 RUN setcap cap_net_bind_service=+ep ./bin
 
-# Make sure it is statically linked
-RUN ldd ./bin | grep "statically linked"
-RUN file ./bin | grep "statically linked"
-
 # Make sure it runs
 RUN ./bin --version
+
+# Make sure it is statically linked
+RUN objdump -p ./bin &&\
+    readelf -lW ./bin &&\
+    readelf --relocs ./bin &&\
+    file ./bin &&\
+    file ./bin | grep "statically linked"
+
+# TODO: Make sure it is PIE
+# ENV CFLAGS="-static-pie"
 
 # Fetch latest certificates
 RUN update-ca-certificates --verbose

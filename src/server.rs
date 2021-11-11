@@ -1,5 +1,7 @@
 use crate::{
-    identity::{inclusion_proof_helper, insert_identity_commitment, Commitment},
+    identity::{
+        inclusion_proof_helper, insert_identity_commitment, insert_identity_to_contract, Commitment,
+    },
     mimc_tree::MimcTree,
     solidity::{initialize_semaphore, SemaphoreContract},
 };
@@ -55,7 +57,7 @@ const NUM_LEVELS: usize = 20;
 const NOTHING_UP_MY_SLEEVE: Commitment =
     hex!("1c4823575d154474ee3e5ac838d002456a815181437afd14f126da58a9912bbe");
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitmentRequest {
     identity_commitment: String,
@@ -75,7 +77,7 @@ impl App {
             Ok((provider, semaphore)) => (provider, semaphore),
             Err(e) => panic!("Error building app"),
         };
-        App {
+        Self {
             merkle_tree:        RwLock::new(MimcTree::new(depth, NOTHING_UP_MY_SLEEVE)),
             last_leaf:          AtomicUsize::new(0),
             provider,
@@ -118,31 +120,34 @@ impl App {
             println!("After Merkle tree root {:?}", root);
         }
 
-        // insert_identity_to_contract(&commitment_request.identity_commitment)
-        //     .await
-        //     .unwrap();
+        insert_identity_to_contract(&commitment_request.identity_commitment)
+            .await
+            .unwrap();
         Ok(Response::new("Insert Identity!\n".into()))
     }
 }
 
+#[derive(Debug)]
 pub enum Error {
     InvalidMethod,
     InvalidContentType,
 }
 
+#[allow(clippy::fallible_impl_from)]
 impl From<serde_json::Error> for Error {
-    fn from(error: serde_json::Error) -> Self {
-        println!("Serde error {}", error);
+    fn from(_error: serde_json::Error) -> Self {
         todo!()
     }
 }
 
+#[allow(clippy::fallible_impl_from)]
 impl From<hyper::Error> for Error {
     fn from(_error: hyper::Error) -> Self {
         todo!()
     }
 }
 
+#[allow(clippy::fallible_impl_from)]
 impl From<Error> for hyper::Error {
     fn from(_error: Error) -> Self {
         todo!()
@@ -254,13 +259,18 @@ mod test {
     use hyper::{body::to_bytes, Request};
     use pretty_assertions::assert_eq;
 
-    #[tokio::test]
-    async fn test_hello_world() {
-        // let request = Request::new(Body::empty());
-        // let response = hello_world(request).await.unwrap();
-        // let bytes = to_bytes(response.into_body()).await.unwrap();
-        // assert_eq!(bytes.as_ref(), b"Hello, World!\n");
-    }
+    // #[tokio::test]
+    // async fn test_hello_world() {
+    //     let app = Arc::new(App::new(2));
+    //     let request = CommitmentRequest {
+    //         identity_commitment:
+    // "24C94355810D659EEAA9E0B9E21F831493B50574AA2D3205F0AAB779E2864623"
+    //             .to_string(),
+    //     };
+    //     let response = app.insert_identity(request).await.unwrap();
+    //     let bytes = to_bytes(response.into_body()).await.unwrap();
+    //     assert_eq!(bytes.as_ref(), b"Insert Identity!\n");
+    // }
 }
 #[cfg(feature = "bench")]
 #[allow(clippy::wildcard_imports, unused_imports)]
@@ -270,18 +280,23 @@ pub mod bench {
     use criterion::{black_box, Criterion};
     use hyper::body::to_bytes;
 
-    pub fn group(c: &mut Criterion) {
-        bench_hello_world(c);
+    pub fn group(_c: &mut Criterion) {
+        //     bench_hello_world(c);
     }
 
-    fn bench_hello_world(c: &mut Criterion) {
-        c.bench_function("bench_hello_world", |b| {
-            b.to_async(runtime()).iter(|| async {
-                let request = Request::new(Body::empty());
-                let response = hello_world(request).await.unwrap();
-                let bytes = to_bytes(response.into_body()).await.unwrap();
-                drop(black_box(bytes));
-            });
-        });
-    }
+    // fn bench_hello_world(c: &mut Criterion) {
+    //     let app = Arc::new(App::new(2));
+    //     let request = CommitmentRequest {
+    //         identity_commitment:
+    // "24C94355810D659EEAA9E0B9E21F831493B50574AA2D3205F0AAB779E2864623"
+    //             .to_string(),
+    //     };
+    //     c.bench_function("bench_insert_identity", |b| {
+    //         b.to_async(runtime()).iter(|| async {
+    //             let response =
+    // app.insert_identity(request.clone()).await.unwrap();             let
+    // bytes = to_bytes(response.into_body()).await.unwrap();
+    // drop(black_box(bytes));         });
+    //     });
+    // }
 }

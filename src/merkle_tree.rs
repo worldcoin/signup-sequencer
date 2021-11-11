@@ -150,13 +150,12 @@ impl<H: Hasher> MerkleTree<H> {
         proof.root(hash) == self.root()
     }
 
-    pub fn find(&self, leaf_hash: H::Hash) -> Option<usize> {
-        self.nodes
-            .iter()
-            .rev()
-            .enumerate()
-            .find(|(_, hash)| **hash == leaf_hash)
-            .map(|x| x.0)
+    pub fn leaves(&self) -> &[H::Hash] {
+        &self.nodes[(self.num_leaves() - 1)..]
+    }
+
+    pub fn position(&self, leaf: &H::Hash) -> Option<usize> {
+        self.leaves().iter().position(|x| x == leaf)
     }
 }
 
@@ -308,5 +307,55 @@ pub mod test {
             hex!("0000000000000000000000000000000000000000000000000000000000000001"),
             &proof
         ));
+    }
+
+    #[test]
+    fn test_position() {
+        let mut tree = MerkleTree::<Keccak>::new(3, [0; 32]);
+        tree.set(
+            0,
+            hex!("0000000000000000000000000000000000000000000000000000000000000001"),
+        );
+        tree.set(
+            1,
+            hex!("0000000000000000000000000000000000000000000000000000000000000002"),
+        );
+        tree.set(
+            2,
+            hex!("0000000000000000000000000000000000000000000000000000000000000003"),
+        );
+        tree.set(
+            3,
+            hex!("0000000000000000000000000000000000000000000000000000000000000004"),
+        );
+
+        assert_eq!(
+            tree.position(&hex!(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            ))
+            .unwrap(),
+            0,
+        );
+        assert_eq!(
+            tree.position(&hex!(
+                "0000000000000000000000000000000000000000000000000000000000000002"
+            ))
+            .unwrap(),
+            1,
+        );
+        assert_eq!(
+            tree.position(&hex!(
+                "0000000000000000000000000000000000000000000000000000000000000003"
+            ))
+            .unwrap(),
+            2,
+        );
+        assert_eq!(
+            tree.position(&hex!(
+                "0000000000000000000000000000000000000000000000000000000000000004"
+            ))
+            .unwrap(),
+            3,
+        );
     }
 }

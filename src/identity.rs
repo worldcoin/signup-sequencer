@@ -3,16 +3,13 @@ use crate::{
     solidity::Semaphore,
 };
 use ethers::prelude::{Address, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware};
-use eyre::{bail, eyre, Error as EyreError};
+use eyre::{bail, Error as EyreError};
 use std::{
     convert::{TryFrom, TryInto},
     sync::Arc,
 };
 
 pub type Commitment = Hash;
-
-// TODO Use real value
-const NUM_LEAVES: usize = 2;
 
 const SEMAPHORE_ADDRESS: &str = "0x762403528A6917587f45aD9ec18513244f8DD87e";
 // const WALLET_CLAIMS_ADDRESS: &str =
@@ -21,11 +18,12 @@ const SEMAPHORE_ADDRESS: &str = "0x762403528A6917587f45aD9ec18513244f8DD87e";
 pub fn inclusion_proof_helper(tree: &MimcTree, commitment: &str) -> Result<Proof, EyreError> {
     let decoded_commitment = hex::decode(commitment).unwrap();
     let decoded_commitment: Commitment = (&decoded_commitment[..]).try_into().unwrap();
-    if let Some(index) = tree.find(decoded_commitment) {
+    if let Some(index) = tree.position(&decoded_commitment) {
         return Ok(tree.proof(index));
     } else {
         bail!("Commitment not found {}", commitment);
     }
+    bail!("Commitment not found {}", commitment);
 }
 
 pub fn insert_identity_commitment(tree: &mut MimcTree, commitment: &str, index: usize) {

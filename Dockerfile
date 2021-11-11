@@ -65,7 +65,7 @@ RUN touch build.rs src/lib.rs src/cli/main.rs &&\
 RUN setcap cap_net_bind_service=+ep ./bin
 
 # Make sure it is statically linked
-RUN ! ldd ./bin
+RUN ldd ./bin | grep "statically linked"
 RUN file ./bin | grep "statically linked"
 
 # Make sure it runs

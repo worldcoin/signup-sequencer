@@ -12,7 +12,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [linux/amd64,linux/arm64]
+        platform: [linux/amd64]
+        # linux/arm64 is disabled for now pending native runners; building in
+        # qemu-aarch64 is too slow and costly.
+        # See <https://github.com/actions/virtual-environments/issues/2187>
     runs-on: ubuntu-latest
     steps:
 

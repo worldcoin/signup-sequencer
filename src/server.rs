@@ -12,7 +12,7 @@ use hyper::{
     body::Buf,
     header,
     service::{make_service_fn, service_fn},
-    Body, Method, Request, Response, Server, StatusCode,
+    Body, Method, Request, Response, Server,
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
@@ -55,7 +55,7 @@ const NUM_LEVELS: usize = 2;
 const NOTHING_UP_MY_SLEEVE: Commitment =
     hex!("1c4823575d154474ee3e5ac838d002456a815181437afd14f126da58a9912bbe");
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitmentRequest {
     identity_commitment: String,
@@ -68,7 +68,7 @@ pub struct App {
 
 impl App {
     pub fn new(depth: usize) -> Self {
-        App {
+        Self {
             merkle_tree: RwLock::new(MimcTree::new(depth, NOTHING_UP_MY_SLEEVE)),
             last_leaf:   AtomicUsize::new(0),
         }
@@ -109,31 +109,34 @@ impl App {
             println!("After Merkle tree root {:?}", root);
         }
 
-        // insert_identity_to_contract(&commitment_request.identity_commitment)
-        //     .await
-        //     .unwrap();
+        insert_identity_to_contract(&commitment_request.identity_commitment)
+            .await
+            .unwrap();
         Ok(Response::new("Insert Identity!\n".into()))
     }
 }
 
+#[derive(Debug)]
 pub enum Error {
     InvalidMethod,
     InvalidContentType,
 }
 
+#[allow(clippy::fallible_impl_from)]
 impl From<serde_json::Error> for Error {
-    fn from(error: serde_json::Error) -> Self {
-        println!("Serde error {}", error);
+    fn from(_error: serde_json::Error) -> Self {
         todo!()
     }
 }
 
+#[allow(clippy::fallible_impl_from)]
 impl From<hyper::Error> for Error {
     fn from(_error: hyper::Error) -> Self {
         todo!()
     }
 }
 
+#[allow(clippy::fallible_impl_from)]
 impl From<Error> for hyper::Error {
     fn from(_error: Error) -> Self {
         todo!()
@@ -247,10 +250,14 @@ mod test {
 
     #[tokio::test]
     async fn test_hello_world() {
-        // let request = Request::new(Body::empty());
-        // let response = hello_world(request).await.unwrap();
-        // let bytes = to_bytes(response.into_body()).await.unwrap();
-        // assert_eq!(bytes.as_ref(), b"Hello, World!\n");
+        let app = Arc::new(App::new(2));
+        let request = CommitmentRequest {
+            identity_commitment: "24C94355810D659EEAA9E0B9E21F831493B50574AA2D3205F0AAB779E2864623"
+                .to_string(),
+        };
+        let response = app.insert_identity(request).await.unwrap();
+        let bytes = to_bytes(response.into_body()).await.unwrap();
+        assert_eq!(bytes.as_ref(), b"Insert Identity!\n");
     }
 }
 #[cfg(feature = "bench")]
@@ -266,10 +273,14 @@ pub mod bench {
     }
 
     fn bench_hello_world(c: &mut Criterion) {
-        c.bench_function("bench_hello_world", |b| {
+        let app = Arc::new(App::new(2));
+        let request = CommitmentRequest {
+            identity_commitment: "24C94355810D659EEAA9E0B9E21F831493B50574AA2D3205F0AAB779E2864623"
+                .to_string(),
+        };
+        c.bench_function("bench_insert_identity", |b| {
             b.to_async(runtime()).iter(|| async {
-                let request = Request::new(Body::empty());
-                let response = hello_world(request).await.unwrap();
+                let response = app.insert_identity(request.clone()).await.unwrap();
                 let bytes = to_bytes(response.into_body()).await.unwrap();
                 drop(black_box(bytes));
             });

@@ -10,9 +10,6 @@ use std::{
 
 pub type Commitment = Hash;
 
-// TODO Use real value
-const NUM_LEAVES: usize = 2;
-
 const SEMAPHORE_ADDRESS: &str = "0x762403528A6917587f45aD9ec18513244f8DD87e";
 // const WALLET_CLAIMS_ADDRESS: &str =
 // "0x39777E5d6bB83F4bF51fa832cD50E3c74eeA50A5";
@@ -26,11 +23,10 @@ abigen!(
 pub fn inclusion_proof_helper(tree: &MimcTree, commitment: &str) -> Result<Proof, EyreError> {
     let decoded_commitment = hex::decode(commitment).unwrap();
     let decoded_commitment: [u8; 32] = (&decoded_commitment[..]).try_into().unwrap();
-    if let Some(index) = tree.find(decoded_commitment) {
+    if let Some(index) = tree.position(&decoded_commitment) {
         return Ok(tree.proof(index));
-    } else {
-        bail!("Commitment not found {}", commitment);
     }
+    bail!("Commitment not found {}", commitment);
 }
 
 pub fn insert_identity_commitment(tree: &mut MimcTree, commitment: &str, index: usize) {

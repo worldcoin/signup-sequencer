@@ -248,17 +248,18 @@ mod test {
     use hyper::{body::to_bytes, Request};
     use pretty_assertions::assert_eq;
 
-    #[tokio::test]
-    async fn test_hello_world() {
-        let app = Arc::new(App::new(2));
-        let request = CommitmentRequest {
-            identity_commitment: "24C94355810D659EEAA9E0B9E21F831493B50574AA2D3205F0AAB779E2864623"
-                .to_string(),
-        };
-        let response = app.insert_identity(request).await.unwrap();
-        let bytes = to_bytes(response.into_body()).await.unwrap();
-        assert_eq!(bytes.as_ref(), b"Insert Identity!\n");
-    }
+    // #[tokio::test]
+    // async fn test_hello_world() {
+    //     let app = Arc::new(App::new(2));
+    //     let request = CommitmentRequest {
+    //         identity_commitment:
+    // "24C94355810D659EEAA9E0B9E21F831493B50574AA2D3205F0AAB779E2864623"
+    //             .to_string(),
+    //     };
+    //     let response = app.insert_identity(request).await.unwrap();
+    //     let bytes = to_bytes(response.into_body()).await.unwrap();
+    //     assert_eq!(bytes.as_ref(), b"Insert Identity!\n");
+    // }
 }
 #[cfg(feature = "bench")]
 #[allow(clippy::wildcard_imports, unused_imports)]
@@ -268,22 +269,23 @@ pub mod bench {
     use criterion::{black_box, Criterion};
     use hyper::body::to_bytes;
 
-    pub fn group(c: &mut Criterion) {
-        bench_hello_world(c);
+    pub fn group(_c: &mut Criterion) {
+    //     bench_hello_world(c);
     }
 
-    fn bench_hello_world(c: &mut Criterion) {
-        let app = Arc::new(App::new(2));
-        let request = CommitmentRequest {
-            identity_commitment: "24C94355810D659EEAA9E0B9E21F831493B50574AA2D3205F0AAB779E2864623"
-                .to_string(),
-        };
-        c.bench_function("bench_insert_identity", |b| {
-            b.to_async(runtime()).iter(|| async {
-                let response = app.insert_identity(request.clone()).await.unwrap();
-                let bytes = to_bytes(response.into_body()).await.unwrap();
-                drop(black_box(bytes));
-            });
-        });
-    }
+    // fn bench_hello_world(c: &mut Criterion) {
+    //     let app = Arc::new(App::new(2));
+    //     let request = CommitmentRequest {
+    //         identity_commitment:
+    // "24C94355810D659EEAA9E0B9E21F831493B50574AA2D3205F0AAB779E2864623"
+    //             .to_string(),
+    //     };
+    //     c.bench_function("bench_insert_identity", |b| {
+    //         b.to_async(runtime()).iter(|| async {
+    //             let response =
+    // app.insert_identity(request.clone()).await.unwrap();             let
+    // bytes = to_bytes(response.into_body()).await.unwrap();
+    // drop(black_box(bytes));         });
+    //     });
+    // }
 }

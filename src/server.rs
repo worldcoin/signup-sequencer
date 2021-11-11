@@ -270,7 +270,7 @@ pub mod bench {
     use hyper::body::to_bytes;
 
     pub fn group(_c: &mut Criterion) {
-    //     bench_hello_world(c);
+        //     bench_hello_world(c);
     }
 
     // fn bench_hello_world(c: &mut Criterion) {

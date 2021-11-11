@@ -41,6 +41,7 @@ RUN mkdir -p src/cli &&\
     echo 'fn main() { }' > build.rs &&\
     echo 'fn main() { panic!("build failed") }' > src/cli/main.rs &&\
     echo '' > src/lib.rs &&\
+    export CC=/usr/local/musl/bin/$(uname -m)-linux-musl-gcc &&\
     export PATH="/usr/local/musl/bin:$PATH" &&\
     cargo build --locked --release --target $(uname -m)-unknown-linux-musl --features "${FEATURES}" --bin rust-app &&\
     rm -r build.rs src
@@ -56,6 +57,8 @@ ARG BIN=rust-app
 COPY build.rs Readme.md ./
 COPY src ./src
 RUN touch build.rs src/lib.rs src/cli/main.rs &&\
+    export CC=/usr/local/musl/bin/$(uname -m)-linux-musl-gcc &&\
+    export PATH="/usr/local/musl/bin:$PATH" &&\
     cargo build --locked --release --target $(uname -m)-unknown-linux-musl --features "${FEATURES}" --bin $BIN &&\
     cp ./target/$(uname -m)-unknown-linux-musl/release/$BIN ./bin &&\
     strip ./bin

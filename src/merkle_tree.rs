@@ -67,6 +67,9 @@ const fn depth(index: usize) -> usize {
 }
 
 impl<H: Hasher> MerkleTree<H> {
+    /// Creates a new `MerkleTree`
+    /// * `depth` - The depth of the tree, including the root. This is 1 greater
+    ///   than the `treeLevels` argument to the Semaphore contract.
     pub fn new(depth: usize, initial_leaf: H::Hash) -> Self {
         // Compute empty node values, leaf to root
         let empty = successors(Some(initial_leaf), |prev| Some(H::hash_node(prev, prev)))

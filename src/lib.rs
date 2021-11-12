@@ -6,6 +6,7 @@ mod merkle_tree;
 mod mimc_hash;
 mod mimc_tree;
 mod server;
+mod solidity;
 mod utils;
 
 use crate::utils::spawn_or_abort;

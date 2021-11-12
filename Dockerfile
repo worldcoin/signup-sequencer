@@ -1,57 +1,50 @@
 FROM rust as build-env
 WORKDIR /src
 
-ARG TARGET=x86_64-unknown-linux-musl
-ENV TARGET $TARGET
-
-# Build tools for a static musl target
 RUN apt-get update &&\
-    apt-get install -yq build-essential musl-dev musl-tools libcap2-bin &&\
+    apt-get install -y texinfo libcap2-bin &&\
     apt-get clean && rm -rf /var/lib/apt/lists/* &&\
-    rustup target add $TARGET
-RUN mkdir -p /usr/local/musl/include
-ENV C_INCLUDE_PATH=/usr/local/musl/include
-ENV CC=musl-gcc
+    rustup target add $(uname -m)-unknown-linux-musl
 
-# Build OpenSSL
-ARG OPENSSL_VERSION=1.1.1l
-RUN cd /tmp && \
-    curl -fLO "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" && \
-    tar xzf "openssl-$OPENSSL_VERSION.tar.gz" && cd "openssl-$OPENSSL_VERSION" && \
-    ln -s /usr/include/linux /usr/local/musl/include/linux && \
-    ln -s /usr/include/x86_64-linux-gnu/asm /usr/local/musl/include/asm && \
-    ln -s /usr/include/asm-generic /usr/local/musl/include/asm-generic && \
-    ./Configure no-shared no-zlib -fPIC --prefix=/usr/local/musl -DOPENSSL_NO_SECURE_MEMORY linux-x86_64 && \
-    make depend && make && make install_sw && \
-    rm /usr/local/musl/include/linux /usr/local/musl/include/asm /usr/local/musl/include/asm-generic && \
-    rm -r /tmp/*
+# Build {x86_64,aarch64}-linux-musl toolchain
+# This is required to build zlib, openssl and other C dependencies
+ARG MUSL_CROSS_VERSION=0.9.9
+RUN curl -fL "https://github.com/richfelker/musl-cross-make/archive/v${MUSL_CROSS_VERSION}.tar.gz"\
+    | tar xz && cd musl-cross-make-${MUSL_CROSS_VERSION} &&\
+    make install TARGET=$(uname -m)-linux-musl OUTPUT=/usr/local/musl &&\
+    rm -r /src/musl-cross-make-${MUSL_CROSS_VERSION}
 
 # Build zlib
 ARG ZLIB_VERSION=1.2.11
-RUN cd /tmp && \
-    curl -fLO "http://zlib.net/zlib-$ZLIB_VERSION.tar.gz" && \
-    tar xzf "zlib-$ZLIB_VERSION.tar.gz" && cd "zlib-$ZLIB_VERSION" && \
-    ./configure --static --prefix=/usr/local/musl && \
-    make && make install && \
-    rm -r /tmp/*
+RUN curl -fL "http://zlib.net/zlib-$ZLIB_VERSION.tar.gz" | tar xz && cd "zlib-$ZLIB_VERSION" &&\
+    export CC=/usr/local/musl/bin/$(uname -m)-linux-musl-gcc &&\
+    ./configure --static --prefix=/usr/local/musl && make && make install &&\
+    rm -r "/src/zlib-$ZLIB_VERSION"
 
-ENV X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_DIR=/usr/local/musl/ \
-    X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_STATIC=1 \
-    PG_CONFIG_X86_64_UNKNOWN_LINUX_GNU=/usr/bin/pg_config \
-    PKG_CONFIG_ALLOW_CROSS=true \
-    PKG_CONFIG_ALL_STATIC=true \
-    LIBZ_SYS_STATIC=1
+# Build OpenSSL
+ARG OPENSSL_VERSION=1.1.1l
+RUN curl -fL "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" | tar xz &&\
+    cd "openssl-$OPENSSL_VERSION" &&\
+    export CC=/usr/local/musl/bin/$(uname -m)-linux-musl-gcc &&\
+    ./Configure no-shared --prefix=/usr/local/musl linux-$(uname -m) &&\
+    make install_sw &&\
+    rm -r "/src/openssl-$OPENSSL_VERSION"
+ENV OPENSSL_DIR=/usr/local/musl
+ENV OPENSSL_STATIC=1
 
 # Use Mimalloc by default instead of the musl malloc
 ARG FEATURES="mimalloc"
 
 # Build dependencies only
+ARG BIN=rust-app
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src/cli &&\
     echo 'fn main() { }' > build.rs &&\
     echo 'fn main() { panic!("build failed") }' > src/cli/main.rs &&\
     echo '' > src/lib.rs &&\
-    cargo build --release --locked --target $TARGET --features "${FEATURES}" --bin rust-app &&\
+    export CC=/usr/local/musl/bin/$(uname -m)-linux-musl-gcc &&\
+    export PATH="/usr/local/musl/bin:$PATH" &&\
+    cargo build --locked --release --target $(uname -m)-unknown-linux-musl --features "${FEATURES}" --bin $BIN &&\
     rm -r build.rs src
 
 # Take build identifying information as arguments
@@ -59,25 +52,32 @@ ARG COMMIT_SHA=0000000000000000000000000000000000000000
 ARG COMMIT_DATE=0000-00-00
 ENV COMMIT_SHA $COMMIT_SHA
 ENV COMMIT_DATE $COMMIT_DATE
-ENV BIN="./target/$TARGET/release/rust-app"
 
 # Build app
 COPY build.rs Readme.md ./
 COPY src ./src
 RUN touch build.rs src/lib.rs src/cli/main.rs &&\
-    cargo build --release --locked --target $TARGET --features "${FEATURES}" --bin rust-app &&\
-    strip $BIN
+    export CC=/usr/local/musl/bin/$(uname -m)-linux-musl-gcc &&\
+    export PATH="/usr/local/musl/bin:$PATH" &&\
+    cargo build --locked --release --target $(uname -m)-unknown-linux-musl --features "${FEATURES}" --bin $BIN &&\
+    cp ./target/$(uname -m)-unknown-linux-musl/release/$BIN ./bin &&\
+    strip ./bin
 
 # Set capabilities
-RUN setcap cap_net_bind_service=+ep $BIN
-
-# Make sure it is statically linked
-RUN ldd $BIN ; file $BIN
-RUN ldd $BIN | grep "statically linked"
-# RUN file $BIN | grep "statically linked"
+RUN setcap cap_net_bind_service=+ep ./bin
 
 # Make sure it runs
-RUN $BIN --version
+RUN ./bin --version
+
+# Make sure it is statically linked
+RUN objdump -p ./bin &&\
+    readelf -lW ./bin &&\
+    file ./bin
+# TODO RUN file ./bin | grep "statically linked"
+
+# TODO: Make sure it is PIE
+# RUN readelf --relocs ./bin
+# ENV CFLAGS="-static-pie"
 
 # Fetch latest certificates
 RUN update-ca-certificates --verbose
@@ -108,8 +108,7 @@ LABEL prometheus.io/path="/metrics"
 
 # Executable
 # TODO: --chmod=010
-COPY --from=build-env --chown=0:1000 \
-    /src/target/x86_64-unknown-linux-musl/release/rust-app /
+COPY --from=build-env --chown=0:1000 /src/bin /bin
 STOPSIGNAL SIGTERM
 HEALTHCHECK NONE
-ENTRYPOINT ["/rust-app"]
+ENTRYPOINT ["/bin"]

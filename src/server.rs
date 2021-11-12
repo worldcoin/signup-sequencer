@@ -70,14 +70,14 @@ pub struct App {
 }
 
 impl App {
-    pub async fn new(depth: usize) -> Self {
-        let (signer, semaphore) = initialize_semaphore().await.unwrap();
-        Self {
+    pub async fn new(depth: usize) -> Result<Self, eyre::Error> {
+        let (signer, semaphore) = initialize_semaphore().await?;
+        Ok(Self {
             merkle_tree: RwLock::new(MimcTree::new(depth, NOTHING_UP_MY_SLEEVE)),
             last_leaf: AtomicUsize::new(0),
             signer,
             semaphore_contract: semaphore,
-        }
+        })
     }
 
     #[allow(clippy::unused_async)]
@@ -218,7 +218,7 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResu
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
-    let app = Arc::new(App::new(NUM_LEVELS).await);
+    let app = Arc::new(App::new(NUM_LEVELS).await?);
 
     let make_svc = make_service_fn(move |_| {
         // Clone here as `make_service_fn` is called for every connection

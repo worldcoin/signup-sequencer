@@ -36,6 +36,7 @@ ENV OPENSSL_STATIC=1
 ARG FEATURES="mimalloc"
 
 # Build dependencies only
+ARG BIN=rust-app
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src/cli &&\
     echo 'fn main() { }' > build.rs &&\
@@ -43,7 +44,7 @@ RUN mkdir -p src/cli &&\
     echo '' > src/lib.rs &&\
     export CC=/usr/local/musl/bin/$(uname -m)-linux-musl-gcc &&\
     export PATH="/usr/local/musl/bin:$PATH" &&\
-    cargo build --locked --release --target $(uname -m)-unknown-linux-musl --features "${FEATURES}" --bin rust-app &&\
+    cargo build --locked --release --target $(uname -m)-unknown-linux-musl --features "${FEATURES}" --bin $BIN &&\
     rm -r build.rs src
 
 # Take build identifying information as arguments
@@ -53,7 +54,6 @@ ENV COMMIT_SHA $COMMIT_SHA
 ENV COMMIT_DATE $COMMIT_DATE
 
 # Build app
-ARG BIN=rust-app
 COPY build.rs Readme.md ./
 COPY src ./src
 RUN touch build.rs src/lib.rs src/cli/main.rs &&\

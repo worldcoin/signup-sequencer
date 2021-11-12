@@ -2,7 +2,7 @@ use crate::{identity::{
         inclusion_proof_helper, insert_identity_commitment, insert_identity_to_contract, Commitment,
     }, mimc_tree::MimcTree, solidity::{ContractSigner, SemaphoreContract, initialize_semaphore, parse_identity_commitments}};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
-use eyre::{bail, ensure, Result as EyreResult, WrapErr as _};
+use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
 use hex_literal::hex;
 use hyper::{
@@ -61,7 +61,7 @@ pub struct CommitmentRequest {
 pub struct App {
     merkle_tree:        RwLock<MimcTree>,
     last_leaf:          AtomicUsize,
-    signer:             Arc<ContractSigner>,
+    signer:             ContractSigner,
     semaphore_contract: SemaphoreContract,
 }
 
@@ -103,12 +103,12 @@ impl App {
                 &mut merkle_tree,
                 &commitment_request.identity_commitment,
                 last_leaf,
-            );
+            )?;
         }
 
         insert_identity_to_contract(
             &self.semaphore_contract,
-            self.signer.clone(),
+            &self.signer,
             &commitment_request.identity_commitment,
         )
         .await
@@ -133,6 +133,13 @@ impl From<serde_json::Error> for Error {
 #[allow(clippy::fallible_impl_from)]
 impl From<hyper::Error> for Error {
     fn from(_error: hyper::Error) -> Self {
+        todo!()
+    }
+}
+
+#[allow(clippy::fallible_impl_from)]
+impl From<EyreError> for Error {
+    fn from(_error: EyreError) -> Self {
         todo!()
     }
 }

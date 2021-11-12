@@ -1,7 +1,8 @@
 use std::sync::Arc;
-use ethers::{core::k256::ecdsa::SigningKey, prelude::{Address, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware, U256, Wallet, abigen, builders::Event}};
 use crate::{identity::Commitment, mimc_tree::MimcTree};
-use eyre::Result as EyreResult;
+use eyre::{eyre, Result as EyreResult};
+use ethers::{core::k256::ecdsa::SigningKey, prelude::{Address, H160, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware, Wallet, abigen, builders::Event}};
+use hex_literal::hex;
 
 abigen!(
     Semaphore,
@@ -12,26 +13,26 @@ abigen!(
     event_derives(serde::Deserialize, serde::Serialize)
 );
 
-const SEMAPHORE_ADDRESS: &str = "0xFE600E2C8023d28219F65C5ED2dDED310737742a";
+const SEMAPHORE_ADDRESS: Address = H160(hex!("FE600E2C8023d28219F65C5ED2dDED310737742a"));
+const SIGNING_KEY: [u8; 32] =
+    hex!("ee79b5f6e221356af78cf4c36f4f7885a11b67dfcc81c34d80249947330c0f82");
 
 pub type ContractSigner = SignerMiddleware<Provider<Http>, Wallet<SigningKey>>;
 pub type SemaphoreContract = Semaphore<ContractSigner>;
 
-pub async fn initialize_semaphore() -> Result<(Arc<ContractSigner>, SemaphoreContract), eyre::Error>
-{
+pub async fn initialize_semaphore() -> Result<(ContractSigner, SemaphoreContract), eyre::Error> {
     let provider = Provider::<Http>::try_from("http://localhost:8545")
         .expect("could not instantiate HTTP Provider");
-    let chain_id = provider.get_chainid().await.unwrap();
+    let chain_id: u64 = provider
+        .get_chainid()
+        .await?
+        .try_into()
+        .map_err(|e| eyre!("{}", e))?;
 
-    let wallet = "ee79b5f6e221356af78cf4c36f4f7885a11b67dfcc81c34d80249947330c0f82"
-        .parse::<LocalWallet>()?;
-    let wallet = wallet.with_chain_id(chain_id.as_u64());
+    let wallet = LocalWallet::from(SigningKey::from_bytes(&SIGNING_KEY)?).with_chain_id(chain_id);
+    let signer = SignerMiddleware::new(provider, wallet);
+    let contract = Semaphore::new(SEMAPHORE_ADDRESS, Arc::new(signer.clone()));
 
-    let signer = SignerMiddleware::new(provider.clone(), wallet);
-    let signer = Arc::new(signer);
-
-    let semaphore_address = SEMAPHORE_ADDRESS.parse::<Address>().unwrap();
-    let contract = Semaphore::new(semaphore_address, signer.clone());
     Ok((signer, contract))
 }
 

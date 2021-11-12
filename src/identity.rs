@@ -1,22 +1,16 @@
-use crate::mimc_tree::{Hash, Proof};
+use crate::mimc_tree::{Hash, MimcTree, Proof};
 use ethers::prelude::{
     abigen, Address, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware,
 };
-use eyre::{eyre, Error as EyreError};
+use eyre::{bail, Error as EyreError};
 use std::{
     convert::{TryFrom, TryInto},
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::Arc,
 };
 
 pub type Commitment = Hash;
 
-// TODO Use real value
-const NUM_LEAVES: usize = 2;
-
-const SEMAPHORE_ADDRESS: &str = "0x1a2BdAE39EB03E1D10551866717F8631bEf6e88a";
+const SEMAPHORE_ADDRESS: &str = "0x762403528A6917587f45aD9ec18513244f8DD87e";
 // const WALLET_CLAIMS_ADDRESS: &str =
 // "0x39777E5d6bB83F4bF51fa832cD50E3c74eeA50A5";
 
@@ -26,43 +20,23 @@ abigen!(
     event_derives(serde::Deserialize, serde::Serialize),
 );
 
-pub fn initialize_commitments() -> Vec<Commitment> {
-    let identity_commitments = vec![[0_u8; 32]; 1 << NUM_LEAVES];
-    identity_commitments
+pub fn inclusion_proof_helper(tree: &MimcTree, commitment: &str) -> Result<Proof, EyreError> {
+    let decoded_commitment = hex::decode(commitment).unwrap();
+    let decoded_commitment: [u8; 32] = (&decoded_commitment[..]).try_into().unwrap();
+    if let Some(index) = tree.position(&decoded_commitment) {
+        return Ok(tree.proof(index));
+    }
+    bail!("Commitment not found {}", commitment);
 }
 
-pub fn inclusion_proof_helper(
-    commitment: &str,
-    commitments: &[Commitment],
-) -> Result<Proof, EyreError> {
-    // For some reason strings have extra `"`s on the ends
-    let commitment = commitment.trim_matches('"');
-    let commitment = hex::decode(commitment).unwrap();
-    let commitment: [u8; 32] = (&commitment[..]).try_into().unwrap();
-    let _index = commitments
-        .iter()
-        .position(|x| *x == commitment)
-        .ok_or_else(|| eyre!("Commitment not found: {:?}", commitment))?;
-
-    // let t: MimcTree = MimcTree::try_from_iter(commitments.iter().map(|x|
-    // Ok(*x))).unwrap(); t.gen_proof(index)
-    todo!()
-}
-
-pub fn insert_identity_commitment(
-    commitment: &str,
-    commitments: &mut [Commitment],
-    index: &AtomicUsize,
-) {
-    let commitment = commitment.trim_matches('"');
+pub fn insert_identity_commitment(tree: &mut MimcTree, commitment: &str, index: usize) {
+    // let commitment = commitment.trim_matches('"');
     let decoded_commitment = hex::decode(commitment).unwrap();
     let commitment: [u8; 32] = (&decoded_commitment[..]).try_into().unwrap();
-    let index: usize = index.fetch_add(1, Ordering::AcqRel);
-    commitments[index] = commitment;
+    tree.set(index, commitment);
 }
 
 pub async fn insert_identity_to_contract(commitment: &str) -> Result<bool, EyreError> {
-    let commitment = commitment.trim_matches('"');
     let decoded_commitment = hex::decode(commitment).unwrap();
 
     let provider = Provider::<Http>::try_from("http://localhost:8545")

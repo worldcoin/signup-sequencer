@@ -70,7 +70,7 @@ pub struct App {
 }
 
 impl App {
-    pub async fn new(depth: usize) -> Result<Self, eyre::Error> {
+    pub async fn new(depth: usize) -> EyreResult<Self> {
         let (signer, semaphore) = initialize_semaphore().await?;
         Ok(Self {
             merkle_tree: RwLock::new(MimcTree::new(depth, NOTHING_UP_MY_SLEEVE)),

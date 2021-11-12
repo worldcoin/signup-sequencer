@@ -1,10 +1,6 @@
-use crate::{
-    identity::{
+use crate::{identity::{
         inclusion_proof_helper, insert_identity_commitment, insert_identity_to_contract, Commitment,
-    },
-    mimc_tree::MimcTree,
-    solidity::{initialize_semaphore, ContractSigner, SemaphoreContract},
-};
+    }, mimc_tree::MimcTree, solidity::{ContractSigner, SemaphoreContract, initialize_semaphore, parse_identity_commitments}};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use eyre::{bail, ensure, Result as EyreResult, WrapErr as _};
 use futures::Future;
@@ -72,9 +68,11 @@ pub struct App {
 impl App {
     pub async fn new(depth: usize) -> EyreResult<Self> {
         let (signer, semaphore) = initialize_semaphore().await?;
+        let mut merkle_tree = MimcTree::new(depth, NOTHING_UP_MY_SLEEVE);
+        let last_leaf = parse_identity_commitments(&mut merkle_tree, semaphore.clone(), None).await?;
         Ok(Self {
-            merkle_tree: RwLock::new(MimcTree::new(depth, NOTHING_UP_MY_SLEEVE)),
-            last_leaf: AtomicUsize::new(0),
+            merkle_tree: RwLock::new(merkle_tree),
+            last_leaf: AtomicUsize::new(last_leaf),
             signer,
             semaphore_contract: semaphore,
         })

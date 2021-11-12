@@ -1,16 +1,13 @@
 use std::sync::Arc;
-
-use ethers::{
-    core::k256::ecdsa::SigningKey,
-    prelude::{
-        abigen, Address, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware, Wallet,
-    },
-};
+use ethers::{core::k256::ecdsa::SigningKey, prelude::{Address, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware, U256, Wallet, abigen, builders::Event}};
+use crate::{identity::Commitment, mimc_tree::MimcTree};
+use eyre::Result as EyreResult;
 
 abigen!(
     Semaphore,
     r#"[
         function insertIdentity(uint256 _identityCommitment) public onlyOwner returns (uint256)
+        event LeafInsertion(uint256 indexed leaf, uint256 indexed leafIndex)
     ]"#,
     event_derives(serde::Deserialize, serde::Serialize)
 );
@@ -36,4 +33,20 @@ pub async fn initialize_semaphore() -> Result<(Arc<ContractSigner>, SemaphoreCon
     let semaphore_address = SEMAPHORE_ADDRESS.parse::<Address>().unwrap();
     let contract = Semaphore::new(semaphore_address, signer.clone());
     Ok((signer, contract))
+}
+
+pub async fn parse_identity_commitments(tree: &mut MimcTree, semaphore_contract: SemaphoreContract, starting_block: Option<usize>) -> EyreResult<usize> {
+    // TODO read/write from file
+    let starting_block = starting_block.unwrap_or(0);
+    let filter: Event<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>, LeafInsertionFilter> = semaphore_contract.leaf_insertion_filter().from_block(starting_block);
+    let logs = filter.query().await?;
+    let mut last_index = 0;
+    for event in logs.iter() {
+        let index: usize = event.leaf_index.as_u32().try_into()?;
+        let leaf = hex::decode(format!("{:x}", event.leaf))?;
+        let leaf: Commitment = (&leaf[..]).try_into()?;
+        tree.set(index, leaf);
+        last_index = index;
+    }
+    Ok(last_index)
 }

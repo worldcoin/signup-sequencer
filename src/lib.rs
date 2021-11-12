@@ -26,7 +26,7 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResu
     let server = spawn_or_abort({
         let shutdown = shutdown.clone();
         async move {
-            // server::main(options.server, shutdown).await?;
+            server::main(options.server, shutdown).await?;
             EyreResult::Ok(())
         }
     });
@@ -96,9 +96,9 @@ pub mod bench {
     use tokio::runtime;
 
     pub fn group(criterion: &mut Criterion) {
-        // crate::server::bench::group(criterion);
-        // crate::mimc_hash::bench::group(criterion);
-        // crate::mimc_tree::bench::group(criterion);
+        crate::server::bench::group(criterion);
+        crate::mimc_hash::bench::group(criterion);
+        crate::mimc_tree::bench::group(criterion);
         bench_example_proptest(criterion);
         bench_example_async(criterion);
     }

@@ -71,10 +71,7 @@ pub struct App {
 
 impl App {
     pub async fn new(depth: usize) -> Self {
-        let (signer, semaphore) = match initialize_semaphore().await {
-            Ok((signer, semaphore)) => (signer, semaphore),
-            Err(_) => panic!("Error building app"),
-        };
+        let (signer, semaphore) = initialize_semaphore().await.unwrap();
         Self {
             merkle_tree: RwLock::new(MimcTree::new(depth, NOTHING_UP_MY_SLEEVE)),
             last_leaf: AtomicUsize::new(0),

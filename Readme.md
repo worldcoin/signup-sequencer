@@ -3,7 +3,7 @@
 ![lines of code](https://img.shields.io/tokei/lines/github/recmo/rust-app-template)
 [![dependency status](https://deps.rs/repo/github/recmo/rust-app-template/status.svg)](https://deps.rs/repo/github/recmo/rust-app-template)
 [![codecov](https://img.shields.io/codecov/c/github/recmo/rust-app-template)](https://codecov.io/gh/Recmo/rust-app-template)
-[![build](https://img.shields.io/github/workflow/status/recmo/rust-app-template/build)](https://github.com/Recmo/rust-app-template/actions?query=workflow%3Abuild)
+[![ci](https://img.shields.io/github/workflow/status/recmo/rust-app-template/ci)](https://github.com/Recmo/rust-app-template/actions?query=workflow%ci)
 
 **Main features.** Comes with the kitchen sink. Remove what you don't need.
 

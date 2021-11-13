@@ -39,8 +39,6 @@ ENV AARCH64_UNKNOWN_LINUX_MUSL_OPENSSL_STATIC=1
 # Use Mimalloc by default instead of the musl malloc
 ARG FEATURES="mimalloc"
 
-RUN apt-get update && apt-get install 
-
 # Build dependencies only
 ARG BIN=rust-app
 COPY Cargo.toml Cargo.lock ./

@@ -2,7 +2,7 @@ FROM rust as build-env
 WORKDIR /src
 
 RUN apt-get update &&\
-    apt-get install -y texinfo libcap2-bin &&\
+    apt-get install -y libssl-dev texinfo libcap2-bin &&\
     apt-get clean && rm -rf /var/lib/apt/lists/* &&\
     rustup target add $(uname -m)-unknown-linux-musl
 
@@ -13,6 +13,8 @@ RUN curl -fL "https://github.com/richfelker/musl-cross-make/archive/v${MUSL_CROS
     | tar xz && cd musl-cross-make-${MUSL_CROSS_VERSION} &&\
     make install TARGET=$(uname -m)-linux-musl OUTPUT=/usr/local/musl &&\
     rm -r /src/musl-cross-make-${MUSL_CROSS_VERSION}
+ENV CC_x86_64_unknown_linux_musl=/usr/local/musl/bin/x86_64-linux-musl-gcc
+ENV CC_aarch64_unknown_linux_musl=/usr/local/musl/bin/aarch64-linux-musl-gcc
 
 # Build zlib
 ARG ZLIB_VERSION=1.2.11
@@ -29,11 +31,15 @@ RUN curl -fL "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" | 
     ./Configure no-shared --prefix=/usr/local/musl linux-$(uname -m) &&\
     make install_sw &&\
     rm -r "/src/openssl-$OPENSSL_VERSION"
-ENV OPENSSL_DIR=/usr/local/musl
-ENV OPENSSL_STATIC=1
+ENV X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_DIR=/usr/local/musl
+ENV X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_STATIC=1
+ENV AARCH64_UNKNOWN_LINUX_MUSL_OPENSSL_DIR=/usr/local/musl
+ENV AARCH64_UNKNOWN_LINUX_MUSL_OPENSSL_STATIC=1
 
 # Use Mimalloc by default instead of the musl malloc
 ARG FEATURES="mimalloc"
+
+RUN apt-get update && apt-get install 
 
 # Build dependencies only
 ARG BIN=rust-app
@@ -42,8 +48,6 @@ RUN mkdir -p src/cli &&\
     echo 'fn main() { }' > build.rs &&\
     echo 'fn main() { panic!("build failed") }' > src/cli/main.rs &&\
     echo '' > src/lib.rs &&\
-    export CC=/usr/local/musl/bin/$(uname -m)-linux-musl-gcc &&\
-    export PATH="/usr/local/musl/bin:$PATH" &&\
     cargo build --locked --release --target $(uname -m)-unknown-linux-musl --features "${FEATURES}" --bin $BIN &&\
     rm -r build.rs src
 
@@ -57,8 +61,6 @@ ENV COMMIT_DATE $COMMIT_DATE
 COPY build.rs Readme.md ./
 COPY src ./src
 RUN touch build.rs src/lib.rs src/cli/main.rs &&\
-    export CC=/usr/local/musl/bin/$(uname -m)-linux-musl-gcc &&\
-    export PATH="/usr/local/musl/bin:$PATH" &&\
     cargo build --locked --release --target $(uname -m)-unknown-linux-musl --features "${FEATURES}" --bin $BIN &&\
     cp ./target/$(uname -m)-unknown-linux-musl/release/$BIN ./bin &&\
     strip ./bin

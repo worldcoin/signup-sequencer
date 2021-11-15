@@ -1,22 +1,52 @@
-# This is a self build version of <https://github.com/emk/rust-musl-builder>
-# It should be replaced with `ekidd/rust-musl-builder:*` once they build images again.
-FROM remcob/rust-musl-builder:1.54@sha256:f21d804ad46de51c32e5626224994134e400d75cf9fa4287da000fb10768896c as build-env
+FROM rust as build-env
+WORKDIR /src
 
-#  Install setcap
-RUN sudo apt-get update && \
-    sudo apt-get install -yq libcap2-bin && \
-    sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
+RUN apt-get update &&\
+    apt-get install -y libssl-dev texinfo libcap2-bin &&\
+    apt-get clean && rm -rf /var/lib/apt/lists/* &&\
+    rustup target add $(uname -m)-unknown-linux-musl
+
+# Build {x86_64,aarch64}-linux-musl toolchain
+# This is required to build zlib, openssl and other C dependencies
+ARG MUSL_CROSS_VERSION=0.9.9
+RUN curl -fL "https://github.com/richfelker/musl-cross-make/archive/v${MUSL_CROSS_VERSION}.tar.gz"\
+    | tar xz && cd musl-cross-make-${MUSL_CROSS_VERSION} &&\
+    make install TARGET=$(uname -m)-linux-musl OUTPUT=/usr/local/musl &&\
+    rm -r /src/musl-cross-make-${MUSL_CROSS_VERSION}
+ENV CC_x86_64_unknown_linux_musl=/usr/local/musl/bin/x86_64-linux-musl-gcc
+ENV CC_aarch64_unknown_linux_musl=/usr/local/musl/bin/aarch64-linux-musl-gcc
+
+# Build zlib
+ARG ZLIB_VERSION=1.2.11
+RUN curl -fL "http://zlib.net/zlib-$ZLIB_VERSION.tar.gz" | tar xz && cd "zlib-$ZLIB_VERSION" &&\
+    export CC=/usr/local/musl/bin/$(uname -m)-linux-musl-gcc &&\
+    ./configure --static --prefix=/usr/local/musl && make && make install &&\
+    rm -r "/src/zlib-$ZLIB_VERSION"
+
+# Build OpenSSL
+ARG OPENSSL_VERSION=1.1.1l
+RUN curl -fL "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" | tar xz &&\
+    cd "openssl-$OPENSSL_VERSION" &&\
+    export CC=/usr/local/musl/bin/$(uname -m)-linux-musl-gcc &&\
+    ./Configure no-shared --prefix=/usr/local/musl linux-$(uname -m) &&\
+    make install_sw &&\
+    rm -r "/src/openssl-$OPENSSL_VERSION"
+ENV X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_DIR=/usr/local/musl
+ENV X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_STATIC=1
+ENV AARCH64_UNKNOWN_LINUX_MUSL_OPENSSL_DIR=/usr/local/musl
+ENV AARCH64_UNKNOWN_LINUX_MUSL_OPENSSL_STATIC=1
 
 # Use Mimalloc by default instead of the musl malloc
 ARG FEATURES="mimalloc"
 
 # Build dependencies only
-COPY --chown=rust:rust Cargo.toml Cargo.lock ./
+ARG BIN=rust-app
+COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src/cli &&\
     echo 'fn main() { }' > build.rs &&\
     echo 'fn main() { panic!("build failed") }' > src/cli/main.rs &&\
     echo '' > src/lib.rs &&\
-    cargo build --release --locked --features "${FEATURES}" --bin rust-app &&\
+    cargo build --locked --release --target $(uname -m)-unknown-linux-musl --features "${FEATURES}" --bin $BIN &&\
     rm -r build.rs src
 
 # Take build identifying information as arguments
@@ -24,27 +54,33 @@ ARG COMMIT_SHA=0000000000000000000000000000000000000000
 ARG COMMIT_DATE=0000-00-00
 ENV COMMIT_SHA $COMMIT_SHA
 ENV COMMIT_DATE $COMMIT_DATE
-ENV BIN="./target/x86_64-unknown-linux-musl/release/rust-app"
 
 # Build app
-COPY --chown=rust:rust build.rs Readme.md ./
-COPY --chown=rust:rust src ./src
+COPY build.rs Readme.md ./
+COPY src ./src
 RUN touch build.rs src/lib.rs src/cli/main.rs &&\
-    cargo build --release --locked --features "${FEATURES}" --bin rust-app &&\
-    strip $BIN
+    cargo build --locked --release --target $(uname -m)-unknown-linux-musl --features "${FEATURES}" --bin $BIN &&\
+    cp ./target/$(uname -m)-unknown-linux-musl/release/$BIN ./bin &&\
+    strip ./bin
 
 # Set capabilities
-RUN sudo setcap cap_net_bind_service=+ep $BIN
-
-# Make sure it is statically linked
-RUN ! ldd $BIN
-RUN file $BIN | grep "statically linked"
+RUN setcap cap_net_bind_service=+ep ./bin
 
 # Make sure it runs
-RUN $BIN --version
+RUN ./bin --version
+
+# Make sure it is statically linked
+RUN objdump -p ./bin &&\
+    readelf -lW ./bin &&\
+    file ./bin
+# TODO RUN file ./bin | grep "statically linked"
+
+# TODO: Make sure it is PIE
+# RUN readelf --relocs ./bin
+# ENV CFLAGS="-static-pie"
 
 # Fetch latest certificates
-RUN sudo update-ca-certificates --verbose
+RUN update-ca-certificates --verbose
 
 ################################################################################
 # Create minimal docker image for our app
@@ -72,8 +108,7 @@ LABEL prometheus.io/path="/metrics"
 
 # Executable
 # TODO: --chmod=010
-COPY --from=build-env --chown=0:1000 \
-    /home/rust/src/target/x86_64-unknown-linux-musl/release/rust-app /
+COPY --from=build-env --chown=0:1000 /src/bin /bin
 STOPSIGNAL SIGTERM
 HEALTHCHECK NONE
-ENTRYPOINT ["/rust-app"]
+ENTRYPOINT ["/bin"]

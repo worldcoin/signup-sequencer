@@ -3,7 +3,7 @@
 use core::str::FromStr;
 use eyre::{bail, eyre, Error as EyreError, Result as EyreResult, WrapErr as _};
 use structopt::StructOpt;
-use tracing::info;
+use tracing::{debug, info};
 use tracing_subscriber::{fmt, EnvFilter};
 
 #[derive(Debug, PartialEq)]
@@ -78,6 +78,10 @@ impl LogOptions {
             version = env!("CARGO_PKG_VERSION"),
             commit = &env!("COMMIT_SHA")[..8],
         );
+
+        // Log main address to test ASLR
+        debug!("Address of main {:#x}", &crate::main as *const _ as usize);
+
         Ok(())
     }
 }

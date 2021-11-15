@@ -30,22 +30,19 @@ Run benchmarks
 ```shell
 cargo bench --bench criterion --features="bench proptest"
 ```
+
 ## To do
 
-* Code coverage in CI
-* Build cache in CI
-* no_std support, CI test using no-std target.
+Copy from Tokio:
+* Add license, contributing, and other changelogs
+* Add ISSUE_TEMPLATE, PR template, etc.
+
+* Run `cargo audit` in CI
+
 * To do scraper in CI.
 * `--threads` cli argument for Rayon worker pool size.
-* `--trace` cli argument for `tracing-chrome`.
 * `--seed` cli argument for deterministic `rand`.
 * Rustdocs with Katex.
 * Long running / fuzz mode for proptests.
 * [`loom`](https://crates.io/crates/loom) support for concurrency testing, maybe [`simulation`](https://github.com/tokio-rs/simulation).
-* Run benchmarks in CI on dedicated machine.
-* Generate documentation in CI
-* Add code coverage to CI
-* Add license, contributing, and other changelogs
-* Add ISSUE_TEMPLATE, PR template, etc.
 * Add crates.io publishing
-* Build ARM binary

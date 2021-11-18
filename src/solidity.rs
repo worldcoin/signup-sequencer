@@ -1,4 +1,4 @@
-use crate::{identity::Commitment, mimc_tree::MimcTree};
+use crate::{hash::Hash, mimc_tree::MimcTree};
 use ethers::{
     core::k256::ecdsa::SigningKey,
     prelude::{
@@ -49,7 +49,7 @@ pub async fn initialize_semaphore() -> Result<(ContractSigner, SemaphoreContract
 #[serde(rename_all = "camelCase")]
 pub struct JsonCommitment {
     pub last_block:  usize,
-    pub commitments: Vec<Commitment>,
+    pub commitments: Vec<Hash>,
 }
 
 pub async fn parse_identity_commitments(
@@ -83,9 +83,7 @@ pub async fn parse_identity_commitments(
     let logs = filter.query().await?;
     for event in &logs {
         let index: usize = event.leaf_index.as_u32().try_into()?;
-        let leaf = hex::decode(format!("{:x}", event.leaf))?;
-        let leaf: Commitment = (&leaf[..]).try_into()?;
-        tree.set(index, leaf);
+        tree.set(index, event.leaf.into());
         last_index = index;
     }
     Ok(last_index)

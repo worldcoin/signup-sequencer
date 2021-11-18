@@ -1,13 +1,13 @@
 use crate::{
     hash::Hash,
-    mimc_tree::{MimcTree, Proof},
+    mimc_tree::MimcTree,
     server::Error,
     solidity::{
         initialize_semaphore, parse_identity_commitments, ContractSigner, SemaphoreContract,
     },
 };
 use ethers::prelude::*;
-use eyre::{bail, Error as EyreError, Result as EyreResult};
+use eyre::{eyre, Result as EyreResult};
 use hyper::{Body, Response};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -56,26 +56,41 @@ impl App {
         })
     }
 
-    #[allow(clippy::unused_async)]
-    pub async fn inclusion_proof(&self, commitment: &Hash) -> Result<Response<Body>, Error> {
-        let merkle_tree = self.merkle_tree.read().await;
-        let proof = inclusion_proof_helper(&merkle_tree, commitment);
-        println!("Proof: {:?}", proof);
-        // TODO handle commitment not found
-        let response = "Inclusion Proof!\n"; // TODO: proof
-        Ok(Response::new(response.into()))
-    }
-
     pub async fn insert_identity(&self, commitment: &Hash) -> Result<Response<Body>, Error> {
         {
             let mut merkle_tree = self.merkle_tree.write().await;
             let last_leaf = self.last_leaf.fetch_add(1, Ordering::AcqRel);
-            insert_identity_commitment(&mut merkle_tree, &self.signer, commitment, last_leaf)
-                .await?;
+
+            // TODO: Error handling
+            merkle_tree.set(last_leaf, *commitment);
+            let num = self.signer.get_block_number().await.map_err(|e| eyre!(e))?;
+            serde_json::to_writer(
+                &File::create(COMMITMENTS_FILE).map_err(|e| eyre!(e))?,
+                &JsonCommitment {
+                    last_block:  num.as_usize(),
+                    commitments: merkle_tree.leaves()[..=last_leaf].to_vec(),
+                },
+            )?;
         }
 
-        insert_identity_to_contract(&self.semaphore_contract, &self.signer, commitment).await?;
+        let tx = self.semaphore_contract.insert_identity(commitment.into());
+        let pending_tx = self.signer.send_transaction(tx.tx, None).await.unwrap();
+        let _receipt = pending_tx.await.map_err(|e| eyre!(e))?;
+        // TODO: What does it mean if `_receipt` is None?
         Ok(Response::new("Insert Identity!\n".into()))
+    }
+
+    #[allow(clippy::unused_async)]
+    pub async fn inclusion_proof(&self, commitment: &Hash) -> Result<Response<Body>, Error> {
+        let merkle_tree = self.merkle_tree.read().await;
+        let proof = merkle_tree
+            .position(commitment)
+            .map(|i| merkle_tree.proof(i));
+
+        println!("Proof: {:?}", proof);
+        // TODO handle commitment not found
+        let response = "Inclusion Proof!\n"; // TODO: proof
+        Ok(Response::new(response.into()))
     }
 }
 
@@ -98,37 +113,4 @@ impl From<U256> for Hash {
         u256.to_big_endian(&mut bytes);
         Self::from_bytes_be(bytes)
     }
-}
-
-pub fn inclusion_proof_helper(tree: &MimcTree, commitment: &Hash) -> Result<Proof, EyreError> {
-    if let Some(index) = tree.position(commitment) {
-        return Ok(tree.proof(index));
-    }
-    bail!("Commitment not found {:?}", commitment);
-}
-
-pub async fn insert_identity_commitment(
-    tree: &mut MimcTree,
-    signer: &ContractSigner,
-    commitment: &Hash,
-    index: usize,
-) -> EyreResult<()> {
-    tree.set(index, *commitment);
-    let num = signer.get_block_number().await?;
-    serde_json::to_writer(&File::create(COMMITMENTS_FILE)?, &JsonCommitment {
-        last_block:  num.as_usize(),
-        commitments: tree.leaves()[..=index].to_vec(),
-    })?;
-    Ok(())
-}
-
-pub async fn insert_identity_to_contract(
-    semaphore_contract: &SemaphoreContract,
-    signer: &ContractSigner,
-    commitment: &Hash,
-) -> EyreResult<bool> {
-    let tx = semaphore_contract.insert_identity(commitment.into());
-    let pending_tx = signer.send_transaction(tx.tx, None).await.unwrap();
-    pending_tx.await?.unwrap();
-    Ok(true)
 }

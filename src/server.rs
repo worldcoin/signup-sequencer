@@ -41,8 +41,6 @@ static LATENCY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!("api_latency_seconds", "The API latency in seconds.").unwrap()
 });
 const CONTENT_JSON: &str = "application/json";
-/// `NUM_LEVELS` must be +1 to `treeLevels` argument in `Semaphore.sol`
-const NUM_LEVELS: usize = 21;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -144,7 +142,11 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
     Ok(response)
 }
 
-pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<()> {
+pub async fn main(
+    app: Arc<App>,
+    options: Options,
+    shutdown: broadcast::Sender<()>,
+) -> EyreResult<()> {
     ensure!(
         options.server.scheme() == "http",
         "Only http:// is supported in {}",
@@ -163,8 +165,6 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResu
     };
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
-
-    let app = Arc::new(App::new(NUM_LEVELS).await?);
 
     let make_svc = make_service_fn(move |_| {
         // Clone here as `make_service_fn` is called for every connection

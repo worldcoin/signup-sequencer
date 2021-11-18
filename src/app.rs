@@ -8,14 +8,27 @@ use crate::{
     },
 };
 use eyre::Result as EyreResult;
-use hex_literal::hex;
 use hyper::{Body, Response};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use structopt::StructOpt;
 use tokio::sync::RwLock;
 
-const NOTHING_UP_MY_SLEEVE: Hash = Hash::from_bytes_be(hex!(
-    "1c4823575d154474ee3e5ac838d002456a815181437afd14f126da58a9912bbe"
-));
+#[derive(Debug, PartialEq, StructOpt)]
+pub struct Options {
+    /// Number of layers in the tree. Defaults to 21 to match Semaphore.sol
+    /// defaults.
+    #[structopt(long, env, default_value = "21")]
+    pub tree_depth: usize,
+
+    /// Initial value of the Merkle tree leaves. Defaults to the initial value
+    /// in Semaphore.sol.
+    #[structopt(
+        long,
+        env,
+        default_value = "1c4823575d154474ee3e5ac838d002456a815181437afd14f126da58a9912bbe"
+    )]
+    pub initial_leaf: Hash,
+}
 
 pub struct App {
     merkle_tree:        RwLock<MimcTree>,
@@ -25,9 +38,9 @@ pub struct App {
 }
 
 impl App {
-    pub async fn new(depth: usize) -> EyreResult<Self> {
+    pub async fn new(options: Options) -> EyreResult<Self> {
         let (signer, semaphore) = initialize_semaphore().await?;
-        let mut merkle_tree = MimcTree::new(depth, NOTHING_UP_MY_SLEEVE);
+        let mut merkle_tree = MimcTree::new(options.tree_depth, options.initial_leaf);
         let last_leaf = parse_identity_commitments(&mut merkle_tree, semaphore.clone()).await?;
         Ok(Self {
             merkle_tree: RwLock::new(merkle_tree),

@@ -11,8 +11,9 @@ mod server;
 mod solidity;
 mod utils;
 
-use crate::utils::spawn_or_abort;
+use crate::{app::App, utils::spawn_or_abort};
 use eyre::Result as EyreResult;
+use std::sync::Arc;
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::info;
@@ -20,16 +21,22 @@ use tracing::info;
 #[derive(Debug, PartialEq, StructOpt)]
 pub struct Options {
     #[structopt(flatten)]
+    app: app::Options,
+
+    #[structopt(flatten)]
     server: server::Options,
 }
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<()> {
+    // Create App struct
+    let app = Arc::new(App::new(options.app).await?);
+
     // Start server
     let server = spawn_or_abort({
         let shutdown = shutdown.clone();
         async move {
-            server::main(options.server, shutdown).await?;
+            server::main(app, options.server, shutdown).await?;
             EyreResult::Ok(())
         }
     });

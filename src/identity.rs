@@ -7,8 +7,6 @@ use ethers::prelude::{Middleware, U256};
 use eyre::{bail, Error as EyreError, Result as EyreResult};
 use std::fs::File;
 
-pub type Commitment = Hash;
-
 impl From<&Hash> for U256 {
     fn from(hash: &Hash) -> Self {
         Self::from_big_endian(hash.as_bytes_be())
@@ -23,10 +21,7 @@ impl From<U256> for Hash {
     }
 }
 
-pub fn inclusion_proof_helper(
-    tree: &MimcTree,
-    commitment: &Commitment,
-) -> Result<Proof, EyreError> {
+pub fn inclusion_proof_helper(tree: &MimcTree, commitment: &Hash) -> Result<Proof, EyreError> {
     if let Some(index) = tree.position(commitment) {
         return Ok(tree.proof(index));
     }

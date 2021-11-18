@@ -19,6 +19,13 @@ use tokio::sync::RwLock;
 
 pub const COMMITMENTS_FILE: &str = "./commitments.json";
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonCommitment {
+    pub last_block:  usize,
+    pub commitments: Vec<Hash>,
+}
+
 #[derive(Debug, PartialEq, StructOpt)]
 pub struct Options {
     /// Number of layers in the tree. Defaults to 21 to match Semaphore.sol
@@ -61,7 +68,6 @@ impl App {
             let mut merkle_tree = self.merkle_tree.write().await;
             let last_leaf = self.last_leaf.fetch_add(1, Ordering::AcqRel);
 
-            // TODO: Error handling
             merkle_tree.set(last_leaf, *commitment);
             let num = self.signer.get_block_number().await.map_err(|e| eyre!(e))?;
             serde_json::to_writer(
@@ -91,26 +97,5 @@ impl App {
         // TODO handle commitment not found
         let response = "Inclusion Proof!\n"; // TODO: proof
         Ok(Response::new(response.into()))
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JsonCommitment {
-    pub last_block:  usize,
-    pub commitments: Vec<Hash>,
-}
-
-impl From<&Hash> for U256 {
-    fn from(hash: &Hash) -> Self {
-        Self::from_big_endian(hash.as_bytes_be())
-    }
-}
-
-impl From<U256> for Hash {
-    fn from(u256: U256) -> Self {
-        let mut bytes = [0_u8; 32];
-        u256.to_big_endian(&mut bytes);
-        Self::from_bytes_be(bytes)
     }
 }

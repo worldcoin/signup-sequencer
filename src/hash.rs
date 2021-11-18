@@ -1,3 +1,4 @@
+use ethers::types::U256;
 use serde::{de::Error as _, ser::Error as _, Deserialize, Serialize};
 use std::{
     fmt::Debug,
@@ -22,6 +23,22 @@ impl Hash {
 impl Debug for Hash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Hash(hex!(\"{}\"))", hex::encode(&self.0))
+    }
+}
+
+/// Conversion from Ether U256
+impl From<&Hash> for U256 {
+    fn from(hash: &Hash) -> Self {
+        Self::from_big_endian(hash.as_bytes_be())
+    }
+}
+
+/// Conversion to Ether U256
+impl From<U256> for Hash {
+    fn from(u256: U256) -> Self {
+        let mut bytes = [0_u8; 32];
+        u256.to_big_endian(&mut bytes);
+        Self::from_bytes_be(bytes)
     }
 }
 

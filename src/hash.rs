@@ -2,8 +2,18 @@ use serde::{de::Error as _, ser::Error as _, Deserialize, Serialize};
 use std::{fmt::Debug, str::from_utf8};
 
 /// Container for 256-bit hash values.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub struct Hash([u8; 32]);
+
+impl Hash {
+    pub const fn from_bytes_be(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub const fn as_bytes_be(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
 
 /// Debug print hashes using `hex!(..)` literals.
 impl Debug for Hash {

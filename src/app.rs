@@ -12,12 +12,11 @@ use hyper::{Body, Response};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
+    path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
 };
 use structopt::StructOpt;
 use tokio::sync::RwLock;
-
-pub const COMMITMENTS_FILE: &str = "./commitments.json";
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +27,10 @@ pub struct JsonCommitment {
 
 #[derive(Debug, PartialEq, StructOpt)]
 pub struct Options {
+    /// Storage location for the Merkle tree.
+    #[structopt(long, env, default_value = "commitments.json")]
+    pub storage_file: PathBuf,
+
     /// Number of layers in the tree. Defaults to 21 to match Semaphore.sol
     /// defaults.
     #[structopt(long, env, default_value = "21")]
@@ -44,6 +47,7 @@ pub struct Options {
 }
 
 pub struct App {
+    storage_file:       PathBuf,
     merkle_tree:        RwLock<MimcTree>,
     last_leaf:          AtomicUsize,
     signer:             ContractSigner,
@@ -54,8 +58,11 @@ impl App {
     pub async fn new(options: Options) -> EyreResult<Self> {
         let (signer, semaphore) = initialize_semaphore().await?;
         let mut merkle_tree = MimcTree::new(options.tree_depth, options.initial_leaf);
-        let last_leaf = parse_identity_commitments(&mut merkle_tree, semaphore.clone()).await?;
+        let last_leaf =
+            parse_identity_commitments(&options.storage_file, &mut merkle_tree, semaphore.clone())
+                .await?;
         Ok(Self {
+            storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
             last_leaf: AtomicUsize::new(last_leaf),
             signer,
@@ -71,7 +78,7 @@ impl App {
             merkle_tree.set(last_leaf, *commitment);
             let num = self.signer.get_block_number().await.map_err(|e| eyre!(e))?;
             serde_json::to_writer(
-                &File::create(COMMITMENTS_FILE).map_err(|e| eyre!(e))?,
+                &File::create(&self.storage_file).map_err(|e| eyre!(e))?,
                 &JsonCommitment {
                     last_block:  num.as_usize(),
                     commitments: merkle_tree.leaves()[..=last_leaf].to_vec(),

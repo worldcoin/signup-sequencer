@@ -1,7 +1,4 @@
-use crate::{
-    app::{JsonCommitment, COMMITMENTS_FILE},
-    mimc_tree::MimcTree,
-};
+use crate::{app::JsonCommitment, mimc_tree::MimcTree};
 use ethers::{
     core::k256::ecdsa::SigningKey,
     prelude::{
@@ -47,10 +44,10 @@ pub async fn initialize_semaphore() -> Result<(ContractSigner, SemaphoreContract
 }
 
 pub async fn parse_identity_commitments(
+    json_file_path: &Path,
     tree: &mut MimcTree,
     semaphore_contract: SemaphoreContract,
 ) -> EyreResult<usize> {
-    let json_file_path = Path::new(COMMITMENTS_FILE);
     let mut last_index = 0;
     let starting_block = match File::open(json_file_path) {
         Ok(file) => {

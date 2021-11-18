@@ -1,21 +1,12 @@
 use crate::{
-    mimc_tree::{Hash, MimcTree, Proof},
+    mimc_tree::{Hash, MimcTree},
     solidity::{ContractSigner, JsonCommitment, SemaphoreContract, COMMITMENTS_FILE},
 };
 use ethers::prelude::Middleware;
-use eyre::{bail, Error as EyreError, Result as EyreResult};
+use eyre::Result as EyreResult;
 use std::{convert::TryInto, fs::File};
 
 pub type Commitment = Hash;
-
-pub fn inclusion_proof_helper(tree: &MimcTree, commitment: &str) -> Result<Proof, EyreError> {
-    let decoded_commitment = hex::decode(commitment)?;
-    let decoded_commitment: Commitment = (&decoded_commitment[..]).try_into()?;
-    if let Some(index) = tree.position(&decoded_commitment) {
-        return Ok(tree.proof(index));
-    }
-    bail!("Commitment not found {}", commitment);
-}
 
 pub async fn insert_identity_commitment(
     tree: &mut MimcTree,

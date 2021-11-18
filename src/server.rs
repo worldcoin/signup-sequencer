@@ -1,7 +1,5 @@
 use crate::{
-    identity::{
-        inclusion_proof_helper, insert_identity_commitment, insert_identity_to_contract, Commitment,
-    },
+    identity::{insert_identity_commitment, insert_identity_to_contract, Commitment},
     mimc_tree::MimcTree,
     solidity::{
         initialize_semaphore, parse_identity_commitments, ContractSigner, SemaphoreContract,
@@ -60,8 +58,19 @@ const NOTHING_UP_MY_SLEEVE: Commitment =
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CommitmentRequest {
+pub struct InsertCommitmentRequest {
     identity_commitment: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InclusionProofRequest {
+    identity_index: usize,
+}
+
+#[derive(Serialize)]
+pub struct IndexResponse {
+    identity_index: usize,
 }
 
 pub struct App {
@@ -87,23 +96,29 @@ impl App {
     #[allow(clippy::unused_async)]
     pub async fn inclusion_proof(
         &self,
-        commitment_request: CommitmentRequest,
+        proof_request: InclusionProofRequest,
     ) -> Result<Response<Body>, Error> {
         let merkle_tree = self.merkle_tree.read().await;
-        let proof = inclusion_proof_helper(&merkle_tree, &commitment_request.identity_commitment);
+        if proof_request.identity_index >= merkle_tree.num_leaves() {
+            return Ok(Response::builder()
+                .status(400)
+                .body(Body::from("Supplied identity index out of bounds"))
+                .unwrap());
+        }
+        let proof = merkle_tree.proof(proof_request.identity_index);
         println!("Proof: {:?}", proof);
-        // TODO handle commitment not found
-        let response = "Inclusion Proof!\n"; // TODO: proof
+        let response = "Inclusion Proof!\n"; // TODO: serialize proof
         Ok(Response::new(response.into()))
     }
 
     pub async fn insert_identity(
         &self,
-        commitment_request: CommitmentRequest,
+        commitment_request: InsertCommitmentRequest,
     ) -> Result<Response<Body>, Error> {
+        let last_leaf;
         {
             let mut merkle_tree = self.merkle_tree.write().await;
-            let last_leaf = self.last_leaf.fetch_add(1, Ordering::AcqRel);
+            last_leaf = self.last_leaf.fetch_add(1, Ordering::AcqRel);
             insert_identity_commitment(
                 &mut merkle_tree,
                 &self.signer,
@@ -119,7 +134,12 @@ impl App {
             &commitment_request.identity_commitment,
         )
         .await?;
-        Ok(Response::new("Insert Identity!\n".into()))
+        Ok(Response::new(Body::from(
+            serde_json::to_string_pretty(&IndexResponse {
+                identity_index: last_leaf,
+            })
+            .unwrap(),
+        )))
     }
 }
 

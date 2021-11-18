@@ -8,6 +8,7 @@ pub type Hash = [u8; 32];
 pub type MimcTree = MerkleTree<MimcHash>;
 #[allow(dead_code)]
 pub type Branch = merkle_tree::Branch<MimcHash>;
+#[allow(dead_code)]
 pub type Proof = merkle_tree::Proof<MimcHash>;
 
 #[derive(Clone, Copy, PartialEq, Eq)]

@@ -100,7 +100,6 @@ impl<H: Hasher> MerkleTree<H> {
             .unwrap_or_default()
     }
 
-    #[allow(dead_code)]
     pub fn root(&self) -> H::Hash {
         self.nodes[0].clone()
     }
@@ -157,6 +156,8 @@ impl<H: Hasher> MerkleTree<H> {
         &self.nodes[(self.num_leaves() - 1)..]
     }
 
+    // TODO maybe remove? Not needed if we search by index vs. commitment
+    #[allow(dead_code)]
     pub fn position(&self, leaf: &H::Hash) -> Option<usize> {
         self.leaves().iter().position(|x| x == leaf)
     }

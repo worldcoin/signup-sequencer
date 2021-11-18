@@ -4,7 +4,9 @@ use crate::{
         inclusion_proof_helper, insert_identity_commitment, insert_identity_to_contract, Commitment,
     },
     mimc_tree::MimcTree,
-    solidity::{initialize_semaphore, ContractSigner, SemaphoreContract},
+    solidity::{
+        initialize_semaphore, parse_identity_commitments, ContractSigner, SemaphoreContract,
+    },
 };
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
@@ -23,11 +25,11 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc, RwLock,
+        Arc,
     },
 };
 use structopt::StructOpt;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, RwLock};
 use tracing::{info, trace};
 use url::{Host, Url};
 
@@ -74,9 +76,11 @@ pub struct App {
 impl App {
     pub async fn new(depth: usize) -> EyreResult<Self> {
         let (signer, semaphore) = initialize_semaphore().await?;
+        let mut merkle_tree = MimcTree::new(depth, NOTHING_UP_MY_SLEEVE);
+        let last_leaf = parse_identity_commitments(&mut merkle_tree, semaphore.clone()).await?;
         Ok(Self {
-            merkle_tree: RwLock::new(MimcTree::new(depth, NOTHING_UP_MY_SLEEVE)),
-            last_leaf: AtomicUsize::new(0),
+            merkle_tree: RwLock::new(merkle_tree),
+            last_leaf: AtomicUsize::new(last_leaf),
             signer,
             semaphore_contract: semaphore,
         })
@@ -87,7 +91,7 @@ impl App {
         &self,
         commitment_request: CommitmentRequest,
     ) -> Result<Response<Body>, Error> {
-        let merkle_tree = self.merkle_tree.read().unwrap();
+        let merkle_tree = self.merkle_tree.read().await;
         let proof = inclusion_proof_helper(&merkle_tree, &commitment_request.identity_commitment);
         println!("Proof: {:?}", proof);
         // TODO handle commitment not found
@@ -95,19 +99,20 @@ impl App {
         Ok(Response::new(response.into()))
     }
 
-    #[allow(clippy::unused_async)]
     pub async fn insert_identity(
         &self,
         commitment_request: CommitmentRequest,
     ) -> Result<Response<Body>, Error> {
         {
-            let mut merkle_tree = self.merkle_tree.write().unwrap();
+            let mut merkle_tree = self.merkle_tree.write().await;
             let last_leaf = self.last_leaf.fetch_add(1, Ordering::AcqRel);
             insert_identity_commitment(
                 &mut merkle_tree,
+                &self.signer,
                 &commitment_request.identity_commitment,
                 last_leaf,
-            );
+            )
+            .await?;
         }
 
         insert_identity_to_contract(
@@ -115,8 +120,7 @@ impl App {
             &self.signer,
             &commitment_request.identity_commitment,
         )
-        .await
-        .unwrap();
+        .await?;
         Ok(Response::new("Insert Identity!\n".into()))
     }
 }

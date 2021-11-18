@@ -3,7 +3,6 @@
 
 mod app;
 mod hash;
-mod identity;
 mod merkle_tree;
 mod mimc_hash;
 mod mimc_tree;

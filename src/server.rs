@@ -1,15 +1,7 @@
-use crate::{
-    hash::Hash,
-    identity::{inclusion_proof_helper, insert_identity_commitment, insert_identity_to_contract},
-    mimc_tree::MimcTree,
-    solidity::{
-        initialize_semaphore, parse_identity_commitments, ContractSigner, SemaphoreContract,
-    },
-};
+use crate::{app::App, hash::Hash};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
-use hex_literal::hex;
 use hyper::{
     body::Buf,
     header,
@@ -21,13 +13,10 @@ use prometheus::{register_int_counter_vec, IntCounterVec};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::Arc,
 };
 use structopt::StructOpt;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::broadcast;
 use tracing::{info, trace};
 use url::{Host, Url};
 
@@ -54,73 +43,11 @@ static LATENCY: Lazy<Histogram> = Lazy::new(|| {
 const CONTENT_JSON: &str = "application/json";
 /// `NUM_LEVELS` must be +1 to `treeLevels` argument in `Semaphore.sol`
 const NUM_LEVELS: usize = 21;
-const NOTHING_UP_MY_SLEEVE: Hash = Hash::from_bytes_be(hex!(
-    "1c4823575d154474ee3e5ac838d002456a815181437afd14f126da58a9912bbe"
-));
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitmentRequest {
     identity_commitment: Hash,
-}
-
-pub struct App {
-    merkle_tree:        RwLock<MimcTree>,
-    last_leaf:          AtomicUsize,
-    signer:             ContractSigner,
-    semaphore_contract: SemaphoreContract,
-}
-
-impl App {
-    pub async fn new(depth: usize) -> EyreResult<Self> {
-        let (signer, semaphore) = initialize_semaphore().await?;
-        let mut merkle_tree = MimcTree::new(depth, NOTHING_UP_MY_SLEEVE);
-        let last_leaf = parse_identity_commitments(&mut merkle_tree, semaphore.clone()).await?;
-        Ok(Self {
-            merkle_tree: RwLock::new(merkle_tree),
-            last_leaf: AtomicUsize::new(last_leaf),
-            signer,
-            semaphore_contract: semaphore,
-        })
-    }
-
-    #[allow(clippy::unused_async)]
-    pub async fn inclusion_proof(
-        &self,
-        commitment_request: CommitmentRequest,
-    ) -> Result<Response<Body>, Error> {
-        let merkle_tree = self.merkle_tree.read().await;
-        let proof = inclusion_proof_helper(&merkle_tree, &commitment_request.identity_commitment);
-        println!("Proof: {:?}", proof);
-        // TODO handle commitment not found
-        let response = "Inclusion Proof!\n"; // TODO: proof
-        Ok(Response::new(response.into()))
-    }
-
-    pub async fn insert_identity(
-        &self,
-        commitment_request: CommitmentRequest,
-    ) -> Result<Response<Body>, Error> {
-        {
-            let mut merkle_tree = self.merkle_tree.write().await;
-            let last_leaf = self.last_leaf.fetch_add(1, Ordering::AcqRel);
-            insert_identity_commitment(
-                &mut merkle_tree,
-                &self.signer,
-                &commitment_request.identity_commitment,
-                last_leaf,
-            )
-            .await?;
-        }
-
-        insert_identity_to_contract(
-            &self.semaphore_contract,
-            &self.signer,
-            &commitment_request.identity_commitment,
-        )
-        .await?;
-        Ok(Response::new("Insert Identity!\n".into()))
-    }
 }
 
 #[derive(Debug)]
@@ -191,10 +118,18 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
     // Route requests
     let response = match (request.method(), request.uri().path()) {
         (&Method::GET, "/inclusionProof") => {
-            json_middleware(request, |c| app.inclusion_proof(c)).await?
+            json_middleware(request, |request: CommitmentRequest| {
+                let app = app.clone();
+                async move { app.inclusion_proof(&request.identity_commitment).await }
+            })
+            .await?
         }
         (&Method::POST, "/insertIdentity") => {
-            json_middleware(request, |c| app.insert_identity(c)).await?
+            json_middleware(request, |request: CommitmentRequest| {
+                let app = app.clone();
+                async move { app.insert_identity(&request.identity_commitment).await }
+            })
+            .await?
         }
         _ => Response::builder()
             .status(404)

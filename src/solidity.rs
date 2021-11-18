@@ -1,10 +1,16 @@
-use std::{fs::File, path::Path, sync::Arc};
 use crate::{identity::Commitment, mimc_tree::MimcTree};
+use ethers::{
+    core::k256::ecdsa::SigningKey,
+    prelude::{
+        abigen, builders::Event, Address, Http, LocalWallet, Middleware, Provider, Signer,
+        SignerMiddleware, Wallet, H160,
+    },
+};
 use eyre::{eyre, Result as EyreResult};
-use ethers::{core::k256::ecdsa::SigningKey, prelude::{Address, H160, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware, Wallet, abigen, builders::Event}};
 use hex_literal::hex;
 use serde::{Deserialize, Serialize};
-use serde_json::{Error as SerdeError};
+use serde_json::Error as SerdeError;
+use std::{fs::File, path::Path, sync::Arc};
 
 abigen!(
     Semaphore,
@@ -42,33 +48,40 @@ pub async fn initialize_semaphore() -> Result<(ContractSigner, SemaphoreContract
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsonCommitment {
-    pub last_block: usize,
+    pub last_block:  usize,
     pub commitments: Vec<Commitment>,
 }
 
-pub async fn parse_identity_commitments(tree: &mut MimcTree, semaphore_contract: SemaphoreContract) -> EyreResult<usize> {
+pub async fn parse_identity_commitments(
+    tree: &mut MimcTree,
+    semaphore_contract: SemaphoreContract,
+) -> EyreResult<usize> {
     let json_file_path = Path::new(COMMITMENTS_FILE);
     let mut last_index = 0;
     let starting_block = match File::open(json_file_path) {
         Ok(file) => {
-            let json_commitments: Result<JsonCommitment, SerdeError> = serde_json::from_reader(file);
+            let json_commitments: Result<JsonCommitment, SerdeError> =
+                serde_json::from_reader(file);
             match json_commitments {
                 Ok(json_commitments) => {
-                    for &commitment in json_commitments.commitments.iter() {
+                    for &commitment in &json_commitments.commitments {
                         tree.set(last_index, commitment);
                         last_index += 1;
                     }
                     json_commitments.last_block
-                },
+                }
                 Err(_) => 0,
             }
-        },
+        }
         Err(_) => 0,
     };
 
-    let filter: Event<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>, LeafInsertionFilter> = semaphore_contract.leaf_insertion_filter().from_block(starting_block);
+    let filter: Event<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>, LeafInsertionFilter> =
+        semaphore_contract
+            .leaf_insertion_filter()
+            .from_block(starting_block);
     let logs = filter.query().await?;
-    for event in logs.iter() {
+    for event in &logs {
         let index: usize = event.leaf_index.as_u32().try_into()?;
         let leaf = hex::decode(format!("{:x}", event.leaf))?;
         let leaf: Commitment = (&leaf[..]).try_into()?;

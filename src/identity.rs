@@ -1,4 +1,7 @@
-use crate::{mimc_tree::{Hash, MimcTree, Proof}, solidity::{COMMITMENTS_FILE, ContractSigner, JsonCommitment, SemaphoreContract}};
+use crate::{
+    mimc_tree::{Hash, MimcTree, Proof},
+    solidity::{ContractSigner, JsonCommitment, SemaphoreContract, COMMITMENTS_FILE},
+};
 use ethers::prelude::Middleware;
 use eyre::{bail, Error as EyreError, Result as EyreResult};
 use std::{convert::TryInto, fs::File};
@@ -24,8 +27,8 @@ pub async fn insert_identity_commitment(
     let commitment: Commitment = (&decoded_commitment[..]).try_into()?;
     tree.set(index, commitment);
     let num = signer.get_block_number().await?;
-    serde_json::to_writer(&File::create(COMMITMENTS_FILE)?, &JsonCommitment{
-        last_block: num.as_usize(),
+    serde_json::to_writer(&File::create(COMMITMENTS_FILE)?, &JsonCommitment {
+        last_block:  num.as_usize(),
         commitments: tree.leaves()[..=index].to_vec(),
     })?;
     Ok(())

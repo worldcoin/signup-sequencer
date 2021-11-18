@@ -1,6 +1,12 @@
-use crate::{identity::{
+use crate::{
+    identity::{
         inclusion_proof_helper, insert_identity_commitment, insert_identity_to_contract, Commitment,
-    }, mimc_tree::MimcTree, solidity::{ContractSigner, SemaphoreContract, initialize_semaphore, parse_identity_commitments}};
+    },
+    mimc_tree::MimcTree,
+    solidity::{
+        initialize_semaphore, parse_identity_commitments, ContractSigner, SemaphoreContract,
+    },
+};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
@@ -103,7 +109,8 @@ impl App {
                 &self.signer,
                 &commitment_request.identity_commitment,
                 last_leaf,
-            ).await?;
+            )
+            .await?;
         }
 
         insert_identity_to_contract(

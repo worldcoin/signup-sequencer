@@ -1,22 +1,33 @@
 use crate::{
-    mimc_tree::{Hash, MimcTree},
+    hash::Hash,
+    mimc_tree::{MimcTree, Proof},
     solidity::{ContractSigner, JsonCommitment, SemaphoreContract, COMMITMENTS_FILE},
 };
-use ethers::prelude::Middleware;
-use eyre::Result as EyreResult;
-use std::{convert::TryInto, fs::File};
+use ethers::prelude::{Middleware, U256};
+use eyre::{bail, Error as EyreError, Result as EyreResult};
+use std::fs::File;
 
-pub type Commitment = Hash;
+impl From<&Hash> for U256 {
+    fn from(hash: &Hash) -> Self {
+        Self::from_big_endian(hash.as_bytes_be())
+    }
+}
+
+impl From<U256> for Hash {
+    fn from(u256: U256) -> Self {
+        let mut bytes = [0_u8; 32];
+        u256.to_big_endian(&mut bytes);
+        Self::from_bytes_be(bytes)
+    }
+}
 
 pub async fn insert_identity_commitment(
     tree: &mut MimcTree,
     signer: &ContractSigner,
-    commitment: &str,
+    commitment: &Hash,
     index: usize,
 ) -> EyreResult<()> {
-    let decoded_commitment = hex::decode(commitment)?;
-    let commitment: Commitment = (&decoded_commitment[..]).try_into()?;
-    tree.set(index, commitment);
+    tree.set(index, *commitment);
     let num = signer.get_block_number().await?;
     serde_json::to_writer(&File::create(COMMITMENTS_FILE)?, &JsonCommitment {
         last_block:  num.as_usize(),
@@ -28,10 +39,9 @@ pub async fn insert_identity_commitment(
 pub async fn insert_identity_to_contract(
     semaphore_contract: &SemaphoreContract,
     signer: &ContractSigner,
-    commitment: &str,
+    commitment: &Hash,
 ) -> EyreResult<bool> {
-    let decoded_commitment = hex::decode(commitment).unwrap();
-    let tx = semaphore_contract.insert_identity(decoded_commitment[..].into());
+    let tx = semaphore_contract.insert_identity(commitment.into());
     let pending_tx = signer.send_transaction(tx.tx, None).await.unwrap();
     pending_tx.await?.unwrap();
     Ok(true)

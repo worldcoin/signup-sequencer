@@ -1,5 +1,6 @@
 use crate::{
-    identity::{insert_identity_commitment, insert_identity_to_contract, Commitment},
+    hash::Hash,
+    identity::{insert_identity_commitment, insert_identity_to_contract},
     mimc_tree::MimcTree,
     solidity::{
         initialize_semaphore, parse_identity_commitments, ContractSigner, SemaphoreContract,
@@ -53,13 +54,14 @@ static LATENCY: Lazy<Histogram> = Lazy::new(|| {
 const CONTENT_JSON: &str = "application/json";
 /// `NUM_LEVELS` must be +1 to `treeLevels` argument in `Semaphore.sol`
 const NUM_LEVELS: usize = 21;
-const NOTHING_UP_MY_SLEEVE: Commitment =
-    hex!("1c4823575d154474ee3e5ac838d002456a815181437afd14f126da58a9912bbe");
+const NOTHING_UP_MY_SLEEVE: Hash = Hash::from_bytes_be(hex!(
+    "1c4823575d154474ee3e5ac838d002456a815181437afd14f126da58a9912bbe"
+));
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InsertCommitmentRequest {
-    identity_commitment: String,
+    identity_commitment: Hash,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -99,16 +101,17 @@ impl App {
         proof_request: InclusionProofRequest,
     ) -> Result<Response<Body>, Error> {
         let merkle_tree = self.merkle_tree.read().await;
-        if proof_request.identity_index >= merkle_tree.num_leaves() {
-            return Ok(Response::builder()
-                .status(400)
-                .body(Body::from("Supplied identity index out of bounds"))
-                .unwrap());
-        }
         let proof = merkle_tree.proof(proof_request.identity_index);
         println!("Proof: {:?}", proof);
-        let response = "Inclusion Proof!\n"; // TODO: serialize proof
-        Ok(Response::new(response.into()))
+        if let Some(proof) = proof {
+            return Ok(
+                    Response::new(Body::from(serde_json::to_string_pretty(&proof).unwrap()))
+            )
+        }
+        Ok(Response::builder()
+            .status(400)
+            .body(Body::from("Supplied identity index out of bounds"))
+            .unwrap())
     }
 
     pub async fn insert_identity(

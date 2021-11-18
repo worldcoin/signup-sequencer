@@ -1,0 +1,9 @@
+[advisories]
+ignore = [
+    # TODO: Disable `chrono` and `time` advisories untill a solution is available
+    # See <https://github.com/chronotope/chrono/issues/499>
+    # See <https://github.com/time-rs/time/issues/293>
+    # See <https://github.com/chronotope/chrono/issues/553>
+    "RUSTSEC-2020-0159", # chrono
+    "RUSTSEC-2020-0071", # time
+]

@@ -1,8 +1,10 @@
-use std::sync::Arc;
+use std::{fs::File, path::Path, sync::Arc};
 use crate::{identity::Commitment, mimc_tree::MimcTree};
 use eyre::{eyre, Result as EyreResult};
 use ethers::{core::k256::ecdsa::SigningKey, prelude::{Address, H160, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware, Wallet, abigen, builders::Event}};
 use hex_literal::hex;
+use serde::{Deserialize, Serialize};
+use serde_json::{Error as SerdeError};
 
 abigen!(
     Semaphore,
@@ -13,9 +15,10 @@ abigen!(
     event_derives(serde::Deserialize, serde::Serialize)
 );
 
-const SEMAPHORE_ADDRESS: Address = H160(hex!("FE600E2C8023d28219F65C5ED2dDED310737742a"));
+const SEMAPHORE_ADDRESS: Address = H160(hex!("266FB396B626621898C87a92efFBA109dE4685F6"));
 const SIGNING_KEY: [u8; 32] =
     hex!("ee79b5f6e221356af78cf4c36f4f7885a11b67dfcc81c34d80249947330c0f82");
+pub const COMMITMENTS_FILE: &str = "./commitments.json";
 
 pub type ContractSigner = SignerMiddleware<Provider<Http>, Wallet<SigningKey>>;
 pub type SemaphoreContract = Semaphore<ContractSigner>;
@@ -36,12 +39,35 @@ pub async fn initialize_semaphore() -> Result<(ContractSigner, SemaphoreContract
     Ok((signer, contract))
 }
 
-pub async fn parse_identity_commitments(tree: &mut MimcTree, semaphore_contract: SemaphoreContract, starting_block: Option<usize>) -> EyreResult<usize> {
-    // TODO read/write from file
-    let starting_block = starting_block.unwrap_or(0);
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonCommitment {
+    pub last_block: usize,
+    pub commitments: Vec<Commitment>,
+}
+
+pub async fn parse_identity_commitments(tree: &mut MimcTree, semaphore_contract: SemaphoreContract) -> EyreResult<usize> {
+    let json_file_path = Path::new(COMMITMENTS_FILE);
+    let mut last_index = 0;
+    let starting_block = match File::open(json_file_path) {
+        Ok(file) => {
+            let json_commitments: Result<JsonCommitment, SerdeError> = serde_json::from_reader(file);
+            match json_commitments {
+                Ok(json_commitments) => {
+                    for &commitment in json_commitments.commitments.iter() {
+                        tree.set(last_index, commitment);
+                        last_index += 1;
+                    }
+                    json_commitments.last_block
+                },
+                Err(_) => 0,
+            }
+        },
+        Err(_) => 0,
+    };
+
     let filter: Event<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>, LeafInsertionFilter> = semaphore_contract.leaf_insertion_filter().from_block(starting_block);
     let logs = filter.query().await?;
-    let mut last_index = 0;
     for event in logs.iter() {
         let index: usize = event.leaf_index.as_u32().try_into()?;
         let leaf = hex::decode(format!("{:x}", event.leaf))?;

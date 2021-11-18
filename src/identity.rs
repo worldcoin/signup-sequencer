@@ -1,10 +1,7 @@
-use crate::{
-    mimc_tree::{Hash, MimcTree, Proof},
-    solidity::{ContractSigner, SemaphoreContract},
-};
+use crate::{mimc_tree::{Hash, MimcTree, Proof}, solidity::{COMMITMENTS_FILE, ContractSigner, JsonCommitment, SemaphoreContract}};
 use ethers::prelude::Middleware;
 use eyre::{bail, Error as EyreError, Result as EyreResult};
-use std::convert::TryInto;
+use std::{convert::TryInto, fs::File};
 
 pub type Commitment = Hash;
 
@@ -17,14 +14,20 @@ pub fn inclusion_proof_helper(tree: &MimcTree, commitment: &str) -> Result<Proof
     bail!("Commitment not found {}", commitment);
 }
 
-pub fn insert_identity_commitment(
+pub async fn insert_identity_commitment(
     tree: &mut MimcTree,
+    signer: &ContractSigner,
     commitment: &str,
     index: usize,
 ) -> EyreResult<()> {
     let decoded_commitment = hex::decode(commitment)?;
     let commitment: Commitment = (&decoded_commitment[..]).try_into()?;
     tree.set(index, commitment);
+    let num = signer.get_block_number().await?;
+    serde_json::to_writer(&File::create(COMMITMENTS_FILE)?, &JsonCommitment{
+        last_block: num.as_usize(),
+        commitments: tree.leaves()[..=index].to_vec(),
+    })?;
     Ok(())
 }
 

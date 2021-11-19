@@ -1,9 +1,4 @@
-use crate::{
-    ethereum::{self, Ethereum},
-    hash::Hash,
-    mimc_tree::MimcTree,
-    server::Error,
-};
+use crate::{ethereum::{self, Ethereum}, hash::Hash, mimc_tree::MimcTree, server::Error};
 use core::cmp::max;
 use eyre::Result as EyreResult;
 use hyper::{Body, Response};
@@ -52,7 +47,12 @@ pub struct App {
     ethereum:     Ethereum,
     storage_file: PathBuf,
     merkle_tree:  RwLock<MimcTree>,
-    last_leaf:    AtomicUsize, // TODO: Is this last or next leaf?
+    next_leaf:    AtomicUsize,
+}
+
+#[derive(Serialize)]
+struct IndexResponse {
+    identity_index: usize,
 }
 
 impl App {
@@ -62,12 +62,12 @@ impl App {
 
         // Read tree from file
         info!(path = ?&options.storage_file, "Reading tree from storage");
-        let (mut last_leaf, last_block) = if options.storage_file.is_file() {
+        let (mut next_leaf, last_block) = if options.storage_file.is_file() {
             let file = File::open(&options.storage_file)?;
             let file: JsonCommitment = serde_json::from_reader(file)?;
-            let last_leaf = file.commitments.len();
+            let next_leaf = file.commitments.len();
             merkle_tree.set_range(0, file.commitments);
-            (last_leaf, file.last_block)
+            (next_leaf, file.last_block)
         } else {
             warn!(path = ?&options.storage_file, "Storage file not found, skipping.");
             (0, 0)
@@ -77,23 +77,24 @@ impl App {
         let events = ethereum.fetch_events(last_block).await?;
         for (leaf, hash) in events {
             merkle_tree.set(leaf, hash);
-            last_leaf = max(last_leaf, leaf + 1);
+            next_leaf = max(next_leaf, leaf + 1);
         }
 
         Ok(Self {
             ethereum,
             storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
-            last_leaf: AtomicUsize::new(last_leaf),
+            next_leaf: AtomicUsize::new(next_leaf),
         })
     }
 
     pub async fn insert_identity(&self, commitment: &Hash) -> Result<Response<Body>, Error> {
         // Update merkle tree
+        let leaf;
         {
             let mut merkle_tree = self.merkle_tree.write().await;
-            let last_leaf = self.last_leaf.fetch_add(1, Ordering::AcqRel);
-            merkle_tree.set(last_leaf, *commitment);
+            leaf = self.next_leaf.fetch_add(1, Ordering::AcqRel);
+            merkle_tree.set(leaf, *commitment);
         }
 
         // Write state file
@@ -102,29 +103,37 @@ impl App {
         // Send Semaphore transaction
         self.ethereum.insert_identity(commitment).await?;
 
-        Ok(Response::new("Insert Identity!\n".into()))
+        Ok(Response::new(Body::from(
+            serde_json::to_string_pretty(&IndexResponse {
+                identity_index: leaf,
+            })
+            .unwrap(),
+        )))
     }
 
-    #[allow(clippy::unused_async)]
-    pub async fn inclusion_proof(&self, commitment: &Hash) -> Result<Response<Body>, Error> {
+    pub async fn inclusion_proof(&self, identity_index: usize) -> Result<Response<Body>, Error> {
         let merkle_tree = self.merkle_tree.read().await;
-        let proof = merkle_tree
-            .position(commitment)
-            .map(|i| merkle_tree.proof(i));
+        let proof = merkle_tree.proof(identity_index);
 
-        println!("Proof: {:?}", proof);
-        // TODO handle commitment not found
-        let response = "Inclusion Proof!\n"; // TODO: proof
-        Ok(Response::new(response.into()))
+        if let Some(proof) = proof {
+            return Ok(
+                    Response::new(Body::from(serde_json::to_string_pretty(&proof).unwrap()))
+            )
+        }
+
+        Ok(Response::builder()
+            .status(400)
+            .body(Body::from("Supplied identity index out of bounds"))
+            .unwrap())
     }
 
     pub async fn store(&self) -> EyreResult<()> {
         let file = File::create(&self.storage_file)?;
         let last_block = self.ethereum.last_block().await?;
-        let last_leaf = self.last_leaf.load(Ordering::Acquire);
+        let next_leaf = self.next_leaf.load(Ordering::Acquire);
         let commitments = {
             let lock = self.merkle_tree.read().await;
-            lock.leaves()[..=last_leaf].to_vec()
+            lock.leaves()[..=next_leaf].to_vec()
         };
         let data = JsonCommitment {
             last_block,

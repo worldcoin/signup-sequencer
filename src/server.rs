@@ -54,11 +54,6 @@ pub struct InclusionProofRequest {
     identity_index: usize,
 }
 
-#[derive(Serialize)]
-pub struct IndexResponse {
-    pub identity_index: usize,
-}
-
 #[derive(Debug)]
 pub enum Error {
     InvalidMethod,

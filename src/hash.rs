@@ -109,7 +109,7 @@ impl<'de> Visitor<'de> for HashStrVisitor {
     type Value = Hash;
 
     fn expecting(&self, formatter: &mut Formatter) -> FmtResult {
-        formatter.write_str("a string")
+        formatter.write_str("a 32 byte hex string")
     }
 
     fn visit_borrowed_str<E>(self, value: &'de str) -> Result<Self::Value, E>

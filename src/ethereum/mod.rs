@@ -1,8 +1,11 @@
+mod contract;
+
+use self::contract::{LeafInsertionFilter, Semaphore};
 use crate::{app::JsonCommitment, mimc_tree::MimcTree};
 use ethers::{
     core::k256::ecdsa::SigningKey,
     prelude::{
-        abigen, builders::Event, Address, Http, LocalWallet, Middleware, Provider, Signer,
+        builders::Event, Address, Http, LocalWallet, Middleware, Provider, Signer,
         SignerMiddleware, Wallet, H160,
     },
 };
@@ -11,21 +14,12 @@ use hex_literal::hex;
 use serde_json::Error as SerdeError;
 use std::{fs::File, path::Path, sync::Arc};
 
-abigen!(
-    Semaphore,
-    r#"[
-        function insertIdentity(uint256 _identityCommitment) public onlyOwner returns (uint256)
-        event LeafInsertion(uint256 indexed leaf, uint256 indexed leafIndex)
-    ]"#,
-    event_derives(serde::Deserialize, serde::Serialize)
-);
-
 const SEMAPHORE_ADDRESS: Address = H160(hex!("266FB396B626621898C87a92efFBA109dE4685F6"));
 const SIGNING_KEY: [u8; 32] =
     hex!("ee79b5f6e221356af78cf4c36f4f7885a11b67dfcc81c34d80249947330c0f82");
 
 pub type ContractSigner = SignerMiddleware<Provider<Http>, Wallet<SigningKey>>;
-pub type SemaphoreContract = Semaphore<ContractSigner>;
+pub type SemaphoreContract = contract::Semaphore<ContractSigner>;
 
 pub async fn initialize_semaphore() -> Result<(ContractSigner, SemaphoreContract), eyre::Error> {
     let provider = Provider::<Http>::try_from("http://localhost:8545")

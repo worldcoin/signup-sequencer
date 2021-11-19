@@ -1,15 +1,11 @@
 use crate::{
-    ethereum::{
-        self, initialize_semaphore, parse_identity_commitments, ContractSigner, Ethereum,
-        SemaphoreContract,
-    },
+    ethereum::{self, Ethereum},
     hash::Hash,
     mimc_tree::MimcTree,
     server::Error,
 };
 use core::cmp::max;
-use ethers::prelude::*;
-use eyre::{eyre, Result as EyreResult};
+use eyre::Result as EyreResult;
 use hyper::{Body, Response};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -23,7 +19,7 @@ use tokio::sync::RwLock;
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsonCommitment {
-    pub last_block:  usize,
+    pub last_block:  u64,
     pub commitments: Vec<Hash>,
 }
 
@@ -52,19 +48,15 @@ pub struct Options {
 }
 
 pub struct App {
-    ethereum:           Ethereum,
-    storage_file:       PathBuf,
-    merkle_tree:        RwLock<MimcTree>,
-    last_leaf:          AtomicUsize,
-    signer:             ContractSigner,
-    semaphore_contract: SemaphoreContract,
+    ethereum:     Ethereum,
+    storage_file: PathBuf,
+    merkle_tree:  RwLock<MimcTree>,
+    last_leaf:    AtomicUsize,
 }
 
 impl App {
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
-
-        let (signer, semaphore) = initialize_semaphore().await?;
         let mut merkle_tree = MimcTree::new(options.tree_depth, options.initial_leaf);
 
         // Read tree from file
@@ -73,12 +65,10 @@ impl App {
         let mut last_leaf = json_commitments.commitments.len();
         merkle_tree.set_range(0, json_commitments.commitments);
         let last_block = json_commitments.last_block;
-        // TODO: Use last_index, last_block
         // TODO: Handle non-existing file.
 
         // Read events from blockchain
-        let starting_block = 0;
-        let events = ethereum.fetch_events(starting_block).await?;
+        let events = ethereum.fetch_events(last_block).await?;
         for (leaf, hash) in events {
             merkle_tree.set(leaf, hash);
             last_leaf = max(last_leaf, leaf + 1);
@@ -89,8 +79,6 @@ impl App {
             storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
             last_leaf: AtomicUsize::new(last_leaf),
-            signer,
-            semaphore_contract: semaphore,
         })
     }
 
@@ -106,10 +94,7 @@ impl App {
         self.store().await?;
 
         // Send Semaphore transaction
-        let tx = self.semaphore_contract.insert_identity(commitment.into());
-        let pending_tx = self.signer.send_transaction(tx.tx, None).await.unwrap();
-        let _receipt = pending_tx.await.map_err(|e| eyre!(e))?;
-        // TODO: What does it mean if `_receipt` is None?
+        self.ethereum.insert_identity(commitment).await?;
 
         Ok(Response::new("Insert Identity!\n".into()))
     }
@@ -129,7 +114,7 @@ impl App {
 
     pub async fn store(&self) -> EyreResult<()> {
         let file = File::create(&self.storage_file)?;
-        let last_block = self.signer.get_block_number().await?.as_usize();
+        let last_block = self.ethereum.last_block().await?;
         let last_leaf = self.last_leaf.load(Ordering::Acquire);
         let commitments = {
             let lock = self.merkle_tree.read().await;

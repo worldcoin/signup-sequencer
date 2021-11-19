@@ -1,29 +1,18 @@
 mod contract;
 
 use self::contract::{LeafInsertionFilter, Semaphore};
-use crate::{app::JsonCommitment, hash::Hash, mimc_tree::MimcTree};
-use color_eyre::owo_colors::OwoColorize;
+use crate::hash::Hash;
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    prelude::{
-        builders::Event, Address, Http, LocalWallet, Middleware, Provider, Signer,
-        SignerMiddleware, Wallet, H160,
-    },
+    prelude::{Address, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware, Wallet},
 };
 use eyre::{eyre, Result as EyreResult};
-use hex_literal::hex;
-use serde_json::Error as SerdeError;
-use std::{fs::File, path::Path, sync::Arc};
+use std::sync::Arc;
 use structopt::StructOpt;
 use tracing::info;
 use url::Url;
 
-const SEMAPHORE_ADDRESS: Address = H160(hex!("266FB396B626621898C87a92efFBA109dE4685F6"));
-const SIGNING_KEY: [u8; 32] =
-    hex!("ee79b5f6e221356af78cf4c36f4f7885a11b67dfcc81c34d80249947330c0f82");
-
 pub type ContractSigner = SignerMiddleware<Provider<Http>, Wallet<SigningKey>>;
-pub type SemaphoreContract = contract::Semaphore<ContractSigner>;
 
 #[derive(Debug, PartialEq, StructOpt)]
 pub struct Options {
@@ -47,7 +36,7 @@ pub struct Options {
 
 pub struct Ethereum {
     provider:  Provider<Http>,
-    wallet:    Wallet<SigningKey>,
+    client:    Arc<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>>,
     semaphore: Semaphore<ContractSigner>,
 }
 
@@ -74,17 +63,22 @@ impl Ethereum {
 
         // Construct middleware stack
         // TODO: See <https://docs.rs/ethers-middleware/0.5.4/ethers_middleware/index.html> for useful middlewares.
-        let client = SignerMiddleware::new(provider.clone(), wallet.clone());
+        let client = SignerMiddleware::new(provider.clone(), wallet);
 
         // Connect to Contract
         let client = Arc::new(client);
-        let semaphore = Semaphore::new(options.semaphore_address, client);
+        let semaphore = Semaphore::new(options.semaphore_address, client.clone());
 
         Ok(Self {
             provider,
-            wallet,
+            client,
             semaphore,
         })
+    }
+
+    pub async fn last_block(&self) -> EyreResult<u64> {
+        let block_number = self.provider.get_block_number().await?;
+        Ok(block_number.as_u64())
     }
 
     pub async fn fetch_events(&self, starting_block: u64) -> EyreResult<Vec<(usize, Hash)>> {
@@ -101,20 +95,12 @@ impl Ethereum {
             .collect::<Vec<_>>();
         Ok(insertions)
     }
-}
 
-pub async fn initialize_semaphore() -> Result<(ContractSigner, SemaphoreContract), eyre::Error> {
-    let provider = Provider::<Http>::try_from("http://localhost:8545")
-        .expect("could not instantiate HTTP Provider");
-    let chain_id: u64 = provider
-        .get_chainid()
-        .await?
-        .try_into()
-        .map_err(|e| eyre!("{}", e))?;
-
-    let wallet = LocalWallet::from(SigningKey::from_bytes(&SIGNING_KEY)?).with_chain_id(chain_id);
-    let signer = SignerMiddleware::new(provider, wallet);
-    let contract = Semaphore::new(SEMAPHORE_ADDRESS, Arc::new(signer.clone()));
-
-    Ok((signer, contract))
+    pub async fn insert_identity(&self, commitment: &Hash) -> EyreResult<()> {
+        let tx = self.semaphore.insert_identity(commitment.into());
+        let pending_tx = self.client.send_transaction(tx.tx, None).await.unwrap();
+        let _receipt = pending_tx.await.map_err(|e| eyre!(e))?;
+        // TODO: What does it mean if `_receipt` is None?
+        Ok(())
+    }
 }

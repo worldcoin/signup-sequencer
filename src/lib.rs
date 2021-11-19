@@ -2,12 +2,12 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
 mod app;
+mod ethereum;
 mod hash;
 mod merkle_tree;
 mod mimc_hash;
 mod mimc_tree;
 mod server;
-mod solidity;
 mod utils;
 
 use crate::{app::App, utils::spawn_or_abort};

@@ -1,10 +1,10 @@
 use crate::{
+    ethereum::{
+        initialize_semaphore, parse_identity_commitments, ContractSigner, SemaphoreContract,
+    },
     hash::Hash,
     mimc_tree::MimcTree,
     server::Error,
-    solidity::{
-        initialize_semaphore, parse_identity_commitments, ContractSigner, SemaphoreContract,
-    },
 };
 use ethers::prelude::*;
 use eyre::{eyre, Result as EyreResult};

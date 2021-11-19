@@ -15,7 +15,7 @@ use std::{
 };
 use structopt::StructOpt;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,12 +62,16 @@ impl App {
 
         // Read tree from file
         info!(path = ?&options.storage_file, "Reading tree from storage");
-        let file = File::open(&options.storage_file)?;
-        let json_commitments: JsonCommitment = serde_json::from_reader(file)?;
-        let mut last_leaf = json_commitments.commitments.len();
-        merkle_tree.set_range(0, json_commitments.commitments);
-        let last_block = json_commitments.last_block;
-        // TODO: Handle non-existing file.
+        let (mut last_leaf, last_block) = if options.storage_file.is_file() {
+            let file = File::open(&options.storage_file)?;
+            let file: JsonCommitment = serde_json::from_reader(file)?;
+            let last_leaf = file.commitments.len();
+            merkle_tree.set_range(0, file.commitments);
+            (last_leaf, file.last_block)
+        } else {
+            warn!(path = ?&options.storage_file, "Storage file not found, skipping.");
+            (0, 0)
+        };
 
         // Read events from blockchain
         let events = ethereum.fetch_events(last_block).await?;

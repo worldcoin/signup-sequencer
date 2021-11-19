@@ -17,7 +17,7 @@ use std::{
 };
 use structopt::StructOpt;
 use tokio::sync::broadcast;
-use tracing::{info, trace, error};
+use tracing::{error, info, trace};
 use url::{Host, Url};
 
 #[derive(Debug, PartialEq, StructOpt)]
@@ -203,7 +203,7 @@ pub async fn main(
 #[allow(unused_imports)]
 mod test {
     use super::*;
-    use hyper::{Request, StatusCode, body::to_bytes};
+    use hyper::{body::to_bytes, Request, StatusCode};
     use pretty_assertions::assert_eq;
     use serde_json::json;
 
@@ -212,14 +212,18 @@ mod test {
         let matches = crate::app::Options::clap().get_matches();
         let options = crate::app::Options::from_clap(&matches);
         let app = Arc::new(App::new(options).await.unwrap());
-        let body = Body::from(json!({
-            "identityIndex": 0,
-        }).to_string());
+        let body = Body::from(
+            json!({
+                "identityIndex": 0,
+            })
+            .to_string(),
+        );
         let request = Request::builder()
             .method("GET")
             .uri("/inclusionProof")
             .header("Content-Type", "application/json")
-            .body(body).unwrap();
+            .body(body)
+            .unwrap();
         let res = route(request, app).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
         // TODO deserialize proof and compare results

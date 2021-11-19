@@ -1,4 +1,4 @@
-use crate::{hash::Hash, mimc_tree::MimcTree};
+use crate::{app::JsonCommitment, mimc_tree::MimcTree};
 use ethers::{
     core::k256::ecdsa::SigningKey,
     prelude::{
@@ -8,7 +8,6 @@ use ethers::{
 };
 use eyre::{eyre, Result as EyreResult};
 use hex_literal::hex;
-use serde::{Deserialize, Serialize};
 use serde_json::Error as SerdeError;
 use std::{fs::File, path::Path, sync::Arc};
 
@@ -24,7 +23,6 @@ abigen!(
 const SEMAPHORE_ADDRESS: Address = H160(hex!("266FB396B626621898C87a92efFBA109dE4685F6"));
 const SIGNING_KEY: [u8; 32] =
     hex!("ee79b5f6e221356af78cf4c36f4f7885a11b67dfcc81c34d80249947330c0f82");
-pub const COMMITMENTS_FILE: &str = "./commitments.json";
 
 pub type ContractSigner = SignerMiddleware<Provider<Http>, Wallet<SigningKey>>;
 pub type SemaphoreContract = Semaphore<ContractSigner>;
@@ -45,18 +43,11 @@ pub async fn initialize_semaphore() -> Result<(ContractSigner, SemaphoreContract
     Ok((signer, contract))
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JsonCommitment {
-    pub last_block:  usize,
-    pub commitments: Vec<Hash>,
-}
-
 pub async fn parse_identity_commitments(
+    json_file_path: &Path,
     tree: &mut MimcTree,
     semaphore_contract: SemaphoreContract,
 ) -> EyreResult<usize> {
-    let json_file_path = Path::new(COMMITMENTS_FILE);
     let mut last_index = 0;
     let starting_block = match File::open(json_file_path) {
         Ok(file) => {

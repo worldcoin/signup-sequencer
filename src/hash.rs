@@ -1,5 +1,9 @@
+use ethers::types::U256;
 use serde::{de::Error as _, ser::Error as _, Deserialize, Serialize};
-use std::{fmt::Debug, str::from_utf8};
+use std::{
+    fmt::Debug,
+    str::{from_utf8, FromStr},
+};
 
 /// Container for 256-bit hash values.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -19,6 +23,36 @@ impl Hash {
 impl Debug for Hash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Hash(hex!(\"{}\"))", hex::encode(&self.0))
+    }
+}
+
+/// Conversion from Ether U256
+impl From<&Hash> for U256 {
+    fn from(hash: &Hash) -> Self {
+        Self::from_big_endian(hash.as_bytes_be())
+    }
+}
+
+/// Conversion to Ether U256
+impl From<U256> for Hash {
+    fn from(u256: U256) -> Self {
+        let mut bytes = [0_u8; 32];
+        u256.to_big_endian(&mut bytes);
+        Self::from_bytes_be(bytes)
+    }
+}
+
+/// Parse Hash from hex string.
+/// Hex strings can be upper/lower/mixed case and have an optional `0x` prefix
+/// but they must always be exactly 32 bytes.
+impl FromStr for Hash {
+    type Err = hex::FromHexError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let str = trim_hex_prefix(s);
+        let mut out = [0_u8; 32];
+        hex::decode_to_slice(str, &mut out)?;
+        Ok(Self(out))
     }
 }
 
@@ -52,11 +86,7 @@ impl<'de> Deserialize<'de> for Hash {
     {
         if deserializer.is_human_readable() {
             let str = <&'de str>::deserialize(deserializer)?;
-            let str = trim_hex_prefix(str);
-            let mut out = [0_u8; 32];
-            hex::decode_to_slice(str, &mut out)
-                .map_err(|e| D::Error::custom(format!("Error in hex: {}", e)))?;
-            Ok(Self(out))
+            Self::from_str(str).map_err(|e| D::Error::custom(format!("Error in hex: {}", e)))
         } else {
             <[u8; 32]>::deserialize(deserializer).map(Hash)
         }

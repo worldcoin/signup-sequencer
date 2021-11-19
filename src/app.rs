@@ -1,6 +1,7 @@
 use crate::{
     ethereum::{
-        initialize_semaphore, parse_identity_commitments, ContractSigner, SemaphoreContract,
+        self, initialize_semaphore, parse_identity_commitments, ContractSigner, Ethereum,
+        SemaphoreContract,
     },
     hash::Hash,
     mimc_tree::MimcTree,
@@ -27,6 +28,9 @@ pub struct JsonCommitment {
 
 #[derive(Debug, PartialEq, StructOpt)]
 pub struct Options {
+    #[structopt(flatten)]
+    pub ethereum: ethereum::Options,
+
     /// Storage location for the Merkle tree.
     #[structopt(long, env, default_value = "commitments.json")]
     pub storage_file: PathBuf,
@@ -47,6 +51,7 @@ pub struct Options {
 }
 
 pub struct App {
+    ethereum:           Ethereum,
     storage_file:       PathBuf,
     merkle_tree:        RwLock<MimcTree>,
     last_leaf:          AtomicUsize,
@@ -56,12 +61,15 @@ pub struct App {
 
 impl App {
     pub async fn new(options: Options) -> EyreResult<Self> {
+        let ethereum = Ethereum::new(options.ethereum).await?;
+
         let (signer, semaphore) = initialize_semaphore().await?;
         let mut merkle_tree = MimcTree::new(options.tree_depth, options.initial_leaf);
         let last_leaf =
             parse_identity_commitments(&options.storage_file, &mut merkle_tree, semaphore.clone())
                 .await?;
         Ok(Self {
+            ethereum,
             storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
             last_leaf: AtomicUsize::new(last_leaf),

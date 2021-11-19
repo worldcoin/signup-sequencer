@@ -15,6 +15,7 @@ use std::{
 };
 use structopt::StructOpt;
 use tokio::sync::RwLock;
+use tracing::info;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,6 +61,7 @@ impl App {
         let mut merkle_tree = MimcTree::new(options.tree_depth, options.initial_leaf);
 
         // Read tree from file
+        info!(path = ?&options.storage_file, "Reading tree from storage");
         let file = File::open(&options.storage_file)?;
         let json_commitments: JsonCommitment = serde_json::from_reader(file)?;
         let mut last_leaf = json_commitments.commitments.len();

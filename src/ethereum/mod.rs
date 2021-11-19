@@ -82,6 +82,7 @@ impl Ethereum {
     }
 
     pub async fn fetch_events(&self, starting_block: u64) -> EyreResult<Vec<(usize, Hash)>> {
+        info!(starting_block, "Reading LeafInsertion events from chains");
         // TODO: Some form of pagination.
         // TODO: Register to the event stream and track it going forward.
         let filter = self
@@ -89,6 +90,7 @@ impl Ethereum {
             .leaf_insertion_filter()
             .from_block(starting_block);
         let events: Vec<LeafInsertionFilter> = filter.query().await?;
+        info!(count = events.len(), "Read events");
         let insertions = events
             .iter()
             .map(|event| (event.leaf_index.as_usize(), event.leaf.into()))
@@ -97,6 +99,7 @@ impl Ethereum {
     }
 
     pub async fn insert_identity(&self, commitment: &Hash) -> EyreResult<()> {
+        info!(%commitment, "Inserting identity in contract");
         let tx = self.semaphore.insert_identity(commitment.into());
         let pending_tx = self.client.send_transaction(tx.tx, None).await.unwrap();
         let _receipt = pending_tx.await.map_err(|e| eyre!(e))?;

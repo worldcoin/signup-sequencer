@@ -29,7 +29,7 @@ required-features = [ "bench", "proptest" ]
 
 [dependencies]
 color-eyre = "0.5"
-criterion = { version = "0.3", optional = true }
+criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
 ethers = "0.5"
 eyre = "0.6"
 futures = "0.3"
@@ -56,7 +56,6 @@ url = "2.2"
 zkp-u256 = "0.2"
 
 [dev-dependencies]
-criterion = { version = "0.3", features = [ "async_tokio" ] }
 pretty_assertions = "1.0"
 proptest = { version = "1.0" }
 

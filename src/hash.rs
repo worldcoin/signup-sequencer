@@ -1,7 +1,7 @@
 use ethers::types::U256;
 use serde::{de::Error as _, ser::Error as _, Deserialize, Serialize};
 use std::{
-    fmt::Debug,
+    fmt::{Debug, Display},
     str::{from_utf8, FromStr},
 };
 
@@ -23,6 +23,13 @@ impl Hash {
 impl Debug for Hash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Hash(hex!(\"{}\"))", hex::encode(&self.0))
+    }
+}
+
+/// Display print hases as `0x...`.
+impl Display for Hash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", hex::encode(&self.0))
     }
 }
 

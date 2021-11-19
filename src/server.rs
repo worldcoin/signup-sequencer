@@ -17,7 +17,7 @@ use std::{
 };
 use structopt::StructOpt;
 use tokio::sync::broadcast;
-use tracing::{info, trace};
+use tracing::{info, trace, error};
 use url::{Host, Url};
 
 #[derive(Debug, PartialEq, StructOpt)]
@@ -62,28 +62,32 @@ pub enum Error {
 
 #[allow(clippy::fallible_impl_from)]
 impl From<serde_json::Error> for Error {
-    fn from(_error: serde_json::Error) -> Self {
+    fn from(error: serde_json::Error) -> Self {
+        error!("Error in from serde_json::Error to Error: {:?}", error);
         todo!()
     }
 }
 
 #[allow(clippy::fallible_impl_from)]
 impl From<hyper::Error> for Error {
-    fn from(_error: hyper::Error) -> Self {
+    fn from(error: hyper::Error) -> Self {
+        error!("Error in from hyper::Error to Error: {:?}", error);
         todo!()
     }
 }
 
 #[allow(clippy::fallible_impl_from)]
 impl From<EyreError> for Error {
-    fn from(_error: EyreError) -> Self {
+    fn from(error: EyreError) -> Self {
+        error!("Error in from EyreError to Error: {:?}", error);
         todo!()
     }
 }
 
 #[allow(clippy::fallible_impl_from)]
 impl From<Error> for hyper::Error {
-    fn from(_error: Error) -> Self {
+    fn from(error: Error) -> Self {
+        error!("Error in from Error to hyper::Error: {:?}", error);
         todo!()
     }
 }
@@ -112,7 +116,6 @@ where
     next(value).await
 }
 
-#[allow(clippy::unused_async)] // We are implementing an interface
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
@@ -179,7 +182,7 @@ pub async fn main(
             Ok::<_, hyper::Error>(service_fn(move |req| {
                 // Clone here as `service_fn` is called for every request
                 let app = app.clone();
-                route(req, app) // commitments, last_index)
+                route(req, app)
             }))
         }
     });
@@ -200,21 +203,26 @@ pub async fn main(
 #[allow(unused_imports)]
 mod test {
     use super::*;
-    use hyper::{body::to_bytes, Request};
+    use hyper::{Request, StatusCode, body::to_bytes};
     use pretty_assertions::assert_eq;
+    use serde_json::json;
 
-    // #[tokio::test]
-    // async fn test_hello_world() {
-    //     let app = Arc::new(App::new(2));
-    //     let request = CommitmentRequest {
-    //         identity_commitment:
-    // "24C94355810D659EEAA9E0B9E21F831493B50574AA2D3205F0AAB779E2864623"
-    //             .to_string(),
-    //     };
-    //     let response = app.insert_identity(request).await.unwrap();
-    //     let bytes = to_bytes(response.into_body()).await.unwrap();
-    //     assert_eq!(bytes.as_ref(), b"Insert Identity!\n");
-    // }
+    #[tokio::test]
+    async fn test_inclusion_proof() {
+        let matches = crate::app::Options::clap().get_matches();
+        let options = crate::app::Options::from_clap(&matches);
+        let app = Arc::new(App::new(options).await.unwrap());
+        let body = Body::from(json!({
+            "identityIndex": 0,
+        }).to_string());
+        let request = Request::builder()
+            .method("GET")
+            .uri("/inclusionProof")
+            .header("Content-Type", "application/json")
+            .body(body).unwrap();
+        let res = route(request, app).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+    }
 }
 #[cfg(feature = "bench")]
 #[allow(clippy::wildcard_imports, unused_imports)]

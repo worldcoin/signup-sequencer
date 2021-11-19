@@ -2,6 +2,7 @@ mod contract;
 
 use self::contract::{LeafInsertionFilter, Semaphore};
 use crate::{app::JsonCommitment, hash::Hash, mimc_tree::MimcTree};
+use color_eyre::owo_colors::OwoColorize;
 use ethers::{
     core::k256::ecdsa::SigningKey,
     prelude::{
@@ -85,6 +86,21 @@ impl Ethereum {
             semaphore,
         })
     }
+
+    pub async fn fetch_events(&self, starting_block: u64) -> EyreResult<Vec<(usize, Hash)>> {
+        // TODO: Some form of pagination.
+        // TODO: Register to the event stream and track it going forward.
+        let filter = self
+            .semaphore
+            .leaf_insertion_filter()
+            .from_block(starting_block);
+        let events: Vec<LeafInsertionFilter> = filter.query().await?;
+        let insertions = events
+            .iter()
+            .map(|event| (event.leaf_index.as_usize(), event.leaf.into()))
+            .collect::<Vec<_>>();
+        Ok(insertions)
+    }
 }
 
 pub async fn initialize_semaphore() -> Result<(ContractSigner, SemaphoreContract), eyre::Error> {
@@ -101,41 +117,4 @@ pub async fn initialize_semaphore() -> Result<(ContractSigner, SemaphoreContract
     let contract = Semaphore::new(SEMAPHORE_ADDRESS, Arc::new(signer.clone()));
 
     Ok((signer, contract))
-}
-
-pub async fn parse_identity_commitments(
-    json_file_path: &Path,
-    tree: &mut MimcTree,
-    semaphore_contract: SemaphoreContract,
-) -> EyreResult<usize> {
-    let mut last_index = 0;
-    let starting_block = match File::open(json_file_path) {
-        Ok(file) => {
-            let json_commitments: Result<JsonCommitment, SerdeError> =
-                serde_json::from_reader(file);
-            match json_commitments {
-                Ok(json_commitments) => {
-                    for &commitment in &json_commitments.commitments {
-                        tree.set(last_index, commitment);
-                        last_index += 1;
-                    }
-                    json_commitments.last_block
-                }
-                Err(_) => 0,
-            }
-        }
-        Err(_) => 0,
-    };
-
-    let filter: Event<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>, LeafInsertionFilter> =
-        semaphore_contract
-            .leaf_insertion_filter()
-            .from_block(starting_block);
-    let logs = filter.query().await?;
-    for event in &logs {
-        let index: usize = event.leaf_index.as_u32().try_into()?;
-        tree.set(index, event.leaf.into());
-        last_index = index;
-    }
-    Ok(last_index)
 }

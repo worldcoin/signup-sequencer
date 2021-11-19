@@ -7,6 +7,7 @@ use crate::{
     mimc_tree::MimcTree,
     server::Error,
 };
+use core::cmp::max;
 use ethers::prelude::*;
 use eyre::{eyre, Result as EyreResult};
 use hyper::{Body, Response};
@@ -65,9 +66,24 @@ impl App {
 
         let (signer, semaphore) = initialize_semaphore().await?;
         let mut merkle_tree = MimcTree::new(options.tree_depth, options.initial_leaf);
-        let last_leaf =
-            parse_identity_commitments(&options.storage_file, &mut merkle_tree, semaphore.clone())
-                .await?;
+
+        // Read tree from file
+        let file = File::open(&options.storage_file)?;
+        let json_commitments: JsonCommitment = serde_json::from_reader(file)?;
+        let mut last_leaf = json_commitments.commitments.len();
+        merkle_tree.set_range(0, json_commitments.commitments);
+        let last_block = json_commitments.last_block;
+        // TODO: Use last_index, last_block
+        // TODO: Handle non-existing file.
+
+        // Read events from blockchain
+        let starting_block = 0;
+        let events = ethereum.fetch_events(starting_block).await?;
+        for (leaf, hash) in events {
+            merkle_tree.set(leaf, hash);
+            last_leaf = max(last_leaf, leaf + 1);
+        }
+
         Ok(Self {
             ethereum,
             storage_file: options.storage_file,

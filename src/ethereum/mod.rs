@@ -4,15 +4,20 @@ use self::contract::{LeafInsertionFilter, Semaphore};
 use crate::hash::Hash;
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    prelude::{Address, Http, LocalWallet, Middleware, Provider, Signer, SignerMiddleware, Wallet},
+    middleware::{
+        gas_escalator::{Frequency, GasEscalatorMiddleware, GeometricGasPrice},
+        gas_oracle::{EthGasStation, GasOracleMiddleware},
+        NonceManagerMiddleware, SignerMiddleware,
+    },
+    providers::{Http, Middleware, Provider},
+    signers::{LocalWallet, Signer, Wallet},
+    types::Address,
 };
 use eyre::{eyre, Result as EyreResult};
 use std::sync::Arc;
 use structopt::StructOpt;
 use tracing::info;
 use url::Url;
-
-pub type ContractSigner = SignerMiddleware<Provider<Http>, Wallet<SigningKey>>;
 
 #[derive(Debug, PartialEq, StructOpt)]
 pub struct Options {
@@ -34,44 +39,85 @@ pub struct Options {
     pub signing_key: Hash,
 }
 
+// Code out the provider stack in types
+// Needed because of <https://github.com/gakonst/ethers-rs/issues/592>
+type Provider0 = Provider<Http>;
+type Provider1 = SignerMiddleware<Provider0, Wallet<SigningKey>>;
+type Provider2 = GasEscalatorMiddleware<Provider1, GeometricGasPrice>;
+type Provider3 = GasOracleMiddleware<Provider2, EthGasStation>;
+type Provider4 = NonceManagerMiddleware<Provider3>;
+type ProviderStack = Provider4;
+
 pub struct Ethereum {
-    provider:  Provider<Http>,
-    client:    Arc<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>>,
-    semaphore: Semaphore<ContractSigner>,
+    provider:  Arc<ProviderStack>,
+    semaphore: Semaphore<ProviderStack>,
 }
 
 impl Ethereum {
     pub async fn new(options: Options) -> EyreResult<Self> {
         // Connect to the Ethereum provider
-        // TODO: Support WebSocket and Https
-        info!(
-            provider = %&options.ethereum_provider,
-            "Connecting to Ethereum"
-        );
-        let http = Http::new(options.ethereum_provider);
-        let provider = Provider::new(http);
-        let chain_id = provider.get_chainid().await?;
-        let latest_block = provider.get_block_number().await?;
-        info!(%chain_id, %latest_block, "Connected to Ethereum");
+        // TODO: Support WebSocket and IPC.
+        // Blocked on <https://github.com/gakonst/ethers-rs/issues/592>
+        let (provider, chain_id) = {
+            info!(
+                provider = %&options.ethereum_provider,
+                "Connecting to Ethereum"
+            );
+            let http = Http::new(options.ethereum_provider);
+            let provider = Provider::new(http);
+            let chain_id = provider.get_chainid().await?;
+            let latest_block = provider.get_block_number().await?;
+            info!(%chain_id, %latest_block, "Connected to Ethereum");
+            (provider, chain_id)
+        };
 
-        // Construct wallet
-        let chain_id: u64 = chain_id.try_into().map_err(|e| eyre!("{}", e))?;
-        let signing_key = SigningKey::from_bytes(options.signing_key.as_bytes_be())?;
-        let wallet = LocalWallet::from(signing_key).with_chain_id(chain_id);
-        let address = wallet.address();
-        info!(?address, "Constructed wallet");
+        // TODO: Add metrics layer that measures the time each rpc call takes.
+        // TODO: Add logging layer that logs calls to major RPC endpoints like
+        // send_transaction.
 
-        // Construct middleware stack
-        // TODO: See <https://docs.rs/ethers-middleware/0.5.4/ethers_middleware/index.html> for useful middlewares.
-        let client = SignerMiddleware::new(provider.clone(), wallet);
+        // Construct a local key signer
+        let (provider, address) = {
+            let signing_key = SigningKey::from_bytes(options.signing_key.as_bytes_be())?;
+            let signer = LocalWallet::from(signing_key);
+            let address = signer.address();
+            let chain_id: u64 = chain_id.try_into().map_err(|e| eyre!("{}", e))?;
+            let signer = signer.with_chain_id(chain_id);
+            let provider = SignerMiddleware::new(provider, signer);
+            info!(?address, "Constructed wallet");
+            (provider, address)
+        };
+
+        // Escalate gas prices
+        let provider = {
+            // TODO: Put bounds in place.
+            let escalator = GeometricGasPrice::new(1.125, 60u64, None::<u64>);
+            GasEscalatorMiddleware::new(provider, escalator, Frequency::PerBlock)
+        };
+
+        // Use EthGasStation as the gas oracle
+        let provider = {
+            // TODO: Take Median of multiple sources and have security checks.
+            let gas_oracle = EthGasStation::new(None);
+            GasOracleMiddleware::new(provider, gas_oracle)
+        };
+
+        // Manage nonces locally
+        let provider = { NonceManagerMiddleware::new(provider, address) };
+
+        // Add a 10 block delay to avoid having to handle re-orgs
+        // TODO: Pending <https://github.com/gakonst/ethers-rs/pull/568/files>
+        // let provider = {
+        //     const BLOCK_DELAY: u8 = 10;
+        //     TimeLag::<BLOCK_DELAY>::new(provider)
+        // };
 
         // Connect to Contract
-        let client = Arc::new(client);
-        let semaphore = Semaphore::new(options.semaphore_address, client.clone());
+        let provider = Arc::new(provider);
+        let semaphore = Semaphore::new(options.semaphore_address, provider.clone());
+        // TODO: Test contract connection by calling a view function.
 
         Ok(Self {
             provider,
-            client,
             semaphore,
         })
     }
@@ -101,7 +147,7 @@ impl Ethereum {
     pub async fn insert_identity(&self, commitment: &Hash) -> EyreResult<()> {
         info!(%commitment, "Inserting identity in contract");
         let tx = self.semaphore.insert_identity(commitment.into());
-        let pending_tx = self.client.send_transaction(tx.tx, None).await.unwrap();
+        let pending_tx = self.provider.send_transaction(tx.tx, None).await.unwrap();
         let _receipt = pending_tx.await.map_err(|e| eyre!(e))?;
         // TODO: What does it mean if `_receipt` is None?
         Ok(())

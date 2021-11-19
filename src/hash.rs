@@ -30,7 +30,7 @@ impl Debug for Hash {
     }
 }
 
-/// Display print hases as `0x...`.
+/// Display print hashes as `0x...`.
 impl Display for Hash {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "0x{}", hex::encode(&self.0))

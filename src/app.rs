@@ -1,4 +1,9 @@
-use crate::{ethereum::{self, Ethereum}, hash::Hash, mimc_tree::MimcTree, server::Error};
+use crate::{
+    ethereum::{self, Ethereum},
+    hash::Hash,
+    mimc_tree::MimcTree,
+    server::Error,
+};
 use core::cmp::max;
 use eyre::Result as EyreResult;
 use hyper::{Body, Response};
@@ -116,9 +121,9 @@ impl App {
         let proof = merkle_tree.proof(identity_index);
 
         if let Some(proof) = proof {
-            return Ok(
-                    Response::new(Body::from(serde_json::to_string_pretty(&proof).unwrap()))
-            )
+            return Ok(Response::new(Body::from(
+                serde_json::to_string_pretty(&proof).unwrap(),
+            )));
         }
 
         Ok(Response::builder()

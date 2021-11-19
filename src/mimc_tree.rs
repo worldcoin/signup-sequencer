@@ -97,7 +97,7 @@ pub mod bench {
     fn bench_verify(criterion: &mut Criterion) {
         let tree = MimcTree::new(DEPTH, LEAF);
         let index = 354_184;
-        let proof = tree.proof(index);
+        let proof = tree.proof(index).expect("proof should exist");
         let hash = Hash::from_bytes_be([0_u8; 32]);
         criterion.bench_function("mimc_verfiy", move |bencher| {
             bencher.iter(|| proof.root(black_box(hash)));

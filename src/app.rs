@@ -71,25 +71,22 @@ impl App {
     }
 
     pub async fn insert_identity(&self, commitment: &Hash) -> Result<Response<Body>, Error> {
+        // Update merkle tree
         {
             let mut merkle_tree = self.merkle_tree.write().await;
             let last_leaf = self.last_leaf.fetch_add(1, Ordering::AcqRel);
-
             merkle_tree.set(last_leaf, *commitment);
-            let num = self.signer.get_block_number().await.map_err(|e| eyre!(e))?;
-            serde_json::to_writer(
-                &File::create(&self.storage_file).map_err(|e| eyre!(e))?,
-                &JsonCommitment {
-                    last_block:  num.as_usize(),
-                    commitments: merkle_tree.leaves()[..=last_leaf].to_vec(),
-                },
-            )?;
         }
 
+        // Write state file
+        self.store().await?;
+
+        // Send Semaphore transaction
         let tx = self.semaphore_contract.insert_identity(commitment.into());
         let pending_tx = self.signer.send_transaction(tx.tx, None).await.unwrap();
         let _receipt = pending_tx.await.map_err(|e| eyre!(e))?;
         // TODO: What does it mean if `_receipt` is None?
+
         Ok(Response::new("Insert Identity!\n".into()))
     }
 
@@ -104,5 +101,21 @@ impl App {
         // TODO handle commitment not found
         let response = "Inclusion Proof!\n"; // TODO: proof
         Ok(Response::new(response.into()))
+    }
+
+    pub async fn store(&self) -> EyreResult<()> {
+        let file = File::create(&self.storage_file)?;
+        let last_block = self.signer.get_block_number().await?.as_usize();
+        let last_leaf = self.last_leaf.load(Ordering::Acquire);
+        let commitments = {
+            let lock = self.merkle_tree.read().await;
+            lock.leaves()[..=last_leaf].to_vec()
+        };
+        let data = JsonCommitment {
+            last_block,
+            commitments,
+        };
+        serde_json::to_writer(&file, &data)?;
+        Ok(())
     }
 }

@@ -22,7 +22,7 @@ pub trait Hasher {
 
 /// Merkle tree with all leaf and intermediate hashes stored
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct MerkleTree<H: Hasher + Serialize> {
+pub struct MerkleTree<H: Hasher> {
     /// Depth of the tree, # of layers including leaf layer
     depth: usize,
 
@@ -68,7 +68,7 @@ const fn depth(index: usize) -> usize {
     (index + 2).next_power_of_two().trailing_zeros() as usize - 1
 }
 
-impl<H: Hasher + Serialize> MerkleTree<H> {
+impl<H: Hasher> MerkleTree<H> {
     /// Creates a new `MerkleTree`
     /// * `depth` - The depth of the tree, including the root. This is 1 greater
     ///   than the `treeLevels` argument to the Semaphore contract.
@@ -168,7 +168,7 @@ impl<H: Hasher + Serialize> MerkleTree<H> {
     }
 }
 
-impl<H: Hasher + Serialize> Proof<H> {
+impl<H: Hasher> Proof<H> {
     /// Compute the leaf index for this proof
     #[allow(dead_code)]
     pub fn leaf_index(&self) -> usize {
@@ -190,7 +190,7 @@ impl<H: Hasher + Serialize> Proof<H> {
 
 impl<H> Debug for Branch<H>
 where
-    H: Hasher + Serialize,
+    H: Hasher,
     H::Hash: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -203,7 +203,7 @@ where
 
 impl<H> Debug for Proof<H>
 where
-    H: Hasher + Serialize,
+    H: Hasher,
     H::Hash: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -217,7 +217,6 @@ pub mod test {
     use ethers::utils::keccak256;
     use hex_literal::hex;
 
-    #[derive(Serialize)]
     struct Keccak;
 
     impl Hasher for Keccak {

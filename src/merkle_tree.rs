@@ -9,10 +9,12 @@ use std::{
     iter::{once, repeat, successors},
 };
 
+use serde::Serialize;
+
 /// Hash types, values and algorithms for a Merkle tree
 pub trait Hasher {
     /// Type of the leaf and node hashes
-    type Hash: Clone + Eq;
+    type Hash: Clone + Eq + Serialize;
 
     /// Compute the hash of an intermediate node
     fn hash_node(left: &Self::Hash, right: &Self::Hash) -> Self::Hash;
@@ -20,7 +22,7 @@ pub trait Hasher {
 
 /// Merkle tree with all leaf and intermediate hashes stored
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct MerkleTree<H: Hasher> {
+pub struct MerkleTree<H: Hasher + Serialize> {
     /// Depth of the tree, # of layers including leaf layer
     depth: usize,
 
@@ -32,7 +34,7 @@ pub struct MerkleTree<H: Hasher> {
 }
 
 /// Element of a Merkle proof
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Branch<H: Hasher> {
     /// Left branch taken, value is the right sibling hash.
     Left(H::Hash),
@@ -42,7 +44,7 @@ pub enum Branch<H: Hasher> {
 }
 
 /// Merkle proof path, bottom to top.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct Proof<H: Hasher>(pub Vec<Branch<H>>);
 
 /// For a given node index, return the parent node index
@@ -66,7 +68,7 @@ const fn depth(index: usize) -> usize {
     (index + 2).next_power_of_two().trailing_zeros() as usize - 1
 }
 
-impl<H: Hasher> MerkleTree<H> {
+impl<H: Hasher + Serialize> MerkleTree<H> {
     /// Creates a new `MerkleTree`
     /// * `depth` - The depth of the tree, including the root. This is 1 greater
     ///   than the `treeLevels` argument to the Semaphore contract.
@@ -132,7 +134,10 @@ impl<H: Hasher> MerkleTree<H> {
         }
     }
 
-    pub fn proof(&self, leaf: usize) -> Proof<H> {
+    pub fn proof(&self, leaf: usize) -> Option<Proof<H>> {
+        if leaf >= self.num_leaves() {
+            return None;
+        }
         let mut index = self.num_leaves() + leaf - 1;
         let mut path = Vec::with_capacity(self.depth);
         while let Some(parent) = parent(index) {
@@ -144,7 +149,7 @@ impl<H: Hasher> MerkleTree<H> {
             });
             index = parent;
         }
-        Proof(path)
+        Some(Proof(path))
     }
 
     #[allow(dead_code)]
@@ -163,7 +168,7 @@ impl<H: Hasher> MerkleTree<H> {
     }
 }
 
-impl<H: Hasher> Proof<H> {
+impl<H: Hasher + Serialize> Proof<H> {
     /// Compute the leaf index for this proof
     #[allow(dead_code)]
     pub fn leaf_index(&self) -> usize {
@@ -185,7 +190,7 @@ impl<H: Hasher> Proof<H> {
 
 impl<H> Debug for Branch<H>
 where
-    H: Hasher,
+    H: Hasher + Serialize,
     H::Hash: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -198,7 +203,7 @@ where
 
 impl<H> Debug for Proof<H>
 where
-    H: Hasher,
+    H: Hasher + Serialize,
     H::Hash: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -212,6 +217,7 @@ pub mod test {
     use ethers::utils::keccak256;
     use hex_literal::hex;
 
+    #[derive(Serialize)]
     struct Keccak;
 
     impl Hasher for Keccak {
@@ -301,7 +307,7 @@ pub mod test {
             hex!("0000000000000000000000000000000000000000000000000000000000000004"),
         );
 
-        let proof = tree.proof(2);
+        let proof = tree.proof(2).expect("proof should exist");
         assert_eq!(proof.leaf_index(), 2);
         assert!(tree.verify(
             hex!("0000000000000000000000000000000000000000000000000000000000000003"),

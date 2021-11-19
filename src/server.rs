@@ -131,12 +131,12 @@ impl App {
             .await?;
         }
 
-        insert_identity_to_contract(
-            &self.semaphore_contract,
-            &self.signer,
-            &commitment_request.identity_commitment,
-        )
-        .await?;
+        // insert_identity_to_contract(
+        //     &self.semaphore_contract,
+        //     &self.signer,
+        //     &commitment_request.identity_commitment,
+        // )
+        // .await?;
         Ok(Response::new(Body::from(
             serde_json::to_string_pretty(&IndexResponse {
                 identity_index: last_leaf,

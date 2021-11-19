@@ -52,7 +52,7 @@ pub struct App {
     ethereum:     Ethereum,
     storage_file: PathBuf,
     merkle_tree:  RwLock<MimcTree>,
-    last_leaf:    AtomicUsize,
+    last_leaf:    AtomicUsize, // TODO: Is this last or next leaf?
 }
 
 impl App {

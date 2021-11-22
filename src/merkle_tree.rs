@@ -160,12 +160,6 @@ impl<H: Hasher> MerkleTree<H> {
     pub fn leaves(&self) -> &[H::Hash] {
         &self.nodes[(self.num_leaves() - 1)..]
     }
-
-    // TODO maybe remove? Not needed if we search by index vs. commitment
-    #[allow(dead_code)]
-    pub fn position(&self, leaf: &H::Hash) -> Option<usize> {
-        self.leaves().iter().position(|x| x == leaf)
-    }
 }
 
 impl<H: Hasher> Proof<H> {
@@ -336,35 +330,6 @@ pub mod test {
         tree.set(
             3,
             hex!("0000000000000000000000000000000000000000000000000000000000000004"),
-        );
-
-        assert_eq!(
-            tree.position(&hex!(
-                "0000000000000000000000000000000000000000000000000000000000000001"
-            ))
-            .unwrap(),
-            0,
-        );
-        assert_eq!(
-            tree.position(&hex!(
-                "0000000000000000000000000000000000000000000000000000000000000002"
-            ))
-            .unwrap(),
-            1,
-        );
-        assert_eq!(
-            tree.position(&hex!(
-                "0000000000000000000000000000000000000000000000000000000000000003"
-            ))
-            .unwrap(),
-            2,
-        );
-        assert_eq!(
-            tree.position(&hex!(
-                "0000000000000000000000000000000000000000000000000000000000000004"
-            ))
-            .unwrap(),
-            3,
         );
     }
 }

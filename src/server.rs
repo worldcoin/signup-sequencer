@@ -124,7 +124,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
 
     // Route requests
     let response = match (request.method(), request.uri().path()) {
-        (&Method::GET, "/inclusionProof") => {
+        (&Method::POST, "/inclusionProof") => {
             json_middleware(request, |request: InclusionProofRequest| {
                 let app = app.clone();
                 async move { app.inclusion_proof(request.identity_index).await }
@@ -219,7 +219,7 @@ mod test {
             .to_string(),
         );
         let request = Request::builder()
-            .method("GET")
+            .method("POST")
             .uri("/inclusionProof")
             .header("Content-Type", "application/json")
             .body(body)

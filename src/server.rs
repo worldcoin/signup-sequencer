@@ -209,8 +209,7 @@ mod test {
 
     #[tokio::test]
     async fn test_inclusion_proof() {
-        let matches = crate::app::Options::clap().get_matches();
-        let options = crate::app::Options::from_clap(&matches);
+        let options = crate::app::Options::default();
         let app = Arc::new(App::new(options).await.unwrap());
         let body = Body::from(
             json!({

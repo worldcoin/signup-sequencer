@@ -14,7 +14,7 @@ use ethers::{
     types::Address,
 };
 use eyre::{eyre, Result as EyreResult};
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 use structopt::StructOpt;
 use tracing::info;
 use url::Url;
@@ -26,7 +26,7 @@ pub struct Options {
     pub ethereum_provider: Url,
 
     /// Semaphore contract address.
-    #[structopt(long, env, default_value = "266FB396B626621898C87a92efFBA109dE4685F6")]
+    #[structopt(long, env, default_value = "3F3D3369214C9DF92579304cf7331A05ca1ABd73")]
     pub semaphore_address: Address,
 
     /// Private key used for transaction signing
@@ -37,6 +37,20 @@ pub struct Options {
     )]
     // NOTE: We abuse `Hash` here because it has the right `FromStr` implementation.
     pub signing_key: Hash,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            ethereum_provider: Url::parse("http://localhost:8545").expect("Url parsing failed"),
+            semaphore_address: Address::from_str("3F3D3369214C9DF92579304cf7331A05ca1ABd73")
+                .expect("Decoding failed"),
+            signing_key:       Hash::from_str(
+                "ee79b5f6e221356af78cf4c36f4f7885a11b67dfcc81c34d80249947330c0f82",
+            )
+            .expect("Hash decoding failed"),
+        }
+    }
 }
 
 // Code out the provider stack in types

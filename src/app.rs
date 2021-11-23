@@ -2,7 +2,7 @@ use crate::{
     ethereum::{self, Ethereum},
     hash::Hash,
     mimc_tree::MimcTree,
-    server::Error,
+    server::Error as ServerError,
 };
 use core::cmp::max;
 use eyre::Result as EyreResult;
@@ -108,7 +108,7 @@ impl App {
         })
     }
 
-    pub async fn insert_identity(&self, commitment: &Hash) -> Result<Response<Body>, Error> {
+    pub async fn insert_identity(&self, commitment: &Hash) -> Result<Response<Body>, ServerError> {
         // Update merkle tree
         let leaf;
         {
@@ -131,7 +131,10 @@ impl App {
         )))
     }
 
-    pub async fn inclusion_proof(&self, identity_index: usize) -> Result<Response<Body>, Error> {
+    pub async fn inclusion_proof(
+        &self,
+        identity_index: usize,
+    ) -> Result<Response<Body>, ServerError> {
         let merkle_tree = self.merkle_tree.read().await;
         let proof = merkle_tree.proof(identity_index);
 
@@ -140,11 +143,7 @@ impl App {
                 serde_json::to_string_pretty(&proof).unwrap(),
             )));
         }
-
-        Ok(Response::builder()
-            .status(400)
-            .body(Body::from("Supplied identity index out of bounds"))
-            .unwrap())
+        Err(ServerError::IndexOutOfBounds)
     }
 
     pub async fn store(&self) -> EyreResult<()> {

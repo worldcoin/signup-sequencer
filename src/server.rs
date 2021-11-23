@@ -6,7 +6,7 @@ use hyper::{
     body::Buf,
     header,
     service::{make_service_fn, service_fn},
-    Body, Method, Request, Response, Server,
+    Body, Method, Request, Response, Server, StatusCode,
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
@@ -16,6 +16,7 @@ use std::{
     sync::Arc,
 };
 use structopt::StructOpt;
+use thiserror::Error;
 use tokio::sync::broadcast;
 use tracing::{error, info, trace};
 use url::{Host, Url};
@@ -54,41 +55,28 @@ pub struct InclusionProofRequest {
     identity_index: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
+    #[error("invalid method")]
     InvalidMethod,
+    #[error("invalid content type")]
     InvalidContentType,
+    #[error("provided identity index out of bounds")]
+    IndexOutOfBounds,
+    #[error("invalid serialization format")]
+    InvalidSerialization(#[from] serde_json::Error),
+    #[error(transparent)]
+    Hyper(#[from] hyper::Error),
+    #[error(transparent)]
+    Other(#[from] EyreError),
 }
 
-#[allow(clippy::fallible_impl_from)]
-impl From<serde_json::Error> for Error {
-    fn from(error: serde_json::Error) -> Self {
-        error!("Error in from serde_json::Error to Error: {:?}", error);
-        todo!()
-    }
-}
-
-#[allow(clippy::fallible_impl_from)]
-impl From<hyper::Error> for Error {
-    fn from(error: hyper::Error) -> Self {
-        error!("Error in from hyper::Error to Error: {:?}", error);
-        todo!()
-    }
-}
-
-#[allow(clippy::fallible_impl_from)]
-impl From<EyreError> for Error {
-    fn from(error: EyreError) -> Self {
-        error!("Error in from EyreError to Error: {:?}", error);
-        todo!()
-    }
-}
-
-#[allow(clippy::fallible_impl_from)]
-impl From<Error> for hyper::Error {
-    fn from(error: Error) -> Self {
-        error!("Error in from Error to hyper::Error: {:?}", error);
-        todo!()
+impl Error {
+    fn to_response(&self) -> hyper::Response<Body> {
+        hyper::Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(hyper::Body::from(self.to_string()))
+            .unwrap()
     }
 }
 
@@ -123,25 +111,26 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
     trace!(url = %request.uri(), "Receiving request");
 
     // Route requests
-    let response = match (request.method(), request.uri().path()) {
+    let result = match (request.method(), request.uri().path()) {
         (&Method::POST, "/inclusionProof") => {
             json_middleware(request, |request: InclusionProofRequest| {
                 let app = app.clone();
                 async move { app.inclusion_proof(request.identity_index).await }
             })
-            .await?
+            .await
         }
         (&Method::POST, "/insertIdentity") => {
             json_middleware(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
                 async move { app.insert_identity(&request.identity_commitment).await }
             })
-            .await?
+            .await
         }
-        _ => Response::builder()
-            .status(404)
-            .body(Body::from("404"))
-            .unwrap(),
+        _ => Err(Error::InvalidMethod),
+    };
+    let response = match result {
+        Ok(resp) => resp,
+        Err(err) => err.to_response(),
     };
 
     // Measure result and return

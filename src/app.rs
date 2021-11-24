@@ -109,6 +109,9 @@ impl App {
     }
 
     pub async fn insert_identity(&self, commitment: &Hash) -> Result<Response<Body>, ServerError> {
+        // Send Semaphore transaction
+        self.ethereum.insert_identity(commitment).await?;
+
         // Update merkle tree
         let leaf;
         {
@@ -119,9 +122,6 @@ impl App {
 
         // Write state file
         self.store().await?;
-
-        // Send Semaphore transaction
-        self.ethereum.insert_identity(commitment).await?;
 
         Ok(Response::new(Body::from(
             serde_json::to_string_pretty(&IndexResponse {

@@ -209,6 +209,7 @@ mod test {
 
     // TODO: Fix test
     // #[tokio::test]
+    #[allow(dead_code)]
     async fn test_inclusion_proof() {
         let options = crate::app::Options::from_iter_safe(&[""]).unwrap();
         let app = Arc::new(App::new(options).await.unwrap());

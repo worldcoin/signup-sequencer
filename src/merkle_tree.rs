@@ -9,10 +9,12 @@ use std::{
     iter::{once, repeat, successors},
 };
 
+use serde::Serialize;
+
 /// Hash types, values and algorithms for a Merkle tree
 pub trait Hasher {
     /// Type of the leaf and node hashes
-    type Hash: Clone + Eq;
+    type Hash: Clone + Eq + Serialize;
 
     /// Compute the hash of an intermediate node
     fn hash_node(left: &Self::Hash, right: &Self::Hash) -> Self::Hash;
@@ -32,7 +34,7 @@ pub struct MerkleTree<H: Hasher> {
 }
 
 /// Element of a Merkle proof
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Branch<H: Hasher> {
     /// Left branch taken, value is the right sibling hash.
     Left(H::Hash),
@@ -42,7 +44,7 @@ pub enum Branch<H: Hasher> {
 }
 
 /// Merkle proof path, bottom to top.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct Proof<H: Hasher>(pub Vec<Branch<H>>);
 
 /// For a given node index, return the parent node index
@@ -100,7 +102,6 @@ impl<H: Hasher> MerkleTree<H> {
             .unwrap_or_default()
     }
 
-    #[allow(dead_code)]
     pub fn root(&self) -> H::Hash {
         self.nodes[0].clone()
     }
@@ -133,7 +134,10 @@ impl<H: Hasher> MerkleTree<H> {
         }
     }
 
-    pub fn proof(&self, leaf: usize) -> Proof<H> {
+    pub fn proof(&self, leaf: usize) -> Option<Proof<H>> {
+        if leaf >= self.num_leaves() {
+            return None;
+        }
         let mut index = self.num_leaves() + leaf - 1;
         let mut path = Vec::with_capacity(self.depth);
         while let Some(parent) = parent(index) {
@@ -145,7 +149,7 @@ impl<H: Hasher> MerkleTree<H> {
             });
             index = parent;
         }
-        Proof(path)
+        Some(Proof(path))
     }
 
     #[allow(dead_code)]
@@ -155,10 +159,6 @@ impl<H: Hasher> MerkleTree<H> {
 
     pub fn leaves(&self) -> &[H::Hash] {
         &self.nodes[(self.num_leaves() - 1)..]
-    }
-
-    pub fn position(&self, leaf: &H::Hash) -> Option<usize> {
-        self.leaves().iter().position(|x| x == leaf)
     }
 }
 
@@ -300,7 +300,7 @@ pub mod test {
             hex!("0000000000000000000000000000000000000000000000000000000000000004"),
         );
 
-        let proof = tree.proof(2);
+        let proof = tree.proof(2).expect("proof should exist");
         assert_eq!(proof.leaf_index(), 2);
         assert!(tree.verify(
             hex!("0000000000000000000000000000000000000000000000000000000000000003"),
@@ -330,35 +330,6 @@ pub mod test {
         tree.set(
             3,
             hex!("0000000000000000000000000000000000000000000000000000000000000004"),
-        );
-
-        assert_eq!(
-            tree.position(&hex!(
-                "0000000000000000000000000000000000000000000000000000000000000001"
-            ))
-            .unwrap(),
-            0,
-        );
-        assert_eq!(
-            tree.position(&hex!(
-                "0000000000000000000000000000000000000000000000000000000000000002"
-            ))
-            .unwrap(),
-            1,
-        );
-        assert_eq!(
-            tree.position(&hex!(
-                "0000000000000000000000000000000000000000000000000000000000000003"
-            ))
-            .unwrap(),
-            2,
-        );
-        assert_eq!(
-            tree.position(&hex!(
-                "0000000000000000000000000000000000000000000000000000000000000004"
-            ))
-            .unwrap(),
-            3,
         );
     }
 }

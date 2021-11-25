@@ -3,6 +3,7 @@ use crate::{
     merkle_tree::{self, Hasher, MerkleTree},
     mimc_hash::hash,
 };
+use serde::Serialize;
 use zkp_u256::U256;
 
 pub type MimcTree = MerkleTree<MimcHash>;
@@ -11,7 +12,7 @@ pub type Branch = merkle_tree::Branch<MimcHash>;
 #[allow(dead_code)]
 pub type Proof = merkle_tree::Proof<MimcHash>;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct MimcHash;
 
 impl Hasher for MimcHash {
@@ -42,7 +43,7 @@ pub mod test {
                 "250de92bd4bcf4fb684fdf64923cb3b20ef4118b41c6ffb8c36b606468d6be57"
             ))
         );
-        let proof = tree.proof(3);
+        let proof = tree.proof(3).expect("proof should exist");
         assert_eq!(
             proof,
             crate::merkle_tree::Proof(vec![
@@ -96,7 +97,7 @@ pub mod bench {
     fn bench_verify(criterion: &mut Criterion) {
         let tree = MimcTree::new(DEPTH, LEAF);
         let index = 354_184;
-        let proof = tree.proof(index);
+        let proof = tree.proof(index).expect("proof should exist");
         let hash = Hash::from_bytes_be([0_u8; 32]);
         criterion.bench_function("mimc_verfiy", move |bencher| {
             bencher.iter(|| proof.root(black_box(hash)));

@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     path::PathBuf,
-    str::FromStr,
     sync::atomic::{AtomicUsize, Ordering},
 };
 use structopt::StructOpt;
@@ -47,20 +46,6 @@ pub struct Options {
         default_value = "1c4823575d154474ee3e5ac838d002456a815181437afd14f126da58a9912bbe"
     )]
     pub initial_leaf: Hash,
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            ethereum:     ethereum::Options::default(),
-            storage_file: PathBuf::from("commitments.json"),
-            tree_depth:   21,
-            initial_leaf: Hash::from_str(
-                "1c4823575d154474ee3e5ac838d002456a815181437afd14f126da58a9912bbe",
-            )
-            .unwrap(),
-        }
-    }
 }
 
 pub struct App {

@@ -128,10 +128,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
         }
         _ => Err(Error::InvalidMethod),
     };
-    let response = match result {
-        Ok(resp) => resp,
-        Err(err) => err.to_response(),
-    };
+    let response = result.unwrap_or_else(|err| err.to_response());
 
     // Measure result and return
     STATUS

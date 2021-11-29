@@ -4,11 +4,7 @@ use self::contract::{LeafInsertionFilter, Semaphore};
 use crate::hash::Hash;
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    middleware::{
-        gas_escalator::{Frequency, GasEscalatorMiddleware, GeometricGasPrice},
-        gas_oracle::{EthGasStation, GasOracleMiddleware},
-        NonceManagerMiddleware, SignerMiddleware,
-    },
+    middleware::{NonceManagerMiddleware, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
     types::Address,
@@ -26,7 +22,7 @@ pub struct Options {
     pub ethereum_provider: Url,
 
     /// Semaphore contract address.
-    #[structopt(long, env, default_value = "3F3D3369214C9DF92579304cf7331A05ca1ABd73")]
+    #[structopt(long, env, default_value = "0B9aB69DD852778C941e6FE3eaB302B162309B4E")]
     pub semaphore_address: Address,
 
     /// Private key used for transaction signing
@@ -43,10 +39,11 @@ pub struct Options {
 // Needed because of <https://github.com/gakonst/ethers-rs/issues/592>
 type Provider0 = Provider<Http>;
 type Provider1 = SignerMiddleware<Provider0, Wallet<SigningKey>>;
-type Provider2 = GasEscalatorMiddleware<Provider1, GeometricGasPrice>;
-type Provider3 = GasOracleMiddleware<Provider2, EthGasStation>;
-type Provider4 = NonceManagerMiddleware<Provider3>;
-type ProviderStack = Provider4;
+type Provider2 = NonceManagerMiddleware<Provider1>;
+type ProviderStack = Provider2;
+// type Provider2 = GasEscalatorMiddleware<Provider1, GeometricGasPrice>;
+// type Provider3 = GasOracleMiddleware<Provider2, EthGasStation>;
+// type Provider4 = NonceManagerMiddleware<Provider1>;
 
 pub struct Ethereum {
     provider:  Arc<ProviderStack>,
@@ -87,19 +84,19 @@ impl Ethereum {
             (provider, address)
         };
 
-        // Escalate gas prices
-        let provider = {
-            // TODO: Put bounds in place.
-            let escalator = GeometricGasPrice::new(1.125, 60u64, None::<u64>);
-            GasEscalatorMiddleware::new(provider, escalator, Frequency::PerBlock)
-        };
+        // // Escalate gas prices
+        // let provider = {
+        //     // TODO: Put bounds in place.
+        //     let escalator = GeometricGasPrice::new(1.125, 60u64, None::<u64>);
+        //     GasEscalatorMiddleware::new(provider, escalator, Frequency::PerBlock)
+        // };
 
-        // Use EthGasStation as the gas oracle
-        let provider = {
-            // TODO: Take Median of multiple sources and have security checks.
-            let gas_oracle = EthGasStation::new(None);
-            GasOracleMiddleware::new(provider, gas_oracle)
-        };
+        // // Use EthGasStation as the gas oracle
+        // let provider = {
+        //     // TODO: Take Median of multiple sources and have security checks.
+        //     let gas_oracle = EthGasStation::new(None);
+        //     GasOracleMiddleware::new(provider, gas_oracle)
+        // };
 
         // Manage nonces locally
         let provider = { NonceManagerMiddleware::new(provider, address) };

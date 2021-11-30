@@ -148,8 +148,12 @@ impl Ethereum {
         info!(%commitment, "Inserting identity in contract");
         let tx = self.semaphore.insert_identity(commitment.into());
         let pending_tx = self.provider.send_transaction(tx.tx, None).await.unwrap();
-        let _receipt = pending_tx.await.map_err(|e| eyre!(e))?;
-        // TODO: What does it mean if `_receipt` is None?
+        let receipt = pending_tx.await.map_err(|e| eyre!(e))?;
+        if receipt.is_none() {
+            // This should only happen if the tx is no longer in the mempool, meaning the tx
+            // was dropped.
+            return Err(eyre!("tx dropped from mempool"));
+        }
         Ok(())
     }
 }

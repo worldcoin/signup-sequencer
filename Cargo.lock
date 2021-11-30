@@ -3137,7 +3137,7 @@ checksum = "3eb7bda2e93bbc9c5b247034acc6a4b3d04f033a3d4b8fc1cb87d4d1c7c7ebd7"
 dependencies = [
  "lazy_static",
  "tracing-core",
- "tracing-subscriber 0.3.2",
+ "tracing-subscriber 0.3.3",
  "tracing-test-macro",
 ]
 

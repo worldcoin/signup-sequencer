@@ -1,0 +1,3 @@
+imageRegistry: "ghcr.io/worldcoin/signup-commander-rust"
+dockerTag: "latest"
+pullPolicy: "Always"

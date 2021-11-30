@@ -41,9 +41,6 @@ type Provider0 = Provider<Http>;
 type Provider1 = SignerMiddleware<Provider0, Wallet<SigningKey>>;
 type Provider2 = NonceManagerMiddleware<Provider1>;
 type ProviderStack = Provider2;
-// type Provider2 = GasEscalatorMiddleware<Provider1, GeometricGasPrice>;
-// type Provider3 = GasOracleMiddleware<Provider2, EthGasStation>;
-// type Provider4 = NonceManagerMiddleware<Provider1>;
 
 pub struct Ethereum {
     provider:  Arc<ProviderStack>,
@@ -84,19 +81,7 @@ impl Ethereum {
             (provider, address)
         };
 
-        // // Escalate gas prices
-        // let provider = {
-        //     // TODO: Put bounds in place.
-        //     let escalator = GeometricGasPrice::new(1.125, 60u64, None::<u64>);
-        //     GasEscalatorMiddleware::new(provider, escalator, Frequency::PerBlock)
-        // };
-
-        // // Use EthGasStation as the gas oracle
-        // let provider = {
-        //     // TODO: Take Median of multiple sources and have security checks.
-        //     let gas_oracle = EthGasStation::new(None);
-        //     GasOracleMiddleware::new(provider, gas_oracle)
-        // };
+        // TODO: Integrate gas price oracle to not rely on node's `eth_gasPrice`
 
         // Manage nonces locally
         let provider = { NonceManagerMiddleware::new(provider, address) };

@@ -55,11 +55,6 @@ pub struct InclusionProofRequest {
     identity_index: usize,
 }
 
-#[derive(Serialize)]
-struct IndexResponse {
-    identity_index: usize,
-}
-
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("invalid method")]
@@ -109,6 +104,13 @@ where
     next(value).await
 }
 
+fn convert_data_to_response<T: Serialize>(data: Result<T, Error>) -> Response<Body> {
+    match data {
+        Ok(data) => Response::new(Body::from(serde_json::to_string_pretty(&data).unwrap())),
+        Err(e) => e.to_response(),
+    }
+}
+
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
@@ -117,35 +119,20 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
 
     // Route requests
     let response = match (request.method(), request.uri().path()) {
-        (&Method::POST, "/inclusionProof") => {
-            let response = json_middleware(request, |request: InclusionProofRequest| {
+        (&Method::POST, "/inclusionProof") => convert_data_to_response(
+            json_middleware(request, |request: InclusionProofRequest| {
                 let app = app.clone();
                 async move { app.inclusion_proof(request.identity_index).await }
             })
-            .await;
-            match response {
-                Ok(proof) => {
-                    Response::new(Body::from(serde_json::to_string_pretty(&proof).unwrap()))
-                }
-                Err(e) => e.to_response(),
-            }
-        }
-        (&Method::POST, "/insertIdentity") => {
-            let response = json_middleware(request, |request: InsertCommitmentRequest| {
+            .await,
+        ),
+        (&Method::POST, "/insertIdentity") => convert_data_to_response(
+            json_middleware(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
                 async move { app.insert_identity(&request.identity_commitment).await }
             })
-            .await;
-            match response {
-                Ok(leaf_index) => Response::new(Body::from(
-                    serde_json::to_string_pretty(&IndexResponse {
-                        identity_index: leaf_index,
-                    })
-                    .unwrap(),
-                )),
-                Err(e) => e.to_response(),
-            }
-        }
+            .await,
+        ),
         _ => Error::InvalidMethod.to_response(),
     };
 

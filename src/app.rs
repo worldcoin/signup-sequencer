@@ -23,6 +23,11 @@ pub struct JsonCommitment {
     pub commitments: Vec<Hash>,
 }
 
+#[derive(Serialize)]
+pub struct IndexResponse {
+    identity_index: usize,
+}
+
 #[derive(Debug, PartialEq, StructOpt)]
 pub struct Options {
     #[structopt(flatten)]
@@ -87,22 +92,22 @@ impl App {
         })
     }
 
-    pub async fn insert_identity(&self, commitment: &Hash) -> Result<usize, ServerError> {
+    pub async fn insert_identity(&self, commitment: &Hash) -> Result<IndexResponse, ServerError> {
         // Send Semaphore transaction
         self.ethereum.insert_identity(commitment).await?;
 
         // Update merkle tree
-        let leaf;
+        let identity_index;
         {
             let mut merkle_tree = self.merkle_tree.write().await;
-            leaf = self.next_leaf.fetch_add(1, Ordering::AcqRel);
-            merkle_tree.set(leaf, *commitment);
+            identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
+            merkle_tree.set(identity_index, *commitment);
         }
 
         // Write state file
         self.store().await?;
 
-        Ok(leaf)
+        Ok(IndexResponse { identity_index })
     }
 
     pub async fn inclusion_proof(&self, identity_index: usize) -> Result<Proof, ServerError> {

@@ -1,12 +1,11 @@
 use crate::{
     ethereum::{self, Ethereum},
     hash::Hash,
-    mimc_tree::MimcTree,
+    mimc_tree::{MimcTree, Proof},
     server::Error as ServerError,
 };
 use core::cmp::max;
 use eyre::Result as EyreResult;
-use hyper::{Body, Response};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
@@ -55,11 +54,6 @@ pub struct App {
     next_leaf:    AtomicUsize,
 }
 
-#[derive(Serialize)]
-struct IndexResponse {
-    identity_index: usize,
-}
-
 impl App {
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
@@ -93,7 +87,7 @@ impl App {
         })
     }
 
-    pub async fn insert_identity(&self, commitment: &Hash) -> Result<Response<Body>, ServerError> {
+    pub async fn insert_identity(&self, commitment: &Hash) -> Result<usize, ServerError> {
         // Send Semaphore transaction
         self.ethereum.insert_identity(commitment).await?;
 
@@ -108,25 +102,15 @@ impl App {
         // Write state file
         self.store().await?;
 
-        Ok(Response::new(Body::from(
-            serde_json::to_string_pretty(&IndexResponse {
-                identity_index: leaf,
-            })
-            .unwrap(),
-        )))
+        Ok(leaf)
     }
 
-    pub async fn inclusion_proof(
-        &self,
-        identity_index: usize,
-    ) -> Result<Response<Body>, ServerError> {
+    pub async fn inclusion_proof(&self, identity_index: usize) -> Result<Proof, ServerError> {
         let merkle_tree = self.merkle_tree.read().await;
         let proof = merkle_tree.proof(identity_index);
 
         if let Some(proof) = proof {
-            return Ok(Response::new(Body::from(
-                serde_json::to_string_pretty(&proof).unwrap(),
-            )));
+            return Ok(proof);
         }
         Err(ServerError::IndexOutOfBounds)
     }

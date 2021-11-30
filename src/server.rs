@@ -55,6 +55,11 @@ pub struct InclusionProofRequest {
     identity_index: usize,
 }
 
+#[derive(Serialize)]
+struct IndexResponse {
+    identity_index: usize,
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("invalid method")]
@@ -111,24 +116,38 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
     trace!(url = %request.uri(), "Receiving request");
 
     // Route requests
-    let result = match (request.method(), request.uri().path()) {
+    let response = match (request.method(), request.uri().path()) {
         (&Method::POST, "/inclusionProof") => {
-            json_middleware(request, |request: InclusionProofRequest| {
+            let response = json_middleware(request, |request: InclusionProofRequest| {
                 let app = app.clone();
                 async move { app.inclusion_proof(request.identity_index).await }
             })
-            .await
+            .await;
+            match response {
+                Ok(proof) => {
+                    Response::new(Body::from(serde_json::to_string_pretty(&proof).unwrap()))
+                }
+                Err(e) => e.to_response(),
+            }
         }
         (&Method::POST, "/insertIdentity") => {
-            json_middleware(request, |request: InsertCommitmentRequest| {
+            let response = json_middleware(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
                 async move { app.insert_identity(&request.identity_commitment).await }
             })
-            .await
+            .await;
+            match response {
+                Ok(leaf_index) => Response::new(Body::from(
+                    serde_json::to_string_pretty(&IndexResponse {
+                        identity_index: leaf_index,
+                    })
+                    .unwrap(),
+                )),
+                Err(e) => e.to_response(),
+            }
         }
-        _ => Err(Error::InvalidMethod),
+        _ => Error::InvalidMethod.to_response(),
     };
-    let response = result.unwrap_or_else(|err| err.to_response());
 
     // Measure result and return
     STATUS

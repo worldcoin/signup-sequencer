@@ -22,7 +22,7 @@ pub struct Options {
     pub ethereum_provider: Url,
 
     /// Semaphore contract address.
-    #[structopt(long, env, default_value = "0B9aB69DD852778C941e6FE3eaB302B162309B4E")]
+    #[structopt(long, env, default_value = "3F3D3369214C9DF92579304cf7331A05ca1ABd73")]
     pub semaphore_address: Address,
 
     /// Private key used for transaction signing

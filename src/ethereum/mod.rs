@@ -4,11 +4,7 @@ use self::contract::{LeafInsertionFilter, Semaphore};
 use crate::hash::Hash;
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    middleware::{
-        gas_escalator::{Frequency, GasEscalatorMiddleware, GeometricGasPrice},
-        gas_oracle::{EthGasStation, GasOracleMiddleware},
-        NonceManagerMiddleware, SignerMiddleware,
-    },
+    middleware::{NonceManagerMiddleware, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
     types::Address,
@@ -43,10 +39,8 @@ pub struct Options {
 // Needed because of <https://github.com/gakonst/ethers-rs/issues/592>
 type Provider0 = Provider<Http>;
 type Provider1 = SignerMiddleware<Provider0, Wallet<SigningKey>>;
-type Provider2 = GasEscalatorMiddleware<Provider1, GeometricGasPrice>;
-type Provider3 = GasOracleMiddleware<Provider2, EthGasStation>;
-type Provider4 = NonceManagerMiddleware<Provider3>;
-type ProviderStack = Provider4;
+type Provider2 = NonceManagerMiddleware<Provider1>;
+type ProviderStack = Provider2;
 
 pub struct Ethereum {
     provider:  Arc<ProviderStack>,
@@ -87,19 +81,7 @@ impl Ethereum {
             (provider, address)
         };
 
-        // Escalate gas prices
-        let provider = {
-            // TODO: Put bounds in place.
-            let escalator = GeometricGasPrice::new(1.125, 60u64, None::<u64>);
-            GasEscalatorMiddleware::new(provider, escalator, Frequency::PerBlock)
-        };
-
-        // Use EthGasStation as the gas oracle
-        let provider = {
-            // TODO: Take Median of multiple sources and have security checks.
-            let gas_oracle = EthGasStation::new(None);
-            GasOracleMiddleware::new(provider, gas_oracle)
-        };
+        // TODO: Integrate gas price oracle to not rely on node's `eth_gasPrice`
 
         // Manage nonces locally
         let provider = { NonceManagerMiddleware::new(provider, address) };
@@ -148,8 +130,12 @@ impl Ethereum {
         info!(%commitment, "Inserting identity in contract");
         let tx = self.semaphore.insert_identity(commitment.into());
         let pending_tx = self.provider.send_transaction(tx.tx, None).await.unwrap();
-        let _receipt = pending_tx.await.map_err(|e| eyre!(e))?;
-        // TODO: What does it mean if `_receipt` is None?
+        let receipt = pending_tx.await.map_err(|e| eyre!(e))?;
+        if receipt.is_none() {
+            // This should only happen if the tx is no longer in the mempool, meaning the tx
+            // was dropped.
+            return Err(eyre!("tx dropped from mempool"));
+        }
         Ok(())
     }
 }

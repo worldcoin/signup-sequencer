@@ -114,10 +114,7 @@ impl App {
         let merkle_tree = self.merkle_tree.read().await;
         let proof = merkle_tree.proof(identity_index);
 
-        if let Some(proof) = proof {
-            return Ok(proof);
-        }
-        Err(ServerError::IndexOutOfBounds)
+        proof.ok_or(ServerError::IndexOutOfBounds)
     }
 
     pub async fn store(&self) -> EyreResult<()> {

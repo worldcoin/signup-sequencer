@@ -82,16 +82,16 @@ impl Error {
 
 /// Parse a [`Request<Body>`] as JSON using Serde and handle using the provided
 /// method.
-async fn json_middleware<F, T, S, U>(request: Request<Body>, mut next: F) -> Result<U, Error>
+async fn json_middleware<F, T, S, U>(
+    request: Request<Body>,
+    mut next: F,
+) -> Result<Response<Body>, Error>
 where
     T: DeserializeOwned + Send,
     F: FnMut(T) -> S + Send,
     S: Future<Output = Result<U, Error>> + Send,
+    U: Serialize,
 {
-    // TODO seems unnecessary as the handler passing this here already qualifies the
-    // method if request.method() != Method::POST {
-    //     return Err(Error::InvalidMethod);
-    // }
     let valid_content_type = request
         .headers()
         .get(header::CONTENT_TYPE)
@@ -101,13 +101,12 @@ where
     }
     let body = hyper::body::aggregate(request).await?;
     let value = serde_json::from_reader(body.reader())?;
-    next(value).await
-}
-
-fn convert_data_to_response<T: Serialize>(data: Result<T, Error>) -> Response<Body> {
-    match data {
-        Ok(data) => Response::new(Body::from(serde_json::to_string_pretty(&data).unwrap())),
-        Err(e) => e.to_response(),
+    let result = next(value).await;
+    match result {
+        Ok(data) => Ok(Response::new(Body::from(serde_json::to_string_pretty(
+            &data,
+        )?))),
+        Err(e) => Err(e),
     }
 }
 
@@ -118,23 +117,24 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
     trace!(url = %request.uri(), "Receiving request");
 
     // Route requests
-    let response = match (request.method(), request.uri().path()) {
-        (&Method::POST, "/inclusionProof") => convert_data_to_response(
+    let result = match (request.method(), request.uri().path()) {
+        (&Method::POST, "/inclusionProof") => {
             json_middleware(request, |request: InclusionProofRequest| {
                 let app = app.clone();
                 async move { app.inclusion_proof(request.identity_index).await }
             })
-            .await,
-        ),
-        (&Method::POST, "/insertIdentity") => convert_data_to_response(
+            .await
+        }
+        (&Method::POST, "/insertIdentity") => {
             json_middleware(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
                 async move { app.insert_identity(&request.identity_commitment).await }
             })
-            .await,
-        ),
-        _ => Error::InvalidMethod.to_response(),
+            .await
+        }
+        _ => Err(Error::InvalidMethod),
     };
+    let response = result.unwrap_or_else(|err| err.to_response());
 
     // Measure result and return
     STATUS

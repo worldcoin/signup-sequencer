@@ -98,6 +98,14 @@ jobs:
         with:
           command: test
           args: --locked --all-features --all-targets --no-fail-fast
+      - name: Doc test with coverage
+        env:
+          RUSTFLAGS: -Zinstrument-coverage
+          LLVM_PROFILE_FILE: profile-%m.profraw
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --locked --all-features --doc --no-fail-fast
       - name: Creating coverage report
         env:
           RUSTFLAGS: -Zinstrument-coverage

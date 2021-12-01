@@ -1,0 +1,41 @@
+name: Set up Rust with caching
+description: Set up a rust development environment 
+
+inputs:
+  version:
+    description: Rust version to use
+    required: false
+    default: nightly-2021-11-30
+  components:
+    description: Rust components to install
+    required: false
+
+outputs:
+  rustc_hash:
+    description: Rust version hash
+    value: ${{ steps.rust.outputs.rustc_hash }}
+  cache_hit:
+    description: Build cache hit
+    value: ${{ steps.cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+      - id: rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ inputs.version }}
+          override: true
+          components: ${{ inputs.components }}
+      - id: cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: >-
+            ${{ runner.os }}
+            ${{ steps.rust.outputs.rustc_hash }}
+            ${{ github.job }}
+            ${{ hashFiles('**/Cargo.lock') }}

@@ -1,3 +1,29 @@
-imageRegistry: "ghcr.io/worldcoin/signup-commander-rust"
-dockerTag: "latest"
-pullPolicy: "Always"
+image:
+  image: "ghcr.io/worldcoin/signup-commander-rust"
+  arch: amd64 # Also supports arch64
+  pullSecrets:
+
+environment: prod
+replicas: 1
+region: "us-east-1"
+
+canary:
+  enabled: false
+
+resources:
+  cpuReq: 2
+  cpuLimit: 2
+  memReq: 8Gi
+  memLimit: 8Gi
+
+resources:
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+env:
+  - name: ETHEREUM_PROVIDER
+    value: "http://localhost:8545"

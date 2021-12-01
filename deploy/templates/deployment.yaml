@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mychart.fullname" . }}
+  annotations:
+  labels:
+    {{- include "mychart.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      name: {{ include "mychart.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "mychart.fullname" . }}
+      annotations:
+        prometheus.io/scrape: true
+        prometheus.io/port: 9998
+        prometheus.io/path: "/metrics"
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecrets }}
+      nodeSelector:
+        beta.kubernetes.io/arch: {{ .Values.image.arch }}
+      containers:
+        - name: app
+          image: {{ .Values.image.image }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: LOG_FORMAT
+              value: json
+            {{- toYaml .Values.env | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            capabilities:
+              drop:
+                - all
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            runAsUser: 1000
+            runAsGroup: 1000
+          livenessProbe:
+            httpGet:
+              path: /ready
+              scheme: HTTP
+              port: 8080
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /ready
+              scheme: HTTP
+              port: 8080
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 2

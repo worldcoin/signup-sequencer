@@ -15,8 +15,8 @@ spec:
       labels:
         app: {{ include "mychart.fullname" . }}
       annotations:
-        prometheus.io/scrape: true
-        prometheus.io/port: 9998
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9998"
         prometheus.io/path: "/metrics"
     spec:
       imagePullSecrets:

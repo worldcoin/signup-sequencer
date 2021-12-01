@@ -166,7 +166,11 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-v3
+          key: >-
+            ${{ runner.os }}
+            ${{ steps.rust.outputs.rustc_hash }}
+            ${{ github.job }}
+            ${{ hashFiles('**/Cargo.lock') }}
       - name: Install rustfilt and cargo-binutils
         if: steps.cache.outputs.cache-hit != 'true'
         run: |

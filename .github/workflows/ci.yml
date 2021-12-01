@@ -18,10 +18,11 @@ jobs:
         uses: actions/checkout@v2
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
-      - uses: actions-rs/cargo@v1
+      - name: Build and run release mode
+        uses: actions-rs/cargo@v1
         with:
-          command: build
-          args: --locked --all-features --all-targets --release
+          command: run
+          args: --locked --all-features --release -- --version
 
   test:
     name: Test

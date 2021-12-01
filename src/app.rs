@@ -28,7 +28,7 @@ pub struct IndexResponse {
     identity_index: usize,
 }
 
-#[derive(Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     #[structopt(flatten)]
     pub ethereum: ethereum::Options,

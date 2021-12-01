@@ -6,7 +6,7 @@ mod ethereum;
 mod hash;
 mod merkle_tree;
 mod mimc_hash;
-mod mimc_tree;
+pub mod mimc_tree;
 pub mod server;
 mod utils;
 
@@ -17,7 +17,7 @@ use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::info;
 
-#[derive(Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     #[structopt(flatten)]
     pub app: app::Options,

@@ -23,12 +23,8 @@ env:
   - name: ETHEREUM_PROVIDER
     value: "http://localhost:8545"
 
+# Spec ingress policy for the `api` and `metrics` port.
+# Values are a list of NetworkPolicyPeer v1 objects, empty means allow all.
 ingress:
   api:
-    - {} # Allow all
   metrics:
-    - {} # Allow all
-
-egress:
-  allow_dns: true
-  

@@ -148,7 +148,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
   
   helm:
-    name: Test Helm chart
+    name: Test deployment
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -164,6 +164,4 @@ jobs:
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
       - name: Test install deploy
-        run: |
-          kubectl create namespace deploy-test
-          helm install deploy-test deploy --namespace deploy-test --wait
+        run: helm install deploy -g --atomic

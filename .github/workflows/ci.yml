@@ -59,6 +59,8 @@ jobs:
         uses: actions/checkout@v2
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt
       - name: Check formatting
         uses: actions-rs/cargo@v1
         with:
@@ -73,6 +75,8 @@ jobs:
         uses: actions/checkout@v2
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          components: clippy
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -88,6 +92,8 @@ jobs:
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
         id: setup_rust
+        with:
+          components: llvm-tools-preview
       - name: Install rustfilt and cargo-binutils
         if: steps.setup_rust.outputs.cache_hit != 'true'
         run: |

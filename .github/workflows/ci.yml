@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 env:
-  RUST_NIGHTLY: 2020-11-30
+  RUST_NIGHTLY: 2021-11-30
   CARGO_TERM_COLOR: always
 
 jobs:

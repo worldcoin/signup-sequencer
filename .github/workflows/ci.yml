@@ -36,20 +36,11 @@ jobs:
         with:
           command: test
           args: --locked --all-features --all-targets
-
-  bench:
-    name: Test benchmarks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-      - name: Build and test benchmarks
+      - name: Build and run doc tests
         uses: actions-rs/cargo@v1
         with:
-          command: bench
-          args: --locked --bench criterion --features bench -- --test
+          command: test
+          args: --locked --all-features --doc
 
   rustfmt:
     name: Rustfmt

@@ -16,18 +16,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
       - uses: actions-rs/cargo@v1
         with:
           command: build
@@ -39,18 +29,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-v2
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
       - name: Build and run tests
         uses: actions-rs/cargo@v1
         with:
@@ -63,18 +43,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
       - name: Build and test benchmarks
         uses: actions-rs/cargo@v1
         with:
@@ -87,11 +57,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
         with:
-          toolchain: nightly
-          override: true
           components: rustfmt
       - name: Check formatting
         uses: actions-rs/cargo@v1
@@ -105,19 +73,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
         with:
-          toolchain: nightly
-          override: true
           components: clippy
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -130,23 +89,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        id: setup_rust
         with:
-          toolchain: nightly
           components: llvm-tools-preview
-          override: true
-      - uses: actions/cache@v2
-        id: cache
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-            target
-          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-v3
       - name: Install rustfilt and cargo-binutils
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.setup_rust.outputs.cache_hit != 'true'
         run: |
           cargo install rustfilt cargo-binutils
       - name: Test with coverage

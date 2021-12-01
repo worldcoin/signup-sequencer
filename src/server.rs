@@ -82,16 +82,16 @@ impl Error {
 
 /// Parse a [`Request<Body>`] as JSON using Serde and handle using the provided
 /// method.
-async fn json_middleware<F, T, S, U>(request: Request<Body>, mut next: F) -> Result<U, Error>
+async fn json_middleware<F, T, S, U>(
+    request: Request<Body>,
+    mut next: F,
+) -> Result<Response<Body>, Error>
 where
     T: DeserializeOwned + Send,
     F: FnMut(T) -> S + Send,
     S: Future<Output = Result<U, Error>> + Send,
+    U: Serialize,
 {
-    // TODO seems unnecessary as the handler passing this here already qualifies the
-    // method if request.method() != Method::POST {
-    //     return Err(Error::InvalidMethod);
-    // }
     let valid_content_type = request
         .headers()
         .get(header::CONTENT_TYPE)
@@ -100,8 +100,10 @@ where
         return Err(Error::InvalidContentType);
     }
     let body = hyper::body::aggregate(request).await?;
-    let value = serde_json::from_reader(body.reader())?;
-    next(value).await
+    let request = serde_json::from_reader(body.reader())?;
+    let response = next(request).await?;
+    let json = serde_json::to_string_pretty(&response)?;
+    Ok(Response::new(Body::from(json)))
 }
 
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {

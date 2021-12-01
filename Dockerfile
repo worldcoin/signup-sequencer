@@ -87,7 +87,7 @@ RUN update-ca-certificates --verbose
 FROM scratch
 
 # Drop priviliges
-USER 1000:1000
+USER 10001:10001
 
 # Configure SSL CA certificates
 # TODO: --chmod=040

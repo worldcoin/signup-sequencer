@@ -16,7 +16,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - uses: ./.github/actions/setup-rust
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
       - uses: actions-rs/cargo@v1
         with:
           command: build
@@ -28,7 +29,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - uses: ./.github/actions/setup-rust
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
       - name: Build and run tests
         uses: actions-rs/cargo@v1
         with:
@@ -41,7 +43,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - uses: ./.github/actions/setup-rust
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
       - name: Build and test benchmarks
         uses: actions-rs/cargo@v1
         with:
@@ -54,7 +57,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - uses: ./.github/actions/setup-rust
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
       - name: Check formatting
         uses: actions-rs/cargo@v1
         with:
@@ -67,7 +71,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - uses: ./.github/actions/setup-rust
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -80,7 +85,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - uses: ./.github/actions/setup-rust
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
         id: setup_rust
       - name: Install rustfilt and cargo-binutils
         if: steps.setup_rust.outputs.cache_hit != 'true'

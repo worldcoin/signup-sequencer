@@ -4,6 +4,7 @@ description: Set up a rust development environment
 inputs:
   version:
     description: Rust version to use
+    required: false
     default: nightly-2021-11-30
 
 outputs:
@@ -21,7 +22,7 @@ runs:
         name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-${{ env.RUST_NIGHTLY }}
+          toolchain: ${{ inputs.version }}
           override: true
       - id: cache
         name: Cache build

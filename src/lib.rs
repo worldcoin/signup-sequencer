@@ -1,13 +1,13 @@
 #![doc = include_str!("../Readme.md")]
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
-mod app;
+pub mod app;
 mod ethereum;
 mod hash;
 mod merkle_tree;
 mod mimc_hash;
 mod mimc_tree;
-mod server;
+pub mod server;
 mod utils;
 
 use crate::{app::App, utils::spawn_or_abort};
@@ -20,10 +20,10 @@ use tracing::info;
 #[derive(Debug, PartialEq, StructOpt)]
 pub struct Options {
     #[structopt(flatten)]
-    app: app::Options,
+    pub app: app::Options,
 
     #[structopt(flatten)]
-    server: server::Options,
+    pub server: server::Options,
 }
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]

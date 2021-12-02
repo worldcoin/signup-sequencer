@@ -76,7 +76,7 @@ impl Error {
         hyper::Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(hyper::Body::from(self.to_string()))
-            .unwrap()
+            .expect("Failed to convert error string into hyper::Body")
     }
 }
 

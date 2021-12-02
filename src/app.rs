@@ -60,6 +60,10 @@ pub struct App {
 }
 
 impl App {
+    /// # Errors
+    ///
+    /// Will return `Err` if the internal Ethereum handler errors or if the
+    /// `options.storage_file` is not accessible.
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let mut merkle_tree = MimcTree::new(options.tree_depth, options.initial_leaf);
@@ -92,6 +96,10 @@ impl App {
         })
     }
 
+    /// # Errors
+    ///
+    /// Will return `Err` if the Eth handler cannot insert the identity to the
+    /// contract, or if writing to the storage file fails.
     pub async fn insert_identity(&self, commitment: &Hash) -> Result<IndexResponse, ServerError> {
         // Send Semaphore transaction
         self.ethereum.insert_identity(commitment).await?;
@@ -110,6 +118,9 @@ impl App {
         Ok(IndexResponse { identity_index })
     }
 
+    /// # Errors
+    ///
+    /// Will return `Err` if the provided index is out of bounds.
     pub async fn inclusion_proof(&self, identity_index: usize) -> Result<Proof, ServerError> {
         let merkle_tree = self.merkle_tree.read().await;
         let proof = merkle_tree.proof(identity_index);
@@ -117,7 +128,7 @@ impl App {
         proof.ok_or(ServerError::IndexOutOfBounds)
     }
 
-    pub async fn store(&self) -> EyreResult<()> {
+    async fn store(&self) -> EyreResult<()> {
         let file = File::create(&self.storage_file)?;
         let last_block = self.ethereum.last_block().await?;
         let next_leaf = self.next_leaf.load(Ordering::Acquire);

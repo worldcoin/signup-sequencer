@@ -139,6 +139,11 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
     Ok(response)
 }
 
+/// # Errors
+///
+/// Will return `Err` if `options.server` URI is not http, incorrectly includes
+/// a path beyond `/`, or cannot be cast into an IP address. Also returns an
+/// `Err` if the server cannot bind to the given address.
 pub async fn main(
     app: Arc<App>,
     options: Options,
@@ -163,13 +168,17 @@ pub async fn main(
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
-    let listener = TcpListener::bind(&addr).expect("Failed to bind random port");
+    let listener = TcpListener::bind(&addr)?;
 
     bind_from_listener(app, listener, shutdown).await?;
 
     Ok(())
 }
 
+/// # Errors
+///
+/// Will return `Err` if the provided `listener` address cannot be accessed or
+/// if the server fails to bind to the given address.
 pub async fn bind_from_listener(
     app: Arc<App>,
     listener: TcpListener,

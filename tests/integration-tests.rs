@@ -1,22 +1,32 @@
+use eyre::{bail, Result as EyreResult};
 use hyper::{Body, Client, Request};
 use rust_app_template::{app::App, mimc_tree::MimcTree, server, Options};
 use serde_json::json;
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
+    path::PathBuf,
+    sync::Arc,
+};
 use structopt::StructOpt;
 use tokio::{spawn, sync::broadcast};
+use url::{Host, Url};
 
 #[tokio::test]
 async fn insert_identity_works() {
     let mut options = Options::from_iter_safe(&[""]).unwrap();
+    options.server.server = Url::parse("http://127.0.0.1:0/").unwrap();
     // TODO delete file before test? how to manage path?
     options.app.storage_file = PathBuf::from("tests/commitments.json");
-    spawn_app(options.clone()).await;
-    let port = options.server.server.port().unwrap().to_string();
+    let local_addr = spawn_app(options.clone())
+        .await
+        .expect("Failed to spawn app.");
+    let uri = "http://".to_owned() + &local_addr.to_string();
+
     let client = Client::new();
     let body = construct_inclusion_proof_body(0);
     let req = Request::builder()
         .method("POST")
-        .uri("http://localhost:".to_owned() + &port + "/inclusionProof")
+        .uri(uri + "/inclusionProof")
         .header("Content-Type", "application/json")
         .body(body)
         .unwrap();
@@ -46,16 +56,28 @@ fn construct_inclusion_proof_body(identity_index: usize) -> Body {
     )
 }
 
-async fn spawn_app(options: Options) -> url::Url {
+async fn spawn_app(options: Options) -> EyreResult<SocketAddr> {
     let app = Arc::new(App::new(options.app).await.expect("Failed to create App"));
-    let server = options.server.server.clone();
+
+    let ip: IpAddr = match options.server.server.host() {
+        Some(Host::Ipv4(ip)) => ip.into(),
+        Some(Host::Ipv6(ip)) => ip.into(),
+        Some(_) => bail!("Cannot bind {}", options.server.server),
+        None => Ipv4Addr::LOCALHOST.into(),
+    };
+    let port = options.server.server.port().unwrap_or(9998);
+    let addr = SocketAddr::new(ip, port);
+    let listener = TcpListener::bind(&addr).expect("Failed to bind random port");
+    let local_addr = listener.local_addr()?;
+
     spawn({
         let (shutdown, _) = broadcast::channel(1);
         async move {
-            server::main(app, options.server, shutdown)
+            server::bind_from_listener(app, listener, shutdown)
                 .await
-                .expect("Start");
+                .expect("Failed to bind address");
         }
     });
-    server
+
+    Ok(local_addr)
 }

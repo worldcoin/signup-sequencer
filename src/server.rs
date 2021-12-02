@@ -100,14 +100,10 @@ where
         return Err(Error::InvalidContentType);
     }
     let body = hyper::body::aggregate(request).await?;
-    let value = serde_json::from_reader(body.reader())?;
-    let result = next(value).await;
-    match result {
-        Ok(data) => Ok(Response::new(Body::from(serde_json::to_string_pretty(
-            &data,
-        )?))),
-        Err(e) => Err(e),
-    }
+    let request = serde_json::from_reader(body.reader())?;
+    let response = next(request).await?;
+    let json = serde_json::to_string_pretty(&response)?;
+    Ok(Response::new(Body::from(json)))
 }
 
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {

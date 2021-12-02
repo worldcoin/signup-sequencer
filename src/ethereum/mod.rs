@@ -129,7 +129,7 @@ impl Ethereum {
     pub async fn insert_identity(&self, commitment: &Hash) -> EyreResult<()> {
         info!(%commitment, "Inserting identity in contract");
         let tx = self.semaphore.insert_identity(commitment.into());
-        let pending_tx = self.provider.send_transaction(tx.tx, None).await.unwrap();
+        let pending_tx = self.provider.send_transaction(tx.tx, None).await?;
         let receipt = pending_tx.await.map_err(|e| eyre!(e))?;
         if receipt.is_none() {
             // This should only happen if the tx is no longer in the mempool, meaning the tx

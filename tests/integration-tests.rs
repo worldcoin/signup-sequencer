@@ -1,5 +1,4 @@
 use eyre::{bail, Result as EyreResult};
-use hex_literal::hex;
 use hyper::{client::HttpConnector, Body, Client, Request};
 use rust_app_template::{
     app::App,
@@ -11,19 +10,29 @@ use rust_app_template::{
 use serde_json::json;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    path::PathBuf,
-    sync::Arc,
+    path::{PathBuf, Path},
+    sync::Arc, fs, str::FromStr,
 };
 use structopt::StructOpt;
 use tokio::{spawn, sync::broadcast};
 use url::{Host, Url};
+
+const TEST_COMMITMENTS_PATH: &str = "tests/commitments.json";
+const TEST_LEAFS: &'static [&'static str] = &[
+    "0000000000000000000000000000000000000000000000000000000000000001",
+    "0000000000000000000000000000000000000000000000000000000000000002",
+];
+
 
 #[tokio::test]
 async fn insert_identity_and_proofs() {
     let mut options = Options::from_iter_safe(&[""]).unwrap();
     options.server.server = Url::parse("http://127.0.0.1:0/").unwrap();
     // TODO delete file before test? how to manage path?
-    options.app.storage_file = PathBuf::from("tests/commitments.json");
+    if Path::new(TEST_COMMITMENTS_PATH).exists() {
+        fs::remove_file(TEST_COMMITMENTS_PATH).unwrap();
+    }
+    options.app.storage_file = PathBuf::from(TEST_COMMITMENTS_PATH);
     let local_addr = spawn_app(options.clone())
         .await
         .expect("Failed to spawn app.");
@@ -36,7 +45,7 @@ async fn insert_identity_and_proofs() {
     test_insert_identity(
         &uri,
         &client,
-        "0000000000000000000000000000000000000000000000000000000000000001",
+        TEST_LEAFS[0],
         0,
     )
     .await;
@@ -45,15 +54,15 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash(hex!(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        )),
+        &Hash::from_str(
+            TEST_LEAFS[0]
+        ).unwrap(),
     )
     .await;
     test_insert_identity(
         &uri,
         &client,
-        "0000000000000000000000000000000000000000000000000000000000000002",
+        TEST_LEAFS[1],
         1,
     )
     .await;
@@ -62,12 +71,14 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash(hex!(
-            "0000000000000000000000000000000000000000000000000000000000000002"
-        )),
+        &Hash::from_str(
+            TEST_LEAFS[1]
+        ).unwrap(),
     )
     .await;
     test_inclusion_proof(&uri, &client, 2, &mut ref_tree, &options.app.initial_leaf).await;
+
+    fs::remove_file(TEST_COMMITMENTS_PATH).unwrap();
 }
 
 async fn test_inclusion_proof(

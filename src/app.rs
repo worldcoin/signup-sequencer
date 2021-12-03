@@ -24,6 +24,7 @@ pub struct JsonCommitment {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IndexResponse {
     identity_index: usize,
 }

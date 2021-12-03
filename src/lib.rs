@@ -3,7 +3,7 @@
 
 pub mod app;
 mod ethereum;
-mod hash;
+pub mod hash;
 mod merkle_tree;
 mod mimc_hash;
 pub mod mimc_tree;

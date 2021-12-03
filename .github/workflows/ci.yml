@@ -188,7 +188,7 @@ jobs:
           # Bump buildkit version because we need PR 2433 to fix a bug
           # in Github Actions Cache support.
           # See <https://github.com/moby/buildkit/pull/2433>
-          driver-opts: image=moby/buildkit:v0.9.2
+          driver-opts: image=moby/buildkit:v0.9.3
 
       - name: Build
         uses: docker/build-push-action@v2

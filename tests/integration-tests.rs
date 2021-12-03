@@ -33,7 +33,9 @@ async fn insert_identity_and_proofs() {
         fs::remove_file(TEST_COMMITMENTS_PATH).unwrap();
     }
     options.app.storage_file = PathBuf::from(TEST_COMMITMENTS_PATH);
-    let local_addr = spawn_app(options.clone())
+
+    let (shutdown, _) = broadcast::channel(1);
+    let local_addr = spawn_app(options.clone(), shutdown.clone())
         .await
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
@@ -77,6 +79,18 @@ async fn insert_identity_and_proofs() {
     )
     .await;
     test_inclusion_proof(&uri, &client, 2, &mut ref_tree, &options.app.initial_leaf).await;
+
+
+    // Shutdown app and spawn new one from file
+    let _ = shutdown.send(()).unwrap();
+
+    let local_addr = spawn_app(options.clone(), shutdown.clone())
+        .await
+        .expect("Failed to spawn app.");
+    let uri = "http://".to_owned() + &local_addr.to_string();
+
+    test_inclusion_proof(&uri, &client, 0, &mut ref_tree, &Hash::from_str(TEST_LEAFS[0]).unwrap()).await;
+    test_inclusion_proof(&uri, &client, 1, &mut ref_tree, &Hash::from_str(TEST_LEAFS[1]).unwrap()).await;
 
     fs::remove_file(TEST_COMMITMENTS_PATH).unwrap();
 }
@@ -163,7 +177,7 @@ fn construct_insert_identity_body(identity_commitment: &str) -> Body {
     )
 }
 
-async fn spawn_app(options: Options) -> EyreResult<SocketAddr> {
+async fn spawn_app(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<SocketAddr> {
     let app = Arc::new(App::new(options.app).await.expect("Failed to create App"));
 
     let ip: IpAddr = match options.server.server.host() {
@@ -178,7 +192,6 @@ async fn spawn_app(options: Options) -> EyreResult<SocketAddr> {
     let local_addr = listener.local_addr()?;
 
     spawn({
-        let (shutdown, _) = broadcast::channel(1);
         async move {
             server::bind_from_listener(app, listener, shutdown)
                 .await

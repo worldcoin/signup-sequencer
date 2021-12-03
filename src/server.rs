@@ -52,7 +52,7 @@ pub struct InsertCommitmentRequest {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProofRequest {
-    identity_index: usize,
+    pub identity_index: usize,
 }
 
 #[derive(Debug, Error)]

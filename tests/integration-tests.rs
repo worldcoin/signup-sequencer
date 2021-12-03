@@ -1,6 +1,13 @@
 use eyre::{bail, Result as EyreResult};
-use hyper::{Body, Client, Request};
-use rust_app_template::{app::App, mimc_tree::MimcTree, server, Options};
+use hex_literal::hex;
+use hyper::{client::HttpConnector, Body, Client, Request};
+use rust_app_template::{
+    app::App,
+    hash::Hash,
+    mimc_tree::MimcTree,
+    server::{self, InclusionProofRequest},
+    Options,
+};
 use serde_json::json;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
@@ -12,7 +19,7 @@ use tokio::{spawn, sync::broadcast};
 use url::{Host, Url};
 
 #[tokio::test]
-async fn insert_identity_works() {
+async fn insert_identity_and_proofs() {
     let mut options = Options::from_iter_safe(&[""]).unwrap();
     options.server.server = Url::parse("http://127.0.0.1:0/").unwrap();
     // TODO delete file before test? how to manage path?
@@ -21,36 +28,123 @@ async fn insert_identity_works() {
         .await
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
-
+    let mut ref_tree = MimcTree::new(options.app.tree_depth, options.app.initial_leaf);
     let client = Client::new();
-    let body = construct_inclusion_proof_body(0);
+
+    test_inclusion_proof(&uri, &client, 0, &mut ref_tree, &options.app.initial_leaf).await;
+    test_inclusion_proof(&uri, &client, 1, &mut ref_tree, &options.app.initial_leaf).await;
+    test_insert_identity(
+        &uri,
+        &client,
+        "0000000000000000000000000000000000000000000000000000000000000001",
+        0,
+    )
+    .await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        0,
+        &mut ref_tree,
+        &Hash(hex!(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        )),
+    )
+    .await;
+    test_insert_identity(
+        &uri,
+        &client,
+        "0000000000000000000000000000000000000000000000000000000000000002",
+        1,
+    )
+    .await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        1,
+        &mut ref_tree,
+        &Hash(hex!(
+            "0000000000000000000000000000000000000000000000000000000000000002"
+        )),
+    )
+    .await;
+    test_inclusion_proof(&uri, &client, 2, &mut ref_tree, &options.app.initial_leaf).await;
+}
+
+async fn test_inclusion_proof(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    leaf_index: usize,
+    ref_tree: &mut MimcTree,
+    leaf: &Hash,
+) {
+    let body = construct_inclusion_proof_body(leaf_index);
     let req = Request::builder()
         .method("POST")
-        .uri(uri + "/inclusionProof")
+        .uri(uri.to_owned() + "/inclusionProof")
         .header("Content-Type", "application/json")
         .body(body)
         .unwrap();
-
-    let ref_tree = MimcTree::new(options.app.tree_depth, options.app.initial_leaf);
 
     let mut response = client
         .request(req)
         .await
         .expect("Failed to execute request.");
     assert!(response.status().is_success());
+
     let bytes = hyper::body::to_bytes(response.body_mut()).await.unwrap();
     let result = String::from_utf8(bytes.into_iter().collect()).unwrap();
-    let proof = ref_tree.proof(0).expect("Ref tree malfunctioning");
+
+    ref_tree.set(leaf_index, *leaf);
+    let proof = ref_tree.proof(leaf_index).expect("Ref tree malfunctioning");
     let serialized_proof =
         serde_json::to_string_pretty(&proof).expect("Proof serialization failed");
 
     assert_eq!(result, serialized_proof);
 }
 
+async fn test_insert_identity(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    identity_commitment: &str,
+    identity_index: usize,
+) {
+    let body = construct_insert_identity_body(identity_commitment);
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri.to_owned() + "/insertIdentity")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .unwrap();
+
+    let mut response = client
+        .request(req)
+        .await
+        .expect("Failed to execute request.");
+    assert!(response.status().is_success());
+
+    let bytes = hyper::body::to_bytes(response.body_mut()).await.unwrap();
+    let result = String::from_utf8(bytes.into_iter().collect()).unwrap();
+
+    let expected = InclusionProofRequest { identity_index };
+    let expected = serde_json::to_string_pretty(&expected).expect("Index serialization failed");
+
+    assert_eq!(result, expected);
+}
+
 fn construct_inclusion_proof_body(identity_index: usize) -> Body {
     Body::from(
         json!({
             "identityIndex": identity_index,
+        })
+        .to_string(),
+    )
+}
+
+fn construct_insert_identity_body(identity_commitment: &str) -> Body {
+    Body::from(
+        json!({
+            "identityCommitment": identity_commitment,
+
         })
         .to_string(),
     )

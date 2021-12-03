@@ -9,20 +9,21 @@ use rust_app_template::{
 };
 use serde_json::json;
 use std::{
+    fs,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    path::{PathBuf, Path},
-    sync::Arc, fs, str::FromStr,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
 };
 use structopt::StructOpt;
 use tokio::{spawn, sync::broadcast};
 use url::{Host, Url};
 
 const TEST_COMMITMENTS_PATH: &str = "tests/commitments.json";
-const TEST_LEAFS: &'static [&'static str] = &[
+const TEST_LEAFS: &[&str] = &[
     "0000000000000000000000000000000000000000000000000000000000000001",
     "0000000000000000000000000000000000000000000000000000000000000002",
 ];
-
 
 #[tokio::test]
 async fn insert_identity_and_proofs() {
@@ -44,42 +45,25 @@ async fn insert_identity_and_proofs() {
 
     test_inclusion_proof(&uri, &client, 0, &mut ref_tree, &options.app.initial_leaf).await;
     test_inclusion_proof(&uri, &client, 1, &mut ref_tree, &options.app.initial_leaf).await;
-    test_insert_identity(
-        &uri,
-        &client,
-        TEST_LEAFS[0],
-        0,
-    )
-    .await;
+    test_insert_identity(&uri, &client, TEST_LEAFS[0], 0).await;
     test_inclusion_proof(
         &uri,
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str(
-            TEST_LEAFS[0]
-        ).unwrap(),
+        &Hash::from_str(TEST_LEAFS[0]).unwrap(),
     )
     .await;
-    test_insert_identity(
-        &uri,
-        &client,
-        TEST_LEAFS[1],
-        1,
-    )
-    .await;
+    test_insert_identity(&uri, &client, TEST_LEAFS[1], 1).await;
     test_inclusion_proof(
         &uri,
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str(
-            TEST_LEAFS[1]
-        ).unwrap(),
+        &Hash::from_str(TEST_LEAFS[1]).unwrap(),
     )
     .await;
     test_inclusion_proof(&uri, &client, 2, &mut ref_tree, &options.app.initial_leaf).await;
-
 
     // Shutdown app and spawn new one from file
     let _ = shutdown.send(()).unwrap();
@@ -89,8 +73,22 @@ async fn insert_identity_and_proofs() {
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
 
-    test_inclusion_proof(&uri, &client, 0, &mut ref_tree, &Hash::from_str(TEST_LEAFS[0]).unwrap()).await;
-    test_inclusion_proof(&uri, &client, 1, &mut ref_tree, &Hash::from_str(TEST_LEAFS[1]).unwrap()).await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        0,
+        &mut ref_tree,
+        &Hash::from_str(TEST_LEAFS[0]).unwrap(),
+    )
+    .await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        1,
+        &mut ref_tree,
+        &Hash::from_str(TEST_LEAFS[1]).unwrap(),
+    )
+    .await;
 
     fs::remove_file(TEST_COMMITMENTS_PATH).unwrap();
 }

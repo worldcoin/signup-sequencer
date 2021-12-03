@@ -149,6 +149,7 @@ jobs:
 
   container:
     name: Build container image
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         platform: [linux/amd64]

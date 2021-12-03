@@ -213,4 +213,4 @@ jobs:
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
       - name: Test install deploy
-        run: helm install deploy -g --atomic
+        run: helm install deploy -g --atomic --timeout 15s

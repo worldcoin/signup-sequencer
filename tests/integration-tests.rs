@@ -102,6 +102,8 @@ async fn test_inclusion_proof(
     assert_eq!(result, serialized_proof);
 }
 
+/// TODO: requires running geth node with deployed contract -- how best to mock
+/// or automate
 async fn test_insert_identity(
     uri: &str,
     client: &Client<HttpConnector>,

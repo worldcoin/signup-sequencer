@@ -8,10 +8,9 @@ use rust_app_template::{
     Options,
 };
 use serde_json::json;
+use tempfile::NamedTempFile;
 use std::{
-    fs,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
 };
@@ -19,7 +18,6 @@ use structopt::StructOpt;
 use tokio::{spawn, sync::broadcast};
 use url::{Host, Url};
 
-const TEST_COMMITMENTS_PATH: &str = "tests/commitments.json";
 const TEST_LEAFS: &[&str] = &[
     "0000000000000000000000000000000000000000000000000000000000000001",
     "0000000000000000000000000000000000000000000000000000000000000002",
@@ -29,11 +27,9 @@ const TEST_LEAFS: &[&str] = &[
 async fn insert_identity_and_proofs() {
     let mut options = Options::from_iter_safe(&[""]).unwrap();
     options.server.server = Url::parse("http://127.0.0.1:0/").unwrap();
-    // TODO delete file before test? how to manage path?
-    if Path::new(TEST_COMMITMENTS_PATH).exists() {
-        fs::remove_file(TEST_COMMITMENTS_PATH).unwrap();
-    }
-    options.app.storage_file = PathBuf::from(TEST_COMMITMENTS_PATH);
+
+    let temp_commitments_file = NamedTempFile::new().expect("Failed to create named temp file");
+    options.app.storage_file = temp_commitments_file.path().to_path_buf();
 
     let (shutdown, _) = broadcast::channel(1);
     let local_addr = spawn_app(options.clone(), shutdown.clone())
@@ -90,7 +86,7 @@ async fn insert_identity_and_proofs() {
     )
     .await;
 
-    fs::remove_file(TEST_COMMITMENTS_PATH).unwrap();
+    temp_commitments_file.close().expect("Failed to close temp file");
 }
 
 async fn test_inclusion_proof(

@@ -22,6 +22,7 @@
         "smallvec",
         "structopt",
         "subcommand",
+        "tempfile",
         "thiserror"
     ]
 }

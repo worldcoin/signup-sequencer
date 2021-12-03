@@ -73,10 +73,15 @@ impl App {
         info!(path = ?&options.storage_file, "Reading tree from storage");
         let (mut next_leaf, last_block) = if options.storage_file.is_file() {
             let file = File::open(&options.storage_file)?;
-            let file: JsonCommitment = serde_json::from_reader(file)?;
-            let next_leaf = file.commitments.len();
-            merkle_tree.set_range(0, file.commitments);
-            (next_leaf, file.last_block)
+            if file.metadata()?.len() > 0 {
+                let file: JsonCommitment = serde_json::from_reader(file)?;
+                let next_leaf = file.commitments.len();
+                merkle_tree.set_range(0, file.commitments);
+                (next_leaf, file.last_block)
+            } else {
+                warn!(path = ?&options.storage_file, "Storage file empty, skipping.");
+                (0, 0)
+            }
         } else {
             warn!(path = ?&options.storage_file, "Storage file not found, skipping.");
             (0, 0)

@@ -69,7 +69,6 @@ lto = true
 panic = "abort"
 overflow-checks = true
 
-
 # Compilation profile for any non-workspace member.
 # Dependencies are optimized, even in a dev build. This improves dev performance
 # while having neglible impact on incremental build times.

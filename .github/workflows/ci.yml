@@ -10,18 +10,33 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Build (release)
+  accept:
+    name: Accept
+    runs-on: ubuntu-latest
+    needs: [lint, test, container, helm_lint]
+    steps:
+      - name: Accept
+        run: true
+
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
-      - uses: actions-rs/cargo@v1
         with:
-          command: build
-          args: --locked --all-features --all-targets --release
+          components: rustfmt, clippy
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --locked --all-features --all-targets
 
   test:
     name: Test
@@ -36,51 +51,11 @@ jobs:
         with:
           command: test
           args: --locked --all-features --all-targets
-
-  bench:
-    name: Test benchmarks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-      - name: Build and test benchmarks
+      - name: Build and run doc tests
         uses: actions-rs/cargo@v1
         with:
-          command: bench
-          args: --locked --bench criterion --features bench -- --test
-
-  rustfmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          components: rustfmt
-      - name: Check formatting
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          components: clippy
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --locked --all-features --all-targets
+          command: test
+          args: --locked --all-features --doc
 
   codecov:
     # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
@@ -106,6 +81,14 @@ jobs:
         with:
           command: test
           args: --locked --all-features --all-targets --no-fail-fast
+      - name: Doc test with coverage
+        env:
+          RUSTFLAGS: -Zinstrument-coverage
+          LLVM_PROFILE_FILE: profile-%m.profraw
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --locked --all-features --doc --no-fail-fast
       - name: Creating coverage report
         env:
           RUSTFLAGS: -Zinstrument-coverage
@@ -146,3 +129,100 @@ jobs:
       - uses: actions-rs/audit-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  container:
+    name: Build image
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [linux/amd64]
+        # linux/arm64 is disabled for now pending native runners; building in
+        # qemu-aarch64 is too slow and costly.
+        # See <https://github.com/actions/virtual-environments/issues/2187>
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up QEMU
+        id: qemu
+        uses: docker/setup-qemu-action@v1
+      - name: Available platforms
+        run: echo ${{ steps.qemu.outputs.platforms }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          # Bump buildkit version because we need PR 2433 to fix a bug
+          # in Github Actions Cache support.
+          # See <https://github.com/moby/buildkit/pull/2433>
+          driver-opts: image=moby/buildkit:v0.9.3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1 
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Get commit date
+        id: author-date
+        uses: actions/github-script@v5
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const commit_details = await github.rest.git.getCommit({owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha});
+            return commit_details.data.author.date
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          platforms: ${{ matrix.platform }}
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            COMMIT_DATE=${{ steps.author-date.outputs.result }}
+      - name: Test image
+        run:
+          docker run --pull always --platform ${{ matrix.platform }} --rm ghcr.io/${{ github.repository }}:${{ github.sha }} --version
+
+  helm_lint:
+    name: Lint helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup kube-score
+        uses: tobbbles/setup-kubescore@v1.0.2
+      - name: Run kube-score
+        run: helm template deploy | kube-score score -
+
+  helm_test:
+    name: Test deployment
+    runs-on: ubuntu-latest
+    needs: [container]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.2.0
+      - name: Create pull secret for ghcr.io
+        run: >-
+          kubectl create secret docker-registry ghcr-secret
+          --docker-server=ghcr.io
+          --docker-username="${{ github.repository_owner }}"
+          --docker-password="${{ secrets.GITHUB_TOKEN }}"
+      - name: Test install deploy
+        run: >-
+          helm install deploy
+          --generate-name --atomic
+          --timeout 60s  --debug
+          --set image.tag="${{ github.sha }}"
+          --set image.pullSecret=ghcr-secret
+      - name: Describe pods
+        if: always()
+        run: kubectl describe pod
+      - name: Dump logs
+        if: always()
+        run: >-
+          kubectl get pods
+          | tail -n +2
+          | cut -f 1 -d ' '
+          | xargs -L 1 kubectl logs

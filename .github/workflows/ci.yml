@@ -13,7 +13,7 @@ jobs:
   accept:
     name: Accept
     runs-on: ubuntu-latest
-    needs: [lint, test, container, helm_lint, helm_test]
+    needs: [lint, test, container, helm_lint]
     steps:
       - name: Accept
         run: true

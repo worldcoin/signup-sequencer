@@ -213,9 +213,17 @@ jobs:
         run: >-
           helm install deploy
           --generate-name --atomic
-          --timeout 15s  --debug
+          --timeout 60s  --debug
           --set image.tag="${{ github.sha }}"
           --set image.pullSecret=ghcr-secret
-      - name: Describe pod
+      - name: Describe pods
         if: always()
         run: kubectl describe pod
+      - name: Dump logs
+        if: always()
+        run: >-
+          kubectl get pods
+          | tail -n +2
+          | cut -f 1 -d ' '
+          | xargs -L 1
+            kubectl logs

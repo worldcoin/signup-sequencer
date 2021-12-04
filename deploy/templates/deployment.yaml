@@ -20,8 +20,10 @@ spec:
         prometheus.io/port: "9998"
         prometheus.io/path: "/metrics"
     spec:
+      {{ with .Values.image.pullSecret -}}
       imagePullSecrets:
-        - name: {{ .Values.image.pullSecrets }}
+        - name: {{ . }}
+      {{ end -}}
       nodeSelector:
         beta.kubernetes.io/arch: {{ .Values.image.arch }}
       containers:

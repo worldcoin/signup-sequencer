@@ -2,7 +2,7 @@ image:
   image: "ghcr.io/worldcoin/signup-commander-rust"
   tag: # Defaults to `v` + appVersion
   arch: amd64 # Either amd64 or arm64
-  pullSecrets:
+  pullSecret:
 
 environment: prod
 replicas: 1

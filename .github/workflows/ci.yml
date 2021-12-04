@@ -10,19 +10,25 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Build (release)
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
-      - name: Build and run release mode
+        with:
+          components: clippy
+      - name: Check formatting
         uses: actions-rs/cargo@v1
         with:
-          command: run
-          args: --locked --all-features --release -- --version
+          command: fmt
+          args: --all -- --check
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --locked --all-features --all-targets
 
   test:
     name: Test
@@ -42,37 +48,6 @@ jobs:
         with:
           command: test
           args: --locked --all-features --doc
-
-  rustfmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          components: rustfmt
-      - name: Check formatting
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          components: clippy
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --locked --all-features --all-targets
 
   codecov:
     # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
@@ -148,7 +123,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
   container:
-    name: Build container image
+    name: Build image
     runs-on: ubuntu-latest
     strategy:
       matrix:

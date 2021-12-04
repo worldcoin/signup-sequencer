@@ -203,9 +203,19 @@ jobs:
         uses: actions/checkout@v2
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
+      - name: Create pull secret for ghcr.io
+        run: >-
+          kubectl create secret docker-registry ghcr-secret
+          --docker-server=ghcr.io
+          --docker-username="${{ github.repository_owner }}"
+          --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Test install deploy
-        run: helm install deploy -g --atomic --debug --timeout 15s --set image.tag="${{ github.sha }}"
-      - name: Run 
+        run: >-
+          helm install deploy
+          --generate-name --atomic
+          --timeout 15s  --debug
+          --set image.tag="${{ github.sha }}"
+          --set image.pullSecret=ghcr-secret
+      - name: Describe pod
         if: always()
         run: kubectl describe pod
-

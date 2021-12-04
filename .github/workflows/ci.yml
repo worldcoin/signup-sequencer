@@ -25,7 +25,7 @@ jobs:
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
         with:
-          components: clippy
+          components: rustfmt, clippy
       - name: Check formatting
         uses: actions-rs/cargo@v1
         with:

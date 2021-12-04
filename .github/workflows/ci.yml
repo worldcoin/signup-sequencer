@@ -181,7 +181,7 @@ jobs:
             COMMIT_DATE=${{ steps.author-date.outputs.result }}
       - name: Test image
         run:
-          docker run --platform ${{ matrix.platform }} --rm ${{ github.repository }}:${{ github.sha }} --version
+          docker run --pull always --platform ${{ matrix.platform }} --rm ghcr.io/${{ github.repository }}:${{ github.sha }} --version
 
   helm_lint:
     name: Lint helm chart

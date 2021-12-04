@@ -10,6 +10,12 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  accept:
+    name: Accept
+    runs-on: ubuntu-latest
+    needs: [lint, test, container, helm_lint, helm_test]
+    steps:
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

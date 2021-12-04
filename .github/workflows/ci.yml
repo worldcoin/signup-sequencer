@@ -154,6 +154,12 @@ jobs:
           # in Github Actions Cache support.
           # See <https://github.com/moby/buildkit/pull/2433>
           driver-opts: image=moby/buildkit:v0.9.3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1 
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Get commit date
         id: author-date
         uses: actions/github-script@v5

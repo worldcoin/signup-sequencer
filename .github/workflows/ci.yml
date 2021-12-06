@@ -69,10 +69,16 @@ jobs:
         id: setup_rust
         with:
           components: llvm-tools-preview
-      - name: Install rustfilt and cargo-binutils
-        if: steps.setup_rust.outputs.cache_hit != 'true'
-        run: |
-          cargo install rustfilt cargo-binutils
+      - name: Install cargo-binutils
+        uses: actions-rs/install@v0.1.2
+        with:
+          crate: cargo-binutils
+          version: latest
+      - name: Install rustfilt
+        uses: actions-rs/install@v0.1.2
+        with:
+          crate: rustfilt
+          version: latest
       - name: Test with coverage
         env:
           RUSTFLAGS: -Zinstrument-coverage

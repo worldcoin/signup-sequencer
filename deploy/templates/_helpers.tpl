@@ -40,7 +40,7 @@ helm.sh/chart: {{ include "mychart.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/component: {{ .Values.labels.component | quote }}
+app.kubernetes.io/component: {{ .Values.labels.component | default .Chart.Name | quote }}
 app.kubernetes.io/part-of: {{ .Values.labels.partOf | quote }}
 {{- if .Values.labels.createdBy }}
 app.kubernetes.io/created-by: {{ .Values.labels.createdBy | quote }}

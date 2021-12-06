@@ -193,6 +193,8 @@ jobs:
         uses: tobbbles/setup-kubescore@v1.0.2
       - name: Run kube-score
         run: helm template deploy | kube-score score -
+      - name: Check if Chart.yaml is up to date
+        run: ./deploy/generate.py | diff ./deploy/Chart.yaml -
 
   helm_test:
     name: Test deployment

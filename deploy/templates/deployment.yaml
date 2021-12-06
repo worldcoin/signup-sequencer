@@ -15,6 +15,7 @@ spec:
     metadata:
       labels:
         app: {{ include "mychart.fullname" . }}
+        {{- include "mychart.labels" . | nindent 8 }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9998"

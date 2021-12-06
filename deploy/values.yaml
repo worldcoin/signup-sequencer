@@ -5,7 +5,7 @@ image:
   pullSecret:
 
 labels:
-  component: signup-commander
+  component: signup-sequencer
   partOf: protocol-signup
   createdBy:
 

@@ -1,5 +1,5 @@
 image:
-  image: "ghcr.io/worldcoin/signup-commander-rust"
+  image: "ghcr.io/worldcoin/signup-sequencer"
   tag: # Defaults to `v` + appVersion
   arch: amd64 # Either amd64 or arm64
   pullSecret:

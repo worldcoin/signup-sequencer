@@ -1,10 +1,10 @@
-# Rust project template
+# Worldcoin Sign-up Sequencer
 
-![lines of code](https://img.shields.io/tokei/lines/github/worldcoin/signup-commander-rust)
-[![dependency status](https://deps.rs/repo/github/worldcoin/signup-commander-rust/status.svg)](https://deps.rs/repo/github/worldcoin/signup-commander-rust)
-[![codecov](https://codecov.io/gh/worldcoin/signup-commander-rust/branch/main/graph/badge.svg?token=WBPZ9U4TTO)](https://codecov.io/gh/worldcoin/signup-commander-rust)
-[![ci](https://github.com/worldcoin/signup-commander-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/worldcoin/signup-commander-rust/actions/workflows/ci.yml)
-[![cd](https://github.com/worldcoin/signup-commander-rust/actions/workflows/cd.yml/badge.svg)](https://github.com/worldcoin/signup-commander-rust/actions/workflows/cd.yml)
+![lines of code](https://img.shields.io/tokei/lines/github/worldcoin/signup-sequencer)
+[![dependency status](https://deps.rs/repo/github/worldcoin/signup-sequencer/status.svg)](https://deps.rs/repo/github/worldcoin/signup-sequencer)
+[![codecov](https://codecov.io/gh/worldcoin/signup-sequencer/branch/main/graph/badge.svg?token=WBPZ9U4TTO)](https://codecov.io/gh/worldcoin/signup-sequencer)
+[![ci](https://github.com/worldcoin/signup-sequencer/actions/workflows/ci.yml/badge.svg)](https://github.com/worldcoin/signup-sequencer/actions/workflows/ci.yml)
+[![cd](https://github.com/worldcoin/signup-sequencer/actions/workflows/cd.yml/badge.svg)](https://github.com/worldcoin/signup-sequencer/actions/workflows/cd.yml)
 
 ## Hints
 

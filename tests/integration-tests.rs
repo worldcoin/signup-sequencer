@@ -1,7 +1,7 @@
 use ethers::{
     core::abi::Abi,
-    prelude::{Bytes, ContractFactory, Http, LocalWallet, Provider, SignerMiddleware},
-    utils::Ganache,
+    prelude::{Bytes, ContractFactory, Http, LocalWallet, Provider, SignerMiddleware, NonceManagerMiddleware, Signer},
+    utils::{Ganache, GanacheInstance}, abi::Address,
 };
 use eyre::{bail, Result as EyreResult};
 use hyper::{client::HttpConnector, Body, Client, Request};
@@ -25,6 +25,7 @@ use structopt::StructOpt;
 use tempfile::NamedTempFile;
 use tokio::{spawn, sync::broadcast};
 use url::{Host, Url};
+use hex_literal::hex;
 
 const TEST_LEAFS: &[&str] = &[
     "0000000000000000000000000000000000000000000000000000000000000001",
@@ -40,13 +41,18 @@ async fn insert_identity_and_proofs() {
     options.app.storage_file = temp_commitments_file.path().to_path_buf();
 
     let (shutdown, _) = broadcast::channel(1);
+
+    let (ganache, semaphore_address) = spawn_mock_chain()
+        .await
+        .expect("Failed to spawn ganache chain");
+
+    options.app.ethereum.ethereum_provider = Url::parse(&ganache.endpoint()).expect("Failed to parse ganache endpoint");
+    options.app.ethereum.semaphore_address = semaphore_address;
+    options.app.ethereum.signing_key = Hash(hex!("1ce6a4cc4c9941a4781349f988e129accdc35a55bb3d5b1a7b342bc2171db484"));
+
     let local_addr = spawn_app(options.clone(), shutdown.clone())
         .await
         .expect("Failed to spawn app.");
-
-    spawn_mock_chain()
-        .await
-        .expect("Failed to spawn ganache chain");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let mut ref_tree = MimcTree::new(options.app.tree_depth, options.app.initial_leaf);
@@ -226,9 +232,12 @@ fn deserialize_to_bytes(input: String) -> EyreResult<Bytes> {
     }
 }
 
-async fn spawn_mock_chain() -> EyreResult<()> {
+async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)>{
     // TODO add `ganache-cli` command to CI?
-    let ganache = Ganache::new().block_time(2u64).spawn();
+    let ganache = Ganache::new()
+        .block_time(2u64)
+        .mnemonic("test")
+        .spawn();
 
     let provider = Provider::<Http>::try_from(ganache.endpoint())
         .unwrap()
@@ -237,7 +246,8 @@ async fn spawn_mock_chain() -> EyreResult<()> {
     let wallet: LocalWallet = ganache.keys()[0].clone().into();
 
     // connect the wallet to the provider
-    let client = SignerMiddleware::new(provider, wallet);
+    let client = SignerMiddleware::new(provider, wallet.clone());
+    let client = NonceManagerMiddleware::new(client, wallet.address());
     let client = std::sync::Arc::new(client);
 
     let mimc_json = File::open("./sol/MiMC.json").expect("Failed to read MiMC.sol");
@@ -259,8 +269,6 @@ async fn spawn_mock_chain() -> EyreResult<()> {
     let semaphore_json: CompiledContract =
         serde_json::from_reader(semaphore_json).expect("Could not read contract");
 
-    // assert_eq!("this is new", s.replace("old", "new"));
-    // println!("Bytecode before {}", semaphore_json.bytecode);
     let semaphore_bytecode = semaphore_json.bytecode.replace(
         "__$cf5da3090e28b1d67a537682696360513a$__",
         &format!("{:?}", mimc_contract.address()).replace("0x", ""),
@@ -268,7 +276,7 @@ async fn spawn_mock_chain() -> EyreResult<()> {
     let semaphore_bytecode = deserialize_to_bytes(semaphore_bytecode)?;
 
     // create a factory which will be used to deploy instances of the contract
-    let semaphore_factory = ContractFactory::new(semaphore_json.abi, semaphore_bytecode, client);
+    let semaphore_factory = ContractFactory::new(semaphore_json.abi, semaphore_bytecode, client.clone());
 
     let semaphore_contract = semaphore_factory
         .deploy((4_u64, 123_u64))?
@@ -277,7 +285,8 @@ async fn spawn_mock_chain() -> EyreResult<()> {
         .send()
         .await?;
 
-    println!("semaphore contract {:?}", semaphore_contract.address());
-
-    Ok(())
+    Ok((
+        ganache,
+        semaphore_contract.address(),
+    ))
 }

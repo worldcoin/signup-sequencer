@@ -1,3 +1,8 @@
+use ethers::{
+    core::abi::Abi,
+    prelude::{Bytes, ContractFactory, Http, LocalWallet, Provider, SignerMiddleware},
+    utils::Ganache,
+};
 use eyre::{bail, Result as EyreResult};
 use hyper::{client::HttpConnector, Body, Client, Request};
 use rust_app_template::{
@@ -7,14 +12,17 @@ use rust_app_template::{
     server::{self, InclusionProofRequest},
     Options,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tempfile::NamedTempFile;
 use std::{
+    fs::File,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 use structopt::StructOpt;
+use tempfile::NamedTempFile;
 use tokio::{spawn, sync::broadcast};
 use url::{Host, Url};
 
@@ -35,6 +43,11 @@ async fn insert_identity_and_proofs() {
     let local_addr = spawn_app(options.clone(), shutdown.clone())
         .await
         .expect("Failed to spawn app.");
+
+    spawn_mock_chain()
+        .await
+        .expect("Failed to spawn ganache chain");
+
     let uri = "http://".to_owned() + &local_addr.to_string();
     let mut ref_tree = MimcTree::new(options.app.tree_depth, options.app.initial_leaf);
     let client = Client::new();
@@ -86,7 +99,9 @@ async fn insert_identity_and_proofs() {
     )
     .await;
 
-    temp_commitments_file.close().expect("Failed to close temp file");
+    temp_commitments_file
+        .close()
+        .expect("Failed to close temp file");
 }
 
 async fn test_inclusion_proof(
@@ -194,4 +209,75 @@ async fn spawn_app(options: Options, shutdown: broadcast::Sender<()>) -> EyreRes
     });
 
     Ok(local_addr)
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct CompiledContract {
+    abi:      Abi,
+    bytecode: String,
+}
+
+fn deserialize_to_bytes(input: String) -> EyreResult<Bytes> {
+    if input.len() >= 2 && &input[0..2] == "0x" {
+        let bytes: Vec<u8> = hex::decode(&input[2..])?;
+        Ok(bytes.into())
+    } else {
+        bail!("Expected 0x prefix")
+    }
+}
+
+async fn spawn_mock_chain() -> EyreResult<()> {
+    // TODO add `ganache-cli` command to CI?
+    let ganache = Ganache::new().block_time(2u64).spawn();
+
+    let provider = Provider::<Http>::try_from(ganache.endpoint())
+        .unwrap()
+        .interval(Duration::from_millis(500u64));
+
+    let wallet: LocalWallet = ganache.keys()[0].clone().into();
+
+    // connect the wallet to the provider
+    let client = SignerMiddleware::new(provider, wallet);
+    let client = std::sync::Arc::new(client);
+
+    let mimc_json = File::open("./sol/MiMC.json").expect("Failed to read MiMC.sol");
+    let mimc_json: CompiledContract =
+        serde_json::from_reader(mimc_json).expect("Could not parse compiled MiMC contract");
+    let mimc_bytecode = deserialize_to_bytes(mimc_json.bytecode)?;
+
+    let mimc_factory = ContractFactory::new(mimc_json.abi, mimc_bytecode, client.clone());
+
+    let mimc_contract = mimc_factory
+        .deploy(())?
+        .legacy()
+        .confirmations(0usize)
+        .send()
+        .await?;
+
+    let semaphore_json =
+        File::open("./sol/Semaphore.json").expect("Compiled contract doesn't exist");
+    let semaphore_json: CompiledContract =
+        serde_json::from_reader(semaphore_json).expect("Could not read contract");
+
+    // assert_eq!("this is new", s.replace("old", "new"));
+    // println!("Bytecode before {}", semaphore_json.bytecode);
+    let semaphore_bytecode = semaphore_json.bytecode.replace(
+        "__$cf5da3090e28b1d67a537682696360513a$__",
+        &format!("{:?}", mimc_contract.address()).replace("0x", ""),
+    );
+    let semaphore_bytecode = deserialize_to_bytes(semaphore_bytecode)?;
+
+    // create a factory which will be used to deploy instances of the contract
+    let semaphore_factory = ContractFactory::new(semaphore_json.abi, semaphore_bytecode, client);
+
+    let semaphore_contract = semaphore_factory
+        .deploy((4_u64, 123_u64))?
+        .legacy()
+        .confirmations(0usize)
+        .send()
+        .await?;
+
+    println!("semaphore contract {:?}", semaphore_contract.address());
+
+    Ok(())
 }

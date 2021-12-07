@@ -1,9 +1,14 @@
 use ethers::{
+    abi::Address,
     core::abi::Abi,
-    prelude::{Bytes, ContractFactory, Http, LocalWallet, Provider, SignerMiddleware, NonceManagerMiddleware, Signer},
-    utils::{Ganache, GanacheInstance}, abi::Address,
+    prelude::{
+        Bytes, ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
+        SignerMiddleware,
+    },
+    utils::{Ganache, GanacheInstance},
 };
 use eyre::{bail, Result as EyreResult};
+use hex_literal::hex;
 use hyper::{client::HttpConnector, Body, Client, Request};
 use rust_app_template::{
     app::App,
@@ -25,7 +30,6 @@ use structopt::StructOpt;
 use tempfile::NamedTempFile;
 use tokio::{spawn, sync::broadcast};
 use url::{Host, Url};
-use hex_literal::hex;
 
 const TEST_LEAFS: &[&str] = &[
     "0000000000000000000000000000000000000000000000000000000000000001",
@@ -34,8 +38,8 @@ const TEST_LEAFS: &[&str] = &[
 
 #[tokio::test]
 async fn insert_identity_and_proofs() {
-    let mut options = Options::from_iter_safe(&[""]).unwrap();
-    options.server.server = Url::parse("http://127.0.0.1:0/").unwrap();
+    let mut options = Options::from_iter_safe(&[""]).expect("Failed to create options");
+    options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
     let temp_commitments_file = NamedTempFile::new().expect("Failed to create named temp file");
     options.app.storage_file = temp_commitments_file.path().to_path_buf();
@@ -46,9 +50,12 @@ async fn insert_identity_and_proofs() {
         .await
         .expect("Failed to spawn ganache chain");
 
-    options.app.ethereum.ethereum_provider = Url::parse(&ganache.endpoint()).expect("Failed to parse ganache endpoint");
+    options.app.ethereum.ethereum_provider =
+        Url::parse(&ganache.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.ethereum.semaphore_address = semaphore_address;
-    options.app.ethereum.signing_key = Hash(hex!("1ce6a4cc4c9941a4781349f988e129accdc35a55bb3d5b1a7b342bc2171db484"));
+    options.app.ethereum.signing_key = Hash(hex!(
+        "1ce6a4cc4c9941a4781349f988e129accdc35a55bb3d5b1a7b342bc2171db484"
+    ));
 
     let local_addr = spawn_app(options.clone(), shutdown.clone())
         .await
@@ -66,7 +73,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str(TEST_LEAFS[0]).unwrap(),
+        &Hash::from_str(TEST_LEAFS[0]).expect("Failed to parse Hash from test leaf 0"),
     )
     .await;
     test_insert_identity(&uri, &client, TEST_LEAFS[1], 1).await;
@@ -75,13 +82,13 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str(TEST_LEAFS[1]).unwrap(),
+        &Hash::from_str(TEST_LEAFS[1]).expect("Failed to parse Hash from test leaf 1"),
     )
     .await;
     test_inclusion_proof(&uri, &client, 2, &mut ref_tree, &options.app.initial_leaf).await;
 
     // Shutdown app and spawn new one from file
-    let _ = shutdown.send(()).unwrap();
+    let _ = shutdown.send(()).expect("Failed to send shutdown signal");
 
     let local_addr = spawn_app(options.clone(), shutdown.clone())
         .await
@@ -93,7 +100,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str(TEST_LEAFS[0]).unwrap(),
+        &Hash::from_str(TEST_LEAFS[0]).expect("Failed to parse Hash from test leaf 0"),
     )
     .await;
     test_inclusion_proof(
@@ -101,7 +108,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str(TEST_LEAFS[1]).unwrap(),
+        &Hash::from_str(TEST_LEAFS[1]).expect("Failed to parse Hash from test leaf 1"),
     )
     .await;
 
@@ -123,7 +130,7 @@ async fn test_inclusion_proof(
         .uri(uri.to_owned() + "/inclusionProof")
         .header("Content-Type", "application/json")
         .body(body)
-        .unwrap();
+        .expect("Failed to create inclusion proof hyper::Body");
 
     let mut response = client
         .request(req)
@@ -131,8 +138,11 @@ async fn test_inclusion_proof(
         .expect("Failed to execute request.");
     assert!(response.status().is_success());
 
-    let bytes = hyper::body::to_bytes(response.body_mut()).await.unwrap();
-    let result = String::from_utf8(bytes.into_iter().collect()).unwrap();
+    let bytes = hyper::body::to_bytes(response.body_mut())
+        .await
+        .expect("Failed to convert response body to bytes");
+    let result = String::from_utf8(bytes.into_iter().collect())
+        .expect("Could not parse response bytes to utf-8");
 
     ref_tree.set(leaf_index, *leaf);
     let proof = ref_tree.proof(leaf_index).expect("Ref tree malfunctioning");
@@ -156,7 +166,7 @@ async fn test_insert_identity(
         .uri(uri.to_owned() + "/insertIdentity")
         .header("Content-Type", "application/json")
         .body(body)
-        .unwrap();
+        .expect("Failed to create insert identity hyper::Body");
 
     let mut response = client
         .request(req)
@@ -164,8 +174,11 @@ async fn test_insert_identity(
         .expect("Failed to execute request.");
     assert!(response.status().is_success());
 
-    let bytes = hyper::body::to_bytes(response.body_mut()).await.unwrap();
-    let result = String::from_utf8(bytes.into_iter().collect()).unwrap();
+    let bytes = hyper::body::to_bytes(response.body_mut())
+        .await
+        .expect("Failed to convert response body to bytes");
+    let result = String::from_utf8(bytes.into_iter().collect())
+        .expect("Could not parse response bytes to utf-8");
 
     let expected = InclusionProofRequest { identity_index };
     let expected = serde_json::to_string_pretty(&expected).expect("Index serialization failed");
@@ -232,15 +245,12 @@ fn deserialize_to_bytes(input: String) -> EyreResult<Bytes> {
     }
 }
 
-async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)>{
+async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
     // TODO add `ganache-cli` command to CI?
-    let ganache = Ganache::new()
-        .block_time(2u64)
-        .mnemonic("test")
-        .spawn();
+    let ganache = Ganache::new().block_time(2u64).mnemonic("test").spawn();
 
     let provider = Provider::<Http>::try_from(ganache.endpoint())
-        .unwrap()
+        .expect("Failed to initialize ganache endpoint")
         .interval(Duration::from_millis(500u64));
 
     let wallet: LocalWallet = ganache.keys()[0].clone().into();
@@ -276,7 +286,8 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)>{
     let semaphore_bytecode = deserialize_to_bytes(semaphore_bytecode)?;
 
     // create a factory which will be used to deploy instances of the contract
-    let semaphore_factory = ContractFactory::new(semaphore_json.abi, semaphore_bytecode, client.clone());
+    let semaphore_factory =
+        ContractFactory::new(semaphore_json.abi, semaphore_bytecode, client.clone());
 
     let semaphore_contract = semaphore_factory
         .deploy((4_u64, 123_u64))?
@@ -285,8 +296,5 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)>{
         .send()
         .await?;
 
-    Ok((
-        ganache,
-        semaphore_contract.address(),
-    ))
+    Ok((ganache, semaphore_contract.address()))
 }

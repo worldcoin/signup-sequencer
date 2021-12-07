@@ -7,8 +7,8 @@ authors = [
     "Lucas Ege <lucas@worldcoin.org>"]
 edition = "2021"
 build = "build.rs"
-homepage = "https://github.com/worldcoin/signup-commander-rust"
-repository = "https://github.com/worldcoin/signup-commander-rust"
+homepage = "https://github.com/worldcoin/signup-sequencer"
+repository = "https://github.com/worldcoin/signup-sequencer"
 description = "Template for a Rust CLI tool"
 keywords = ["worldcoin", "protocol", "signup"]
 categories = ["cryptography::cryptocurrencies"]

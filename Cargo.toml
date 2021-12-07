@@ -1,15 +1,17 @@
 [package]
 # Please adjust all these values, including the license
-name = "rust-app-template"
+name = "signup-sequencer"
 version = "0.1.0"
-authors = ["Remco Bloemen <remco@wicked.ventures>"]
+authors = [
+    "Remco Bloemen <remco@worldcoin.org>",
+    "Lucas Ege <lucas@worldcoin.org>"]
 edition = "2021"
 build = "build.rs"
-homepage = "https://github.com/Recmo/rust-app-template"
-repository = "https://github.com/Recmo/rust-app-template"
+homepage = "https://github.com/worldcoin/signup-commander-rust"
+repository = "https://github.com/worldcoin/signup-commander-rust"
 description = "Template for a Rust CLI tool"
-keywords = ["template"]
-categories = ["template"]
+keywords = ["worldcoin", "protocol", "signup"]
+categories = ["cryptography::cryptocurrencies"]
 readme = "Readme.md"
 license-file = "mit-license.md"
 

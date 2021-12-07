@@ -4,6 +4,11 @@ image:
   arch: amd64 # Either amd64 or arm64
   pullSecret:
 
+labels:
+  component: # Defaults to name
+  partOf: protocol-signup
+  createdBy:
+
 environment: prod
 replicas: 1
 region: "us-east-1"

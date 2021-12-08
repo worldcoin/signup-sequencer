@@ -1,0 +1,35 @@
+image:
+  image: "ghcr.io/worldcoin/signup-sequencer"
+  tag: # Defaults to `v` + appVersion
+  arch: amd64 # Either amd64 or arm64
+  pullSecret:
+
+labels:
+  component: # Defaults to name
+  partOf: protocol-signup
+  createdBy:
+
+environment: prod
+replicas: 1
+region: "us-east-1"
+
+canary:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 0.1
+    memory: 128Mi
+  limits:
+    cpu: 16.0
+    memory: 4Gi
+
+env:
+  - name: ETHEREUM_PROVIDER
+    value: "http://localhost:8545"
+
+# Spec ingress policy for the `api` and `metrics` port.
+# Values are a list of NetworkPolicyPeer v1 objects, empty means allow all.
+ingress:
+  api:
+  metrics:

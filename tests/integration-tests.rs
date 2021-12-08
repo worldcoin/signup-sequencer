@@ -10,7 +10,7 @@ use ethers::{
 use eyre::{bail, Result as EyreResult};
 use hex_literal::hex;
 use hyper::{client::HttpConnector, Body, Client, Request};
-use rust_app_template::{
+use signup_sequencer::{
     app::App,
     hash::Hash,
     mimc_tree::MimcTree,

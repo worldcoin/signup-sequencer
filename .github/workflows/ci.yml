@@ -82,6 +82,9 @@ jobs:
         with:
           crate: rustfilt
           version: latest
+      - name: Set up npm
+        uses: actions/setup-node@v2
+      - run:  npm install ganache-cli@latest --global
       - name: Test with coverage
         env:
           RUSTFLAGS: -Zinstrument-coverage

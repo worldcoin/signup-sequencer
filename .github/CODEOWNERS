@@ -1,0 +1,9 @@
+# General code
+* @recmo @lucasege @worldcoin/crypto
+
+# CI
+.github @remco @worldcoin/crypto
+
+# CD
+.github/workflows/cd.yml @recmo @kkowalski @worldcoin/infrastructure
+deploy/ @recmo @kkowalski  @worldcoin/infrastructure

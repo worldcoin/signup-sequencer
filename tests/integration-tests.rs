@@ -152,8 +152,6 @@ async fn test_inclusion_proof(
     assert_eq!(result, serialized_proof);
 }
 
-/// TODO: requires running geth node with deployed contract -- how best to mock
-/// or automate
 async fn test_insert_identity(
     uri: &str,
     client: &Client<HttpConnector>,
@@ -246,7 +244,6 @@ fn deserialize_to_bytes(input: String) -> EyreResult<Bytes> {
 }
 
 async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
-    // TODO add `ganache-cli` command to CI?
     let ganache = Ganache::new().block_time(2u64).mnemonic("test").spawn();
 
     let provider = Provider::<Http>::try_from(ganache.endpoint())

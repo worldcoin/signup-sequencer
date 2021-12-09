@@ -24,9 +24,9 @@ resources:
     cpu: 16.0
     memory: 4Gi
 
+# Env values can be strings (to be prefixed with `value:`) or objects
 env:
-  - name: ETHEREUM_PROVIDER
-    value: "http://localhost:8545"
+  ETHEREUM_PROVIDER: "https://localhost:8545/"
 
 # Spec ingress policy for the `api` and `metrics` port.
 # Values are a list of NetworkPolicyPeer v1 objects, empty means allow all.

@@ -90,8 +90,7 @@ FROM scratch
 USER 10001:10001
 
 # Configure SSL CA certificates
-# TODO: --chmod=040
-COPY --from=build-env --chown=0:10001 \
+COPY --from=build-env --chown=0:10001 --chmod=040 \
     /etc/ssl/certs/ca-certificates.crt /
 ENV SSL_CERT_FILE="/ca-certificates.crt"
 
@@ -107,8 +106,7 @@ LABEL prometheus.io/port="9998"
 LABEL prometheus.io/path="/metrics"
 
 # Executable
-# TODO: --chmod=010
-COPY --from=build-env --chown=0:10001 /src/bin /bin
+COPY --from=build-env --chown=0:10001 --chmod=010 /src/bin /bin
 STOPSIGNAL SIGTERM
 HEALTHCHECK NONE
 ENTRYPOINT ["/bin"]

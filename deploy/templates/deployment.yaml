@@ -41,7 +41,14 @@ spec:
           env:
             - name: LOG_FORMAT
               value: json
-            {{- toYaml .Values.env | nindent 12 }}
+            {{- range $name, $item := .Values.env }}
+            - name: {{ $name }}
+              {{- if kindIs "map" $item }}
+              {{- $item | toYaml | nindent 14 }}
+              {{- else }}
+              value: {{ $item | quote }}
+              {{- end }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:

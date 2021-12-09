@@ -36,6 +36,10 @@ const TEST_LEAFS: &[&str] = &[
     "0000000000000000000000000000000000000000000000000000000000000002",
 ];
 
+const GANACHE_DEFAULT_WALLET_KEY: Hash = Hash(hex!(
+    "1ce6a4cc4c9941a4781349f988e129accdc35a55bb3d5b1a7b342bc2171db484"
+));
+
 #[tokio::test]
 async fn insert_identity_and_proofs() {
     let mut options = Options::from_iter_safe(&[""]).expect("Failed to create options");
@@ -50,12 +54,11 @@ async fn insert_identity_and_proofs() {
         .await
         .expect("Failed to spawn ganache chain");
 
+    options.app.ethereum.test = true;
     options.app.ethereum.ethereum_provider =
         Url::parse(&ganache.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.ethereum.semaphore_address = semaphore_address;
-    options.app.ethereum.signing_key = Hash(hex!(
-        "1ce6a4cc4c9941a4781349f988e129accdc35a55bb3d5b1a7b342bc2171db484"
-    ));
+    options.app.ethereum.signing_key = GANACHE_DEFAULT_WALLET_KEY;
 
     let local_addr = spawn_app(options.clone(), shutdown.clone())
         .await

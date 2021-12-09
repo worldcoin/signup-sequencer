@@ -33,6 +33,11 @@ pub struct Options {
     )]
     // NOTE: We abuse `Hash` here because it has the right `FromStr` implementation.
     pub signing_key: Hash,
+
+    /// If this module is being run within an integration test
+    /// Short and long flags (-t, --test)
+    #[structopt(short, long)]
+    pub test: bool,
 }
 
 // Code out the provider stack in types
@@ -45,6 +50,7 @@ type ProviderStack = Provider2;
 pub struct Ethereum {
     provider:  Arc<ProviderStack>,
     semaphore: Semaphore<ProviderStack>,
+    test:      bool,
 }
 
 impl Ethereum {
@@ -101,6 +107,7 @@ impl Ethereum {
         Ok(Self {
             provider,
             semaphore,
+            test: options.test,
         })
     }
 
@@ -129,7 +136,12 @@ impl Ethereum {
     pub async fn insert_identity(&self, commitment: &Hash) -> EyreResult<()> {
         info!(%commitment, "Inserting identity in contract");
         let tx = self.semaphore.insert_identity(commitment.into());
-        let pending_tx = self.provider.send_transaction(tx.legacy().tx, None).await?;
+        let pending_tx = if self.test {
+            // Our tests use ganache which doesn't support EIP-1559 transactions yet.
+            self.provider.send_transaction(tx.legacy().tx, None).await?
+        } else {
+            self.provider.send_transaction(tx.tx, None).await?
+        };
         let receipt = pending_tx.await.map_err(|e| eyre!(e))?;
         if receipt.is_none() {
             // This should only happen if the tx is no longer in the mempool, meaning the tx

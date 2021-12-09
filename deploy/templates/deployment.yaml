@@ -46,6 +46,8 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
             capabilities:
+              add: 
+                - NET_BIND_SERVICE
               drop:
                 - all
             allowPrivilegeEscalation: false

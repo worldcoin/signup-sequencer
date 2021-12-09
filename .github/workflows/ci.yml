@@ -13,7 +13,7 @@ jobs:
   accept:
     name: Accept
     runs-on: ubuntu-latest
-    needs: [lint, test, container, helm_lint]
+    needs: [lint, test, container, helm_lint, helm_test]
     steps:
       - name: Accept
         run: true
@@ -226,6 +226,7 @@ jobs:
           --timeout 60s  --debug
           --set image.tag="${{ github.sha }}"
           --set image.pullSecret=ghcr-secret
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
       - name: Describe pods
         if: always()
         run: kubectl describe pod

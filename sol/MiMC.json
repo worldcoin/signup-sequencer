@@ -1,0 +1,45 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "MiMC",
+  "sourceName": "contracts/MiMC.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "in_xL",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "in_xR",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "k",
+          "type": "uint256"
+        }
+      ],
+      "name": "MiMCSponge",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "xL",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "xR",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "pure",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x608f610025600b82828239805160001a60731461001857fe5b30600052607381538281f3fe730000000000000000000000000000000000000000301460806040526004361060335760003560e01c80633f1a1187146038575b600080fd5b605e60048036036060811015604c57600080fd5b50803590602081013590604001356077565b6040805192835260208301919091528051918290030190f35b60008093509391505056fea164736f6c634300060c000a",
+  "deployedBytecode": "0x730000000000000000000000000000000000000000301460806040526004361060335760003560e01c80633f1a1187146038575b600080fd5b605e60048036036060811015604c57600080fd5b50803590602081013590604001356077565b6040805192835260208301919091528051918290030190f35b60008093509391505056fea164736f6c634300060c000a",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

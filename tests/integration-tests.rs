@@ -54,7 +54,7 @@ async fn insert_identity_and_proofs() {
         .await
         .expect("Failed to spawn ganache chain");
 
-    options.app.ethereum.test = true;
+    options.app.ethereum.eip1559 = false;
     options.app.ethereum.ethereum_provider =
         Url::parse(&ganache.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.ethereum.semaphore_address = semaphore_address;

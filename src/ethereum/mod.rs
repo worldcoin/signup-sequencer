@@ -34,8 +34,9 @@ pub struct Options {
     // NOTE: We abuse `Hash` here because it has the right `FromStr` implementation.
     pub signing_key: Hash,
 
-    /// If this module is being run with EIP-1559 support, useful in some places where EIP-1559 is not yet supported
-    #[structopt(short, parse(try_from_str), default_value="true")]
+    /// If this module is being run with EIP-1559 support, useful in some places
+    /// where EIP-1559 is not yet supported
+    #[structopt(short, parse(try_from_str), default_value = "true")]
     pub eip1559: bool,
 }
 
@@ -49,7 +50,7 @@ type ProviderStack = Provider2;
 pub struct Ethereum {
     provider:  Arc<ProviderStack>,
     semaphore: Semaphore<ProviderStack>,
-    eip1559:      bool,
+    eip1559:   bool,
 }
 
 impl Ethereum {

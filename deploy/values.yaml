@@ -31,5 +31,6 @@ env:
 # Spec ingress policy for the `api` and `metrics` port.
 # Values are a list of NetworkPolicyPeer v1 objects, empty means allow all.
 ingress:
+  host: "crypto.stage-crypto.worldcoin.dev"
   api:
   metrics:

@@ -41,6 +41,16 @@ spec:
           env:
             - name: LOG_FORMAT
               value: json
+            - name: DD_VERSION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['pod-template-hash']
+            - name: DD_ENV
+              value: {{ .Values.environment }}
+            - name: DD_SERVICE
+              value: signup-sequencer
+            - name: SERVER
+              value: http://0.0.0.0:8080
             {{- range $name, $item := .Values.env }}
             - name: {{ $name }}
               {{- if kindIs "map" $item }}
@@ -53,7 +63,7 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
             capabilities:
-              add: 
+              add:
                 - NET_BIND_SERVICE
               drop:
                 - all
@@ -62,22 +72,21 @@ spec:
             readOnlyRootFilesystem: true
             runAsUser: 10001
             runAsGroup: 10001
-          # TODO
-          # livenessProbe:
-          #   httpGet:
-          #     path: /ready
-          #     scheme: HTTP
-          #     port: 8080
-          #   initialDelaySeconds: 10
-          #   timeoutSeconds: 10
-          #   successThreshold: 1
-          #   failureThreshold: 6
-          # readinessProbe:
-          #   httpGet:
-          #     path: /ready
-          #     scheme: HTTP
-          #     port: 8080
-          #   initialDelaySeconds: 10
-          #   timeoutSeconds: 10
-          #   successThreshold: 1
-          #   failureThreshold: 2
+          livenessProbe:
+           httpGet:
+             path: /metrics
+             scheme: HTTP
+             port: 9998
+           initialDelaySeconds: 10
+           timeoutSeconds: 10
+           successThreshold: 1
+           failureThreshold: 6
+          readinessProbe:
+           httpGet:
+             path: /metrics
+             scheme: HTTP
+             port: 9998
+           initialDelaySeconds: 10
+           timeoutSeconds: 10
+           successThreshold: 1
+           failureThreshold: 2

@@ -46,6 +46,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+      - run:  npm install ganache-cli@latest --global
       - name: Build and run tests
         uses: actions-rs/cargo@v1
         with:
@@ -79,6 +80,7 @@ jobs:
         with:
           crate: rustfilt
           version: latest
+      - run:  npm install ganache-cli@latest --global
       - name: Test with coverage
         env:
           RUSTFLAGS: -Zinstrument-coverage

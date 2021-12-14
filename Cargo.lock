@@ -2853,6 +2853,7 @@ dependencies = [
  "serde_json",
  "smallvec",
  "structopt",
+ "tempfile",
  "thiserror",
  "tokio",
  "tracing",

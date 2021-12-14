@@ -3,6 +3,7 @@
     "words": [
         "abigen",
         "Bloemen",
+        "bytecode",
         "chainid",
         "clippy",
         "compat",
@@ -22,6 +23,7 @@
         "smallvec",
         "structopt",
         "subcommand",
+        "tempfile",
         "thiserror"
     ]
 }

@@ -9,6 +9,7 @@ mod mimc_hash;
 mod mimc_tree;
 mod server;
 mod utils;
+mod poseidon_tree;
 
 use crate::{app::App, utils::spawn_or_abort};
 use eyre::Result as EyreResult;

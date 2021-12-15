@@ -2,14 +2,14 @@ use crate::{
     hash::Hash,
     merkle_tree::{self, Hasher, MerkleTree},
 };
-use ff::*;
-use num::{bigint::BigInt, Num};
+use ff::{PrimeField, PrimeFieldRepr};
 use once_cell::sync::Lazy;
 use poseidon_rs::{Fr, FrRepr, Poseidon};
 use serde::Serialize;
 
-static POSEIDON: Lazy<Poseidon> = Lazy::new(|| Poseidon::new());
+static POSEIDON: Lazy<Poseidon> = Lazy::new(Poseidon::new);
 
+#[allow(dead_code)]
 pub type PoseidonTree = MerkleTree<PoseidonHash>;
 #[allow(dead_code)]
 pub type Branch = merkle_tree::Branch<PoseidonHash>;
@@ -19,19 +19,21 @@ pub type Proof = merkle_tree::Proof<PoseidonHash>;
 #[derive(Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct PoseidonHash;
 
+#[allow(clippy::fallible_impl_from)] // TODO
 impl From<&Hash> for Fr {
     fn from(hash: &Hash) -> Self {
         let mut repr = FrRepr::default();
-        repr.read_be(&hash.as_bytes_be()[..]).unwrap(); // TODO
-        Fr::from_repr(repr).unwrap()
+        repr.read_be(&hash.as_bytes_be()[..]).unwrap();
+        Self::from_repr(repr).unwrap()
     }
 }
 
+#[allow(clippy::fallible_impl_from)] // TODO
 impl From<Fr> for Hash {
     fn from(fr: Fr) -> Self {
         let mut bytes = [0_u8; 32];
-        fr.into_repr().write_be(&mut bytes[..]);
-        Hash::from_bytes_be(bytes)
+        fr.into_repr().write_be(&mut bytes[..]).unwrap();
+        Self::from_bytes_be(bytes)
     }
 }
 

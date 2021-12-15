@@ -12,7 +12,7 @@ use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     sync::Arc,
 };
 use structopt::StructOpt;
@@ -21,7 +21,7 @@ use tokio::sync::broadcast;
 use tracing::{error, info, trace};
 use url::{Host, Url};
 
-#[derive(Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     /// API Server url
     #[structopt(long, env = "SERVER", default_value = "http://127.0.0.1:8080/")]
@@ -52,7 +52,7 @@ pub struct InsertCommitmentRequest {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProofRequest {
-    identity_index: usize,
+    pub identity_index: usize,
 }
 
 #[derive(Debug, Error)]
@@ -76,7 +76,7 @@ impl Error {
         hyper::Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(hyper::Body::from(self.to_string()))
-            .unwrap()
+            .expect("Failed to convert error string into hyper::Body")
     }
 }
 
@@ -139,6 +139,11 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
     Ok(response)
 }
 
+/// # Errors
+///
+/// Will return `Err` if `options.server` URI is not http, incorrectly includes
+/// a path beyond `/`, or cannot be cast into an IP address. Also returns an
+/// `Err` if the server cannot bind to the given address.
 pub async fn main(
     app: Arc<App>,
     options: Options,
@@ -163,6 +168,23 @@ pub async fn main(
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
+    let listener = TcpListener::bind(&addr)?;
+
+    bind_from_listener(app, listener, shutdown).await?;
+
+    Ok(())
+}
+
+/// # Errors
+///
+/// Will return `Err` if the provided `listener` address cannot be accessed or
+/// if the server fails to bind to the given address.
+pub async fn bind_from_listener(
+    app: Arc<App>,
+    listener: TcpListener,
+    shutdown: broadcast::Sender<()>,
+) -> EyreResult<()> {
+    let local_addr = listener.local_addr()?;
     let make_svc = make_service_fn(move |_| {
         // Clone here as `make_service_fn` is called for every connection
         let app = app.clone();
@@ -175,13 +197,14 @@ pub async fn main(
         }
     });
 
-    let server = Server::try_bind(&addr)
-        .wrap_err("Could not bind server port")?
+    let server = Server::from_tcp(listener)
+        .wrap_err("Failed to bind address")?
         .serve(make_svc)
         .with_graceful_shutdown(async move {
             shutdown.subscribe().recv().await.ok();
         });
-    info!(url = %options.server, "Server listening");
+
+    info!(url = %local_addr, "Server listening");
 
     server.await?;
     Ok(())

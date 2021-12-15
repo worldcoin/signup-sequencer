@@ -11,13 +11,15 @@ use std::{
 
 /// Container for 256-bit hash values.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
-pub struct Hash([u8; 32]);
+pub struct Hash(pub [u8; 32]);
 
 impl Hash {
+    #[must_use]
     pub const fn from_bytes_be(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }
 
+    #[must_use]
     pub const fn as_bytes_be(&self) -> &[u8; 32] {
         &self.0
     }

@@ -1,9 +1,9 @@
 #![doc = include_str!("../Readme.md")]
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
-mod app;
+pub mod app;
 mod ethereum;
-mod hash;
+pub mod hash;
 mod merkle_tree;
 mod mimc_hash;
 mod mimc_tree;
@@ -18,13 +18,13 @@ use structopt::StructOpt;
 use tokio::sync::broadcast;
 use tracing::info;
 
-#[derive(Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     #[structopt(flatten)]
-    app: app::Options,
+    pub app: app::Options,
 
     #[structopt(flatten)]
-    server: server::Options,
+    pub server: server::Options,
 }
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]

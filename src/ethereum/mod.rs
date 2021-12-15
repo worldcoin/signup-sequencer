@@ -15,7 +15,7 @@ use structopt::StructOpt;
 use tracing::info;
 use url::Url;
 
-#[derive(Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     /// Ethereum API Provider
     #[structopt(long, env, default_value = "http://localhost:8545")]
@@ -33,6 +33,11 @@ pub struct Options {
     )]
     // NOTE: We abuse `Hash` here because it has the right `FromStr` implementation.
     pub signing_key: Hash,
+
+    /// If this module is being run with EIP-1559 support, useful in some places
+    /// where EIP-1559 is not yet supported
+    #[structopt(short, parse(try_from_str), default_value = "true")]
+    pub eip1559: bool,
 }
 
 // Code out the provider stack in types
@@ -45,6 +50,7 @@ type ProviderStack = Provider2;
 pub struct Ethereum {
     provider:  Arc<ProviderStack>,
     semaphore: Semaphore<ProviderStack>,
+    eip1559:   bool,
 }
 
 impl Ethereum {
@@ -101,6 +107,7 @@ impl Ethereum {
         Ok(Self {
             provider,
             semaphore,
+            eip1559: options.eip1559,
         })
     }
 
@@ -129,7 +136,12 @@ impl Ethereum {
     pub async fn insert_identity(&self, commitment: &Hash) -> EyreResult<()> {
         info!(%commitment, "Inserting identity in contract");
         let tx = self.semaphore.insert_identity(commitment.into());
-        let pending_tx = self.provider.send_transaction(tx.tx, None).await.unwrap();
+        let pending_tx = if self.eip1559 {
+            self.provider.send_transaction(tx.tx, None).await?
+        } else {
+            // Our tests use ganache which doesn't support EIP-1559 transactions yet.
+            self.provider.send_transaction(tx.legacy().tx, None).await?
+        };
         let receipt = pending_tx.await.map_err(|e| eyre!(e))?;
         if receipt.is_none() {
             // This should only happen if the tx is no longer in the mempool, meaning the tx

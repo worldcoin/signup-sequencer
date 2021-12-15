@@ -4,8 +4,11 @@ use crate::{
 };
 use ff::*;
 use num::{bigint::BigInt, Num};
+use once_cell::sync::Lazy;
 use poseidon_rs::{Fr, Poseidon};
 use serde::Serialize;
+
+static POSEIDON: Lazy<Poseidon> = Lazy::new(|| Poseidon::new());
 
 pub type PoseidonTree = MerkleTree<PoseidonHash>;
 #[allow(dead_code)]
@@ -20,14 +23,13 @@ impl Hasher for PoseidonHash {
     type Hash = Hash;
 
     fn hash_node(left: &Self::Hash, right: &Self::Hash) -> Self::Hash {
-        let poseidon = Poseidon::new();
         let left_bi = BigInt::from_str_radix(&hex::encode(left.as_bytes_be()), 16).unwrap();
         let left_fr = Fr::from_str(&left_bi.to_str_radix(10)).unwrap();
 
         let right_bi = BigInt::from_str_radix(&hex::encode(right.as_bytes_be()), 16).unwrap();
         let right_fr = Fr::from_str(&right_bi.to_str_radix(10)).unwrap();
 
-        let hash = poseidon.hash(vec![left_fr, right_fr]).unwrap();
+        let hash = POSEIDON.hash(vec![left_fr, right_fr]).unwrap();
 
         let ret = hex::decode(to_hex(&hash)).unwrap();
         let mut d: [u8; 32] = Default::default();

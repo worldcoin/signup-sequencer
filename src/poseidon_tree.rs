@@ -27,16 +27,22 @@ impl From<&Hash> for Fr {
     }
 }
 
+impl From<Fr> for Hash {
+    fn from(fr: Fr) -> Self {
+        let mut bytes = [0_u8; 32];
+        fr.into_repr().write_be(&mut bytes[..]);
+        Hash::from_bytes_be(bytes)
+    }
+}
+
 impl Hasher for PoseidonHash {
     type Hash = Hash;
 
     fn hash_node(left: &Self::Hash, right: &Self::Hash) -> Self::Hash {
-        let hash = POSEIDON.hash(vec![left.into(), right.into()]).unwrap();
-
-        let ret = hex::decode(to_hex(&hash)).unwrap();
-        let mut d: [u8; 32] = Default::default();
-        d.copy_from_slice(&ret[0..32]);
-        Hash::from_bytes_be(d)
+        POSEIDON
+            .hash(vec![left.into(), right.into()])
+            .unwrap() // TODO
+            .into()
     }
 }
 

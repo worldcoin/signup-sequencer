@@ -1,9 +1,9 @@
 use crate::{
-    merkle_tree::{self, Hasher, MerkleTree}, hash::Hash
+    hash::Hash,
+    merkle_tree::{self, Hasher, MerkleTree},
 };
 use ff::*;
-use num::Num;
-use num::bigint::BigInt;
+use num::{bigint::BigInt, Num};
 use poseidon_rs::{Fr, Poseidon};
 use serde::Serialize;
 
@@ -67,4 +67,3 @@ pub mod test {
         );
     }
 }
-

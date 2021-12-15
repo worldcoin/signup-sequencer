@@ -6,9 +6,9 @@ mod ethereum;
 pub mod hash;
 mod merkle_tree;
 mod mimc_hash;
-mod mimc_tree;
+pub mod mimc_tree;
 mod poseidon_tree;
-mod server;
+pub mod server;
 mod utils;
 
 use crate::{app::App, utils::spawn_or_abort};

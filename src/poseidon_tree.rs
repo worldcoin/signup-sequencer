@@ -5,7 +5,7 @@ use crate::{
 use ff::*;
 use num::{bigint::BigInt, Num};
 use once_cell::sync::Lazy;
-use poseidon_rs::{Fr, Poseidon};
+use poseidon_rs::{Fr, FrRepr, Poseidon};
 use serde::Serialize;
 
 static POSEIDON: Lazy<Poseidon> = Lazy::new(|| Poseidon::new());
@@ -19,17 +19,19 @@ pub type Proof = merkle_tree::Proof<PoseidonHash>;
 #[derive(Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct PoseidonHash;
 
+impl From<&Hash> for Fr {
+    fn from(hash: &Hash) -> Self {
+        let mut repr = FrRepr::default();
+        repr.read_be(&hash.as_bytes_be()[..]).unwrap(); // TODO
+        Fr::from_repr(repr).unwrap()
+    }
+}
+
 impl Hasher for PoseidonHash {
     type Hash = Hash;
 
     fn hash_node(left: &Self::Hash, right: &Self::Hash) -> Self::Hash {
-        let left_bi = BigInt::from_str_radix(&hex::encode(left.as_bytes_be()), 16).unwrap();
-        let left_fr = Fr::from_str(&left_bi.to_str_radix(10)).unwrap();
-
-        let right_bi = BigInt::from_str_radix(&hex::encode(right.as_bytes_be()), 16).unwrap();
-        let right_fr = Fr::from_str(&right_bi.to_str_radix(10)).unwrap();
-
-        let hash = POSEIDON.hash(vec![left_fr, right_fr]).unwrap();
+        let hash = POSEIDON.hash(vec![left.into(), right.into()]).unwrap();
 
         let ret = hex::decode(to_hex(&hash)).unwrap();
         let mut d: [u8; 32] = Default::default();

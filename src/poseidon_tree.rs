@@ -42,7 +42,7 @@ impl Hasher for PoseidonHash {
 
     fn hash_node(left: &Self::Hash, right: &Self::Hash) -> Self::Hash {
         POSEIDON
-            .hash(vec![left.into(), right.into()])
+            .hash(&[left.into(), right.into()])
             .unwrap() // TODO
             .into()
     }

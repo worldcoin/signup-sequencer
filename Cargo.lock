@@ -1162,17 +1162,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ff_ce"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce9180c0561effb4f0bd2b9ed62d856b039e860d695d51fe690902f7b8157fe5"
-dependencies = [
- "byteorder",
- "hex",
- "rand 0.4.6",
-]
-
-[[package]]
 name = "ff_derive_ce"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2185,7 +2174,7 @@ version = "0.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c76e4996e3d9572d8b5cd56f495dda3fb748fd4cd6bdca754270b8b66a9a2dd3"
 dependencies = [
- "ff_ce 0.11.0",
+ "ff_ce",
  "rand 0.4.6",
  "serde_json",
 ]
@@ -2940,7 +2929,7 @@ dependencies = [
  "criterion",
  "ethers",
  "eyre",
- "ff_ce 0.13.1",
+ "ff_ce",
  "futures",
  "hex",
  "hex-literal",
@@ -3178,6 +3167,7 @@ dependencies = [
  "pin-project-lite",
  "signal-hook-registry",
  "tokio-macros",
+ "tracing",
  "winapi",
 ]
 

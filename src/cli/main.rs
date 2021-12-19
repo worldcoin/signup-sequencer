@@ -6,6 +6,7 @@ mod allocator;
 mod logging;
 mod prometheus;
 mod shutdown;
+mod tokio_console;
 
 use self::{allocator::Allocator, logging::LogOptions};
 use eyre::{Result as EyreResult, WrapErr as _};

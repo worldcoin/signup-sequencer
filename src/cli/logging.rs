@@ -4,10 +4,7 @@ use core::str::FromStr;
 use eyre::{bail, eyre, Error as EyreError, Result as EyreResult, WrapErr as _};
 use structopt::StructOpt;
 use tracing::{debug, info, Level, Subscriber};
-use tracing_subscriber::{
-    filter::Directive, fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer,
-    Registry,
-};
+use tracing_subscriber::{filter::Targets, fmt, layer::SubscriberExt, Layer, Registry};
 
 #[derive(Debug, PartialEq)]
 enum LogFormat {
@@ -62,24 +59,33 @@ impl LogOptions {
     #[allow(dead_code)]
     pub fn init(&self) -> EyreResult<()> {
         // Log filtering is a combination of `--log-filter` and `--verbose` arguments.
-        let log_filter = if self.log_filter.is_empty() {
-            EnvFilter::default()
-        } else {
-            EnvFilter::try_new(&self.log_filter)?
+        let verbosity = {
+            let (all, app) = match self.verbose {
+                0 => (Level::INFO, Level::INFO),
+                1 => (Level::INFO, Level::DEBUG),
+                2 => (Level::INFO, Level::TRACE),
+                3 => (Level::DEBUG, Level::TRACE),
+                _ => (Level::TRACE, Level::TRACE),
+            };
+            Targets::new()
+                .with_default(all)
+                .with_target("lib", app)
+                .with_target(env!("CARGO_CRATE_NAME"), app)
         };
-        let log_filter = log_filter.add_directive(match self.verbose {
-            0 => Level::INFO.into(),
-            1 => format!("{}=debug,lib=debug", env!("CARGO_CRATE_NAME")).parse()?,
-            2 => format!("{}=trace,lib=trace", env!("CARGO_CRATE_NAME")).parse()?,
-            3 => format!("{}=trace,lib=trace,debug", env!("CARGO_CRATE_NAME")).parse()?,
-            _ => Level::TRACE.into(),
-        });
+        let log_filter = if self.log_filter.is_empty() {
+            Targets::new()
+        } else {
+            self.log_filter.parse()?
+        };
+        let targets = log_filter.with_targets(verbosity);
 
         // Support server for tokio-console
-        let console_layer = { console_subscriber::ConsoleLayer::builder().spawn() };
+        let console_layer = super::tokio_console::layer();
 
-        let subscriber = Registry::default().with(console_layer);
-        let subscriber = self.log_format.to_layer().with_subscriber(subscriber);
+        // Route events to both tokio-console and stdout
+        let subscriber = Registry::default()
+            .with(console_layer)
+            .with(self.log_format.to_layer().with_filter(targets));
         tracing::subscriber::set_global_default(subscriber)?;
 
         // Log version information

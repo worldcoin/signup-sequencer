@@ -3,14 +3,31 @@
 use core::str::FromStr;
 use eyre::{bail, eyre, Error as EyreError, Result as EyreResult, WrapErr as _};
 use structopt::StructOpt;
-use tracing::{debug, info};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing::{debug, info, Level, Subscriber};
+use tracing_subscriber::{
+    filter::Directive, fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer,
+    Registry,
+};
 
 #[derive(Debug, PartialEq)]
 enum LogFormat {
     Compact,
     Pretty,
     Json,
+}
+
+impl LogFormat {
+    fn to_layer<S>(&self) -> impl Layer<S>
+    where
+        S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a> + Send + Sync,
+    {
+        match self {
+            LogFormat::Compact => Box::new(fmt::Layer::new().event_format(fmt::format().compact()))
+                as Box<dyn Layer<S> + Send + Sync>,
+            LogFormat::Pretty => Box::new(fmt::Layer::new().event_format(fmt::format().pretty())),
+            LogFormat::Json => Box::new(fmt::Layer::new().event_format(fmt::format().json())),
+        }
+    }
 }
 
 impl FromStr for LogFormat {
@@ -44,32 +61,26 @@ pub struct LogOptions {
 impl LogOptions {
     #[allow(dead_code)]
     pub fn init(&self) -> EyreResult<()> {
-        let log_filter = match self.verbose {
-            0 => "info".to_owned(),
-            1 => format!("{}=debug,lib=debug", env!("CARGO_CRATE_NAME")),
-            2 => format!("{}=trace,lib=trace", env!("CARGO_CRATE_NAME")),
-            3 => format!("{}=trace,lib=trace,debug", env!("CARGO_CRATE_NAME")),
-            _ => "trace".to_owned(),
-        };
+        // Log filtering is a combination of `--log-filter` and `--verbose` arguments.
         let log_filter = if self.log_filter.is_empty() {
-            log_filter
+            EnvFilter::default()
         } else {
-            format!("{},{}", log_filter, self.log_filter)
+            EnvFilter::try_new(&self.log_filter)?
         };
-        let log_filter = EnvFilter::try_new(log_filter)?;
-        let collector = fmt::fmt().with_env_filter(log_filter);
-        match self.log_format {
-            LogFormat::Compact => collector.compact().try_init(),
-            LogFormat::Pretty => collector.pretty().try_init(),
-            LogFormat::Json => {
-                collector
-                    .without_time() // See <https://github.com/tokio-rs/tracing/issues/1509>
-                    .json()
-                    .try_init()
-            }
-        }
-        .map_err(|err| eyre!(err))
-        .wrap_err("setting default log collector")?;
+        let log_filter = log_filter.add_directive(match self.verbose {
+            0 => Level::INFO.into(),
+            1 => format!("{}=debug,lib=debug", env!("CARGO_CRATE_NAME")).parse()?,
+            2 => format!("{}=trace,lib=trace", env!("CARGO_CRATE_NAME")).parse()?,
+            3 => format!("{}=trace,lib=trace,debug", env!("CARGO_CRATE_NAME")).parse()?,
+            _ => Level::TRACE.into(),
+        });
+
+        // Support server for tokio-console
+        let console_layer = { console_subscriber::ConsoleLayer::builder().spawn() };
+
+        let subscriber = Registry::default().with(console_layer);
+        let subscriber = self.log_format.to_layer().with_subscriber(subscriber);
+        tracing::subscriber::set_global_default(subscriber)?;
 
         // Log version information
         info!(

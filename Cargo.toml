@@ -31,6 +31,7 @@ required-features = [ "bench", "proptest" ]
 
 [dependencies]
 color-eyre = "0.5"
+console-subscriber = "0.1"
 criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
 ethers = "0.6"
 eyre = "0.6"

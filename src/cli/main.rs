@@ -4,15 +4,19 @@ use signup_sequencer as lib;
 
 mod allocator;
 mod logging;
+mod opentelemetry;
 mod prometheus;
 mod shutdown;
 mod tokio_console;
 
 use self::allocator::Allocator;
 use eyre::{Result as EyreResult, WrapErr as _};
+use std::process::id as get_current_pid;
 use structopt::StructOpt;
 use tokio::{runtime, sync::broadcast};
 use tracing::info;
+use tracing_subscriber::{layer::SubscriberExt, Registry};
+use users::{get_current_gid, get_current_uid};
 
 const VERSION: &str = concat!(
     env!("CARGO_PKG_VERSION"),
@@ -43,11 +47,15 @@ pub static ALLOCATOR: Allocator<allocator::MiMalloc> = allocator::new_mimalloc()
 #[derive(StructOpt)]
 struct Options {
     #[structopt(flatten)]
-    log:            logging::Options,
+    log:               logging::Options,
     #[structopt(flatten)]
-    pub prometheus: prometheus::Options,
+    pub tokio_console: tokio_console::Options,
     #[structopt(flatten)]
-    app:            lib::Options,
+    pub prometheus:    prometheus::Options,
+    #[structopt(flatten)]
+    pub opentelemetry: opentelemetry::Options,
+    #[structopt(flatten)]
+    app:               lib::Options,
 }
 
 fn main() -> EyreResult<()> {
@@ -61,8 +69,30 @@ fn main() -> EyreResult<()> {
     // Meter memory consumption
     ALLOCATOR.start_metering();
 
-    // Start log system
-    options.log.init()?;
+    // Start tracing stack
+    {
+        let early_log = Registry::default().with(options.log.to_layer()?);
+        let _guard = tracing::subscriber::set_default(early_log);
+        tracing::subscriber::set_global_default(
+            Registry::default()
+                .with(options.log.to_layer()?)
+                .with(options.opentelemetry.to_layer()?)
+                .with(options.tokio_console.to_layer()?),
+        )?;
+    }
+
+    // Log version and process information
+    info!(
+        host = env!("TARGET"),
+        pid = get_current_pid(),
+        uid = get_current_uid(),
+        gid = get_current_gid(),
+        main = &crate::main as *const _ as usize, // Check if ASLR is working
+        commit = &env!("COMMIT_SHA")[..8],
+        "{name} {version}",
+        name = env!("CARGO_CRATE_NAME"),
+        version = env!("CARGO_PKG_VERSION"),
+    );
 
     // Launch Tokio runtime
     runtime::Builder::new_multi_thread()

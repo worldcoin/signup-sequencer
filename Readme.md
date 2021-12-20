@@ -19,3 +19,32 @@ Run benchmarks
 ```shell
 cargo criterion
 ```
+
+
+<https://www.dynatrace.com/support/help/extend-dynatrace/opentelemetry/opentelemetry-ingest/opent-rust>
+
+
+## Telemetry
+
+### Logging
+
+Logs are written to the console. The default log format is `pretty` for local builds and `json` for containers.
+
+### Traces
+
+
+Start a Jaeger tracing server
+
+```shell
+docker run --rm -ti -p6831:6831/udp -p6832:6832/udp -p16686:16686 jaegertracing/all-in-one:latest
+```
+
+```shell
+open "http://localhost:16686/"
+```
+
+Global tracing
+
+
+### Metrics
+

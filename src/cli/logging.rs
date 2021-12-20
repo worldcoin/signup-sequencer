@@ -1,16 +1,33 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
+use super::tokio_console;
 use core::str::FromStr;
-use eyre::{bail, eyre, Error as EyreError, Result as EyreResult, WrapErr as _};
+use eyre::{bail, Error as EyreError, Result as EyreResult, WrapErr as _};
+use std::process::id as pid;
 use structopt::StructOpt;
-use tracing::{debug, info};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing::{info, Level, Subscriber};
+use tracing_subscriber::{filter::Targets, fmt, layer::SubscriberExt, Layer, Registry};
+use users::{get_current_gid, get_current_uid};
 
 #[derive(Debug, PartialEq)]
 enum LogFormat {
     Compact,
     Pretty,
     Json,
+}
+
+impl LogFormat {
+    fn to_layer<S>(&self) -> impl Layer<S>
+    where
+        S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a> + Send + Sync,
+    {
+        match self {
+            LogFormat::Compact => Box::new(fmt::Layer::new().event_format(fmt::format().compact()))
+                as Box<dyn Layer<S> + Send + Sync>,
+            LogFormat::Pretty => Box::new(fmt::Layer::new().event_format(fmt::format().pretty())),
+            LogFormat::Json => Box::new(fmt::Layer::new().event_format(fmt::format().json())),
+        }
+    }
 }
 
 impl FromStr for LogFormat {
@@ -27,60 +44,70 @@ impl FromStr for LogFormat {
 }
 
 #[derive(Debug, PartialEq, StructOpt)]
-pub struct LogOptions {
+pub struct Options {
     /// Verbose mode (-v, -vv, -vvv, etc.)
     #[structopt(short, long, parse(from_occurrences))]
     verbose: usize,
 
     /// Apply an env_filter compatible log filter
-    #[structopt(long, env = "LOG_FILTER", default_value)]
+    #[structopt(long, env, default_value)]
     log_filter: String,
 
     /// Log format, one of 'compact', 'pretty' or 'json'
-    #[structopt(long, env = "LOG_FORMAT", default_value = "pretty")]
+    #[structopt(long, env, default_value = "pretty")]
     log_format: LogFormat,
+
+    #[structopt(flatten)]
+    pub tokio_console: tokio_console::Options,
 }
 
-impl LogOptions {
+impl Options {
     #[allow(dead_code)]
     pub fn init(&self) -> EyreResult<()> {
-        let log_filter = match self.verbose {
-            0 => "info".to_owned(),
-            1 => format!("{}=debug,lib=debug", env!("CARGO_CRATE_NAME")),
-            2 => format!("{}=trace,lib=trace", env!("CARGO_CRATE_NAME")),
-            3 => format!("{}=trace,lib=trace,debug", env!("CARGO_CRATE_NAME")),
-            _ => "trace".to_owned(),
+        // Log filtering is a combination of `--log-filter` and `--verbose` arguments.
+        let verbosity = {
+            let (all, app) = match self.verbose {
+                0 => (Level::INFO, Level::INFO),
+                1 => (Level::INFO, Level::DEBUG),
+                2 => (Level::INFO, Level::TRACE),
+                3 => (Level::DEBUG, Level::TRACE),
+                _ => (Level::TRACE, Level::TRACE),
+            };
+            Targets::new()
+                .with_default(all)
+                .with_target("lib", app)
+                .with_target(env!("CARGO_CRATE_NAME"), app)
         };
         let log_filter = if self.log_filter.is_empty() {
-            log_filter
+            Targets::new()
         } else {
-            format!("{},{}", log_filter, self.log_filter)
+            self.log_filter
+                .parse()
+                .wrap_err("Error parsing log-filter")?
         };
-        let log_filter = EnvFilter::try_new(log_filter)?;
-        let collector = fmt::fmt().with_env_filter(log_filter);
-        match self.log_format {
-            LogFormat::Compact => collector.compact().try_init(),
-            LogFormat::Pretty => collector.pretty().try_init(),
-            LogFormat::Json => {
-                collector
-                    .without_time() // See <https://github.com/tokio-rs/tracing/issues/1509>
-                    .json()
-                    .try_init()
-            }
-        }
-        .map_err(|err| eyre!(err))
-        .wrap_err("setting default log collector")?;
+        let targets = log_filter.with_targets(verbosity);
+
+        // Support server for tokio-console
+        let console_layer = tokio_console::layer(&self.tokio_console);
+
+        // Route events to both tokio-console and stdout
+        let subscriber = Registry::default()
+            .with(console_layer)
+            .with(self.log_format.to_layer().with_filter(targets));
+        tracing::subscriber::set_global_default(subscriber)?;
 
         // Log version information
         info!(
-            "{name} {version} {commit}",
+            host = env!("TARGET"),
+            pid = pid(),
+            uid = get_current_uid(),
+            gid = get_current_gid(),
+            main = &crate::main as *const _ as usize,
+            commit = &env!("COMMIT_SHA")[..8],
+            "{name} {version}",
             name = env!("CARGO_CRATE_NAME"),
             version = env!("CARGO_PKG_VERSION"),
-            commit = &env!("COMMIT_SHA")[..8],
         );
-
-        // Log main address to test ASLR
-        debug!("Address of main {:#x}", &crate::main as *const _ as usize);
 
         Ok(())
     }
@@ -94,11 +121,14 @@ pub mod test {
     #[test]
     fn test_parse_args() {
         let cmd = "arg0 -v --log-filter foo -vvv";
-        let options = LogOptions::from_iter_safe(cmd.split(' ')).unwrap();
-        assert_eq!(options, LogOptions {
-            verbose:    4,
-            log_filter: "foo".to_owned(),
-            log_format: LogFormat::Pretty,
+        let options = Options::from_iter_safe(cmd.split(' ')).unwrap();
+        assert_eq!(options, Options {
+            verbose:       4,
+            log_filter:    "foo".to_owned(),
+            log_format:    LogFormat::Pretty,
+            tokio_console: tokio_console::Options {
+                tokio_console: false,
+            },
         });
     }
 }

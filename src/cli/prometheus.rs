@@ -20,11 +20,7 @@ use url::{Host, Url};
 pub struct Options {
     /// Prometheus scrape endpoint
     // See <https://github.com/prometheus/prometheus/wiki/Default-port-allocations>
-    #[structopt(
-        long,
-        env = "PROMETHEUS",
-        default_value = "http://127.0.0.1:9998/metrics"
-    )]
+    #[structopt(long, env, default_value = "http://127.0.0.1:9998/metrics")]
     pub prometheus: Url,
 }
 

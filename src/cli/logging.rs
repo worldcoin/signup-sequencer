@@ -6,6 +6,8 @@ use eyre::{bail, Error as EyreError, Result as EyreResult, WrapErr as _};
 use structopt::StructOpt;
 use tracing::{debug, info, Level, Subscriber};
 use tracing_subscriber::{filter::Targets, fmt, layer::SubscriberExt, Layer, Registry};
+use std::process::id as pid;
+use users::{get_current_uid, get_current_gid};
 
 #[derive(Debug, PartialEq)]
 enum LogFormat {
@@ -96,14 +98,16 @@ impl Options {
 
         // Log version information
         info!(
-            "{name} {version} {commit}",
+            host = env!("TARGET"),
+            pid = pid(),
+            uid = get_current_uid(),
+            gid = get_current_gid(),
+            main = &crate::main as *const _ as usize,
+            commit = &env!("COMMIT_SHA")[..8],
+            "{name} {version}",
             name = env!("CARGO_CRATE_NAME"),
             version = env!("CARGO_PKG_VERSION"),
-            commit = &env!("COMMIT_SHA")[..8],
         );
-
-        // Log main address to test ASLR
-        debug!("Address of main {:#x}", &crate::main as *const _ as usize);
 
         Ok(())
     }

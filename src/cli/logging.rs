@@ -3,11 +3,11 @@
 use super::tokio_console;
 use core::str::FromStr;
 use eyre::{bail, Error as EyreError, Result as EyreResult, WrapErr as _};
-use structopt::StructOpt;
-use tracing::{debug, info, Level, Subscriber};
-use tracing_subscriber::{filter::Targets, fmt, layer::SubscriberExt, Layer, Registry};
 use std::process::id as pid;
-use users::{get_current_uid, get_current_gid};
+use structopt::StructOpt;
+use tracing::{info, Level, Subscriber};
+use tracing_subscriber::{filter::Targets, fmt, layer::SubscriberExt, Layer, Registry};
+use users::{get_current_gid, get_current_uid};
 
 #[derive(Debug, PartialEq)]
 enum LogFormat {

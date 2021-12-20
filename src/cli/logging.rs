@@ -1,7 +1,8 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
+use super::tokio_console;
 use core::str::FromStr;
-use eyre::{bail, eyre, Error as EyreError, Result as EyreResult, WrapErr as _};
+use eyre::{bail, Error as EyreError, Result as EyreResult, WrapErr as _};
 use structopt::StructOpt;
 use tracing::{debug, info, Level, Subscriber};
 use tracing_subscriber::{filter::Targets, fmt, layer::SubscriberExt, Layer, Registry};
@@ -41,21 +42,24 @@ impl FromStr for LogFormat {
 }
 
 #[derive(Debug, PartialEq, StructOpt)]
-pub struct LogOptions {
+pub struct Options {
     /// Verbose mode (-v, -vv, -vvv, etc.)
     #[structopt(short, long, parse(from_occurrences))]
     verbose: usize,
 
     /// Apply an env_filter compatible log filter
-    #[structopt(long, env = "LOG_FILTER", default_value)]
+    #[structopt(long, env, default_value)]
     log_filter: String,
 
     /// Log format, one of 'compact', 'pretty' or 'json'
-    #[structopt(long, env = "LOG_FORMAT", default_value = "pretty")]
+    #[structopt(long, env, default_value = "pretty")]
     log_format: LogFormat,
+
+    #[structopt(flatten)]
+    pub tokio_console: tokio_console::Options,
 }
 
-impl LogOptions {
+impl Options {
     #[allow(dead_code)]
     pub fn init(&self) -> EyreResult<()> {
         // Log filtering is a combination of `--log-filter` and `--verbose` arguments.
@@ -75,12 +79,14 @@ impl LogOptions {
         let log_filter = if self.log_filter.is_empty() {
             Targets::new()
         } else {
-            self.log_filter.parse()?
+            self.log_filter
+                .parse()
+                .wrap_err("Error parsing log-filter")?
         };
         let targets = log_filter.with_targets(verbosity);
 
         // Support server for tokio-console
-        let console_layer = super::tokio_console::layer();
+        let console_layer = tokio_console::layer(&self.tokio_console);
 
         // Route events to both tokio-console and stdout
         let subscriber = Registry::default()
@@ -111,11 +117,14 @@ pub mod test {
     #[test]
     fn test_parse_args() {
         let cmd = "arg0 -v --log-filter foo -vvv";
-        let options = LogOptions::from_iter_safe(cmd.split(' ')).unwrap();
-        assert_eq!(options, LogOptions {
-            verbose:    4,
-            log_filter: "foo".to_owned(),
-            log_format: LogFormat::Pretty,
+        let options = Options::from_iter_safe(cmd.split(' ')).unwrap();
+        assert_eq!(options, Options {
+            verbose:       4,
+            log_filter:    "foo".to_owned(),
+            log_format:    LogFormat::Pretty,
+            tokio_console: tokio_console::Options {
+                tokio_console: false,
+            },
         });
     }
 }

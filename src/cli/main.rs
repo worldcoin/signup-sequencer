@@ -59,6 +59,9 @@ struct Options {
 }
 
 fn main() -> EyreResult<()> {
+    // Meter memory consumption
+    ALLOCATOR.start_metering();
+
     // Install error handler
     color_eyre::install()?;
 
@@ -66,40 +69,37 @@ fn main() -> EyreResult<()> {
     let matches = Options::clap().long_version(VERSION).get_matches();
     let options = Options::from_clap(&matches);
 
-    // Meter memory consumption
-    ALLOCATOR.start_metering();
-
-    // Start tracing stack
-    {
-        let early_log = Registry::default().with(options.log.to_layer()?);
-        let _guard = tracing::subscriber::set_default(early_log);
-        tracing::subscriber::set_global_default(
-            Registry::default()
-                .with(options.log.to_layer()?)
-                .with(options.opentelemetry.to_layer()?)
-                .with(options.tokio_console.to_layer()?),
-        )?;
-    }
-
-    // Log version and process information
-    info!(
-        host = env!("TARGET"),
-        pid = get_current_pid(),
-        uid = get_current_uid(),
-        gid = get_current_gid(),
-        main = &crate::main as *const _ as usize, // Check if ASLR is working
-        commit = &env!("COMMIT_SHA")[..8],
-        "{name} {version}",
-        name = env!("CARGO_CRATE_NAME"),
-        version = env!("CARGO_PKG_VERSION"),
-    );
-
     // Launch Tokio runtime
     runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .wrap_err("Error creating Tokio runtime")?
         .block_on(async {
+            // Start tracing stack
+            {
+                let early_log = Registry::default().with(options.log.to_layer()?);
+                let _guard = tracing::subscriber::set_default(early_log);
+                tracing::subscriber::set_global_default(
+                    Registry::default()
+                        .with(options.log.to_layer()?)
+                        .with(options.opentelemetry.to_layer()?)
+                        .with(options.tokio_console.to_layer()?),
+                )?;
+            }
+
+            // Log version and process information
+            info!(
+                host = env!("TARGET"),
+                pid = get_current_pid(),
+                uid = get_current_uid(),
+                gid = get_current_gid(),
+                main = &crate::main as *const _ as usize, // Check if ASLR is working
+                commit = &env!("COMMIT_SHA")[..8],
+                "{name} {version}",
+                name = env!("CARGO_CRATE_NAME"),
+                version = env!("CARGO_PKG_VERSION"),
+            );
+
             // Create shutdown signal
             // TODO: Fix minor race conditions
             let (shutdown, _) = broadcast::channel(1);
@@ -122,7 +122,12 @@ fn main() -> EyreResult<()> {
 
             // Stop prometheus
             info!("Stopping metrics server");
-            prometheus.await?
+            prometheus.await?;
+
+            // Stop opentelemetry
+            opentelemetry::shutdown();
+
+            EyreResult::<(), eyre::Report>::Ok(())
         })?;
 
     // Terminate successfully

@@ -1,5 +1,6 @@
 use eyre::Result as EyreResult;
 use opentelemetry::{
+    global::{force_flush_tracer_provider, shutdown_tracer_provider},
     sdk::{
         trace::{self, IdGenerator, Sampler},
         Resource,
@@ -10,24 +11,32 @@ use opentelemetry_http::{HeaderExtractor, HeaderInjector};
 use opentelemetry_otlp::WithExportConfig;
 use std::collections::HashMap;
 use structopt::StructOpt;
-use tracing::{info, Subscriber};
+use tracing::{error, info, Subscriber};
 use tracing_subscriber::{registry::LookupSpan, Layer};
+use url::Url;
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
-    /// OpenTelemetry submission
-    #[structopt(long)]
-    pub opentelemetry: bool,
+    /// OpenTelemetry http trace submission endpoint
+    #[structopt(long, env)]
+    pub otlp_trace: Option<Url>,
 }
 
 impl Options {
+    #[allow(clippy::unnecessary_wraps)] // Consistency with other modules
     pub fn to_layer<S>(&self) -> EyreResult<impl Layer<S>>
     where
         S: Subscriber + for<'span> LookupSpan<'span>,
     {
-        if !self.opentelemetry {
+        let endpoint = if let Some(endpoint) = &self.otlp_trace {
+            endpoint
+        } else {
             return Ok(None);
-        }
+        };
+
+        opentelemetry::global::set_error_handler(|error| {
+            error!(?error, "{msg}", msg = error);
+        })?;
 
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 6831));
 
@@ -48,8 +57,7 @@ impl Options {
 
         let exporter = opentelemetry_otlp::new_exporter()
             .http()
-            .with_endpoint("<URL>") // TODO replace <URL> with the URL as determined in section 2 above
-            .with_headers(map);
+            .with_endpoint(endpoint.to_string());
 
         let tracer = opentelemetry_otlp::new_pipeline()
             .tracing()
@@ -62,4 +70,10 @@ impl Options {
 
         Ok(Some(tracing_opentelemetry::layer().with_tracer(tracer)))
     }
+}
+
+pub fn shutdown() {
+    info!("Flushing traces and stop tracing");
+    force_flush_tracer_provider();
+    shutdown_tracer_provider();
 }

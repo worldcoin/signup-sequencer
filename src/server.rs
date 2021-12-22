@@ -18,7 +18,7 @@ use std::{
 use structopt::StructOpt;
 use thiserror::Error;
 use tokio::sync::broadcast;
-use tracing::{error, info, trace};
+use tracing::{error, info, trace, warn, Level};
 use url::{Host, Url};
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
@@ -72,9 +72,24 @@ pub enum Error {
 }
 
 impl Error {
+    fn is_internal(&self) -> bool {
+        self.status_code().is_server_error()
+    }
+
+    fn status_code(&self) -> StatusCode {
+        use Error::*;
+        match self {
+            // TODO: Response requires an Allow header.
+            // See <https://developer.mozilla.org/en-US/docs/web/http/status/405>
+            InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
+            Hyper(_) | Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            _ => StatusCode::BAD_REQUEST,
+        }
+    }
+
     fn to_response(&self) -> hyper::Response<Body> {
         hyper::Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .status(self.status_code())
             .body(hyper::Body::from(self.to_string()))
             .expect("Failed to convert error string into hyper::Body")
     }
@@ -130,7 +145,14 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
         }
         _ => Err(Error::InvalidMethod),
     };
-    let response = result.unwrap_or_else(|err| err.to_response());
+    let response = result.unwrap_or_else(|err| {
+        if err.is_internal() {
+            error!(?err, "Server error handling request");
+        } else {
+            warn!(?err, "Client error handling request");
+        }
+        err.to_response()
+    });
 
     // Measure result and return
     STATUS

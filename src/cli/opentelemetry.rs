@@ -2,12 +2,12 @@ use eyre::Result as EyreResult;
 use opentelemetry::{
     global::{force_flush_tracer_provider, shutdown_tracer_provider},
     sdk::{
+        propagation::TraceContextPropagator,
         trace::{self, IdGenerator, Sampler},
         Resource,
     },
     KeyValue,
 };
-use opentelemetry_http::{HeaderExtractor, HeaderInjector};
 use opentelemetry_otlp::WithExportConfig;
 use std::collections::HashMap;
 use structopt::StructOpt;
@@ -34,9 +34,13 @@ impl Options {
             return Ok(None);
         };
 
+        // Set global error handler
         opentelemetry::global::set_error_handler(|error| {
             error!(?error, "{msg}", msg = error);
         })?;
+
+        // Set global propagator
+        opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
 
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 6831));
 
@@ -52,7 +56,7 @@ impl Options {
             .with_max_events_per_span(16)
             .with_resource(Resource::new(vec![KeyValue::new(
                 "service.name",
-                "example",
+                env!("CARGO_CRATE_NAME"),
             )]));
 
         let exporter = opentelemetry_otlp::new_exporter()
@@ -63,8 +67,7 @@ impl Options {
             .tracing()
             .with_exporter(exporter)
             .with_trace_config(trace_config)
-            .install_batch(opentelemetry::runtime::Tokio)
-            .unwrap();
+            .install_batch(opentelemetry::runtime::Tokio)?;
 
         info!("OpenTelemetry enabled");
 

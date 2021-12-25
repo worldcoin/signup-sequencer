@@ -9,6 +9,8 @@ use hyper::{
     Body, Method, Request, Response, Server, StatusCode,
 };
 use once_cell::sync::Lazy;
+use opentelemetry::trace::{Span, Tracer};
+use opentelemetry_http::HeaderExtractor;
 use prometheus::{register_int_counter_vec, IntCounterVec};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
@@ -18,7 +20,7 @@ use std::{
 use structopt::StructOpt;
 use thiserror::Error;
 use tokio::sync::broadcast;
-use tracing::{error, info, trace, warn, Level};
+use tracing::{error, info, instrument, span, trace, warn};
 use url::{Host, Url};
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
@@ -125,7 +127,14 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
     REQUESTS.inc();
-    trace!(url = %request.uri(), "Receiving request");
+
+    // Extract tracing headers
+    let parent_cx = opentelemetry::global::get_text_map_propagator(|propagator| {
+        propagator.extract(&HeaderExtractor(request.headers()))
+    });
+    let mut span =
+        opentelemetry::global::tracer("example/server").start_with_context("hello", parent_cx);
+    span.add_event("handling this...".to_string(), Vec::new());
 
     // Route requests
     let result = match (request.method(), request.uri().path()) {

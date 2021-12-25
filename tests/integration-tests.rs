@@ -21,6 +21,7 @@ use signup_sequencer::{
 };
 use std::{
     fs::File,
+    io::{BufReader},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     str::FromStr,
     sync::Arc,
@@ -261,8 +262,8 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
     let client = std::sync::Arc::new(client);
 
     let mimc_json = File::open("./sol/MiMC.json").expect("Failed to read MiMC.sol");
-    let mimc_json: CompiledContract =
-        serde_json::from_reader(mimc_json).expect("Could not parse compiled MiMC contract");
+    let mimc_json: CompiledContract = serde_json::from_reader(BufReader::new(mimc_json))
+        .expect("Could not parse compiled MiMC contract");
     let mimc_bytecode = deserialize_to_bytes(mimc_json.bytecode)?;
 
     let mimc_factory = ContractFactory::new(mimc_json.abi, mimc_bytecode, client.clone());
@@ -277,7 +278,7 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
     let semaphore_json =
         File::open("./sol/Semaphore.json").expect("Compiled contract doesn't exist");
     let semaphore_json: CompiledContract =
-        serde_json::from_reader(semaphore_json).expect("Could not read contract");
+        serde_json::from_reader(BufReader::new(semaphore_json)).expect("Could not read contract");
 
     let semaphore_bytecode = semaphore_json.bytecode.replace(
         "__$cf5da3090e28b1d67a537682696360513a$__",

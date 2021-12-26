@@ -29,7 +29,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Check formatting
-        uses: actions-rs/cargo@v1
+        run : actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
@@ -47,16 +47,14 @@ jobs:
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
       - run:  npm install ganache-cli@latest --global
-      - name: Build and run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all-features --all-targets
-      - name: Build and run doc tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all-features --doc
+      - name: Build tests
+        run: |
+          cargo test --locked --all-features --all-targets --no-run
+          cargo test --locked --all-features --doc --no-run
+      - name: Run tests
+        run: |
+          cargo test --locked --all-features --all-targets -- --nocapture --quiet
+          cargo test --locked --all-features --doc -- --nocapture --quiet
 
   codecov:
     # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
@@ -81,22 +79,20 @@ jobs:
           crate: rustfilt
           version: latest
       - run:  npm install ganache-cli@latest --global
-      - name: Test with coverage
+      - name: Build tests with coverage
         env:
           RUSTFLAGS: -Zinstrument-coverage
           LLVM_PROFILE_FILE: profile-%m.profraw
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all-features --all-targets --no-fail-fast
-      - name: Doc test with coverage
+        run: |
+          cargo test --locked --all-features --all-targets --no-fail-fast
+          cargo test --locked --all-features --doc --no-fail-fast
+      - name: Run tests with coverage
         env:
           RUSTFLAGS: -Zinstrument-coverage
           LLVM_PROFILE_FILE: profile-%m.profraw
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all-features --doc --no-fail-fast
+        run: |
+          cargo test --locked --all-features --all-targets --no-fail-fast -- --nocapture --quiet
+          cargo test --locked --all-features --doc --no-fail-fast -- --nocapture --quiet
       - name: Creating coverage report
         env:
           RUSTFLAGS: -Zinstrument-coverage
@@ -157,6 +153,7 @@ jobs:
           IMAGE_ID=ghcr.io/${{ github.repository }}:${{ github.sha }}
           docker pull $IMAGE_ID
           snyk container test $IMAGE_ID
+
   build_and_push:
     name: Build image
     runs-on: ubuntu-latest
@@ -258,6 +255,7 @@ jobs:
           | tail -n +2
           | cut -f 1 -d ' '
           | xargs -L 1 kubectl logs
+
   deploy-stage-us-east-1:
     name: Deploy to stage us-east-1
     runs-on: ubuntu-latest
@@ -294,6 +292,7 @@ jobs:
           --set image.pullSecret=ghcr-secret
           --set environment=stage
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
+
   deploy-stage-us-east-1-manual:
     name: Manual deploy to stage us-east-1
     runs-on: ubuntu-latest

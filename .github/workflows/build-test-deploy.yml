@@ -102,28 +102,26 @@ jobs:
           for test in target/debug/doctestbins/*/rust_out; do
             $test --nocapture
           done
-      - name: Creating coverage report
-        run: |
-          # Merge execution traces
-          cargo profdata -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata
-          # Export to lcov format for codecov
-          # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/instrument-coverage.html#including-doc-tests>
-          # NOTE: The inner cargo test command needs to be the same as above.
-          # It's output is parsed to find the location of the executables.
-          cargo cov -- export \
-            --format=lcov > profile.lcov \
-            --instr-profile=profile.profdata \
-            $( \
-              for file in \
-                $( \
-                  cargo test --locked --all-features --all-targets --no-fail-fast --no-run --message-format=json \
-                    | jq -r "select(.profile.test == true) | .filenames[]" \
-                    | grep -v dSYM - \
-                ) \
-                target/debug/doctestbins/*/rust_out; \
-              do \
-                [[ -x $file ]] && printf "%s %s " -object $file; \
-              done \
+      - name: Merge execution traces
+        run: cargo profdata -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata
+      - name: Export to lcov format for codecov
+        # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/instrument-coverage.html#including-doc-tests>
+        run: >
+          cargo cov -- export
+            --format=lcov > profile.lcov
+            --instr-profile=profile.profdata
+            $(
+              for file in
+                $(
+                  cargo test --locked --all-features --all-targets
+                    --no-fail-fast --no-run --message-format=json
+                    | jq -r "select(.profile.test == true) | .filenames[]"
+                    | grep -v dSYM -
+                )
+                target/debug/doctestbins/*/rust_out;
+              do
+                [[ -x $file ]] && printf "%s %s " -object $file;
+              done
             )
       - name: Submit to codecov.io
         uses: codecov/codecov-action@v2.1.0

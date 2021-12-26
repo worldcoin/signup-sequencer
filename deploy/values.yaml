@@ -24,7 +24,7 @@ resources:
     cpu: 16.0
     memory: 4Gi
 
-# Env values can be strings (to be prefixed with `value:`) or objects
+# Environment values can be strings or Kubernetes env objects
 env:
 
 # Spec ingress policy for the `api` and `metrics` port.

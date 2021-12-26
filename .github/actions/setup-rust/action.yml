@@ -31,3 +31,5 @@ runs:
       - name: Cache build
         # Also sets CARGO_INCREMENTAL=0
         uses: Swatinem/rust-cache@v1
+        with:
+          cache-on-failure: true

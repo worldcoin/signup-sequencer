@@ -21,7 +21,7 @@ use signup_sequencer::{
 };
 use std::{
     fs::File,
-    io::{BufReader},
+    io::BufReader,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     str::FromStr,
     sync::Arc,

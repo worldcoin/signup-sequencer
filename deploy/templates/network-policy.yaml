@@ -23,6 +23,6 @@ spec:
     from:
       {{- toYaml .Values.ingress.metrics | nindent 6 }}
   egress:
-    # TODO: Limit egress traffic to ethereum-rpc.
-    # Currently not possible to specify by domain name.
-    - {} # Allow all
+    # Note: It is currently not possible to specify rules by domain name.
+    # Uncomment the following line to allow all egress traffic:
+    # - {} # Allow all

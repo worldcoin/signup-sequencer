@@ -84,8 +84,8 @@ jobs:
         id: setup_rust
         with:
           components: llvm-tools-preview
-      - name: Install cargo-binutils and rustfilt
-        run: cargo install cargo-binutils rustfilt
+      - name: Install cargo-binutils
+        run: cargo install cargo-binutils
       - run:  npm install ganache-cli@latest --global
       - name: Build tests with coverage
         run: |

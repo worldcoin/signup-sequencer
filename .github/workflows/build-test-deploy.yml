@@ -94,14 +94,12 @@ jobs:
       - run:  npm install ganache-cli@latest --global
       - name: Build tests with coverage
         run: |
-          cargo test --locked --all-features --all-targets --no-fail-fast
-          cargo test --locked --all-features --doc --no-fail-fast
+          cargo test --locked --all-features --all-targets --no-fail-fast --no-run
+          cargo test --locked --all-features --doc --no-fail-fast -- --help
       - name: Run tests with coverage
         run: |
           cargo test --locked --all-features --all-targets --no-fail-fast -- --nocapture
-          for test in target/debug/doctestbins/*/rust_out; do
-            $test --nocapture
-          done
+          cargo test --locked --all-features --doc --no-fail-fast
       - name: Merge execution traces
         run: cargo profdata -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata
       - name: Export to lcov format for codecov

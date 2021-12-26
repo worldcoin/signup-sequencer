@@ -87,13 +87,11 @@ jobs:
       - name: Install cargo-binutils
         uses: actions-rs/install@v0.1.2
         with:
-          use-tool-cache: true
           crate: cargo-binutils
           version: latest
       - name: Install rustfilt
         uses: actions-rs/install@v0.1.2
         with:
-          use-tool-cache: true
           crate: rustfilt
           version: latest
       - run:  npm install ganache-cli@latest --global

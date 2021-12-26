@@ -69,6 +69,10 @@ jobs:
     # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
     name: Coverage
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -Zinstrument-coverage
+      RUSTDOCFLAGS: -Z instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
+      LLVM_PROFILE_FILE: profile-%m.profraw
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -89,41 +93,34 @@ jobs:
           version: latest
       - run:  npm install ganache-cli@latest --global
       - name: Build tests with coverage
-        env:
-          RUSTFLAGS: -Zinstrument-coverage
-          LLVM_PROFILE_FILE: profile-%m.profraw
         run: |
           cargo test --locked --all-features --all-targets --no-fail-fast
           cargo test --locked --all-features --doc --no-fail-fast
       - name: Run tests with coverage
-        env:
-          RUSTFLAGS: -Zinstrument-coverage
-          LLVM_PROFILE_FILE: profile-%m.profraw
         run: |
           cargo test --locked --all-features --all-targets --no-fail-fast -- --nocapture
-          cargo test --locked --all-features --doc --no-fail-fast -- --nocapture
+          target/debug/doctestbins/*/rust_out --nocapture
       - name: Creating coverage report
-        env:
-          RUSTFLAGS: -Zinstrument-coverage
         run: |
-          # Show files
-          ls -lah
           # Merge execution traces
           cargo profdata -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata
           # Export to lcov format for codecov
-          # NOTE: The inner cargo test command needs to be the same as above
+          # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/instrument-coverage.html#including-doc-tests>
+          # NOTE: The inner cargo test command needs to be the same as above.
+          # It's output is parsed to find the location of the executables.
           cargo cov -- export \
             --format=lcov > profile.lcov \
             --instr-profile=profile.profdata \
             $( \
               for file in \
                 $( \
-                  cargo test --all-features --all-targets --no-run --message-format=json \
+                  cargo test --locked --all-features --all-targets --no-fail-fast --no-run --message-format=json \
                     | jq -r "select(.profile.test == true) | .filenames[]" \
                     | grep -v dSYM - \
-                ); \
+                ) \
+                target/debug/doctestbins/*/rust_out; \
               do \
-                printf "%s %s " -object $file; \
+                [[ -x $file ]] && printf "%s %s " -object $file; \
               done \
             )
       - name: Submit to codecov.io
@@ -150,7 +147,8 @@ jobs:
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
-      - uses: snyk/actions/setup@master
+      - name: Set up Snyk
+        uses: snyk/actions/setup@master
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
         with:

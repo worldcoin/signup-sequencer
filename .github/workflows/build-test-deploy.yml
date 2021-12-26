@@ -99,7 +99,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           cargo test --locked --all-features --all-targets --no-fail-fast -- --nocapture
-          for $test in target/debug/doctestbins/*/rust_out; do
+          for test in target/debug/doctestbins/*/rust_out; do
             $test --nocapture
           done
       - name: Creating coverage report

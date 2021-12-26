@@ -107,7 +107,7 @@ jobs:
         run: cargo profdata -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata
       - name: Export to lcov format for codecov
         # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/instrument-coverage.html#including-doc-tests>
-        run: >
+        run: >-
           cargo cov -- export
             --format=lcov > profile.lcov
             --instr-profile=profile.profdata

@@ -8,6 +8,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Skip debug info generation in CI
+  CARGO_PROFILE_DEV_DEBUG: 0
 
 jobs:
   accept:

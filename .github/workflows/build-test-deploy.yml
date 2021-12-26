@@ -37,6 +37,11 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --locked --all-features --all-targets
+      - name: Check docs
+        uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          args: --locked --all-features --no-deps --document-private-items
 
   test:
     name: Test

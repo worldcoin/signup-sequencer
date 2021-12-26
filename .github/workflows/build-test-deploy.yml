@@ -52,14 +52,18 @@ jobs:
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
       - run:  npm install ganache-cli@latest --global
+      # Cargo doc test is not included in `--all-targets`
+      # See <https://github.com/rust-lang/cargo/issues/6669>
+      # Cargo doc test also doesn't support `--no-run`, so we run it but
+      # have it just print `--help`.
       - name: Build tests
         run: |
           cargo test --locked --all-features --all-targets --no-run
-          cargo test --locked --all-features --doc --no-run
+          cargo test --locked --all-features --doc -- --help
       - name: Run tests
         run: |
-          cargo test --locked --all-features --all-targets -- --nocapture --quiet
-          cargo test --locked --all-features --doc -- --nocapture --quiet
+          cargo test --locked --all-features --all-targets -- --nocapture
+          cargo test --locked --all-features --doc -- --nocapture
 
   codecov:
     # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
@@ -96,8 +100,8 @@ jobs:
           RUSTFLAGS: -Zinstrument-coverage
           LLVM_PROFILE_FILE: profile-%m.profraw
         run: |
-          cargo test --locked --all-features --all-targets --no-fail-fast -- --nocapture --quiet
-          cargo test --locked --all-features --doc --no-fail-fast -- --nocapture --quiet
+          cargo test --locked --all-features --all-targets --no-fail-fast -- --nocapture
+          cargo test --locked --all-features --doc --no-fail-fast -- --nocapture
       - name: Creating coverage report
         env:
           RUSTFLAGS: -Zinstrument-coverage

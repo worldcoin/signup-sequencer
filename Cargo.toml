@@ -1,12 +1,12 @@
 [package]
 # Please adjust all these values, including the license
-name = "rust-app-template"
+name = "rust-service-template"
 version = "0.1.0"
 authors = ["Remco Bloemen <remco@wicked.ventures>"]
 edition = "2021"
 build = "build.rs"
-homepage = "https://github.com/Recmo/rust-app-template"
-repository = "https://github.com/Recmo/rust-app-template"
+homepage = "https://github.com/Recmo/rust-service-template"
+repository = "https://github.com/Recmo/rust-service-template"
 description = "Template for a Rust CLI tool"
 keywords = ["template"]
 categories = ["template"]

@@ -17,6 +17,10 @@
 * Dependencies build optimized, also in dev build.
 * From scratch Docker build statically linked to musl.
 
+## Deployment
+
+Using GitHub actions for each PR it will push a Docker container image to the [Github container registry](ghcr.io). A Helm chart is included for easy deployment to Kubernetes clusters. The ingress rule assumes a Traefik frontend.
+
 ## Hints
 
 Lint, build, test, run

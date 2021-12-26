@@ -1,0 +1,235 @@
+name: Build, Test & Deploy
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  # Skip incremental build and debug info generation in CI
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
+
+jobs:
+  accept:
+    name: Accept
+    runs-on: ubuntu-latest
+    needs: [lint, test, build_and_push, helm_lint, helm_test]
+    steps:
+      - name: Accept
+        run: true
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt, clippy
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --locked --all-features --all-targets
+      - name: Check docs
+        uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          args: --locked --all-features --no-deps --document-private-items
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+      - run:  npm install ganache-cli@latest --global
+      # Cargo doc test is not included in `--all-targets`
+      # See <https://github.com/rust-lang/cargo/issues/6669>
+      # Cargo doc test also doesn't support `--no-run`, so we run it but
+      # have it just print `--help`.
+      - name: Build tests
+        run: |
+          cargo test --locked --all-features --all-targets --no-run
+          cargo test --locked --all-features --doc -- --help
+      - name: Run tests
+        run: |
+          cargo test --locked --all-features --all-targets -- --nocapture
+          cargo test --locked --all-features --doc -- --nocapture
+
+  codecov:
+    # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
+    name: Coverage
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -Zinstrument-coverage
+      RUSTDOCFLAGS: -Z instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
+      LLVM_PROFILE_FILE: profile-%m.profraw
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        id: setup_rust
+        with:
+          components: llvm-tools-preview
+      - name: Install cargo-binutils
+        run: cargo install cargo-binutils
+      - run:  npm install ganache-cli@latest --global
+      - name: Build tests with coverage
+        run: |
+          cargo test --locked --all-features --all-targets --no-fail-fast --no-run
+          cargo test --locked --all-features --doc --no-fail-fast -- --help
+      - name: Run tests with coverage
+        run: |
+          cargo test --locked --all-features --all-targets --no-fail-fast -- --nocapture
+          cargo test --locked --all-features --doc --no-fail-fast
+      - name: Merge execution traces
+        run: cargo profdata -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata
+      - name: Export to lcov format for codecov
+        # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/instrument-coverage.html#including-doc-tests>
+        run:
+          cargo cov -- export
+            --format=lcov > profile.lcov
+            --instr-profile=profile.profdata
+            $(
+              for file in
+                $(
+                  cargo test --locked --all-features --all-targets
+                    --no-fail-fast --no-run --message-format=json
+                    | jq -r "select(.profile.test == true) | .filenames[]"
+                    | grep -v dSYM - 
+                )
+                target/debug/doctestbins/*/rust_out;
+              do
+                [[ -x $file ]] && printf "%s %s " -object $file ;
+              done
+            )
+      - name: Submit to codecov.io
+        uses: codecov/codecov-action@v2.1.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
+          flags: test
+          fail_ci_if_error: true
+          verbose: true
+
+  security_audit:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/audit-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  build_and_push:
+    name: Build image
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [linux/amd64]
+        # linux/arm64 is disabled for now pending native runners; building in
+        # qemu-aarch64 is too slow and costly.
+        # See <https://github.com/actions/virtual-environments/issues/2187>
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up QEMU
+        id: qemu
+        uses: docker/setup-qemu-action@v1
+      - name: Available platforms
+        run: echo ${{ steps.qemu.outputs.platforms }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          # Bump buildkit version because we need PR 2433 to fix a bug
+          # in Github Actions Cache support.
+          # See <https://github.com/moby/buildkit/pull/2433>
+          driver-opts: image=moby/buildkit:v0.9.3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Get commit date
+        id: author-date
+        uses: actions/github-script@v5
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const commit_details = await github.rest.git.getCommit({owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha});
+            return commit_details.data.author.date
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          platforms: ${{ matrix.platform }}
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            COMMIT_DATE=${{ steps.author-date.outputs.result }}
+      - name: Test image
+        run:
+          docker run --pull always --platform ${{ matrix.platform }} --rm ghcr.io/${{ github.repository }}:${{ github.sha }} --version
+
+  helm_lint:
+    name: Lint helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup kube-score
+        uses: tobbbles/setup-kubescore@v1.0.2
+      - name: Setup python toml
+        run: pip install toml
+      - name: Run kube-score
+        run: helm template deploy | kube-score score -
+      - name: Check if Chart.yaml is up to date
+        run: ./deploy/generate.py | diff ./deploy/Chart.yaml -
+
+  helm_test:
+    name: Test deployment
+    runs-on: ubuntu-latest
+    needs: [build_and_push]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.2.0
+      - name: Create pull secret for ghcr.io
+        run:
+          kubectl create secret docker-registry ghcr-secret
+          --docker-server=ghcr.io
+          --docker-username="${{ github.repository_owner }}"
+          --docker-password="${{ secrets.GITHUB_TOKEN }}"
+      - name: Test install deploy
+        run:
+          helm upgrade --install ${{ github.repository }} ./deploy
+          --atomic
+          --timeout 60s  --debug
+          --set image.tag="${{ github.sha }}"
+          --set image.pullSecret=ghcr-secret
+      - name: Describe pods
+        if: always()
+        run: kubectl describe pod
+      - name: Dump logs
+        if: always()
+        run:
+          kubectl get pods
+          | tail -n +2
+          | cut -f 1 -d ' '
+          | xargs -L 1 kubectl logs

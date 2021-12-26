@@ -12,6 +12,7 @@ on:
 
 jobs:
   security-audit:
+    name: Dependency Security Audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2

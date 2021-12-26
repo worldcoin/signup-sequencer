@@ -240,13 +240,13 @@ jobs:
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
       - name: Create pull secret for ghcr.io
-        run: >-
+        run:
           kubectl create secret docker-registry ghcr-secret
           --docker-server=ghcr.io
           --docker-username="${{ github.repository_owner }}"
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Test install deploy
-        run: >-
+        run:
           helm upgrade --install signup-sequencer ./deploy
           --atomic
           --timeout 60s  --debug
@@ -258,7 +258,7 @@ jobs:
         run: kubectl describe pod
       - name: Dump logs
         if: always()
-        run: >-
+        run:
           kubectl get pods
           | tail -n +2
           | cut -f 1 -d ' '
@@ -285,14 +285,14 @@ jobs:
           role-duration-seconds: 900
       - run: aws eks --region us-east-1 update-kubeconfig --name $CLUSTER_NAME
       - name: Create pull secret for ghcr.io
-        run: >-
+        run:
           kubectl create secret docker-registry ghcr-secret
           --docker-server=ghcr.io
           --docker-username="${{ github.repository_owner }}"
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
           -o yaml --dry-run=client | kubectl apply -n signup-sequencer -f -
       - name: Helm install
-        run: >-
+        run:
           helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
           --atomic
           --timeout 60s
@@ -322,14 +322,14 @@ jobs:
           role-duration-seconds: 900
       - run: aws eks --region us-east-1 update-kubeconfig --name $CLUSTER_NAME
       - name: Create pull secret for ghcr.io
-        run: >-
+        run:
           kubectl create secret docker-registry ghcr-secret
           --docker-server=ghcr.io
           --docker-username="${{ github.repository_owner }}"
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
           -o yaml --dry-run=client | kubectl apply -n signup-sequencer -f -
       - name: Helm install
-        run: >-
+        run:
           helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
           --atomic
           --timeout 60s

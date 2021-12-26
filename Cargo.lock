@@ -1193,7 +1193,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-app-template"
+name = "rust-service-template"
 version = "0.1.0"
 dependencies = [
  "chrono",

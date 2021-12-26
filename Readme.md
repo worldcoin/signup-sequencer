@@ -35,17 +35,26 @@ Run benchmarks
 cargo bench --bench criterion --features="bench proptest"
 ```
 
+## How to use the template
+
+Update `Cargo.toml` and regenerate `deploy/Chart.yaml` from it using the included script:
+
+```shell
+./deploy/generate.py > ./deploy/Chart.yaml
+```
+
+Implement your service in `src/lib.rs`.
+
+If your service makes outbound connections, add egress rules to `deploy/templates/network-policy.yaml`.
+
+Deploy using Helm on a Kubernetes cluster using Traefik for ingress management.
+
+
 ## To do
 
 Copy from Tokio:
 * Add license, contributing, and other changelogs
-* Add ISSUE_TEMPLATE, PR template, etc.
 
-* Run `cargo audit` in CI
-
-* To do scraper in CI.
-* `--threads` cli argument for Rayon worker pool size.
-* `--seed` cli argument for deterministic `rand`.
 * Rustdocs with Katex.
 * Long running / fuzz mode for proptests.
 * [`loom`](https://crates.io/crates/loom) support for concurrency testing, maybe [`simulation`](https://github.com/tokio-rs/simulation).

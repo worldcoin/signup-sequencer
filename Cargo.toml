@@ -29,7 +29,7 @@ required-features = [ "bench", "proptest" ]
 
 [dependencies]
 color-eyre = "0.5"
-criterion = { version = "0.3", optional = true }
+criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
 eyre = "0.6"
 futures = "0.3"
 hyper = { version = "0.14", features = [ "server", "tcp", "http2" ] }
@@ -52,7 +52,6 @@ tracing-test = "0.2"
 url = "2.2"
 
 [dev-dependencies]
-criterion = { version = "0.3", features = [ "async_tokio" ] }
 pretty_assertions = "1.0"
 proptest = { version = "1.0" }
 

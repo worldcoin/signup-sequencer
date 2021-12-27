@@ -43,6 +43,8 @@ Update `Cargo.toml` and regenerate `deploy/Chart.yaml` from it using the include
 ./deploy/generate.py > ./deploy/Chart.yaml
 ```
 
+Change the name of the crate from `rust_service_template` to the new name in `./criterion.rs` and `./src/cli/main.rs`.
+
 Implement your service in `src/lib.rs`.
 
 If your service makes outbound connections, add egress rules to `deploy/templates/network-policy.yaml`.

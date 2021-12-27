@@ -6,6 +6,7 @@
         "compat",
         "cpus",
         "itertools",
+        "Kubernetes",
         "proptest",
         "Remco",
         "rngs",

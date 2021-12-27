@@ -1,12 +1,12 @@
 [package]
 # Please adjust all these values, including the license
-name = "rust-app-template"
+name = "rust-service-template"
 version = "0.1.0"
 authors = ["Remco Bloemen <remco@wicked.ventures>"]
 edition = "2021"
 build = "build.rs"
-homepage = "https://github.com/Recmo/rust-app-template"
-repository = "https://github.com/Recmo/rust-app-template"
+homepage = "https://github.com/Recmo/rust-service-template"
+repository = "https://github.com/Recmo/rust-service-template"
 description = "Template for a Rust CLI tool"
 keywords = ["template"]
 categories = ["template"]
@@ -29,7 +29,7 @@ required-features = [ "bench", "proptest" ]
 
 [dependencies]
 color-eyre = "0.5"
-criterion = { version = "0.3", optional = true }
+criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
 eyre = "0.6"
 futures = "0.3"
 hyper = { version = "0.14", features = [ "server", "tcp", "http2" ] }
@@ -48,17 +48,16 @@ tokio = { version = "1.13", features = [ "signal", "macros", "rt", "sync", "time
 tracing = "0.1"
 tracing-futures = "0.2"
 tracing-subscriber = { version = "0.3", features = [ "env-filter", "json" ] }
-tracing-test = "0.1"
+tracing-test = "0.2"
 url = "2.2"
 
 [dev-dependencies]
-criterion = { version = "0.3", features = [ "async_tokio" ] }
 pretty_assertions = "1.0"
 proptest = { version = "1.0" }
 
 [build-dependencies]
-eyre = "0.6"
 chrono = "0.4"
+eyre = "0.6"
 
 [profile.release]
 codegen-units = 1

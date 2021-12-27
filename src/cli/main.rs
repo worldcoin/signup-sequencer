@@ -1,6 +1,6 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
-use rust_app_template as lib;
+use rust_service_template as lib;
 
 mod allocator;
 mod logging;

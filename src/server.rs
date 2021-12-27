@@ -110,6 +110,7 @@ mod test {
         assert_eq!(bytes.as_ref(), b"Hello, World!\n");
     }
 }
+
 #[cfg(feature = "bench")]
 #[allow(clippy::wildcard_imports, unused_imports)]
 pub mod bench {

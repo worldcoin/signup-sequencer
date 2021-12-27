@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "mychart.fullname" . }}
+  labels:
+      {{- include "mychart.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "mychart.fullname" . }}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - ports:
+    - port: api
+      protocol: TCP
+    from:
+      {{- toYaml .Values.ingress.api | nindent 6 }}
+  - ports:
+    - port: metrics
+      protocol: TCP
+    from:
+      {{- toYaml .Values.ingress.metrics | nindent 6 }}
+  egress:
+    # Note: It is currently not possible to specify rules by domain name.
+    # Uncomment the following line to allow all egress traffic:
+    # - {} # Allow all

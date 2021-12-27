@@ -17,6 +17,10 @@
 * Dependencies build optimized, also in dev build.
 * From scratch Docker build statically linked to musl.
 
+## Deployment
+
+Using GitHub actions for each PR it will push a Docker container image to the [Github container registry](ghcr.io). A Helm chart is included for easy deployment to Kubernetes clusters. The ingress rule assumes a Traefik frontend.
+
 ## Hints
 
 Lint, build, test, run
@@ -31,17 +35,28 @@ Run benchmarks
 cargo bench --bench criterion --features="bench proptest"
 ```
 
+## How to use the template
+
+Update `Cargo.toml` and regenerate `deploy/Chart.yaml` from it using the included script:
+
+```shell
+./deploy/generate.py > ./deploy/Chart.yaml
+```
+
+Change the name of the crate from `rust_service_template` to the new name in `./criterion.rs` and `./src/cli/main.rs`.
+
+Implement your service in `src/lib.rs`.
+
+If your service makes outbound connections, add egress rules to `deploy/templates/network-policy.yaml`.
+
+Deploy using Helm on a Kubernetes cluster using Traefik for ingress management.
+
+
 ## To do
 
 Copy from Tokio:
 * Add license, contributing, and other changelogs
-* Add ISSUE_TEMPLATE, PR template, etc.
 
-* Run `cargo audit` in CI
-
-* To do scraper in CI.
-* `--threads` cli argument for Rayon worker pool size.
-* `--seed` cli argument for deterministic `rand`.
 * Rustdocs with Katex.
 * Long running / fuzz mode for proptests.
 * [`loom`](https://crates.io/crates/loom) support for concurrency testing, maybe [`simulation`](https://github.com/tokio-rs/simulation).

@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mychart.fullname" . }}
+  annotations:
+    kube-score/ignore: pod-probes # TODO
+  labels:
+    {{- include "mychart.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "mychart.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "mychart.fullname" . }}
+        {{- include "mychart.labels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9998"
+        prometheus.io/path: "/metrics"
+    spec:
+      {{ with .Values.image.pullSecret -}}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{ end -}}
+      nodeSelector:
+        beta.kubernetes.io/arch: {{ .Values.image.arch }}
+      containers:
+        - name: app
+          image: "{{ .Values.image.image }}:{{ .Values.image.tag | default (print "v" .Chart.AppVersion)}}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "Always" }}
+          ports:
+            - name: api
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9998
+              protocol: TCP
+          env:
+            - name: LOG_FORMAT
+              value: json
+            - name: SERVER
+              value: http://0.0.0.0:8080
+            {{- range $name, $item := .Values.env }}
+            - name: {{ $name }}
+              {{- if kindIs "map" $item }}
+              {{- $item | toYaml | nindent 14 }}
+              {{- else }}
+              value: {{ $item | quote }}
+              {{- end }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            capabilities:
+              add:
+                - NET_BIND_SERVICE
+              drop:
+                - all
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            runAsUser: 10001
+            runAsGroup: 10001
+          livenessProbe:
+           httpGet:
+             path: /metrics
+             scheme: HTTP
+             port: 9998
+           initialDelaySeconds: 10
+           timeoutSeconds: 10
+           successThreshold: 1
+           failureThreshold: 6
+          readinessProbe:
+           httpGet:
+             path: /metrics
+             scheme: HTTP
+             port: 9998
+           initialDelaySeconds: 10
+           timeoutSeconds: 10
+           successThreshold: 1
+           failureThreshold: 2

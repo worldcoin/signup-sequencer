@@ -64,7 +64,7 @@ zkp-u256 = "0.2"
 [dev-dependencies]
 pretty_assertions = "1.0"
 proptest = { version = "1.0" }
-tempfile = "3.0"
+tempfile = "3.3"
 
 [build-dependencies]
 chrono = "0.4"

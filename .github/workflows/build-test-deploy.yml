@@ -175,6 +175,8 @@ jobs:
             -v /usr/local/cargo/bin \
             ghcr.io/recmo/rust-static-build:1.58-$ARCH \
             cargo build --locked --release --features "$FEATURES"
+      - name: List executable
+        run: ls -lah ./target ; ls -lah ./target/*/release 
       - name: Build and push
         uses: docker/build-push-action@v2
         with:

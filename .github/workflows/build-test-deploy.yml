@@ -173,7 +173,7 @@ jobs:
             *) false
           esac
           docker run --rm \
-            -u $UID:$GID
+            -u $UID:$GID \
             -v "$(pwd)":/src \
             -v $HOME/.cargo:/usr/local/cargo \
             -v /usr/local/cargo/bin \

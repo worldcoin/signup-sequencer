@@ -172,7 +172,7 @@ jobs:
           esac
           docker run --rm \
             -v "$(pwd)":/src \
-            -v $HOME/.cargo:/usr/local/cargo:Z \
+            -v $HOME/.cargo:/usr/local/cargo \
             -v /usr/local/cargo/bin \
             ghcr.io/recmo/rust-static-build:1.58-$ARCH \
             cargo build --locked --release --features "$FEATURES"
@@ -188,9 +188,11 @@ jobs:
       - name: Test image
         run:
           docker run --pull always --platform linux/${{ matrix.platform }} --rm ghcr.io/${{ github.repository }}:${{ github.sha }}-${{ matrix.platform }} --version
+      - name: Experiment
+        run: cargo metadata --all-features --format-version 1 > test.json
 
   image_manifest:
-    name: Image multi-platform manifest
+    name: Image manifest
     runs-on: ubuntu-latest
     needs: [build_and_push]
     steps:

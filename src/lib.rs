@@ -27,6 +27,9 @@ pub struct Options {
     pub server: server::Options,
 }
 
+/// ```
+/// assert!(true);
+/// ```
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<()> {
     // Create App struct

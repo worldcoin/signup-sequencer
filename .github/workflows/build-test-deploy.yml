@@ -163,7 +163,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build executable
-        run:
+        run: |
           case ${{ matrix.platform }} in
             amd64) ARCH=x86_64 ;;
             arm64) ARCH=aarch64 ;;

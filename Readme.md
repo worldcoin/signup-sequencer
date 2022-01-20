@@ -5,6 +5,14 @@
 [![codecov](https://img.shields.io/codecov/c/github/recmo/rust-app-template)](https://codecov.io/gh/Recmo/rust-app-template)
 [![ci](https://img.shields.io/github/workflow/status/recmo/rust-app-template/ci)](https://github.com/Recmo/rust-app-template/actions?query=workflow%ci)
 
+## Features
+
+### Continuous Integration
+
+* Build, test and deploy
+  * Run rustfmt, clippy and doc build
+
+
 **Main features.** Comes with the kitchen sink. Remove what you don't need.
 
 * Command line argument parsing using `StructOpt`.
@@ -21,6 +29,8 @@
 
 Using GitHub actions for each PR it will push a Docker container image to the [Github container registry](ghcr.io). A Helm chart is included for easy deployment to Kubernetes clusters. The ingress rule assumes a Traefik frontend.
 
+
+Todo: Tutorial using: `https://github.com/redkubes/otomi-core`
 ## Hints
 
 Lint, build, test, run
@@ -61,3 +71,26 @@ Copy from Tokio:
 * Long running / fuzz mode for proptests.
 * [`loom`](https://crates.io/crates/loom) support for concurrency testing, maybe [`simulation`](https://github.com/tokio-rs/simulation).
 * Add crates.io publishing
+
+
+## Build images locally
+
+```
+for arch in x86_64 aarch64; do
+  docker run --rm \
+    -v "$(pwd)":/src \
+    -v $HOME/.cargo:/usr/local/cargo:Z \
+    -v /usr/local/cargo/bin \
+    ghcr.io/recmo/rust-static-build:1.58-$arch \
+    cargo build --locked --release --features mimalloc
+done
+for arch in amd64 arm64; do
+  docker build --platform linux/$arch --tag rust-service-template:latest-$arch .
+done
+docker manifest rm ghcr.io/recmo/rust-service-template:latest
+docker manifest create \
+    rust-service-template:latest \
+    rust-service-template:latest-amd64 \
+    rust-service-template:latest-arm64
+docker manifest inspect rust-service-template:latest
+```

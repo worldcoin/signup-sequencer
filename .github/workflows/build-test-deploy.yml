@@ -8,6 +8,7 @@ env:
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
   CARGO_PROFILE_DEV_DEBUG: 0
+  IMAGE_ID: ghcr.io/${{ github.repository }}:${{ github.sha }}
 
 jobs:
   accept:
@@ -189,13 +190,13 @@ jobs:
         with:
           context: .
           platforms: linux/${{ matrix.platform }}
-          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}-${{ matrix.platform }}
+          tags: ${{ env.IMAGE_ID }}-${{ matrix.platform }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Test image
         run:
-          docker run --pull always --platform linux/${{ matrix.platform }} --rm ghcr.io/${{ github.repository }}:${{ github.sha }}-${{ matrix.platform }} --version
+          docker run --pull always --platform linux/${{ matrix.platform }} --rm $IMAGE_ID-${{ matrix.platform }} --version
 
   image_manifest:
     name: Image manifest
@@ -209,16 +210,11 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Create manifest
-        run: docker manifest create
-          ghcr.io/${{ github.repository }}:${{ github.sha }}
-          ghcr.io/${{ github.repository }}:${{ github.sha }}-amd64
-          ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64
+        run: docker manifest create $IMAGE_ID{,-amd64,-arm64}
       - name: Inspect manifest
-        run: docker manifest inspect
-          ghcr.io/${{ github.repository }}:${{ github.sha }}
+        run: docker manifest inspect $IMAGE_ID
       - name: Push manifest
-        run: docker manifest push
-          ghcr.io/${{ github.repository }}:${{ github.sha }}
+        run: docker manifest push $IMAGE_ID
 
   helm_lint:
     name: Lint helm chart
@@ -245,9 +241,8 @@ jobs:
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
       - name: Test install deploy
-        run:
-          helm upgrade --install ${{ github.event.repository.name }} ./deploy
-          --atomic --timeout 60s --debug
+        run: helm upgrade ${{ github.event.repository.name }} ./deploy
+          --install --atomic --timeout 60s --debug
           --set image.tag=${{ github.sha }}-amd64
       - name: Describe pods
         if: always()

@@ -225,10 +225,17 @@ jobs:
     steps:
       - name: Set up Snyk
         uses: snyk/actions/setup@master
-      - name: Pull & Snyk Scan
-        run: |
-          docker pull $IMAGE_ID
-          snyk container test $IMAGE_ID
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull image
+        run: docker pull $IMAGE_ID
+      - name: Snyk Scan
+        # TODO: $IMAGE_ID is a multi-platform manifest, does it scan all?
+        run: snyk container test $IMAGE_ID
 
   helm_lint:
     name: Lint helm chart

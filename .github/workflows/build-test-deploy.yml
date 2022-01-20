@@ -1,22 +1,20 @@
 name: Build, Test & Deploy
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  push
 
 env:
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
   CARGO_PROFILE_DEV_DEBUG: 0
+  IMAGE_ID: ghcr.io/${{ github.repository }}:${{ github.sha }}
 
 jobs:
   accept:
     name: Accept
     runs-on: ubuntu-latest
-    needs: [lint, test, build_and_push, helm_lint, helm_test]
+    needs: [lint, test, build_and_push, image_manifest, helm_lint, helm_test]
     steps:
       - name: Accept
         run: true
@@ -133,39 +131,24 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  snyk_scan_container:
-    name: Snyk container scan
-    runs-on: ubuntu-latest
-    needs: [ build_and_push ]
-    env:
-      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-    steps:
-      - name: Set up Snyk
-        uses: snyk/actions/setup@master
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pull & Snyk Scan
-        run: |
-          IMAGE_ID=ghcr.io/${{ github.repository }}:${{ github.sha }}
-          docker pull $IMAGE_ID
-          snyk container test $IMAGE_ID
-
   build_and_push:
     name: Build image
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        platform: [linux/amd64]
-        # linux/arm64 is disabled for now pending native runners; building in
-        # qemu-aarch64 is too slow and costly.
-        # See <https://github.com/actions/virtual-environments/issues/2187>
+        platform: [amd64, arm64]
+    env:
+      RUST_VERSION: 1.58
+      FEATURES: mimalloc
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_VERSION }}
+          default: true
       - name: Set up QEMU
         id: qemu
         uses: docker/setup-qemu-action@v1
@@ -184,28 +167,75 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Get commit date
-        id: author-date
-        uses: actions/github-script@v5
+      - name: Cache build
+        uses: Swatinem/rust-cache@v1
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const commit_details = await github.rest.git.getCommit({owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha});
-            return commit_details.data.author.date
+          key: ${{ matrix.platform }}-cache-v1
+      - name: Build executable
+        run: |
+          case ${{ matrix.platform }} in
+            amd64) ARCH=x86_64 ;;
+            arm64) ARCH=aarch64 ;;
+            *) false
+          esac
+          docker run --rm \
+            -u $UID:$GID \
+            -v "$(pwd)":/src \
+            -v $HOME/.cargo:/usr/local/cargo \
+            -v /usr/local/cargo/bin \
+            ghcr.io/recmo/rust-static-build:$RUST_VERSION-$ARCH \
+            cargo build --locked --release --features "$FEATURES"
       - name: Build and push
         uses: docker/build-push-action@v2
         with:
-          platforms: ${{ matrix.platform }}
-          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          context: .
+          platforms: linux/${{ matrix.platform }}
+          tags: ${{ env.IMAGE_ID }}-${{ matrix.platform }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            COMMIT_SHA=${{ github.sha }}
-            COMMIT_DATE=${{ steps.author-date.outputs.result }}
       - name: Test image
         run:
-          docker run --pull always --platform ${{ matrix.platform }} --rm ghcr.io/${{ github.repository }}:${{ github.sha }} --version
+          docker run --pull always --platform linux/${{ matrix.platform }} --rm $IMAGE_ID-${{ matrix.platform }} --version
+
+  image_manifest:
+    name: Image manifest
+    runs-on: ubuntu-latest
+    needs: [build_and_push]
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create manifest
+        run: docker manifest create $IMAGE_ID{,-amd64,-arm64}
+      - name: Inspect manifest
+        run: docker manifest inspect $IMAGE_ID
+      - name: Push manifest
+        run: docker manifest push $IMAGE_ID
+
+  snyk_scan_container:
+    name: Snyk container scan
+    runs-on: ubuntu-latest
+    needs: [ image_manifest ]
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - name: Set up Snyk
+        uses: snyk/actions/setup@master
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull image
+        run: docker pull $IMAGE_ID
+      - name: Snyk Scan
+        # TODO: $IMAGE_ID is a multi-platform manifest, does it scan all?
+        run: snyk container test $IMAGE_ID
 
   helm_lint:
     name: Lint helm chart
@@ -231,18 +261,16 @@ jobs:
         uses: actions/checkout@v2
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
+      # TODO: Make package public
       - name: Create pull secret for ghcr.io
-        run:
-          kubectl create secret docker-registry ghcr-secret
+        run: kubectl create secret docker-registry ghcr-secret
           --docker-server=ghcr.io
           --docker-username="${{ github.repository_owner }}"
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Test install deploy
-        run:
-          helm upgrade --install signup-sequencer ./deploy
-          --atomic
-          --timeout 60s  --debug
-          --set image.tag="${{ github.sha }}"
+        run: helm upgrade --install ${{ github.event.repository.name }} ./deploy
+          --atomic --timeout 60s --debug
+          --set image.tag=${{ github.sha }}-amd64
           --set image.pullSecret=ghcr-secret
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
       - name: Describe pods
@@ -274,16 +302,14 @@ jobs:
           role-to-assume: arn:aws:iam::267301337261:role/oidc/github-deploy
           role-duration-seconds: 900
       - run: aws eks --region us-east-1 update-kubeconfig --name $CLUSTER_NAME
+      # TODO: Make package public
       - name: Create pull secret for ghcr.io
-        run:
-          kubectl create secret docker-registry ghcr-secret
+        run: kubectl create secret docker-registry ghcr-secret
           --docker-server=ghcr.io
           --docker-username="${{ github.repository_owner }}"
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
-          -o yaml --dry-run=client | kubectl apply -n signup-sequencer -f -
       - name: Helm install
-        run:
-          helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
+        run: helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
           --atomic
           --timeout 60s
           --set image.tag="${{ github.sha }}"
@@ -313,16 +339,14 @@ jobs:
           role-to-assume: arn:aws:iam::267301337261:role/oidc/github-deploy
           role-duration-seconds: 900
       - run: aws eks --region us-east-1 update-kubeconfig --name $CLUSTER_NAME
+      # TODO: Make package public
       - name: Create pull secret for ghcr.io
-        run:
-          kubectl create secret docker-registry ghcr-secret
+        run: kubectl create secret docker-registry ghcr-secret
           --docker-server=ghcr.io
           --docker-username="${{ github.repository_owner }}"
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
-          -o yaml --dry-run=client | kubectl apply -n signup-sequencer -f -
       - name: Helm install
-        run:
-          helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
+        run: helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
           --atomic
           --timeout 60s
           --set image.tag="${{ github.sha }}"

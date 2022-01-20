@@ -16,7 +16,7 @@ jobs:
   accept:
     name: Accept
     runs-on: ubuntu-latest
-    needs: [lint, test, build_and_push, helm_lint, helm_test]
+    needs: [lint, test, build_and_push, image_manifest, helm_lint, helm_test]
     steps:
       - name: Accept
         run: true
@@ -187,6 +187,29 @@ jobs:
         run:
           docker run --pull always --platform linux/${{ matrix.platform }} --rm ghcr.io/${{ github.repository }}:${{ github.sha }}-${{ matrix.platform }} --version
 
+  image_manifest:
+    name: Image multi-platform manifest
+    runs-on: ubuntu-latest
+    needs: [build_and_push]
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create manifest
+        run: docker manifest create
+          ghcr.io/${{ github.repository }}:${{ github.sha }}
+          ghcr.io/${{ github.repository }}:${{ github.sha }}-amd64
+          ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64
+      - name: Inspect manifest
+        run: docker manifest inspect
+          ghcr.io/${{ github.repository }}:${{ github.sha }}
+      - name: Push manifest
+        run: docker manifest push
+          ghcr.io/${{ github.repository }}:${{ github.sha }}
+
   helm_lint:
     name: Lint helm chart
     runs-on: ubuntu-latest
@@ -205,7 +228,7 @@ jobs:
   helm_test:
     name: Test deployment
     runs-on: ubuntu-latest
-    needs: [build_and_push]
+    needs: [image_manifest]
     steps:
       - name: Checkout
         uses: actions/checkout@v2

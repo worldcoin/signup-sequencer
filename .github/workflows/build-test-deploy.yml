@@ -137,12 +137,17 @@ jobs:
       matrix:
         platform: [amd64, arm64]
     env:
+      RUST_VERSION: 1.58
       FEATURES: mimalloc
     steps:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Set up Rust
-        uses: ./.github/actions/setup-rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_VERSION }}
+          default: true
       - name: Set up QEMU
         id: qemu
         uses: docker/setup-qemu-action@v1
@@ -177,7 +182,7 @@ jobs:
             -v "$(pwd)":/src \
             -v $HOME/.cargo:/usr/local/cargo \
             -v /usr/local/cargo/bin \
-            ghcr.io/recmo/rust-static-build:1.58-$ARCH \
+            ghcr.io/recmo/rust-static-build:$RUST_VERSION-$ARCH \
             cargo build --locked --release --features "$FEATURES"
       - name: Build and push
         uses: docker/build-push-action@v2

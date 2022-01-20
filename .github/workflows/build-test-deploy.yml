@@ -284,8 +284,8 @@ jobs:
           | cut -f 1 -d ' '
           | xargs -L 1 kubectl logs
 
-  deploy-stage:
-    name: Deploy to staging
+  deploy-main-stage:
+    name: Deploy main to staging
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     needs: [accept, image_manifest]

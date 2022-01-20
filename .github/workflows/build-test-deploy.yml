@@ -218,7 +218,7 @@ jobs:
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Test install deploy
         run:
-          helm upgrade --install ${{ github.repository }} ./deploy
+          helm upgrade --install ${{ github.event.repository.name }} ./deploy
           --atomic
           --timeout 60s  --debug
           --set image.tag="${{ github.sha }}"

@@ -2,7 +2,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: signup-sequencer-ingress
+  name: {{ include "mychart.fullname" . }}
   annotations:
     kubernetes.io/ingress.class: traefik
     ingress.kubernetes.io/protocol: http

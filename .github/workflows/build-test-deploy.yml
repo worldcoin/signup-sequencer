@@ -254,11 +254,17 @@ jobs:
         uses: actions/checkout@v2
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
+      # TODO: Make package public
+      - name: Create pull secret for ghcr.io
+        run: kubectl create secret docker-registry ghcr-secret
+          --docker-server=ghcr.io
+          --docker-username="${{ github.repository_owner }}"
+          --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Test install deploy
-        run:
-          helm upgrade --install ${{ github.event.repository.name }} ./deploy
+        run: helm upgrade --install ${{ github.event.repository.name }} ./deploy
           --atomic --timeout 60s --debug
           --set image.tag=${{ github.sha }}-amd64
+          --set image.pullSecret=ghcr-secret
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
       - name: Describe pods
         if: always()
@@ -291,12 +297,18 @@ jobs:
           role-to-assume: arn:aws:iam::267301337261:role/cross-account/deploy
           role-duration-seconds: 900
       - run: aws eks --region us-east-1 update-kubeconfig --name $CLUSTER_NAME
+      # TODO: Make package public
+      - name: Create pull secret for ghcr.io
+        run: kubectl create secret docker-registry ghcr-secret
+          --docker-server=ghcr.io
+          --docker-username="${{ github.repository_owner }}"
+          --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Helm install
-        run:
-          helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
+        run: helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
           --atomic
           --timeout 60s
           --set image.tag="${{ github.sha }}"
+          --set image.pullSecret=ghcr-secret
           --set environment=stage
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
 
@@ -320,11 +332,17 @@ jobs:
           role-to-assume: arn:aws:iam::267301337261:role/cross-account/deploy
           role-duration-seconds: 900
       - run: aws eks --region us-east-1 update-kubeconfig --name $CLUSTER_NAME
+      # TODO: Make package public
+      - name: Create pull secret for ghcr.io
+        run: kubectl create secret docker-registry ghcr-secret
+          --docker-server=ghcr.io
+          --docker-username="${{ github.repository_owner }}"
+          --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Helm install
-        run:
-          helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
+        run: helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
           --atomic
           --timeout 60s
           --set image.tag="${{ github.sha }}"
+          --set image.pullSecret=ghcr-secret
           --set environment=stage
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"

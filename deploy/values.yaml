@@ -30,6 +30,6 @@ env:
 # Spec ingress policy for the `api` and `metrics` port.
 # Values are a list of NetworkPolicyPeer v1 objects, empty means allow all.
 ingress:
-  host: "rust-service-template.staging.2π.com"
+  host: "rust-service-template.staging.xn--2-umb.com"
   api:
   metrics:

@@ -1,10 +1,7 @@
 name: Build, Test & Deploy
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  push
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,7 +13,7 @@ jobs:
   accept:
     name: Accept
     runs-on: ubuntu-latest
-    needs: [lint, test, build_and_push, helm_lint, helm_test]
+    needs: [lint, test, build_and_push, image_manifest, helm_lint, helm_test]
     steps:
       - name: Accept
         run: true
@@ -138,13 +135,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        platform: [linux/amd64]
-        # linux/arm64 is disabled for now pending native runners; building in
-        # qemu-aarch64 is too slow and costly.
-        # See <https://github.com/actions/virtual-environments/issues/2187>
+        platform: [amd64, arm64]
+    env:
+      FEATURES: mimalloc
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
       - name: Set up QEMU
         id: qemu
         uses: docker/setup-qemu-action@v1
@@ -163,28 +161,59 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Get commit date
-        id: author-date
-        uses: actions/github-script@v5
+      - name: Cache build
+        uses: Swatinem/rust-cache@v1
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const commit_details = await github.rest.git.getCommit({owner: context.repo.owner, repo: context.repo.repo, commit_sha: context.sha});
-            return commit_details.data.author.date
+          key: ${{ matrix.platform }}-cache-v1
+      - name: Build executable
+        run: |
+          case ${{ matrix.platform }} in
+            amd64) ARCH=x86_64 ;;
+            arm64) ARCH=aarch64 ;;
+            *) false
+          esac
+          docker run --rm \
+            -u $UID:$GID \
+            -v "$(pwd)":/src \
+            -v $HOME/.cargo:/usr/local/cargo \
+            -v /usr/local/cargo/bin \
+            ghcr.io/recmo/rust-static-build:1.58-$ARCH \
+            cargo build --locked --release --features "$FEATURES"
       - name: Build and push
         uses: docker/build-push-action@v2
         with:
-          platforms: ${{ matrix.platform }}
-          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          context: .
+          platforms: linux/${{ matrix.platform }}
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}-${{ matrix.platform }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            COMMIT_SHA=${{ github.sha }}
-            COMMIT_DATE=${{ steps.author-date.outputs.result }}
       - name: Test image
         run:
-          docker run --pull always --platform ${{ matrix.platform }} --rm ghcr.io/${{ github.repository }}:${{ github.sha }} --version
+          docker run --pull always --platform linux/${{ matrix.platform }} --rm ghcr.io/${{ github.repository }}:${{ github.sha }}-${{ matrix.platform }} --version
+
+  image_manifest:
+    name: Image manifest
+    runs-on: ubuntu-latest
+    needs: [build_and_push]
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create manifest
+        run: docker manifest create
+          ghcr.io/${{ github.repository }}:${{ github.sha }}
+          ghcr.io/${{ github.repository }}:${{ github.sha }}-amd64
+          ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64
+      - name: Inspect manifest
+        run: docker manifest inspect
+          ghcr.io/${{ github.repository }}:${{ github.sha }}
+      - name: Push manifest
+        run: docker manifest push
+          ghcr.io/${{ github.repository }}:${{ github.sha }}
 
   helm_lint:
     name: Lint helm chart
@@ -210,19 +239,11 @@ jobs:
         uses: actions/checkout@v2
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
-      - name: Create pull secret for ghcr.io
-        run:
-          kubectl create secret docker-registry ghcr-secret
-          --docker-server=ghcr.io
-          --docker-username="${{ github.repository_owner }}"
-          --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Test install deploy
         run:
           helm upgrade --install ${{ github.event.repository.name }} ./deploy
-          --atomic
-          --timeout 60s  --debug
-          --set image.tag="${{ github.sha }}"
-          --set image.pullSecret=ghcr-secret
+          --atomic --timeout 60s --debug
+          --set image.tag=${{ github.sha }}-amd64
       - name: Describe pods
         if: always()
         run: kubectl describe pod

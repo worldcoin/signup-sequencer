@@ -14,7 +14,7 @@ jobs:
   accept:
     name: Accept
     runs-on: ubuntu-latest
-    needs: [lint, test, build_and_push, image_manifest, helm_lint, helm_test]
+    needs: [lint, test, build_and_push, image_manifest, snyk_scan_container, helm_lint, helm_test]
     steps:
       - name: Accept
         run: true
@@ -288,7 +288,7 @@ jobs:
     name: Deploy main to staging
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    needs: [accept, image_manifest]
+    needs: [accept]
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -320,7 +320,7 @@ jobs:
   deploy-stage-manual:
     name: Manual deploy to staging
     runs-on: ubuntu-latest
-    needs: [accept, image_manifest]
+    needs: [image_manifest]
     environment: stage-manual
     permissions:
       id-token: write

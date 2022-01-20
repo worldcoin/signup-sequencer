@@ -191,8 +191,6 @@ jobs:
       - name: Test image
         run:
           docker run --pull always --platform linux/${{ matrix.platform }} --rm ghcr.io/${{ github.repository }}:${{ github.sha }}-${{ matrix.platform }} --version
-      - name: Experiment
-        run: cargo metadata --all-features --format-version 1 > test.json
 
   image_manifest:
     name: Image manifest

@@ -159,6 +159,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Cache build
+        uses: Swatinem/rust-cache@v1
+        with:
+          key: ${{ matrix.platform }}-cache-v1
       - name: Build executable
         run: |
           case ${{ matrix.platform }} in

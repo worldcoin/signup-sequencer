@@ -233,25 +233,17 @@ jobs:
   helm_test:
     name: Test deployment
     runs-on: ubuntu-latest
-    needs: [image_manifest]
+    needs: [build_and_push]
     steps:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
-      - name: Create pull secret for ghcr.io
-        run:
-          kubectl create secret docker-registry ghcr-secret
-          --docker-server=ghcr.io
-          --docker-username="${{ github.repository_owner }}"
-          --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Test install deploy
         run:
           helm upgrade --install ${{ github.event.repository.name }} ./deploy
-          --atomic
-          --timeout 60s  --debug
-          --set image.tag="${{ github.sha }}"
-          --set image.pullSecret=ghcr-secret
+          --atomic --timeout 60s --debug
+          --set image.tag=${{ github.sha }}-amd64
       - name: Describe pods
         if: always()
         run: kubectl describe pod

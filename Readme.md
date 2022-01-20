@@ -75,7 +75,7 @@ Copy from Tokio:
 
 ## Build images locally
 
-```
+```shell
 for arch in x86_64 aarch64; do
   docker run --rm \
     -v "$(pwd)":/src \

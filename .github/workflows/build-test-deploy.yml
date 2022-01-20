@@ -284,24 +284,24 @@ jobs:
           | cut -f 1 -d ' '
           | xargs -L 1 kubectl logs
 
-  deploy-stage-us-east-1:
-    name: Deploy to stage us-east-1
+  deploy-stage:
+    name: Deploy to staging
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    needs: [test, build_and_push]
-    env:
-      CLUSTER_NAME: crypto
-      AWS_REGION: us-east-1
+    needs: [accept, image_manifest]
     steps:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: arn:aws:iam::267301337261:role/oidc/github-deploy
+          aws-region: ${{ secrets.AWS_STAGE_REGION }}
+          role-to-assume: ${{ secrets.AWS_STAGE_ROLE }}
           role-duration-seconds: 900
-      - run: aws eks --region us-east-1 update-kubeconfig --name $CLUSTER_NAME
+      - name: Connect to EKS cluster
+        run: aws eks update-kubeconfig
+          --region ${{ secrets.AWS_STAGE_REGION }}
+          --name ${{ secrets.AWS_STAGE_CLUSTER }}
       # TODO: Make package public
       - name: Create pull secret for ghcr.io
         run: kubectl create secret docker-registry ghcr-secret
@@ -317,28 +317,28 @@ jobs:
           --set environment=stage
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
 
-  deploy-stage-us-east-1-manual:
-    name: Manual deploy to stage us-east-1
+  deploy-stage-manual:
+    name: Manual deploy to staging
     runs-on: ubuntu-latest
-    needs: [ test, build_and_push ]
+    needs: [accept, image_manifest]
     environment: stage-manual
     permissions:
       id-token: write
       contents: read
       packages: read
-    env:
-      CLUSTER_NAME: crypto
-      AWS_REGION: us-east-1
     steps:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: arn:aws:iam::267301337261:role/oidc/github-deploy
+          aws-region: ${{ secrets.AWS_STAGE_REGION }}
+          role-to-assume: ${{ secrets.AWS_STAGE_ROLE }}
           role-duration-seconds: 900
-      - run: aws eks --region us-east-1 update-kubeconfig --name $CLUSTER_NAME
+      - name: Connect to EKS cluster
+        run: aws eks update-kubeconfig
+          --region ${{ secrets.AWS_STAGE_REGION }}
+          --name ${{ secrets.AWS_STAGE_CLUSTER }}
       # TODO: Make package public
       - name: Create pull secret for ghcr.io
         run: kubectl create secret docker-registry ghcr-secret

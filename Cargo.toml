@@ -63,6 +63,7 @@ eyre = "0.6"
 codegen-units = 1
 lto = true
 panic = "abort"
+overflow-checks = true
 
 # Compilation profile for any non-workspace member.
 # Dependencies are optimized, even in a dev build. This improves dev performance

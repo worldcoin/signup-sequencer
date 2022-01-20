@@ -1,9 +1,9 @@
 # Rust project template
 
-![lines of code](https://img.shields.io/tokei/lines/github/recmo/rust-app-template)
-[![dependency status](https://deps.rs/repo/github/recmo/rust-app-template/status.svg)](https://deps.rs/repo/github/recmo/rust-app-template)
-[![codecov](https://img.shields.io/codecov/c/github/recmo/rust-app-template)](https://codecov.io/gh/Recmo/rust-app-template)
-[![ci](https://img.shields.io/github/workflow/status/recmo/rust-app-template/ci)](https://github.com/Recmo/rust-app-template/actions?query=workflow%ci)
+![lines of code](https://img.shields.io/tokei/lines/github/recmo/rust-service-template)
+[![dependency status](https://deps.rs/repo/github/recmo/rust-service-template/status.svg)](https://deps.rs/repo/github/recmo/rust-service-template)
+[![codecov](https://img.shields.io/codecov/c/github/recmo/rust-service-template)](https://codecov.io/gh/Recmo/rust-service-template)
+[![Build, Test & Deploy](https://github.com/recmo/rust-service-template/actions/workflows/build-test-deploy.yml/badge.svg)](https://github.com/recmo/rust-service-template/actions/workflows/build-test-deploy.yml)
 
 ## Features
 

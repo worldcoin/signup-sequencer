@@ -1,4 +1,3 @@
-use chrono::Utc;
 use eyre::{bail, eyre, Result, WrapErr as _};
 use std::{
     env::{var, VarError},
@@ -6,6 +5,7 @@ use std::{
     path::Path,
     process::Command,
 };
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
 
 fn main() -> Result<()> {
     let commit = rerun_if_git_changes().unwrap_or_else(|e| {
@@ -20,22 +20,26 @@ fn main() -> Result<()> {
             commit.unwrap_or_else(|| "0000000000000000000000000000000000000000".to_string())
         })
     );
+    let build_date = OffsetDateTime::now_utc();
+    let commit_date = env_or_cmd("COMMIT_DATE", &[
+        "git",
+        "log",
+        "-n1",
+        "--pretty=format:'%aI'",
+    ])
+    .and_then(|str| Ok(OffsetDateTime::parse(str.trim_matches('\''), &Rfc3339)?))
+    .unwrap_or_else(|e| {
+        eprintln!("Warning: {}", e);
+        OffsetDateTime::UNIX_EPOCH
+    });
     println!(
         "cargo:rustc-env=COMMIT_DATE={}",
-        env_or_cmd("COMMIT_DATE", &[
-            "git",
-            "log",
-            "-n1",
-            "--pretty=format:'%ad'",
-            "--date=short"
-        ])
-        .unwrap_or_else(|e| {
-            eprintln!("Warning: {}", e);
-            "0000-00-00".to_string()
-        })
-        .trim_matches('\'')
+        commit_date.to_offset(UtcOffset::UTC).date()
     );
-    println!("cargo:rustc-env=BUILD_DATE={}", Utc::today().naive_utc());
+    println!(
+        "cargo:rustc-env=BUILD_DATE={}",
+        build_date.to_offset(UtcOffset::UTC).date()
+    );
     println!(
         "cargo:rustc-env=TARGET={}",
         var("TARGET").wrap_err("Fetching environment variable TARGET")?

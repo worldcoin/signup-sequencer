@@ -268,8 +268,8 @@ jobs:
           --docker-username="${{ github.repository_owner }}"
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Test install deploy
-        run: helm upgrade --install ${{ github.event.repository.name }} ./deploy
-          --atomic --timeout 60s --debug
+        run: helm upgrade ${{ github.event.repository.name }} ./deploy
+          --install --atomic --timeout 60s --debug
           --set image.tag=${{ github.sha }}-amd64
           --set image.pullSecret=ghcr-secret
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"

@@ -32,7 +32,7 @@ color-eyre = "0.6"
 criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
 eyre = "0.6"
 futures = "0.3"
-hyper = { version = "0.14", features = [ "server", "tcp", "http1", "http2" ] }
+hyper = { version = "^0.14.10", features = [ "server", "tcp", "http1", "http2" ] }
 itertools = "0.10"
 mimalloc = { version = "0.1", default-features = false, optional = true }
 num_cpus = "1.13"
@@ -41,10 +41,10 @@ prometheus = { version = "0.13", features = [ "process" ] }
 proptest = { version = "1.0", optional = true }
 serde = "1.0"
 serde_json = "1.0"
-smallvec = { version = "1.6", features = [ "serde" ] }
+smallvec = { version = "^1.6.1", features = [ "serde" ] }
 structopt = "0.3"
 thiserror = "1.0"
-tokio = { version = "1.13", features = [ "signal", "macros", "rt", "sync", "time", "rt-multi-thread" ] }
+tokio = { version = "1.15", features = [ "signal", "macros", "rt", "sync", "time", "rt-multi-thread" ] }
 tracing = "0.1"
 tracing-futures = "0.2"
 tracing-subscriber = { version = "0.3", features = [ "env-filter", "json" ] }
@@ -56,8 +56,8 @@ pretty_assertions = "1.0"
 proptest = { version = "1.0" }
 
 [build-dependencies]
-chrono = "0.4"
 eyre = "0.6"
+time = { version = "0.3.5", features = [ "formatting", "parsing" ] }
 
 [profile.release]
 codegen-units = 1

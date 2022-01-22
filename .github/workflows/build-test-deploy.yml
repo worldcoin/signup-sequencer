@@ -267,6 +267,7 @@ jobs:
           --docker-server=ghcr.io
           --docker-username="${{ github.repository_owner }}"
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
+          --dry-run=client --output=yaml | kubectl apply -f -
       - name: Test install deploy
         run: helm upgrade ${{ github.event.repository.name }} ./deploy
           --install --atomic --timeout 60s --debug
@@ -278,8 +279,7 @@ jobs:
         run: kubectl describe pod
       - name: Dump logs
         if: always()
-        run:
-          kubectl get pods
+        run: kubectl get pods
           | tail -n +2
           | cut -f 1 -d ' '
           | xargs -L 1 kubectl logs
@@ -289,6 +289,11 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     needs: [accept]
+    environment: stage
+    permissions:
+      id-token: write
+      contents: read
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -305,13 +310,15 @@ jobs:
       # TODO: Make package public
       - name: Create pull secret for ghcr.io
         run: kubectl create secret docker-registry ghcr-secret
+          --namespace "${{ github.event.repository.name }}"
           --docker-server=ghcr.io
           --docker-username="${{ github.repository_owner }}"
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
+          --dry-run=client --output=yaml | kubectl apply -f -
       - name: Helm install
-        run: helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
-          --atomic
-          --timeout 60s
+        run: helm upgrade "${{ github.event.repository.name }}" ./deploy
+          --install --atomic --timeout 60s
+          --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set image.pullSecret=ghcr-secret
           --set environment=stage
@@ -342,13 +349,15 @@ jobs:
       # TODO: Make package public
       - name: Create pull secret for ghcr.io
         run: kubectl create secret docker-registry ghcr-secret
+          --namespace "${{ github.event.repository.name }}"
           --docker-server=ghcr.io
           --docker-username="${{ github.repository_owner }}"
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
+          --dry-run=client --output=yaml | kubectl apply -f -
       - name: Helm install
-        run: helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
-          --atomic
-          --timeout 60s
+        run: helm upgrade "${{ github.event.repository.name }}" ./deploy
+          --install --atomic --timeout 60s
+          --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set image.pullSecret=ghcr-secret
           --set environment=stage

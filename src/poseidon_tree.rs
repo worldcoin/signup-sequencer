@@ -56,7 +56,7 @@ pub mod test {
     #[test]
     fn test_tree_4() {
         const LEAF: Hash = Hash::from_bytes_be(hex!(
-            "0000000000000000000000000000000000000000000000000000000000000000"
+            "1c4823575d154474ee3e5ac838d002456a815181437afd14f126da58a9912bbe"
         ));
 
         let tree = PoseidonTree::new(3, LEAF);
@@ -64,7 +64,7 @@ pub mod test {
         assert_eq!(
             tree.root(),
             Hash::from_bytes_be(hex!(
-                "1069673dcdb12263df301a6ff584a7ec261a44cb9dc68df067a4774460b1f1e1"
+                "2413c857992af7eef8e920e52cb42997f461640b1897caed2101c7ccbf3b12b1"
             ))
         );
         let proof = tree.proof(3).expect("proof should exist");
@@ -73,7 +73,7 @@ pub mod test {
             crate::merkle_tree::Proof(vec![
                 Branch::Right(LEAF),
                 Branch::Right(Hash::from_bytes_be(hex!(
-                    "2098f5fb9e239eab3ceac3f27b81e481dc3124d55ffed523a839ee8446b64864"
+                    "0f51fdd2d74e52adb1b467b9334f88ce595f5426dea8f9509be267952c846f92"
                 ))),
             ])
         );

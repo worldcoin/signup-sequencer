@@ -1,7 +1,8 @@
 use crate::{
     ethereum::{self, Ethereum},
     hash::Hash,
-    server::Error as ServerError, poseidon_tree::{PoseidonTree, Proof},
+    poseidon_tree::{PoseidonTree, Proof},
+    server::Error as ServerError,
 };
 use core::cmp::max;
 use eyre::Result as EyreResult;

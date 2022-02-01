@@ -8,6 +8,7 @@ use eyre::Result as EyreResult;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
+    io::{BufReader, BufWriter},
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
 };
@@ -73,7 +74,7 @@ impl App {
         let (mut next_leaf, last_block) = if options.storage_file.is_file() {
             let file = File::open(&options.storage_file)?;
             if file.metadata()?.len() > 0 {
-                let file: JsonCommitment = serde_json::from_reader(file)?;
+                let file: JsonCommitment = serde_json::from_reader(BufReader::new(file))?;
                 let next_leaf = file.commitments.len();
                 merkle_tree.set_range(0, file.commitments);
                 (next_leaf, file.last_block)
@@ -145,7 +146,7 @@ impl App {
             last_block,
             commitments,
         };
-        serde_json::to_writer(&file, &data)?;
+        serde_json::to_writer(BufWriter::new(file), &data)?;
         Ok(())
     }
 }

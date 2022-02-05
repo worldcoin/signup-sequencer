@@ -7,7 +7,7 @@ pub mod hash;
 mod merkle_tree;
 mod mimc_hash;
 pub mod mimc_tree;
-mod poseidon_tree;
+pub mod poseidon_tree;
 pub mod server;
 mod utils;
 

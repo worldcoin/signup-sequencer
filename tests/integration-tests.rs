@@ -15,7 +15,7 @@ use serde_json::json;
 use signup_sequencer::{
     app::App,
     hash::Hash,
-    mimc_tree::MimcTree,
+    poseidon_tree::PoseidonTree,
     server::{self, InclusionProofRequest},
     Options,
 };
@@ -66,7 +66,7 @@ async fn insert_identity_and_proofs() {
         .expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
-    let mut ref_tree = MimcTree::new(options.app.tree_depth, options.app.initial_leaf);
+    let mut ref_tree = PoseidonTree::new(options.app.tree_depth, options.app.initial_leaf);
     let client = Client::new();
 
     test_inclusion_proof(&uri, &client, 0, &mut ref_tree, &options.app.initial_leaf).await;
@@ -125,7 +125,7 @@ async fn test_inclusion_proof(
     uri: &str,
     client: &Client<HttpConnector>,
     leaf_index: usize,
-    ref_tree: &mut MimcTree,
+    ref_tree: &mut PoseidonTree,
     leaf: &Hash,
 ) {
     let body = construct_inclusion_proof_body(leaf_index);
@@ -261,14 +261,32 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
     let client = NonceManagerMiddleware::new(client, wallet.address());
     let client = std::sync::Arc::new(client);
 
-    let mimc_json = File::open("./sol/MiMC.json").expect("Failed to read MiMC.sol");
-    let mimc_json: CompiledContract = serde_json::from_reader(BufReader::new(mimc_json))
-        .expect("Could not parse compiled MiMC contract");
-    let mimc_bytecode = deserialize_to_bytes(mimc_json.bytecode)?;
+    let poseidon_t3_json =
+        File::open("./sol/PoseidonT3.json").expect("Failed to read PoseidonT3.json");
+    let poseidon_t3_json: CompiledContract =
+        serde_json::from_reader(BufReader::new(poseidon_t3_json))
+            .expect("Could not parse compiled PoseidonT3 contract");
+    let poseidon_t3_bytecode = deserialize_to_bytes(poseidon_t3_json.bytecode)?;
 
-    let mimc_factory = ContractFactory::new(mimc_json.abi, mimc_bytecode, client.clone());
+    let poseidon_t3_factory =
+        ContractFactory::new(poseidon_t3_json.abi, poseidon_t3_bytecode, client.clone());
+    let poseidon_t3_contract = poseidon_t3_factory
+        .deploy(())?
+        .legacy()
+        .confirmations(0usize)
+        .send()
+        .await?;
 
-    let mimc_contract = mimc_factory
+    let poseidon_t6_json =
+        File::open("./sol/PoseidonT6.json").expect("Failed to read PoseidonT6.json");
+    let poseidon_t6_json: CompiledContract =
+        serde_json::from_reader(BufReader::new(poseidon_t6_json))
+            .expect("Could not parse compiled PoseidonT6 contract");
+    let poseidon_t6_bytecode = deserialize_to_bytes(poseidon_t6_json.bytecode)?;
+
+    let poseidon_t6_factory =
+        ContractFactory::new(poseidon_t6_json.abi, poseidon_t6_bytecode, client.clone());
+    let poseidon_t6_contract = poseidon_t6_factory
         .deploy(())?
         .legacy()
         .confirmations(0usize)
@@ -281,8 +299,12 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
         serde_json::from_reader(BufReader::new(semaphore_json)).expect("Could not read contract");
 
     let semaphore_bytecode = semaphore_json.bytecode.replace(
-        "__$cf5da3090e28b1d67a537682696360513a$__",
-        &format!("{:?}", mimc_contract.address()).replace("0x", ""),
+        "__$86e0c54df1042e28bf2dd20ccf184dc428$__",
+        &format!("{:?}", poseidon_t3_contract.address()).replace("0x", ""),
+    );
+    let semaphore_bytecode = semaphore_bytecode.replace(
+        "__$223301b175b06473d424a7afc957d4e96c$__",
+        &format!("{:?}", poseidon_t6_contract.address()).replace("0x", ""),
     );
     let semaphore_bytecode = deserialize_to_bytes(semaphore_bytecode)?;
 

@@ -5,7 +5,7 @@ inputs:
   version:
     description: Rust version to use
     required: false
-    default: nightly-2021-11-30
+    default: nightly-2022-02-22
   components:
     description: Rust components to install
     required: false

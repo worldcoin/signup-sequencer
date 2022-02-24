@@ -1,2 +1,6 @@
 [alias]
 criterion = "bench --bench=criterion --features=bench,proptest"
+
+[build]
+# Enable tokio-console support
+# rustflags = ["--cfg", "tokio_unstable"]

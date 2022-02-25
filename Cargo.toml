@@ -16,6 +16,7 @@ license-file = "mit-license.md"
 [features]
 default = []
 bench = [ "criterion", "proptest" ]
+tokio-console = [ "console-subscriber" ]
 
 [[bin]]
 name = "rust-app"
@@ -29,13 +30,13 @@ required-features = [ "bench", "proptest" ]
 
 [dependencies]
 color-eyre = "0.6"
+console-subscriber = { version = "0.1", optional = true }
 criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
 eyre = "0.6"
 futures = "0.3"
-hyper = { version = "^0.14.10", features = [ "server", "tcp", "http1", "http2" ] }
+hyper = { version = "^0.14.17", features = [ "server", "tcp", "http1", "http2" ] }
 itertools = "0.10"
 mimalloc = { version = "0.1", default-features = false, optional = true }
-num_cpus = "1.13"
 once_cell = "1.8"
 prometheus = { version = "0.13", features = [ "process" ] }
 proptest = { version = "1.0", optional = true }
@@ -44,16 +45,17 @@ serde_json = "1.0"
 smallvec = { version = "^1.6.1", features = [ "serde" ] }
 structopt = "0.3"
 thiserror = "1.0"
-tokio = { version = "1.15", features = [ "signal", "macros", "rt", "sync", "time", "rt-multi-thread" ] }
+tokio = { version = "1.17", features = [ "signal", "macros", "rt", "sync", "time", "rt-multi-thread" ] }
 tracing = "0.1"
 tracing-futures = "0.2"
 tracing-subscriber = { version = "0.3", features = [ "env-filter", "json" ] }
-tracing-test = "0.2"
 url = "2.2"
+users = "0.11"
 
 [dev-dependencies]
 pretty_assertions = "1.0"
 proptest = { version = "1.0" }
+tracing-test = "0.2"
 
 [build-dependencies]
 eyre = "0.6"
@@ -64,6 +66,7 @@ codegen-units = 1
 lto = true
 panic = "abort"
 overflow-checks = true
+strip = true
 
 # Compilation profile for any non-workspace member.
 # Dependencies are optimized, even in a dev build. This improves dev performance

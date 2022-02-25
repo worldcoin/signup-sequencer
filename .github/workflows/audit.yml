@@ -10,13 +10,21 @@ on:
   schedule:
   - cron: '0 2 * * *' # run at 2 AM UTC
 
+env:
+  RUST_VERSION: 1.59
+
 jobs:
   security-audit:
     name: Dependency Security Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Audit Check
-        uses: actions-rs/audit-check@v1
+      - uses: actions/checkout@v1
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_VERSION }}
+          default: true
+      - uses: actions-rs/audit-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

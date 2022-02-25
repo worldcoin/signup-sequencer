@@ -6,8 +6,9 @@ mod allocator;
 mod logging;
 mod prometheus;
 mod shutdown;
+mod tokio_console;
 
-use self::{allocator::Allocator, logging::LogOptions};
+use self::allocator::Allocator;
 use eyre::{Result as EyreResult, WrapErr as _};
 use structopt::StructOpt;
 use tokio::{runtime, sync::broadcast};
@@ -42,7 +43,7 @@ pub static ALLOCATOR: Allocator<allocator::MiMalloc> = allocator::new_mimalloc()
 #[derive(StructOpt)]
 struct Options {
     #[structopt(flatten)]
-    log:            LogOptions,
+    log:            logging::Options,
     #[structopt(flatten)]
     pub prometheus: prometheus::Options,
     #[structopt(flatten)]

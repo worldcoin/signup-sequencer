@@ -2,6 +2,7 @@
 
 use core::str::FromStr;
 use eyre::{bail, Error as EyreError, Result as EyreResult, WrapErr as _};
+use std::{process::id as pid, thread::available_parallelism};
 use structopt::StructOpt;
 use tracing::{Level, Subscriber};
 use tracing_subscriber::{filter::Targets, fmt, Layer};
@@ -42,17 +43,8 @@ pub struct Options {
 }
 
 impl Options {
-    pub fn to_layer<S>(&self) -> EyreResult<impl Layer<S>>
-    where
-        S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a> + Send + Sync,
-    {
-        let log_format = match self.log_format {
-            LogFormat::Compact => Box::new(fmt::Layer::new().event_format(fmt::format().compact()))
-                as Box<dyn Layer<S> + Send + Sync>,
-            LogFormat::Pretty => Box::new(fmt::Layer::new().event_format(fmt::format().pretty())),
-            LogFormat::Json => Box::new(fmt::Layer::new().event_format(fmt::format().json())),
-        };
-
+    #[allow(clippy::borrow_as_ptr)] // ptr::addr_of! does not work here.
+    pub fn init(&self) -> EyreResult<()> {
         // Log filtering is a combination of `--log-filter` and `--verbose` arguments.
         let verbosity = {
             let (all, app) = match self.verbose {
@@ -74,8 +66,30 @@ impl Options {
                 .parse()
                 .wrap_err("Error parsing log-filter")?
         };
-        // TODO: Waiting for <https://github.com/tokio-rs/tracing/issues/1790>
-        let targets = verbosity.with_targets(log_filter);
+        let targets = log_filter.with_targets(verbosity);
+
+        // Support server for tokio-console
+        let console_layer = tokio_console::layer(&self.tokio_console);
+
+        // Route events to both tokio-console and stdout
+        let subscriber = Registry::default()
+            .with(console_layer)
+            .with(self.log_format.to_layer().with_filter(targets));
+        tracing::subscriber::set_global_default(subscriber)?;
+
+        // Log version information
+        info!(
+            host = env!("TARGET"),
+            pid = pid(),
+            uid = get_current_uid(),
+            gid = get_current_gid(),
+            cores = available_parallelism()?,
+            main = &crate::main as *const _ as usize,
+            commit = &env!("COMMIT_SHA")[..8],
+            "{name} {version}",
+            name = env!("CARGO_CRATE_NAME"),
+            version = env!("CARGO_PKG_VERSION"),
+        );
 
         Ok(log_format.with_filter(targets))
     }

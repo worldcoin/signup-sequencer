@@ -1,4 +1,4 @@
-FROM rust as build-env
+FROM rust:1.59 as build-env
 WORKDIR /src
 
 RUN apt-get update &&\
@@ -12,9 +12,6 @@ COPY ./target ./target
 
 # Select the binary for currenct architecture
 RUN cp ./target/$(uname -m)-unknown-linux-musl/release/${BIN} ./bin
-
-# Strip binary
-RUN strip ./bin
 
 # Set capabilities
 RUN setcap cap_net_bind_service=+ep ./bin

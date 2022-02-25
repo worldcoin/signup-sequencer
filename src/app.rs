@@ -1,7 +1,7 @@
 use crate::{
     ethereum::{self, Ethereum},
     hash::Hash,
-    mimc_tree::{MimcTree, Proof},
+    poseidon_tree::{PoseidonTree, Proof},
     server::Error as ServerError,
 };
 use core::cmp::max;
@@ -57,7 +57,7 @@ pub struct Options {
 pub struct App {
     ethereum:     Ethereum,
     storage_file: PathBuf,
-    merkle_tree:  RwLock<MimcTree>,
+    merkle_tree:  RwLock<PoseidonTree>,
     next_leaf:    AtomicUsize,
 }
 
@@ -68,7 +68,7 @@ impl App {
     /// `options.storage_file` is not accessible.
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
-        let mut merkle_tree = MimcTree::new(options.tree_depth, options.initial_leaf);
+        let mut merkle_tree = PoseidonTree::new(options.tree_depth, options.initial_leaf);
 
         // Read tree from file
         info!(path = ?&options.storage_file, "Reading tree from storage");

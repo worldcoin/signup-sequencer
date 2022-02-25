@@ -19,5 +19,5 @@ spec:
               service:
                 name: "{{ include "mychart.fullname" . }}"
                 port:
-                  name: http
+                  name: api
 {{- end }}

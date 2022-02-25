@@ -87,19 +87,6 @@ fn main() -> EyreResult<()> {
                 )?;
             }
 
-            // Log version and process information
-            info!(
-                host = env!("TARGET"),
-                pid = get_current_pid(),
-                uid = get_current_uid(),
-                gid = get_current_gid(),
-                main = &crate::main as *const _ as usize, // Check if ASLR is working
-                commit = &env!("COMMIT_SHA")[..8],
-                "{name} {version}",
-                name = env!("CARGO_CRATE_NAME"),
-                version = env!("CARGO_PKG_VERSION"),
-            );
-
             // Create shutdown signal
             // TODO: Fix minor race conditions
             let (shutdown, _) = broadcast::channel(1);

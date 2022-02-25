@@ -1,5 +1,5 @@
 use structopt::StructOpt;
-use tracing::{info, Subscriber};
+use tracing::Subscriber;
 use tracing_subscriber::{registry::LookupSpan, Layer};
 
 #[cfg(feature = "tokio-console")]

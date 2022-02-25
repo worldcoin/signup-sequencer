@@ -1,17 +1,33 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
+use super::tokio_console;
 use core::str::FromStr;
 use eyre::{bail, Error as EyreError, Result as EyreResult, WrapErr as _};
 use std::{process::id as pid, thread::available_parallelism};
 use structopt::StructOpt;
-use tracing::{Level, Subscriber};
-use tracing_subscriber::{filter::Targets, fmt, Layer};
+use tracing::{info, Level, Subscriber};
+use tracing_subscriber::{filter::Targets, fmt, layer::SubscriberExt, Layer, Registry};
+use users::{get_current_gid, get_current_uid};
 
 #[derive(Debug, PartialEq)]
 enum LogFormat {
     Compact,
     Pretty,
     Json,
+}
+
+impl LogFormat {
+    fn to_layer<S>(&self) -> impl Layer<S>
+    where
+        S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a> + Send + Sync,
+    {
+        match self {
+            LogFormat::Compact => Box::new(fmt::Layer::new().event_format(fmt::format().compact()))
+                as Box<dyn Layer<S> + Send + Sync>,
+            LogFormat::Pretty => Box::new(fmt::Layer::new().event_format(fmt::format().pretty())),
+            LogFormat::Json => Box::new(fmt::Layer::new().event_format(fmt::format().json())),
+        }
+    }
 }
 
 impl FromStr for LogFormat {
@@ -40,6 +56,9 @@ pub struct Options {
     /// Log format, one of 'compact', 'pretty' or 'json'
     #[structopt(long, env, default_value = "pretty")]
     log_format: LogFormat,
+
+    #[structopt(flatten)]
+    pub tokio_console: tokio_console::Options,
 }
 
 impl Options {
@@ -57,7 +76,7 @@ impl Options {
             Targets::new()
                 .with_default(all)
                 .with_target("lib", app)
-                .with_target(env!("CARGO_BIN_NAME"), app)
+                .with_target(env!("CARGO_CRATE_NAME"), app)
         };
         let log_filter = if self.log_filter.is_empty() {
             Targets::new()
@@ -91,7 +110,7 @@ impl Options {
             version = env!("CARGO_PKG_VERSION"),
         );
 
-        Ok(log_format.with_filter(targets))
+        Ok(())
     }
 }
 
@@ -105,9 +124,12 @@ pub mod test {
         let cmd = "arg0 -v --log-filter foo -vvv";
         let options = Options::from_iter_safe(cmd.split(' ')).unwrap();
         assert_eq!(options, Options {
-            verbose:    4,
-            log_filter: "foo".to_owned(),
-            log_format: LogFormat::Pretty,
+            verbose:       4,
+            log_filter:    "foo".to_owned(),
+            log_format:    LogFormat::Pretty,
+            tokio_console: tokio_console::Options {
+                tokio_console: false,
+            },
         });
     }
 }

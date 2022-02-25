@@ -3,7 +3,7 @@
 use super::tokio_console;
 use core::str::FromStr;
 use eyre::{bail, Error as EyreError, Result as EyreResult, WrapErr as _};
-use std::process::id as pid;
+use std::{process::id as pid, thread::available_parallelism};
 use structopt::StructOpt;
 use tracing::{info, Level, Subscriber};
 use tracing_subscriber::{filter::Targets, fmt, layer::SubscriberExt, Layer, Registry};
@@ -62,7 +62,7 @@ pub struct Options {
 }
 
 impl Options {
-    #[allow(dead_code)]
+    #[allow(clippy::borrow_as_ptr)] // ptr::addr_of! does not work here.
     pub fn init(&self) -> EyreResult<()> {
         // Log filtering is a combination of `--log-filter` and `--verbose` arguments.
         let verbosity = {
@@ -102,6 +102,7 @@ impl Options {
             pid = pid(),
             uid = get_current_uid(),
             gid = get_current_gid(),
+            cores = available_parallelism()?,
             main = &crate::main as *const _ as usize,
             commit = &env!("COMMIT_SHA")[..8],
             "{name} {version}",

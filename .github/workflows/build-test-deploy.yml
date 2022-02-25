@@ -4,6 +4,8 @@ on:
   push
 
 env:
+  RUST_VERSION: 1.59
+  NIGHTLY_VERSION: nightly-2022-02-22
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
@@ -25,10 +27,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
         with:
+          profile: minimal
+          toolchain: ${{ env.NIGHTLY_VERSION }}
+          override: true
           components: rustfmt, clippy
+      - name: Cache build
+        uses: Swatinem/rust-cache@v1
+        with:
+          key: cache-v1
       - name: Check formatting
         uses: actions-rs/cargo@v1
         with:
@@ -50,8 +59,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.NIGHTLY_VERSION }}
+          override: true
+      - name: Cache build
+        uses: Swatinem/rust-cache@v1
+        with:
+          key: cache-v1
       - run:  npm install ganache-cli@latest --global
       # Cargo doc test is not included in `--all-targets`
       # See <https://github.com/rust-lang/cargo/issues/6669>
@@ -77,11 +94,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        id: setup_rust
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
         with:
+          profile: minimal
+          toolchain: ${{ env.NIGHTLY_VERSION }}
+          override: true
           components: llvm-tools-preview
+      - name: Cache build
+        uses: Swatinem/rust-cache@v1
+        with:
+          key: cache-v1
       - name: Install cargo-binutils
         run: cargo install cargo-binutils
       - run:  npm install ganache-cli@latest --global
@@ -127,6 +150,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_VERSION }}
+          default: true
       - uses: actions-rs/audit-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -138,7 +167,6 @@ jobs:
       matrix:
         platform: [amd64, arm64]
     env:
-      RUST_VERSION: 1.58
       FEATURES: mimalloc
     steps:
       - name: Checkout

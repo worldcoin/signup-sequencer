@@ -13,9 +13,6 @@ COPY ./target ./target
 # Select the binary for currenct architecture
 RUN cp ./target/$(uname -m)-unknown-linux-musl/release/${BIN} ./bin
 
-# Strip binary
-RUN strip ./bin
-
 # Set capabilities
 RUN setcap cap_net_bind_service=+ep ./bin
 

@@ -1,7 +1,6 @@
 mod contract;
 
 use self::contract::{LeafInsertionFilter, Semaphore};
-use crate::hash::Hash;
 use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::{NonceManagerMiddleware, SignerMiddleware},
@@ -10,6 +9,7 @@ use ethers::{
     types::Address,
 };
 use eyre::{eyre, Result as EyreResult};
+use semaphore::hash::Hash;
 use std::sync::Arc;
 use structopt::StructOpt;
 use tracing::info;

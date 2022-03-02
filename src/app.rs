@@ -1,11 +1,13 @@
 use crate::{
     ethereum::{self, Ethereum},
-    hash::Hash,
-    poseidon_tree::{PoseidonTree, Proof},
     server::Error as ServerError,
 };
 use core::cmp::max;
 use eyre::Result as EyreResult;
+use semaphore::{
+    hash::Hash,
+    poseidon_tree::{PoseidonTree, Proof},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,

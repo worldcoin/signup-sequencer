@@ -10,12 +10,11 @@ use ethers::{
 use eyre::{bail, Result as EyreResult};
 use hex_literal::hex;
 use hyper::{client::HttpConnector, Body, Client, Request};
+use semaphore::{hash::Hash, poseidon_tree::PoseidonTree};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use signup_sequencer::{
     app::App,
-    hash::Hash,
-    poseidon_tree::PoseidonTree,
     server::{self, InclusionProofRequest},
     Options,
 };

@@ -3,11 +3,6 @@
 
 pub mod app;
 mod ethereum;
-pub mod hash;
-mod merkle_tree;
-mod mimc_hash;
-pub mod mimc_tree;
-pub mod poseidon_tree;
 pub mod server;
 mod utils;
 
@@ -110,8 +105,6 @@ pub mod bench {
 
     pub fn group(criterion: &mut Criterion) {
         crate::server::bench::group(criterion);
-        crate::mimc_hash::bench::group(criterion);
-        crate::mimc_tree::bench::group(criterion);
         bench_example_proptest(criterion);
         bench_example_async(criterion);
     }

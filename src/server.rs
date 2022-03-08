@@ -47,12 +47,14 @@ const CONTENT_JSON: &str = "application/json";
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InsertCommitmentRequest {
+    group_id: usize,
     identity_commitment: Hash,
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProofRequest {
+    group_id: usize,
     pub identity_index: usize,
 }
 
@@ -118,14 +120,14 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
         (&Method::POST, "/inclusionProof") => {
             json_middleware(request, |request: InclusionProofRequest| {
                 let app = app.clone();
-                async move { app.inclusion_proof(request.identity_index).await }
+                async move { app.inclusion_proof(request.group_id, request.identity_index).await }
             })
             .await
         }
         (&Method::POST, "/insertIdentity") => {
             json_middleware(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
-                async move { app.insert_identity(&request.identity_commitment).await }
+                async move { app.insert_identity(request.group_id, &request.identity_commitment).await }
             })
             .await
         }

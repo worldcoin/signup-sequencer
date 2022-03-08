@@ -38,6 +38,9 @@ pub struct Options {
     /// where EIP-1559 is not yet supported
     #[structopt(short, parse(try_from_str), default_value = "true")]
     pub eip1559: bool,
+
+    #[structopt(short, parse(try_from_str), default_value = "false")]
+    pub mock: bool,
 }
 
 // Code out the provider stack in types
@@ -51,6 +54,7 @@ pub struct Ethereum {
     provider:  Arc<ProviderStack>,
     semaphore: Semaphore<ProviderStack>,
     eip1559:   bool,
+    mock:      bool,
 }
 
 impl Ethereum {
@@ -108,6 +112,7 @@ impl Ethereum {
             provider,
             semaphore,
             eip1559: options.eip1559,
+            mock: options.mock,
         })
     }
 
@@ -120,6 +125,9 @@ impl Ethereum {
         info!(starting_block, "Reading LeafInsertion events from chains");
         // TODO: Some form of pagination.
         // TODO: Register to the event stream and track it going forward.
+        if self.mock {
+            return Ok(vec![]);
+        }
         let filter = self
             .semaphore
             .leaf_insertion_filter()
@@ -135,6 +143,9 @@ impl Ethereum {
 
     pub async fn insert_identity(&self, commitment: &Hash) -> EyreResult<()> {
         info!(%commitment, "Inserting identity in contract");
+        if self.mock {
+            return Ok(());
+        }
         let tx = self.semaphore.insert_identity(commitment.into());
         let pending_tx = if self.eip1559 {
             self.provider.send_transaction(tx.tx, None).await?

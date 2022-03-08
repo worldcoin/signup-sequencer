@@ -13,11 +13,7 @@ use hyper::{client::HttpConnector, Body, Client, Request};
 use semaphore::{hash::Hash, poseidon_tree::PoseidonTree};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use signup_sequencer::{
-    app::App,
-    server::{self, InclusionProofRequest},
-    Options,
-};
+use signup_sequencer::{app::App, server, Options};
 use std::{
     fs::File,
     io::BufReader,
@@ -181,15 +177,22 @@ async fn test_insert_identity(
     let result = String::from_utf8(bytes.into_iter().collect())
         .expect("Could not parse response bytes to utf-8");
 
-    let expected = InclusionProofRequest { identity_index };
+    let expected = InsertIdentityResponse { identity_index };
     let expected = serde_json::to_string_pretty(&expected).expect("Index serialization failed");
 
     assert_eq!(result, expected);
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InsertIdentityResponse {
+    identity_index: usize,
+}
+
 fn construct_inclusion_proof_body(identity_index: usize) -> Body {
     Body::from(
         json!({
+            "groupId": 0,
             "identityIndex": identity_index,
         })
         .to_string(),
@@ -199,6 +202,7 @@ fn construct_inclusion_proof_body(identity_index: usize) -> Body {
 fn construct_insert_identity_body(identity_commitment: &str) -> Body {
     Body::from(
         json!({
+            "groupId": 0,
             "identityCommitment": identity_commitment,
 
         })

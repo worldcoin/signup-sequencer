@@ -41,6 +41,10 @@ spec:
           env:
             - name: LOG_FORMAT
               value: json
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
             - name: DD_VERSION
               valueFrom:
                 fieldRef:

@@ -289,13 +289,6 @@ jobs:
         uses: actions/checkout@v2
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
-      # TODO: Make package public
-      - name: Create pull secret for ghcr.io
-        run: kubectl create secret docker-registry ghcr-secret
-          --docker-server=ghcr.io
-          --docker-username="${{ github.repository_owner }}"
-          --docker-password="${{ secrets.GITHUB_TOKEN }}"
-          --dry-run=client --output=yaml | kubectl apply -f -
       - name: Test install deploy
         run: helm upgrade ${{ github.event.repository.name }} ./deploy
           --install --atomic --timeout 60s --debug
@@ -321,7 +314,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -335,20 +327,12 @@ jobs:
         run: aws eks update-kubeconfig
           --region ${{ secrets.AWS_STAGE_REGION }}
           --name ${{ secrets.AWS_STAGE_CLUSTER }}
-      # TODO: Make package public
-      - name: Create pull secret for ghcr.io
-        run: kubectl create secret docker-registry ghcr-secret
-          --namespace "${{ github.event.repository.name }}"
-          --docker-server=ghcr.io
-          --docker-username="${{ github.repository_owner }}"
-          --docker-password="${{ secrets.GITHUB_TOKEN }}"
-          --dry-run=client --output=yaml | kubectl apply -f -
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
           --install --atomic --timeout 60s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
-          --set image.pullSecret=ghcr-secret
+          --set ingress.host=signup.stage-crypto.worldcoin.dev
           --set environment=stage
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
 
@@ -360,7 +344,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -374,19 +357,40 @@ jobs:
         run: aws eks update-kubeconfig
           --region ${{ secrets.AWS_STAGE_REGION }}
           --name ${{ secrets.AWS_STAGE_CLUSTER }}
-      # TODO: Make package public
-      - name: Create pull secret for ghcr.io
-        run: kubectl create secret docker-registry ghcr-secret
-          --namespace "${{ github.event.repository.name }}"
-          --docker-server=ghcr.io
-          --docker-username="${{ github.repository_owner }}"
-          --docker-password="${{ secrets.GITHUB_TOKEN }}"
-          --dry-run=client --output=yaml | kubectl apply -f -
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
           --install --atomic --timeout 60s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
-          --set image.pullSecret=ghcr-secret
+          --set ingress.host=signup.stage-crypto.worldcoin.dev
           --set environment=stage
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
+  deploy-prod:
+    name: Deploy main to production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [ accept ]
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: ${{ secrets.AWS_PROD_REGION }}
+          role-to-assume: ${{ secrets.AWS_PROD_ROLE }}
+          role-duration-seconds: 900
+      - name: Connect to EKS cluster
+        run: aws eks update-kubeconfig
+          --region ${{ secrets.AWS_PROD_REGION }}
+          --name ${{ secrets.AWS_PROD_CLUSTER }}
+      - name: Helm install
+        run: helm upgrade "${{ github.event.repository.name }}" ./deploy
+          --install --atomic --timeout 60s
+          --namespace "${{ github.event.repository.name }}"
+          --set image.tag="${{ github.sha }}"
+          --set environment=prod
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"

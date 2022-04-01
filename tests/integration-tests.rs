@@ -30,6 +30,7 @@ use url::{Host, Url};
 const TEST_LEAFS: &[&str] = &[
     "0000000000000000000000000000000000000000000000000000000000000001",
     "0000000000000000000000000000000000000000000000000000000000000002",
+    "0000000000000000000000000000000000000000000000000000000000000003",
 ];
 
 const GANACHE_DEFAULT_WALLET_KEY: Hash = Hash(hex!(
@@ -64,8 +65,8 @@ async fn insert_identity_and_proofs() {
     let mut ref_tree = PoseidonTree::new(options.app.tree_depth, options.app.initial_leaf);
     let client = Client::new();
 
-    test_inclusion_proof(&uri, &client, 0, &mut ref_tree, &options.app.initial_leaf).await;
-    test_inclusion_proof(&uri, &client, 1, &mut ref_tree, &options.app.initial_leaf).await;
+    test_inclusion_proof(&uri, &client, 0, &mut ref_tree, &options.app.initial_leaf, true).await;
+    test_inclusion_proof(&uri, &client, 1, &mut ref_tree, &options.app.initial_leaf, true).await;
     test_insert_identity(&uri, &client, TEST_LEAFS[0], 0).await;
     test_inclusion_proof(
         &uri,
@@ -73,6 +74,7 @@ async fn insert_identity_and_proofs() {
         0,
         &mut ref_tree,
         &Hash::from_str(TEST_LEAFS[0]).expect("Failed to parse Hash from test leaf 0"),
+        false,
     )
     .await;
     test_insert_identity(&uri, &client, TEST_LEAFS[1], 1).await;
@@ -82,9 +84,10 @@ async fn insert_identity_and_proofs() {
         1,
         &mut ref_tree,
         &Hash::from_str(TEST_LEAFS[1]).expect("Failed to parse Hash from test leaf 1"),
+        false,
     )
     .await;
-    test_inclusion_proof(&uri, &client, 2, &mut ref_tree, &options.app.initial_leaf).await;
+    test_inclusion_proof(&uri, &client, 2, &mut ref_tree, &options.app.initial_leaf, true).await;
 
     // Shutdown app and spawn new one from file
     let _ = shutdown.send(()).expect("Failed to send shutdown signal");
@@ -100,6 +103,7 @@ async fn insert_identity_and_proofs() {
         0,
         &mut ref_tree,
         &Hash::from_str(TEST_LEAFS[0]).expect("Failed to parse Hash from test leaf 0"),
+        false,
     )
     .await;
     test_inclusion_proof(
@@ -108,6 +112,7 @@ async fn insert_identity_and_proofs() {
         1,
         &mut ref_tree,
         &Hash::from_str(TEST_LEAFS[1]).expect("Failed to parse Hash from test leaf 1"),
+        false,
     )
     .await;
 
@@ -122,8 +127,9 @@ async fn test_inclusion_proof(
     leaf_index: usize,
     ref_tree: &mut PoseidonTree,
     leaf: &Hash,
+    expect_failure: bool,
 ) {
-    let body = construct_inclusion_proof_body(leaf_index);
+    let body = construct_inclusion_proof_body(TEST_LEAFS[leaf_index]);
     let req = Request::builder()
         .method("POST")
         .uri(uri.to_owned() + "/inclusionProof")
@@ -135,7 +141,12 @@ async fn test_inclusion_proof(
         .request(req)
         .await
         .expect("Failed to execute request.");
-    assert!(response.status().is_success());
+    if expect_failure {
+        assert!(!response.status().is_success());
+        return;
+    } else {
+        assert!(response.status().is_success());
+    }
 
     let bytes = hyper::body::to_bytes(response.body_mut())
         .await
@@ -189,11 +200,11 @@ struct InsertIdentityResponse {
     identity_index: usize,
 }
 
-fn construct_inclusion_proof_body(identity_index: usize) -> Body {
+fn construct_inclusion_proof_body(identity_commitment: &str) -> Body {
     Body::from(
         json!({
             "groupId": 0,
-            "identityIndex": identity_index,
+            "identityCommitment": identity_commitment,
         })
         .to_string(),
     )

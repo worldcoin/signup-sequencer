@@ -54,8 +54,8 @@ pub struct InsertCommitmentRequest {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProofRequest {
-    pub group_id:       usize,
-    pub identity_index: usize,
+    pub group_id:            usize,
+    pub identity_commitment: Hash,
 }
 
 #[derive(Debug, Error)]
@@ -66,6 +66,8 @@ pub enum Error {
     InvalidContentType,
     #[error("provided identity index out of bounds")]
     IndexOutOfBounds,
+    #[error("provided identity commitment not found")]
+    IdentityCommitmentNotFound,
     #[error("invalid serialization format")]
     InvalidSerialization(#[from] serde_json::Error),
     #[error(transparent)]
@@ -121,7 +123,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
             json_middleware(request, |request: InclusionProofRequest| {
                 let app = app.clone();
                 async move {
-                    app.inclusion_proof(request.group_id, request.identity_index)
+                    app.inclusion_proof(request.group_id, &request.identity_commitment)
                         .await
                 }
             })

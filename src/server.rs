@@ -47,13 +47,15 @@ const CONTENT_JSON: &str = "application/json";
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InsertCommitmentRequest {
+    group_id:            usize,
     identity_commitment: Hash,
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProofRequest {
-    pub identity_index: usize,
+    pub group_id:            usize,
+    pub identity_commitment: Hash,
 }
 
 #[derive(Debug, Error)]
@@ -64,6 +66,8 @@ pub enum Error {
     InvalidContentType,
     #[error("provided identity index out of bounds")]
     IndexOutOfBounds,
+    #[error("provided identity commitment not found")]
+    IdentityCommitmentNotFound,
     #[error("invalid serialization format")]
     InvalidSerialization(#[from] serde_json::Error),
     #[error(transparent)]
@@ -118,14 +122,20 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
         (&Method::POST, "/inclusionProof") => {
             json_middleware(request, |request: InclusionProofRequest| {
                 let app = app.clone();
-                async move { app.inclusion_proof(request.identity_index).await }
+                async move {
+                    app.inclusion_proof(request.group_id, &request.identity_commitment)
+                        .await
+                }
             })
             .await
         }
         (&Method::POST, "/insertIdentity") => {
             json_middleware(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
-                async move { app.insert_identity(&request.identity_commitment).await }
+                async move {
+                    app.insert_identity(request.group_id, &request.identity_commitment)
+                        .await
+                }
             })
             .await
         }

@@ -137,9 +137,18 @@ impl App {
     pub async fn inclusion_proof(
         &self,
         _group_id: usize,
-        identity_index: usize,
+        identity_commitment: &Hash,
     ) -> Result<Proof, ServerError> {
         let merkle_tree = self.merkle_tree.read().await;
+        let identity_index = match merkle_tree
+            .leaves()
+            .iter()
+            .position(|&x| x == *identity_commitment)
+        {
+            Some(i) => i,
+            None => return Err(ServerError::IdentityCommitmentNotFound),
+        };
+
         let proof = merkle_tree.proof(identity_index);
 
         proof.ok_or(ServerError::IndexOutOfBounds)

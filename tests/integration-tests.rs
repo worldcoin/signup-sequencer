@@ -65,8 +65,24 @@ async fn insert_identity_and_proofs() {
     let mut ref_tree = PoseidonTree::new(options.app.tree_depth, options.app.initial_leaf);
     let client = Client::new();
 
-    test_inclusion_proof(&uri, &client, 0, &mut ref_tree, &options.app.initial_leaf, true).await;
-    test_inclusion_proof(&uri, &client, 1, &mut ref_tree, &options.app.initial_leaf, true).await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        0,
+        &mut ref_tree,
+        &options.app.initial_leaf,
+        true,
+    )
+    .await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        1,
+        &mut ref_tree,
+        &options.app.initial_leaf,
+        true,
+    )
+    .await;
     test_insert_identity(&uri, &client, TEST_LEAFS[0], 0).await;
     test_inclusion_proof(
         &uri,
@@ -87,7 +103,15 @@ async fn insert_identity_and_proofs() {
         false,
     )
     .await;
-    test_inclusion_proof(&uri, &client, 2, &mut ref_tree, &options.app.initial_leaf, true).await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        2,
+        &mut ref_tree,
+        &options.app.initial_leaf,
+        true,
+    )
+    .await;
 
     // Shutdown app and spawn new one from file
     let _ = shutdown.send(()).expect("Failed to send shutdown signal");

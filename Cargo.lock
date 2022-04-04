@@ -88,7 +88,7 @@ dependencies = [
 [[package]]
 name = "ark-circom"
 version = "0.1.0"
-source = "git+https://github.com/gakonst/ark-circom#d0478d1538d229302f33cc2a6d753ab3c7d73bf3"
+source = "git+https://github.com/gakonst/ark-circom?rev=a93c8b0#a93c8b03d4376e197ceb36aa410a8903c283dab7"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -1397,7 +1397,8 @@ dependencies = [
 [[package]]
 name = "ethabi"
 version = "17.0.0"
-source = "git+https://github.com/rust-ethereum/ethabi?branch=master#7edf185125a9560d43bba0f84432a7cc874a5218"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b69517146dfab88e9238c00c724fd8e277951c3cc6f22b016d72f422a832213e"
 dependencies = [
  "ethereum-types 0.13.1",
  "hex",
@@ -1538,17 +1539,15 @@ dependencies = [
 [[package]]
 name = "ethers-core"
 version = "0.6.0"
-source = "git+https://github.com/gakonst/ethers-rs#94e2d1b1223735ccb3804e1c22855ba93062cdb4"
+source = "git+https://github.com/gakonst/ethers-rs#38b984c35361c205ae9694136870c24f4c31e541"
 dependencies = [
  "arrayvec 0.7.2",
  "bytes",
- "ecdsa 0.13.4",
  "elliptic-curve 0.11.12",
  "ethabi 17.0.0",
  "generic-array 0.14.5",
  "hex",
- "k256 0.10.2",
- "once_cell",
+ "k256 0.10.4",
  "rand 0.8.5",
  "rlp",
  "rlp-derive",
@@ -2399,9 +2398,9 @@ dependencies = [
 
 [[package]]
 name = "k256"
-version = "0.10.2"
+version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cc5937366afd3b38071f400d1ce5bd8b1d40b5083cc14e6f8dbcc4032a7f5bb"
+checksum = "19c3a5e0a0b8450278feda242592512e09f61c72e018b8cd5c859482802daf2d"
 dependencies = [
  "cfg-if",
  "ecdsa 0.13.4",
@@ -3900,7 +3899,7 @@ dependencies = [
 [[package]]
 name = "semaphore"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#3e7ff8061146b88fb8eaa95a3dd97d80ed356ea1"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#5307cbc48302cdb59e9b9f45685b086a2b338d3f"
 dependencies = [
  "ark-bn254",
  "ark-circom",
@@ -3910,16 +3909,22 @@ dependencies = [
  "ark-relations",
  "ark-std",
  "color-eyre 0.5.11",
- "ethers-core 0.6.3",
+ "enumset",
+ "ethers-core 0.6.0",
  "ff_ce",
  "hex",
  "hex-literal",
  "num-bigint 0.4.3",
  "once_cell",
  "poseidon-rs",
+ "primitive-types 0.11.1",
+ "rand 0.8.5",
  "rayon",
  "serde",
  "sha2 0.10.2",
+ "thiserror",
+ "tiny-keccak",
+ "wasmer",
 ]
 
 [[package]]

@@ -39,7 +39,12 @@ pub struct Options {
     #[structopt(short, parse(try_from_str), default_value = "true")]
     pub eip1559: bool,
 
-    #[structopt(short, parse(try_from_str), default_value = "false")]
+    #[structopt(
+        short,
+        parse(try_from_str),
+        default_value = "false",
+        env = "SIGNUP_SEQUENCER_MOCK"
+    )]
     pub mock: bool,
 }
 

@@ -12,6 +12,7 @@ use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
 use semaphore::hash::Hash;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::json;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     sync::Arc,
@@ -78,9 +79,31 @@ pub enum Error {
 
 impl Error {
     fn to_response(&self) -> hyper::Response<Body> {
+        let status = match self {
+            Error::IdentityCommitmentNotFound => StatusCode::NOT_FOUND,
+            _ => StatusCode::BAD_REQUEST,
+        };
+        let error_code: i32 = match self {
+            Error::InvalidSerialization(_) | Error::InvalidContentType => -32700,
+            Error::InvalidMethod => -32601,
+            Error::IndexOutOfBounds => -1,
+            Error::IdentityCommitmentNotFound => -2,
+            _ => -32603,
+        };
+
         hyper::Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(hyper::Body::from(self.to_string()))
+            .status(status)
+            .body(Body::from(
+                json!({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": error_code,
+                        "message": self.to_string(),
+                    },
+                    // TODO id
+                    "id": "1"
+                }).to_string()
+            ))
             .expect("Failed to convert error string into hyper::Body")
     }
 }

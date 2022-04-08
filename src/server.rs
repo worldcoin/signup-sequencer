@@ -48,6 +48,7 @@ const CONTENT_JSON: &str = "application/json";
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InsertCommitmentRequest {
+    id: usize,
     group_id:            usize,
     identity_commitment: Hash,
 }
@@ -55,6 +56,7 @@ pub struct InsertCommitmentRequest {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProofRequest {
+    pub id: usize,
     pub group_id:            usize,
     pub identity_commitment: Hash,
 }
@@ -108,6 +110,38 @@ impl Error {
     }
 }
 
+pub trait JsonRpcId {
+    fn id(&self) -> usize;
+}
+
+impl JsonRpcId for InsertCommitmentRequest {
+    fn id(&self) -> usize {
+        self.id
+    }
+}
+
+impl JsonRpcId for InclusionProofRequest {
+    fn id(&self) -> usize {
+        self.id
+    }
+}
+
+fn json_rpc_middleware<U>(
+    response: U,
+    id: usize,
+) -> Result<String, Error>
+where
+U: Serialize,
+{
+    let json = serde_json::to_string_pretty(&response)?;
+    let json = json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": json,
+    }).to_string();
+    Ok(json)
+}
+
 /// Parse a [`Request<Body>`] as JSON using Serde and handle using the provided
 /// method.
 async fn json_middleware<F, T, S, U>(
@@ -115,7 +149,7 @@ async fn json_middleware<F, T, S, U>(
     mut next: F,
 ) -> Result<Response<Body>, Error>
 where
-    T: DeserializeOwned + Send,
+    T: DeserializeOwned + Send + JsonRpcId,
     F: FnMut(T) -> S + Send,
     S: Future<Output = Result<U, Error>> + Send,
     U: Serialize,
@@ -128,9 +162,10 @@ where
         return Err(Error::InvalidContentType);
     }
     let body = hyper::body::aggregate(request).await?;
-    let request = serde_json::from_reader(body.reader())?;
+    let request: T = serde_json::from_reader(body.reader())?;
+    let id = request.id();
     let response = next(request).await?;
-    let json = serde_json::to_string_pretty(&response)?;
+    let json = json_rpc_middleware(response, id)?;
     Ok(Response::new(Body::from(json)))
 }
 

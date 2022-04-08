@@ -335,6 +335,7 @@ jobs:
           --set ingress.host=signup.stage-crypto.worldcoin.dev
           --set environment=stage
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
+          --set env.SIGNUP_SEQUENCER_MOCK=true
 
   deploy-stage-manual:
     name: Manual deploy to staging
@@ -365,6 +366,7 @@ jobs:
           --set ingress.host=signup.stage-crypto.worldcoin.dev
           --set environment=stage
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
+          --set env.SIGNUP_SEQUENCER_MOCK=true
   deploy-prod:
     name: Deploy main to production
     runs-on: ubuntu-latest

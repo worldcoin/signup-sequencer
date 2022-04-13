@@ -34,3 +34,8 @@ ingress:
   host: "signup.crypto.worldcoin.dev"
   api:
   metrics:
+
+persistentStorage:
+  enabled: true
+  size: 100Gi
+  volumeID: aws://us-east-1a/vol-0ad5bd5c5af15e0c8 # example: aws://us-east-1c/vol-aabbcc123

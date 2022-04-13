@@ -1,5 +1,5 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: Statefulset
 metadata:
   name: {{ include "mychart.fullname" . }}
   annotations:
@@ -21,6 +21,12 @@ spec:
         prometheus.io/port: "9998"
         prometheus.io/path: "/metrics"
     spec:
+      {{ if .Values.persistentStorage.enabled }}
+      volumes:
+        - name: {{ include "mychart.fullname" . }}-storage
+          persistentVolumeClaim:
+            claimName: {{ include "mychart.fullname" . }}
+      {{ end }}
       {{ with .Values.image.pullSecret -}}
       imagePullSecrets:
         - name: {{ . }}
@@ -31,6 +37,9 @@ spec:
         - name: app
           image: "{{ .Values.image.image }}:{{ .Values.image.tag | default (print "v" .Chart.AppVersion)}}"
           imagePullPolicy: {{ .Values.image.pullPolicy | default "Always" }}
+          volumeMounts:
+            - name: {{ include "mychart.fullname" . }}-storage
+              mountPath: "/volume"
           ports:
             - name: api
               containerPort: 8080

@@ -1,4 +1,4 @@
-{{ if .Values.persistentStorage.enabled }}
+{{- if .Values.persistentStorage.enabled }}
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -40,4 +40,4 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistentStorage.size }}
-{{ end }}
+{{- end }}

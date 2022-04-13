@@ -1,9 +1,9 @@
 apiVersion: apps/v1
-kind: Statefulset
+kind: StatefulSet
 metadata:
   name: {{ include "mychart.fullname" . }}
   annotations:
-    kube-score/ignore: pod-probes # TODO
+    kube-score/ignore: 'pod-probes,container-ephemeral-storage-request-and-limit' # TODO
   labels:
     {{- include "mychart.labels" . | nindent 4 }}
 spec:
@@ -11,6 +11,7 @@ spec:
   selector:
     matchLabels:
       app: {{ include "mychart.fullname" . }}
+  serviceName: {{ include "mychart.fullname" . }}-headless
   template:
     metadata:
       labels:
@@ -21,12 +22,12 @@ spec:
         prometheus.io/port: "9998"
         prometheus.io/path: "/metrics"
     spec:
-      {{ if .Values.persistentStorage.enabled }}
+      {{- if .Values.persistentStorage.enabled }}
       volumes:
         - name: {{ include "mychart.fullname" . }}-storage
           persistentVolumeClaim:
             claimName: {{ include "mychart.fullname" . }}
-      {{ end }}
+      {{- end }}
       {{ with .Values.image.pullSecret -}}
       imagePullSecrets:
         - name: {{ . }}

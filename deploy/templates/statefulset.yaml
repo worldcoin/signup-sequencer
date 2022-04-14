@@ -38,9 +38,11 @@ spec:
         - name: app
           image: "{{ .Values.image.image }}:{{ .Values.image.tag | default (print "v" .Chart.AppVersion)}}"
           imagePullPolicy: {{ .Values.image.pullPolicy | default "Always" }}
+          {{- if .Values.persistentStorage.enabled }}
           volumeMounts:
             - name: {{ include "mychart.fullname" . }}-storage
               mountPath: "/volume"
+          {{- end }}
           ports:
             - name: api
               containerPort: 8080

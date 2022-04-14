@@ -6,10 +6,12 @@ metadata:
   labels:
     {{- include "mychart.labels" . | nindent 4 }}
 spec:
-  type: None
+  clusterIP: None
   selector:
     app: {{ include "mychart.fullname" . }}
   ports:
     - name: api
+      protocol: TCP
       port: 80
+      targetPort: api
 {{- end }}

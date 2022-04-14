@@ -34,9 +34,10 @@ spec:
       {{ end -}}
       nodeSelector:
         beta.kubernetes.io/arch: {{ .Values.image.arch }}
+      {{- if .Values.persistentStorage.enabled }}
       initContainers:
         - name: set-volume-permissions
-          image: alpine
+          image: alpine:3.15
           command:
           - chown
           - -R
@@ -45,6 +46,14 @@ spec:
           volumeMounts:
           - mountPath: /volume
             name: signup-sequencer-storage
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+      {{- end }}
       containers:
         - name: app
           image: "{{ .Values.image.image }}:{{ .Values.image.tag | default (print "v" .Chart.AppVersion)}}"

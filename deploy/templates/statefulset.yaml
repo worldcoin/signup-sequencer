@@ -34,6 +34,17 @@ spec:
       {{ end -}}
       nodeSelector:
         beta.kubernetes.io/arch: {{ .Values.image.arch }}
+      initContainers:
+        - name: set-volume-permissions
+          image: alpine
+          command:
+          - chown
+          - -R
+          - 10001:10001
+          - /volume
+          volumeMounts:
+          - mountPath: /volume
+            name: signup-sequencer-storage
       containers:
         - name: app
           image: "{{ .Values.image.image }}:{{ .Values.image.tag | default (print "v" .Chart.AppVersion)}}"

@@ -43,6 +43,8 @@ spec:
             - name: {{ include "mychart.fullname" . }}-storage
               mountPath: "/volume"
           {{- end }}
+          securityContext:
+            fsGroup: 10001 # runtime user from Dockerfile
           ports:
             - name: api
               containerPort: 8080

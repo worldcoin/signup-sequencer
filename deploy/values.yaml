@@ -27,6 +27,7 @@ resources:
 # Env values can be strings (to be prefixed with `value:`) or objects
 env:
   ETHEREUM_PROVIDER: "https://localhost:8545/"
+  STORAGE_FILE: "/volume/commitments.json" # use mounted EBS Volume
 
 # Spec ingress policy for the `api` and `metrics` port.
 # Values are a list of NetworkPolicyPeer v1 objects, empty means allow all.
@@ -34,3 +35,8 @@ ingress:
   host: "signup.crypto.worldcoin.dev"
   api:
   metrics:
+
+persistentStorage:
+  enabled: true
+  size: 100Gi
+  volumeID: aws://us-east-1a/vol-0ad5bd5c5af15e0c8 # example: aws://us-east-1c/vol-aabbcc123

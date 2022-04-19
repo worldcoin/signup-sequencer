@@ -331,11 +331,38 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
         .send()
         .await?;
 
+    let verifier_json = File::open("./sol/Verifier.json").expect("Compiled contract doesn't exist");
+    let verifier_json: CompiledContract = serde_json::from_reader(BufReader::new(verifier_json)).expect("Could not read contract");
+    let verifier_bytecode = deserialize_to_bytes(verifier_json.bytecode)?;
+    let verifier_factory = ContractFactory::new(verifier_json.abi, verifier_bytecode, client.clone());
+    let verifier_contract = verifier_factory
+        .deploy(())?
+        .legacy()
+        .confirmations(0usize)
+        .send()
+        .await?;
+
+    let incremental_binary_tree_json = File::open("./sol/IncrementalBinaryTree.json").expect("Compiled contract doesn't exist");
+    let incremental_binary_tree_json: CompiledContract = serde_json::from_reader(BufReader::new(incremental_binary_tree_json)).expect("Could not read contract");
+    let incremental_binary_tree_bytecode = incremental_binary_tree_json.bytecode.replace(
+        "__$86e0c54df1042e28bf2dd20ccf184dc428$__",
+        &format!("{:?}", poseidon_t3_contract.address()).replace("0x", ""),
+    );
+    let incremental_binary_tree_bytecode = deserialize_to_bytes(incremental_binary_tree_bytecode)?;
+    let incremental_binary_tree_factory = ContractFactory::new(incremental_binary_tree_json.abi, incremental_binary_tree_bytecode, client.clone());
+    let incremental_binary_tree_contract = incremental_binary_tree_factory
+        .deploy(())?
+        .legacy()
+        .confirmations(0usize)
+        .send()
+        .await?;
+
     let semaphore_json =
         File::open("./sol/Semaphore.json").expect("Compiled contract doesn't exist");
     let semaphore_json: CompiledContract =
         serde_json::from_reader(BufReader::new(semaphore_json)).expect("Could not read contract");
 
+        // TODO replace incremental binary tree
     let semaphore_bytecode = semaphore_json.bytecode.replace(
         "__$86e0c54df1042e28bf2dd20ccf184dc428$__",
         &format!("{:?}", poseidon_t3_contract.address()).replace("0x", ""),

@@ -1,4 +1,4 @@
-use crate::app::App;
+use crate::app::{App, Hash};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
@@ -10,7 +10,6 @@ use hyper::{
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use semaphore::hash::Hash;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
@@ -226,7 +225,6 @@ pub async fn bind_from_listener(
 mod test {
     use super::*;
     use hyper::{body::to_bytes, Request, StatusCode};
-    use pretty_assertions::assert_eq;
     use serde_json::json;
 
     // TODO: Fix test

@@ -4,8 +4,8 @@ on:
   push
 
 env:
-  RUST_VERSION: 1.59
-  NIGHTLY_VERSION: nightly-2022-02-22
+  RUST_VERSION: "1.60"
+  NIGHTLY_VERSION: nightly-2022-04-18
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
@@ -88,8 +88,8 @@ jobs:
     name: Coverage
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: -Zinstrument-coverage
-      RUSTDOCFLAGS: -Z instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
+      RUSTFLAGS: -Cinstrument-coverage
+      RUSTDOCFLAGS: -C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
       LLVM_PROFILE_FILE: profile-%m.profraw
     steps:
       - name: Checkout repository

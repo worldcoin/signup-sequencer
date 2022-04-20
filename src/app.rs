@@ -72,6 +72,7 @@ impl App {
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let mut merkle_tree = PoseidonTree::new(options.tree_depth, options.initial_leaf);
+        let mut num_leaves = 0;
 
         // Read tree from file
         info!(path = ?&options.storage_file, "Reading tree from storage");
@@ -80,6 +81,7 @@ impl App {
             if file.metadata()?.len() > 0 {
                 let file: JsonCommitment = serde_json::from_reader(BufReader::new(file))?;
                 let next_leaf = file.commitments.len();
+                num_leaves = file.commitments.len();
                 merkle_tree.set_range(0, file.commitments);
                 (next_leaf, file.last_block)
             } else {
@@ -92,9 +94,7 @@ impl App {
         };
 
         // Read events from blockchain
-        let events = ethereum
-            .fetch_events(last_block, merkle_tree.num_leaves())
-            .await?;
+        let events = ethereum.fetch_events(last_block, num_leaves).await?;
         for (leaf, hash) in events {
             merkle_tree.set(leaf, hash);
             next_leaf = max(next_leaf, leaf + 1);

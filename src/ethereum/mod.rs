@@ -23,7 +23,7 @@ pub struct Options {
     pub ethereum_provider: Url,
 
     /// Semaphore contract address.
-    #[structopt(long, env, default_value = "e4970853AF347FF107712E91702f2E654aD79baF")]
+    #[structopt(long, env, default_value = "174ee9b5fBb5Eb68B6C61032946486dD9c2Dc4b6")]
     pub semaphore_address: Address,
 
     /// Private key used for transaction signing
@@ -173,35 +173,43 @@ impl Ethereum {
         let depth = self.semaphore.get_depth(group_id.into()).call().await?;
         if depth == 0 {
             // Must subtract one as internal rust merkle tree is eth merkle tree depth + 1
-            let tx = self.semaphore.create_airdrop(
+            let create_airdrop_tx = self.semaphore.create_airdrop(
                 group_id.into(),
                 self.address,
                 (tree_depth - 1).try_into()?,
             );
-            let pending_tx = if self.eip1559 {
-                self.provider.send_transaction(tx.tx, None).await?
+            let create_airdrop_pending_tx = if self.eip1559 {
+                self.provider
+                    .send_transaction(create_airdrop_tx.tx, None)
+                    .await?
             } else {
                 // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-                self.provider.send_transaction(tx.legacy().tx, None).await?
+                self.provider
+                    .send_transaction(create_airdrop_tx.legacy().tx, None)
+                    .await?
             };
-            let receipt = pending_tx.await.map_err(|e| eyre!(e))?;
-            if receipt.is_none() {
+            let create_airdrop_receipt = create_airdrop_pending_tx.await.map_err(|e| eyre!(e))?;
+            if create_airdrop_receipt.is_none() {
                 // This should only happen if the tx is no longer in the mempool, meaning the tx
                 // was dropped.
                 return Err(eyre!("tx dropped from mempool"));
             }
         }
-        let tx = self
+        let add_recipient_tx = self
             .semaphore
             .add_recipient(group_id.into(), commitment.into());
-        let pending_tx = if self.eip1559 {
-            self.provider.send_transaction(tx.tx, None).await?
+        let add_recipient_pending_tx = if self.eip1559 {
+            self.provider
+                .send_transaction(add_recipient_tx.tx, None)
+                .await?
         } else {
             // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-            self.provider.send_transaction(tx.legacy().tx, None).await?
+            self.provider
+                .send_transaction(add_recipient_tx.legacy().tx, None)
+                .await?
         };
-        let receipt = pending_tx.await.map_err(|e| eyre!(e))?;
-        if receipt.is_none() {
+        let add_recipient_receipt = add_recipient_pending_tx.await.map_err(|e| eyre!(e))?;
+        if add_recipient_receipt.is_none() {
             // This should only happen if the tx is no longer in the mempool, meaning the tx
             // was dropped.
             return Err(eyre!("tx dropped from mempool"));

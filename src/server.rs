@@ -25,7 +25,7 @@ use url::{Host, Url};
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     /// API Server url
-    #[structopt(long, env = "SERVER", default_value = "http://127.0.0.1:8081/")]
+    #[structopt(long, env = "SERVER", default_value = "http://127.0.0.1:8080/")]
     pub server: Url,
 }
 

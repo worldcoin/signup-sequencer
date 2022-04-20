@@ -5,8 +5,9 @@
     "abi": [
       {
         "inputs": [],
+        "anonymous": false,
         "name": "InvalidProof",
-        "type": "error"
+        "type": "event"
       },
       {
         "inputs": [

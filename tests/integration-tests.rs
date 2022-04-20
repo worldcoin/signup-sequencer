@@ -315,26 +315,12 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
         .send()
         .await?;
 
-    let poseidon_t6_json =
-        File::open("./sol/PoseidonT6.json").expect("Failed to read PoseidonT6.json");
-    let poseidon_t6_json: CompiledContract =
-        serde_json::from_reader(BufReader::new(poseidon_t6_json))
-            .expect("Could not parse compiled PoseidonT6 contract");
-    let poseidon_t6_bytecode = deserialize_to_bytes(poseidon_t6_json.bytecode)?;
-
-    let poseidon_t6_factory =
-        ContractFactory::new(poseidon_t6_json.abi, poseidon_t6_bytecode, client.clone());
-    let poseidon_t6_contract = poseidon_t6_factory
-        .deploy(())?
-        .legacy()
-        .confirmations(0usize)
-        .send()
-        .await?;
-
     let verifier_json = File::open("./sol/Verifier.json").expect("Compiled contract doesn't exist");
-    let verifier_json: CompiledContract = serde_json::from_reader(BufReader::new(verifier_json)).expect("Could not read contract");
+    let verifier_json: CompiledContract =
+        serde_json::from_reader(BufReader::new(verifier_json)).expect("Could not read contract");
     let verifier_bytecode = deserialize_to_bytes(verifier_json.bytecode)?;
-    let verifier_factory = ContractFactory::new(verifier_json.abi, verifier_bytecode, client.clone());
+    let verifier_factory =
+        ContractFactory::new(verifier_json.abi, verifier_bytecode, client.clone());
     let verifier_contract = verifier_factory
         .deploy(())?
         .legacy()
@@ -342,14 +328,22 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
         .send()
         .await?;
 
-    let incremental_binary_tree_json = File::open("./sol/IncrementalBinaryTree.json").expect("Compiled contract doesn't exist");
-    let incremental_binary_tree_json: CompiledContract = serde_json::from_reader(BufReader::new(incremental_binary_tree_json)).expect("Could not read contract");
+    let incremental_binary_tree_json =
+        File::open("./sol/IncrementalBinaryTree.json").expect("Compiled contract doesn't exist");
+    let incremental_binary_tree_json: CompiledContract =
+        serde_json::from_reader(BufReader::new(incremental_binary_tree_json))
+            .expect("Could not read contract");
     let incremental_binary_tree_bytecode = incremental_binary_tree_json.bytecode.replace(
-        "__$86e0c54df1042e28bf2dd20ccf184dc428$__",
+        // Find the hex for the library address by analyzing the bytecode
+        "__$618958d8226014a70a872b898165ec6838$__",
         &format!("{:?}", poseidon_t3_contract.address()).replace("0x", ""),
     );
     let incremental_binary_tree_bytecode = deserialize_to_bytes(incremental_binary_tree_bytecode)?;
-    let incremental_binary_tree_factory = ContractFactory::new(incremental_binary_tree_json.abi, incremental_binary_tree_bytecode, client.clone());
+    let incremental_binary_tree_factory = ContractFactory::new(
+        incremental_binary_tree_json.abi,
+        incremental_binary_tree_bytecode,
+        client.clone(),
+    );
     let incremental_binary_tree_contract = incremental_binary_tree_factory
         .deploy(())?
         .legacy()
@@ -362,14 +356,9 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
     let semaphore_json: CompiledContract =
         serde_json::from_reader(BufReader::new(semaphore_json)).expect("Could not read contract");
 
-        // TODO replace incremental binary tree
     let semaphore_bytecode = semaphore_json.bytecode.replace(
-        "__$86e0c54df1042e28bf2dd20ccf184dc428$__",
-        &format!("{:?}", poseidon_t3_contract.address()).replace("0x", ""),
-    );
-    let semaphore_bytecode = semaphore_bytecode.replace(
-        "__$223301b175b06473d424a7afc957d4e96c$__",
-        &format!("{:?}", poseidon_t6_contract.address()).replace("0x", ""),
+        "__$4c0484323457fe1a856f46a4759b553fe4$__",
+        &format!("{:?}", incremental_binary_tree_contract.address()).replace("0x", ""),
     );
     let semaphore_bytecode = deserialize_to_bytes(semaphore_bytecode)?;
 
@@ -378,7 +367,7 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
         ContractFactory::new(semaphore_json.abi, semaphore_bytecode, client.clone());
 
     let semaphore_contract = semaphore_factory
-        .deploy((4_u64, 123_u64))?
+        .deploy(verifier_contract.address())?
         .legacy()
         .confirmations(0usize)
         .send()

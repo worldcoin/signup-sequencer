@@ -120,7 +120,12 @@ where
     let request = serde_json::from_reader(body.reader())?;
     let response = next(request).await?;
     let json = serde_json::to_string_pretty(&response)?;
-    Ok(Response::new(Body::from(json)))
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, CONTENT_JSON)
+        .body(Body::from(json))
+        .map_err(Error::Http)?;
+    Ok(response)
 }
 
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
@@ -151,6 +156,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
             })
             .await
         }
+        (&Method::POST, _) => Err(Error::InvalidPath),
         _ => Err(Error::InvalidMethod),
     };
     let response = result.unwrap_or_else(|err| err.to_response());
@@ -227,7 +233,7 @@ pub async fn bind_from_listener(
             shutdown.subscribe().recv().await.ok();
         });
 
-    info!(url = %local_addr, "Server listening");
+        info!(url = %local_addr, "Server listening");
 
     server.await?;
     Ok(())

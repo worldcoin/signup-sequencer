@@ -272,7 +272,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Setup kube-score
-        uses: tobbbles/setup-kubescore@v1.0.2
+        uses: tobbbles/setup-kubescore@v1.0.3
       - name: Setup python toml
         run: pip install toml
       - name: Run kube-score

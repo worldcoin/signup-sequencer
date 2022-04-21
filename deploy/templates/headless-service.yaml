@@ -1,0 +1,17 @@
+{{- if not .Values.canary.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mychart.fullname" . }}-headless
+  labels:
+    {{- include "mychart.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    app: {{ include "mychart.fullname" . }}
+  ports:
+    - name: api
+      protocol: TCP
+      port: 80
+      targetPort: api
+{{- end }}

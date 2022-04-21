@@ -5,8 +5,8 @@ use crate::{
 use core::cmp::max;
 use eyre::Result as EyreResult;
 use semaphore::{
-    hash::Hash,
-    poseidon_tree::{PoseidonTree, Proof},
+    merkle_tree::Hasher,
+    poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -18,6 +18,8 @@ use std::{
 use structopt::StructOpt;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
+
+pub type Hash = <PoseidonHash as Hasher>::Hash;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -109,7 +111,11 @@ impl App {
     ///
     /// Will return `Err` if the Eth handler cannot insert the identity to the
     /// contract, or if writing to the storage file fails.
-    pub async fn insert_identity(&self, commitment: &Hash) -> Result<IndexResponse, ServerError> {
+    pub async fn insert_identity(
+        &self,
+        _group_id: usize,
+        commitment: &Hash,
+    ) -> Result<IndexResponse, ServerError> {
         // Send Semaphore transaction
         self.ethereum.insert_identity(commitment).await?;
 
@@ -130,8 +136,21 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if the provided index is out of bounds.
-    pub async fn inclusion_proof(&self, identity_index: usize) -> Result<Proof, ServerError> {
+    pub async fn inclusion_proof(
+        &self,
+        _group_id: usize,
+        identity_commitment: &Hash,
+    ) -> Result<Proof, ServerError> {
         let merkle_tree = self.merkle_tree.read().await;
+        let identity_index = match merkle_tree
+            .leaves()
+            .iter()
+            .position(|&x| x == *identity_commitment)
+        {
+            Some(i) => i,
+            None => return Err(ServerError::IdentityCommitmentNotFound),
+        };
+
         let proof = merkle_tree.proof(identity_index);
 
         proof.ok_or(ServerError::IndexOutOfBounds)

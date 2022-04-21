@@ -4,8 +4,8 @@ on:
   push
 
 env:
-  RUST_VERSION: 1.59
-  NIGHTLY_VERSION: nightly-2022-02-22
+  RUST_VERSION: "1.60"
+  NIGHTLY_VERSION: nightly-2022-04-18
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
@@ -88,8 +88,8 @@ jobs:
     name: Coverage
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: -Zinstrument-coverage
-      RUSTDOCFLAGS: -Z instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
+      RUSTFLAGS: -Cinstrument-coverage
+      RUSTDOCFLAGS: -C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
       LLVM_PROFILE_FILE: profile-%m.profraw
     steps:
       - name: Checkout repository
@@ -295,6 +295,8 @@ jobs:
           --set image.tag=${{ github.sha }}-amd64
           --set image.pullSecret=ghcr-secret
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
+          --set persistentStorage.enabled=false
+          --set ingress.cors.enabled=false
       - name: Describe pods
         if: always()
         run: kubectl describe pod
@@ -335,6 +337,8 @@ jobs:
           --set ingress.host=signup.stage-crypto.worldcoin.dev
           --set environment=stage
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
+          --set env.SIGNUP_SEQUENCER_MOCK=true
+          --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
 
   deploy-stage-manual:
     name: Manual deploy to staging
@@ -365,6 +369,9 @@ jobs:
           --set ingress.host=signup.stage-crypto.worldcoin.dev
           --set environment=stage
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
+          --set env.SIGNUP_SEQUENCER_MOCK=true
+          --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
+
   deploy-prod:
     name: Deploy main to production
     runs-on: ubuntu-latest

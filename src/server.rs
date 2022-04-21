@@ -87,7 +87,9 @@ impl Error {
             InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
             InvalidPath => StatusCode::NOT_FOUND,
             InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            IndexOutOfBounds | IdentityCommitmentNotFound | InvalidSerialization(_) => StatusCode::BAD_REQUEST,
+            IndexOutOfBounds | IdentityCommitmentNotFound | InvalidSerialization(_) => {
+                StatusCode::BAD_REQUEST
+            }
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         hyper::Response::builder()
@@ -233,7 +235,7 @@ pub async fn bind_from_listener(
             shutdown.subscribe().recv().await.ok();
         });
 
-        info!(url = %local_addr, "Server listening");
+    info!(url = %local_addr, "Server listening");
 
     server.await?;
     Ok(())

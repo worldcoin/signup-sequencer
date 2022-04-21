@@ -9,9 +9,11 @@ spec:
     accessControlAllowMethods:
       - "GET"
       - "OPTIONS"
-      - "PUT"
+      - "POST"
     accessControlAllowOriginList:
       - "*"
+    accessControlAllowHeaders:
+      - "content-type"
     accessControlMaxAge: 100
     addVaryHeader: true
 {{- end }}

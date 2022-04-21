@@ -59,26 +59,41 @@ pub struct InclusionProofRequest {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("invalid method")]
+    #[error("invalid http method")]
     InvalidMethod,
+    #[error("invalid path")]
+    InvalidPath,
     #[error("invalid content type")]
     InvalidContentType,
     #[error("provided identity index out of bounds")]
     IndexOutOfBounds,
     #[error("provided identity commitment not found")]
     IdentityCommitmentNotFound,
-    #[error("invalid serialization format")]
+    #[error("invalid JSON request: {0}")]
     InvalidSerialization(#[from] serde_json::Error),
     #[error(transparent)]
     Hyper(#[from] hyper::Error),
+    #[error(transparent)]
+    Http(#[from] hyper::http::Error),
     #[error(transparent)]
     Other(#[from] EyreError),
 }
 
 impl Error {
     fn to_response(&self) -> hyper::Response<Body> {
+        #[allow(clippy::enum_glob_use)]
+        use Error::*;
+        let status_code = match self {
+            InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
+            InvalidPath => StatusCode::NOT_FOUND,
+            InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            IndexOutOfBounds | IdentityCommitmentNotFound | InvalidSerialization(_) => {
+                StatusCode::BAD_REQUEST
+            }
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
         hyper::Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .status(status_code)
             .body(hyper::Body::from(self.to_string()))
             .expect("Failed to convert error string into hyper::Body")
     }
@@ -107,7 +122,12 @@ where
     let request = serde_json::from_reader(body.reader())?;
     let response = next(request).await?;
     let json = serde_json::to_string_pretty(&response)?;
-    Ok(Response::new(Body::from(json)))
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, CONTENT_JSON)
+        .body(Body::from(json))
+        .map_err(Error::Http)?;
+    Ok(response)
 }
 
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
@@ -138,6 +158,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
             })
             .await
         }
+        (&Method::POST, _) => Err(Error::InvalidPath),
         _ => Err(Error::InvalidMethod),
     };
     let response = result.unwrap_or_else(|err| err.to_response());

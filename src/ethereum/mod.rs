@@ -131,6 +131,7 @@ impl Ethereum {
         // TODO: Some form of pagination.
         // TODO: Register to the event stream and track it going forward.
         if self.mock {
+            info!(starting_block, "MOCK mode enabled, skipping");
             return Ok(vec![]);
         }
         let filter = self
@@ -149,6 +150,7 @@ impl Ethereum {
     pub async fn insert_identity(&self, commitment: &Hash) -> EyreResult<()> {
         info!(%commitment, "Inserting identity in contract");
         if self.mock {
+            info!(%commitment, "MOCK mode enabled, skipping");
             return Ok(());
         }
         let tx = self.semaphore.insert_identity(commitment.into());

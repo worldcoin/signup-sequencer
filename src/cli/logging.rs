@@ -75,8 +75,8 @@ impl Options {
             };
             Targets::new()
                 .with_default(all)
-                .with_target("lib", app)
-                .with_target(env!("CARGO_CRATE_NAME"), app)
+                .with_target(env!("CARGO_PKG_NAME").replace('-', "_"), app)
+                .with_target(env!("CARGO_CRATE_NAME").replace('-', "_"), app)
         };
         let log_filter = if self.log_filter.is_empty() {
             Targets::new()
@@ -85,7 +85,7 @@ impl Options {
                 .parse()
                 .wrap_err("Error parsing log-filter")?
         };
-        let targets = log_filter.with_targets(verbosity);
+        let targets = verbosity.with_targets(log_filter);
 
         // Support server for tokio-console
         let console_layer = tokio_console::layer(&self.tokio_console);

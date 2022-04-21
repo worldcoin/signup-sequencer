@@ -35,6 +35,8 @@ ingress:
   host: "signup.crypto.worldcoin.dev"
   api:
   metrics:
+  cors: # Enable Traefik Middleware with CORS headers
+    enabled: true
 
 persistentStorage:
   enabled: true

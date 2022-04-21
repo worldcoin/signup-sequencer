@@ -5,8 +5,8 @@ use crate::{
 use core::cmp::max;
 use eyre::Result as EyreResult;
 use semaphore::{
-    hash::Hash,
-    poseidon_tree::{PoseidonTree, Proof},
+    merkle_tree::Hasher,
+    poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -18,6 +18,8 @@ use std::{
 use structopt::StructOpt;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
+
+pub type Hash = <PoseidonHash as Hasher>::Hash;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

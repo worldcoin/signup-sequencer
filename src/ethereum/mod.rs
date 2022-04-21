@@ -1,15 +1,15 @@
 mod contract;
 
 use self::contract::{LeafInsertionFilter, Semaphore};
+use crate::app::Hash;
 use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::{NonceManagerMiddleware, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
-    types::Address,
+    types::{Address, H256, U256},
 };
 use eyre::{eyre, Result as EyreResult};
-use semaphore::hash::Hash;
 use std::sync::Arc;
 use structopt::StructOpt;
 use tracing::info;
@@ -32,7 +32,7 @@ pub struct Options {
         default_value = "ee79b5f6e221356af78cf4c36f4f7885a11b67dfcc81c34d80249947330c0f82"
     )]
     // NOTE: We abuse `Hash` here because it has the right `FromStr` implementation.
-    pub signing_key: Hash,
+    pub signing_key: H256,
 
     /// If this module is being run with EIP-1559 support, useful in some places
     /// where EIP-1559 is not yet supported
@@ -86,7 +86,7 @@ impl Ethereum {
 
         // Construct a local key signer
         let (provider, address) = {
-            let signing_key = SigningKey::from_bytes(options.signing_key.as_bytes_be())?;
+            let signing_key = SigningKey::from_bytes(options.signing_key.as_bytes())?;
             let signer = LocalWallet::from(signing_key);
             let address = signer.address();
             let chain_id: u64 = chain_id.try_into().map_err(|e| eyre!("{}", e))?;
@@ -131,6 +131,7 @@ impl Ethereum {
         // TODO: Some form of pagination.
         // TODO: Register to the event stream and track it going forward.
         if self.mock {
+            info!(starting_block, "MOCK mode enabled, skipping");
             return Ok(vec![]);
         }
         let filter = self
@@ -141,7 +142,14 @@ impl Ethereum {
         info!(count = events.len(), "Read events");
         let insertions = events
             .iter()
-            .map(|event| (event.leaf_index.as_usize(), event.leaf.into()))
+            .map(|event| {
+                let mut bytes = [0u8; 32];
+                event.leaf.to_big_endian(&mut bytes);
+                (
+                    event.leaf_index.as_usize(),
+                    Hash::from_be_bytes_mod_order(&bytes),
+                )
+            })
             .collect::<Vec<_>>();
         Ok(insertions)
     }
@@ -149,9 +157,11 @@ impl Ethereum {
     pub async fn insert_identity(&self, commitment: &Hash) -> EyreResult<()> {
         info!(%commitment, "Inserting identity in contract");
         if self.mock {
+            info!(%commitment, "MOCK mode enabled, skipping");
             return Ok(());
         }
-        let tx = self.semaphore.insert_identity(commitment.into());
+        let commitment = U256::from_big_endian(&commitment.to_be_bytes());
+        let tx = self.semaphore.insert_identity(commitment);
         let pending_tx = if self.eip1559 {
             self.provider.send_transaction(tx.tx, None).await?
         } else {

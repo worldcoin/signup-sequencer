@@ -22,10 +22,10 @@ impl LogFormat {
         S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a> + Send + Sync,
     {
         match self {
-            LogFormat::Compact => Box::new(fmt::Layer::new().event_format(fmt::format().compact()))
+            Self::Compact => Box::new(fmt::Layer::new().event_format(fmt::format().compact()))
                 as Box<dyn Layer<S> + Send + Sync>,
-            LogFormat::Pretty => Box::new(fmt::Layer::new().event_format(fmt::format().pretty())),
-            LogFormat::Json => Box::new(fmt::Layer::new().event_format(fmt::format().json())),
+            Self::Pretty => Box::new(fmt::Layer::new().event_format(fmt::format().pretty())),
+            Self::Json => Box::new(fmt::Layer::new().event_format(fmt::format().json())),
         }
     }
 }

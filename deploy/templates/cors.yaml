@@ -1,3 +1,4 @@
+{{- if .Values.ingress.cors.enabled }}
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
@@ -13,3 +14,4 @@ spec:
       - "*"
     accessControlMaxAge: 100
     addVaryHeader: true
+{{- end }}

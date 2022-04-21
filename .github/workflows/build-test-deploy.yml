@@ -296,6 +296,7 @@ jobs:
           --set image.pullSecret=ghcr-secret
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
           --set persistentStorage.enabled=false
+          --set ingress.cors.enabled=false
       - name: Describe pods
         if: always()
         run: kubectl describe pod

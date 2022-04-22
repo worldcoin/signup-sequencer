@@ -4,8 +4,8 @@ on:
   push
 
 env:
-  RUST_VERSION: 1.59
-  NIGHTLY_VERSION: nightly-2022-02-22
+  RUST_VERSION: "1.60"
+  NIGHTLY_VERSION: nightly-2022-04-18
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Install rust
         uses: actions-rs/toolchain@v1
         with:
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Install rust
         uses: actions-rs/toolchain@v1
         with:
@@ -88,12 +88,12 @@ jobs:
     name: Coverage
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: -Zinstrument-coverage
-      RUSTDOCFLAGS: -Z instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
+      RUSTFLAGS: -Cinstrument-coverage
+      RUSTDOCFLAGS: -C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
       LLVM_PROFILE_FILE: profile-%m.profraw
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Install rust
         uses: actions-rs/toolchain@v1
         with:
@@ -138,7 +138,7 @@ jobs:
               done
             )
       - name: Submit to codecov.io
-        uses: codecov/codecov-action@v2.1.0
+        uses: codecov/codecov-action@v3.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
           flags: test
@@ -149,7 +149,7 @@ jobs:
     name: Dependency Security Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -170,7 +170,7 @@ jobs:
       FEATURES: mimalloc
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -270,9 +270,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Setup kube-score
-        uses: tobbbles/setup-kubescore@v1.0.2
+        uses: tobbbles/setup-kubescore@v1.0.3
       - name: Setup python toml
         run: pip install toml
       - name: Run kube-score
@@ -286,7 +286,7 @@ jobs:
     needs: [build_and_push]
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
       - name: Test install deploy
@@ -296,6 +296,7 @@ jobs:
           --set image.pullSecret=ghcr-secret
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
           --set persistentStorage.enabled=false
+          --set ingress.cors.enabled=false
       - name: Describe pods
         if: always()
         run: kubectl describe pod
@@ -317,7 +318,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -349,7 +350,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -382,7 +383,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:

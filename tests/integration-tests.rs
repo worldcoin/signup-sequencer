@@ -5,15 +5,19 @@ use ethers::{
         Bytes, ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
         SignerMiddleware,
     },
+    types::H256,
     utils::{Ganache, GanacheInstance},
 };
 use eyre::{bail, Result as EyreResult};
 use hex_literal::hex;
 use hyper::{client::HttpConnector, Body, Client, Request};
-use semaphore::{hash::Hash, poseidon_tree::PoseidonTree};
+use semaphore::poseidon_tree::PoseidonTree;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use signup_sequencer::{app::App, server, Options};
+use signup_sequencer::{
+    app::{App, Hash},
+    server, Options,
+};
 use std::{
     fs::File,
     io::BufReader,
@@ -33,7 +37,7 @@ const TEST_LEAFS: &[&str] = &[
     "0000000000000000000000000000000000000000000000000000000000000003",
 ];
 
-const GANACHE_DEFAULT_WALLET_KEY: Hash = Hash(hex!(
+const GANACHE_DEFAULT_WALLET_KEY: H256 = H256(hex!(
     "1ce6a4cc4c9941a4781349f988e129accdc35a55bb3d5b1a7b342bc2171db484"
 ));
 

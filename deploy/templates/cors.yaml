@@ -1,0 +1,19 @@
+{{- if .Values.ingress.cors.enabled }}
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: cors
+  namespace: signup-sequencer
+spec:
+  headers:
+    accessControlAllowMethods:
+      - "GET"
+      - "OPTIONS"
+      - "POST"
+    accessControlAllowOriginList:
+      - "*"
+    accessControlAllowHeaders:
+      - "content-type"
+    accessControlMaxAge: 100
+    addVaryHeader: true
+{{- end }}

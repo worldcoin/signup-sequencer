@@ -22,10 +22,10 @@ impl LogFormat {
         S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a> + Send + Sync,
     {
         match self {
-            LogFormat::Compact => Box::new(fmt::Layer::new().event_format(fmt::format().compact()))
+            Self::Compact => Box::new(fmt::Layer::new().event_format(fmt::format().compact()))
                 as Box<dyn Layer<S> + Send + Sync>,
-            LogFormat::Pretty => Box::new(fmt::Layer::new().event_format(fmt::format().pretty())),
-            LogFormat::Json => Box::new(fmt::Layer::new().event_format(fmt::format().json())),
+            Self::Pretty => Box::new(fmt::Layer::new().event_format(fmt::format().pretty())),
+            Self::Json => Box::new(fmt::Layer::new().event_format(fmt::format().json())),
         }
     }
 }
@@ -75,8 +75,8 @@ impl Options {
             };
             Targets::new()
                 .with_default(all)
-                .with_target("lib", app)
-                .with_target(env!("CARGO_CRATE_NAME"), app)
+                .with_target(env!("CARGO_PKG_NAME").replace('-', "_"), app)
+                .with_target(env!("CARGO_CRATE_NAME").replace('-', "_"), app)
         };
         let log_filter = if self.log_filter.is_empty() {
             Targets::new()
@@ -85,7 +85,7 @@ impl Options {
                 .parse()
                 .wrap_err("Error parsing log-filter")?
         };
-        let targets = log_filter.with_targets(verbosity);
+        let targets = verbosity.with_targets(log_filter);
 
         // Support server for tokio-console
         let console_layer = tokio_console::layer(&self.tokio_console);
@@ -117,7 +117,6 @@ impl Options {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn test_parse_args() {

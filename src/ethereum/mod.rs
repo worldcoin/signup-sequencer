@@ -7,10 +7,10 @@ use ethers::{
     prelude::H160,
     providers::{Http, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
-    types::Address,
+    types::{Address, H256, U256},
 };
 use eyre::{eyre, Result as EyreResult};
-use semaphore::hash::Hash;
+use semaphore::Field;
 use std::sync::Arc;
 use structopt::StructOpt;
 use tracing::info;
@@ -33,7 +33,7 @@ pub struct Options {
         default_value = "ee79b5f6e221356af78cf4c36f4f7885a11b67dfcc81c34d80249947330c0f82"
     )]
     // NOTE: We abuse `Hash` here because it has the right `FromStr` implementation.
-    pub signing_key: Hash,
+    pub signing_key: H256,
 
     /// If this module is being run with EIP-1559 support, useful in some places
     /// where EIP-1559 is not yet supported
@@ -88,7 +88,7 @@ impl Ethereum {
 
         // Construct a local key signer
         let (provider, address) = {
-            let signing_key = SigningKey::from_bytes(options.signing_key.as_bytes_be())?;
+            let signing_key = SigningKey::from_bytes(options.signing_key.as_bytes())?;
             let signer = LocalWallet::from(signing_key);
             let address = signer.address();
             let chain_id: u64 = chain_id.try_into().map_err(|e| eyre!("{}", e))?;
@@ -133,7 +133,7 @@ impl Ethereum {
         &self,
         starting_block: u64,
         last_leaf: usize,
-    ) -> EyreResult<Vec<(usize, Hash)>> {
+    ) -> EyreResult<Vec<(usize, Field)>> {
         info!(starting_block, "Reading MemberAdded events from chains");
         // TODO: Some form of pagination.
         // TODO: Register to the event stream and track it going forward.
@@ -151,7 +151,11 @@ impl Ethereum {
         let insertions = events
             .iter()
             .map(|event| {
-                let res = (index, event.leaf.into());
+                let mut bytes = [0u8; 32];
+                event.leaf.to_big_endian(&mut bytes);
+                // TODO: Check for < Modulus.
+                let leaf = Field::from_be_bytes_mod_order(&bytes);
+                let res = (index, leaf);
                 index += 1;
                 res
             })
@@ -162,7 +166,7 @@ impl Ethereum {
     pub async fn insert_identity(
         &self,
         group_id: usize,
-        commitment: &Hash,
+        commitment: &Field,
         tree_depth: usize,
     ) -> EyreResult<()> {
         info!(%commitment, "Inserting identity in contract");
@@ -195,9 +199,10 @@ impl Ethereum {
                 return Err(eyre!("tx dropped from mempool"));
             }
         }
+        let commitment = U256::from(commitment.to_be_bytes());
         let add_member_tx = self
             .semaphore
-            .add_member(group_id.into(), commitment.into())
+            .add_member(group_id.into(), commitment)
             .gas(10_000_000);
         let add_member_pending_tx = if self.eip1559 {
             self.provider

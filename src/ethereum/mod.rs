@@ -19,11 +19,7 @@ use url::Url;
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     /// Ethereum API Provider
-    #[structopt(
-        long,
-        env,
-        default_value = "http://localhost:8545"
-    )]
+    #[structopt(long, env, default_value = "http://localhost:8545")]
     pub ethereum_provider: Url,
 
     /// Semaphore contract address.

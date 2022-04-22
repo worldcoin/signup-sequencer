@@ -182,60 +182,60 @@ impl Ethereum {
             return Err(eyre!("Not the manager"));
         }
 
-        let depth = self.semaphore.get_depth(group_id.into())
-        .from(self.address)
-        .call().await?;
+        let depth = self
+            .semaphore
+            .get_depth(group_id.into())
+            .from(self.address)
+            .call()
+            .await?;
 
         info!(?group_id, ?depth, "Fetched group tree depth");
         if depth == 0 {
-
-            let result = self.semaphore.create_group(group_id.into(), (tree_depth - 1).try_into()?, 0.into()).call().await?;
-            info!(?result, "Create group result");
+            // Test the tx by call
+            self.semaphore
+                .create_group(group_id.into(), (tree_depth - 1).try_into()?, 0.into())
+                .call()
+                .await?;
 
             // Must subtract one as internal rust merkle tree is eth merkle tree depth + 1
-            let mut tx = self
-                .semaphore
-                .create_group(group_id.into(), (tree_depth - 1).try_into()?, 0.into());
+            let mut tx = self.semaphore.create_group(
+                group_id.into(),
+                (tree_depth - 1).try_into()?,
+                0.into(),
+            );
             self.provider.fill_transaction(&mut tx.tx, None).await?;
             tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
             info!(?tx, "Sending transaction");
             let create_group_pending_tx = if self.eip1559 {
-                self.provider
-                    .send_transaction(tx.tx, None)
-                    .await?
+                self.provider.send_transaction(tx.tx, None).await?
             } else {
                 // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-                self.provider
-                    .send_transaction(tx.legacy().tx, None)
-                    .await?
+                self.provider.send_transaction(tx.legacy().tx, None).await?
             };
 
-            let receipt = create_group_pending_tx.await.map_err(|e| eyre!(e))?
-                    .ok_or_else(|| eyre!("tx dropped from mempool"))?;
+            let receipt = create_group_pending_tx
+                .await
+                .map_err(|e| eyre!(e))?
+                .ok_or_else(|| eyre!("tx dropped from mempool"))?;
             if receipt.status != Some(U64::from(1_u64)) {
                 return Err(eyre!("tx failed"));
             }
-
         }
         let commitment = U256::from(commitment.to_be_bytes());
-        let mut tx = self
-            .semaphore
-            .add_member(group_id.into(), commitment);
+        let mut tx = self.semaphore.add_member(group_id.into(), commitment);
         self.provider.fill_transaction(&mut tx.tx, None).await?;
         tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
         info!(?tx, "Sending transaction");
         let pending_tx = if self.eip1559 {
-            self.provider
-                .send_transaction(tx.tx, None)
-                .await?
+            self.provider.send_transaction(tx.tx, None).await?
         } else {
             // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-            self.provider
-                .send_transaction(tx.legacy().tx, None)
-                .await?
+            self.provider.send_transaction(tx.legacy().tx, None).await?
         };
-        let receipt = pending_tx.await.map_err(|e| eyre!(e))?
-        .ok_or_else(|| eyre!("tx dropped from mempool"))?;
+        let receipt = pending_tx
+            .await
+            .map_err(|e| eyre!(e))?
+            .ok_or_else(|| eyre!("tx dropped from mempool"))?;
         info!(?receipt, "Receipt");
         if receipt.status != Some(U64::from(1_u64)) {
             return Err(eyre!("tx failed"));

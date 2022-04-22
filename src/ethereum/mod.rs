@@ -203,14 +203,16 @@ impl Ethereum {
                 (tree_depth - 1).try_into()?,
                 0.into(),
             );
-            self.provider.fill_transaction(&mut tx.tx, None).await?;
-            tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
-            info!(?tx, "Sending transaction");
             let create_group_pending_tx = if self.eip1559 {
+                self.provider.fill_transaction(&mut tx.tx, None).await?;
+                tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
+                info!(?tx, "Sending transaction");
                 self.provider.send_transaction(tx.tx, None).await?
             } else {
                 // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-                self.provider.send_transaction(tx.legacy().tx, None).await?
+                tx = tx.legacy();
+                info!(?tx, "Sending transaction");
+                self.provider.send_transaction(tx.tx, None).await?
             };
 
             let receipt = create_group_pending_tx
@@ -223,14 +225,16 @@ impl Ethereum {
         }
         let commitment = U256::from(commitment.to_be_bytes());
         let mut tx = self.semaphore.add_member(group_id.into(), commitment);
-        self.provider.fill_transaction(&mut tx.tx, None).await?;
-        tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
-        info!(?tx, "Sending transaction");
         let pending_tx = if self.eip1559 {
+            self.provider.fill_transaction(&mut tx.tx, None).await?;
+            tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
+            info!(?tx, "Sending transaction");
             self.provider.send_transaction(tx.tx, None).await?
         } else {
             // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-            self.provider.send_transaction(tx.legacy().tx, None).await?
+            tx = tx.legacy();
+            info!(?tx, "Sending transaction");
+            self.provider.send_transaction(tx.tx, None).await?
         };
         let receipt = pending_tx
             .await

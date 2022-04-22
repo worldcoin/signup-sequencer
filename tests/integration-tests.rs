@@ -231,7 +231,8 @@ struct InsertIdentityResponse {
 fn construct_inclusion_proof_body(identity_commitment: &str) -> Body {
     Body::from(
         json!({
-            "groupId": 0,
+            "id": 0,
+            "groupId": 1,
             "identityCommitment": identity_commitment,
         })
         .to_string(),
@@ -241,7 +242,8 @@ fn construct_inclusion_proof_body(identity_commitment: &str) -> Body {
 fn construct_insert_identity_body(identity_commitment: &str) -> Body {
     Body::from(
         json!({
-            "groupId": 0,
+            "id": 0,
+            "groupId": 1,
             "identityCommitment": identity_commitment,
 
         })
@@ -319,19 +321,6 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
         .send()
         .await?;
 
-    let verifier_json = File::open("./sol/Verifier.json").expect("Compiled contract doesn't exist");
-    let verifier_json: CompiledContract =
-        serde_json::from_reader(BufReader::new(verifier_json)).expect("Could not read contract");
-    let verifier_bytecode = deserialize_to_bytes(verifier_json.bytecode)?;
-    let verifier_factory =
-        ContractFactory::new(verifier_json.abi, verifier_bytecode, client.clone());
-    let verifier_contract = verifier_factory
-        .deploy(())?
-        .legacy()
-        .confirmations(0usize)
-        .send()
-        .await?;
-
     let incremental_binary_tree_json =
         File::open("./sol/IncrementalBinaryTree.json").expect("Compiled contract doesn't exist");
     let incremental_binary_tree_json: CompiledContract =
@@ -371,7 +360,7 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
         ContractFactory::new(semaphore_json.abi, semaphore_bytecode, client.clone());
 
     let semaphore_contract = semaphore_factory
-        .deploy(verifier_contract.address())?
+        .deploy(())?
         .legacy()
         .confirmations(0usize)
         .send()

@@ -336,8 +336,10 @@ jobs:
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
           --set environment=stage
-          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
-          --set env.SIGNUP_SEQUENCER_MOCK=true
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
+          --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
+          --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
+          --set env.SIGNUP_SEQUENCER_MOCK=false
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
 
   deploy-stage-manual:
@@ -368,8 +370,10 @@ jobs:
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
           --set environment=stage
-          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
-          --set env.SIGNUP_SEQUENCER_MOCK=true
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
+          --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
+          --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
+          --set env.SIGNUP_SEQUENCER_MOCK=false
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
 
   deploy-prod:

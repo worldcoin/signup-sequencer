@@ -4,7 +4,7 @@ use self::contract::{MemberAddedFilter, SemaphoreAirdrop};
 use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::{NonceManagerMiddleware, SignerMiddleware},
-    prelude::H160,
+    prelude::{H160, U64},
     providers::{Http, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
     types::{Address, H256, U256},
@@ -169,56 +169,76 @@ impl Ethereum {
         commitment: &Field,
         tree_depth: usize,
     ) -> EyreResult<()> {
-        info!(%commitment, "Inserting identity in contract");
+        info!(%group_id, %commitment, "Inserting identity in contract");
         if self.mock {
             info!(%commitment, "MOCK mode enabled, skipping");
             return Ok(());
         }
-        let depth = self.semaphore.get_depth(group_id.into()).call().await?;
+
+        info!(?self.address, "My address");
+        let manager = self.semaphore.manager().call().await?;
+        info!(?manager, "Fetched manager address");
+        if manager != self.address {
+            return Err(eyre!("Not the manager"));
+        }
+
+        let depth = self.semaphore.get_depth(group_id.into())
+        .from(self.address)
+        .call().await?;
+
+        info!(?group_id, ?depth, "Fetched group tree depth");
         if depth == 0 {
+
+            let result = self.semaphore.create_group(group_id.into(), (tree_depth - 1).try_into()?, 0.into()).call().await?;
+            info!(?result, "Create group result");
+
             // Must subtract one as internal rust merkle tree is eth merkle tree depth + 1
-            let create_group_tx = self
+            let mut tx = self
                 .semaphore
-                .create_group(group_id.into(), (tree_depth - 1).try_into()?, 0.into())
-                .gas(10_000_000);
+                .create_group(group_id.into(), (tree_depth - 1).try_into()?, 0.into());
+            self.provider.fill_transaction(&mut tx.tx, None).await?;
+            tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
+            info!(?tx, "Sending transaction");
             let create_group_pending_tx = if self.eip1559 {
                 self.provider
-                    .send_transaction(create_group_tx.tx, None)
+                    .send_transaction(tx.tx, None)
                     .await?
             } else {
                 // Our tests use ganache which doesn't support EIP-1559 transactions yet.
                 self.provider
-                    .send_transaction(create_group_tx.legacy().tx, None)
+                    .send_transaction(tx.legacy().tx, None)
                     .await?
             };
 
-            let create_group_receipt = create_group_pending_tx.await.map_err(|e| eyre!(e))?;
-            if create_group_receipt.is_none() {
-                // This should only happen if the tx is no longer in the mempool, meaning the tx
-                // was dropped.
-                return Err(eyre!("tx dropped from mempool"));
+            let receipt = create_group_pending_tx.await.map_err(|e| eyre!(e))?
+                    .ok_or_else(|| eyre!("tx dropped from mempool"))?;
+            if receipt.status != Some(U64::from(1_u64)) {
+                return Err(eyre!("tx failed"));
             }
+
         }
         let commitment = U256::from(commitment.to_be_bytes());
-        let add_member_tx = self
+        let mut tx = self
             .semaphore
-            .add_member(group_id.into(), commitment)
-            .gas(10_000_000);
-        let add_member_pending_tx = if self.eip1559 {
+            .add_member(group_id.into(), commitment);
+        self.provider.fill_transaction(&mut tx.tx, None).await?;
+        tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
+        info!(?tx, "Sending transaction");
+        let pending_tx = if self.eip1559 {
             self.provider
-                .send_transaction(add_member_tx.tx, None)
+                .send_transaction(tx.tx, None)
                 .await?
         } else {
             // Our tests use ganache which doesn't support EIP-1559 transactions yet.
             self.provider
-                .send_transaction(add_member_tx.legacy().tx, None)
+                .send_transaction(tx.legacy().tx, None)
                 .await?
         };
-        let add_recipient_receipt = add_member_pending_tx.await.map_err(|e| eyre!(e))?;
-        if add_recipient_receipt.is_none() {
-            // This should only happen if the tx is no longer in the mempool, meaning the tx
-            // was dropped.
-            return Err(eyre!("tx dropped from mempool"));
+        let receipt = pending_tx.await.map_err(|e| eyre!(e))?
+        .ok_or_else(|| eyre!("tx dropped from mempool"))?;
+        info!(?receipt, "Receipt");
+        if receipt.status != Some(U64::from(1_u64)) {
+            return Err(eyre!("tx failed"));
         }
         Ok(())
     }

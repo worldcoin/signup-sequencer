@@ -63,6 +63,7 @@ pub struct App {
     storage_file: PathBuf,
     merkle_tree:  RwLock<PoseidonTree>,
     next_leaf:    AtomicUsize,
+    tree_depth:   usize,
 }
 
 impl App {
@@ -73,6 +74,7 @@ impl App {
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let mut merkle_tree = PoseidonTree::new(options.tree_depth, options.initial_leaf);
+        let mut num_leaves = 0;
 
         // Read tree from file
         info!(path = ?&options.storage_file, "Reading tree from storage");
@@ -81,6 +83,7 @@ impl App {
             if file.metadata()?.len() > 0 {
                 let file: JsonCommitment = serde_json::from_reader(BufReader::new(file))?;
                 let next_leaf = file.commitments.len();
+                num_leaves = file.commitments.len();
                 merkle_tree.set_range(0, file.commitments);
                 (next_leaf, file.last_block)
             } else {
@@ -93,7 +96,7 @@ impl App {
         };
 
         // Read events from blockchain
-        let events = ethereum.fetch_events(last_block).await?;
+        let events = ethereum.fetch_events(last_block, num_leaves).await?;
         for (leaf, hash) in events {
             merkle_tree.set(leaf, hash);
             next_leaf = max(next_leaf, leaf + 1);
@@ -104,6 +107,7 @@ impl App {
             storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
             next_leaf: AtomicUsize::new(next_leaf),
+            tree_depth: options.tree_depth,
         })
     }
 
@@ -113,11 +117,13 @@ impl App {
     /// contract, or if writing to the storage file fails.
     pub async fn insert_identity(
         &self,
-        _group_id: usize,
+        group_id: usize,
         commitment: &Hash,
     ) -> Result<IndexResponse, ServerError> {
         // Send Semaphore transaction
-        self.ethereum.insert_identity(commitment).await?;
+        self.ethereum
+            .insert_identity(group_id, commitment, self.tree_depth)
+            .await?;
 
         // Update merkle tree
         let identity_index;

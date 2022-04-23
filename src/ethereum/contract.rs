@@ -1,10 +1,13 @@
 use ethers::contract::abigen;
 
 abigen!(
-    Semaphore,
+    SemaphoreAirdrop,
     r#"[
-        event LeafInsertion(uint256 indexed leaf, uint256 indexed leafIndex)
-        function insertIdentity(uint256 _identityCommitment) public onlyOwner returns (uint256)
+        event MemberAdded(uint256 indexed groupId, uint256 identityCommitment, uint256 leaf)
+        function manager() public view returns (address)
+        function getDepth(uint256 groupId) public view returns (uint8)
+        function createGroup(uint256 groupId, uint8 depth, uint256 zeroValue) public override
+        function addMember(uint256 groupId, uint256 identityCommitment) public override
     ]"#,
     event_derives(serde::Deserialize, serde::Serialize)
 );

@@ -1,15 +1,16 @@
 mod contract;
 
-use self::contract::{LeafInsertionFilter, Semaphore};
-use crate::app::Hash;
+use self::contract::{MemberAddedFilter, SemaphoreAirdrop};
 use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::{NonceManagerMiddleware, SignerMiddleware},
+    prelude::{H160, U64},
     providers::{Http, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
     types::{Address, H256, U256},
 };
 use eyre::{eyre, Result as EyreResult};
+use semaphore::Field;
 use std::sync::Arc;
 use structopt::StructOpt;
 use tracing::info;
@@ -22,7 +23,7 @@ pub struct Options {
     pub ethereum_provider: Url,
 
     /// Semaphore contract address.
-    #[structopt(long, env, default_value = "3F3D3369214C9DF92579304cf7331A05ca1ABd73")]
+    #[structopt(long, env, default_value = "174ee9b5fBb5Eb68B6C61032946486dD9c2Dc4b6")]
     pub semaphore_address: Address,
 
     /// Private key used for transaction signing
@@ -57,7 +58,8 @@ type ProviderStack = Provider2;
 
 pub struct Ethereum {
     provider:  Arc<ProviderStack>,
-    semaphore: Semaphore<ProviderStack>,
+    address:   H160,
+    semaphore: SemaphoreAirdrop<ProviderStack>,
     eip1559:   bool,
     mock:      bool,
 }
@@ -110,11 +112,12 @@ impl Ethereum {
 
         // Connect to Contract
         let provider = Arc::new(provider);
-        let semaphore = Semaphore::new(options.semaphore_address, provider.clone());
+        let semaphore = SemaphoreAirdrop::new(options.semaphore_address, provider.clone());
         // TODO: Test contract connection by calling a view function.
 
         Ok(Self {
             provider,
+            address,
             semaphore,
             eip1559: options.eip1559,
             mock: options.mock,
@@ -126,8 +129,12 @@ impl Ethereum {
         Ok(block_number.as_u64())
     }
 
-    pub async fn fetch_events(&self, starting_block: u64) -> EyreResult<Vec<(usize, Hash)>> {
-        info!(starting_block, "Reading LeafInsertion events from chains");
+    pub async fn fetch_events(
+        &self,
+        starting_block: u64,
+        last_leaf: usize,
+    ) -> EyreResult<Vec<(usize, Field)>> {
+        info!(starting_block, "Reading MemberAdded events from chains");
         // TODO: Some form of pagination.
         // TODO: Register to the event stream and track it going forward.
         if self.mock {
@@ -136,43 +143,106 @@ impl Ethereum {
         }
         let filter = self
             .semaphore
-            .leaf_insertion_filter()
+            .member_added_filter()
             .from_block(starting_block);
-        let events: Vec<LeafInsertionFilter> = filter.query().await?;
+        let events: Vec<MemberAddedFilter> = filter.query().await?;
         info!(count = events.len(), "Read events");
+        let mut index = last_leaf;
         let insertions = events
             .iter()
             .map(|event| {
                 let mut bytes = [0u8; 32];
                 event.leaf.to_big_endian(&mut bytes);
-                (
-                    event.leaf_index.as_usize(),
-                    Hash::from_be_bytes_mod_order(&bytes),
-                )
+                // TODO: Check for < Modulus.
+                let leaf = Field::from_be_bytes_mod_order(&bytes);
+                let res = (index, leaf);
+                index += 1;
+                res
             })
             .collect::<Vec<_>>();
         Ok(insertions)
     }
 
-    pub async fn insert_identity(&self, commitment: &Hash) -> EyreResult<()> {
-        info!(%commitment, "Inserting identity in contract");
+    pub async fn insert_identity(
+        &self,
+        group_id: usize,
+        commitment: &Field,
+        tree_depth: usize,
+    ) -> EyreResult<()> {
+        info!(%group_id, %commitment, "Inserting identity in contract");
         if self.mock {
             info!(%commitment, "MOCK mode enabled, skipping");
             return Ok(());
         }
-        let commitment = U256::from_big_endian(&commitment.to_be_bytes());
-        let tx = self.semaphore.insert_identity(commitment);
+
+        info!(?self.address, "My address");
+        let manager = self.semaphore.manager().call().await?;
+        info!(?manager, "Fetched manager address");
+        if manager != self.address {
+            return Err(eyre!("Not the manager"));
+        }
+
+        let depth = self
+            .semaphore
+            .get_depth(group_id.into())
+            .from(self.address)
+            .call()
+            .await?;
+
+        info!(?group_id, ?depth, "Fetched group tree depth");
+        if depth == 0 {
+            // Test the tx by call
+            self.semaphore
+                .create_group(group_id.into(), (tree_depth - 1).try_into()?, 0.into())
+                .call()
+                .await?;
+
+            // Must subtract one as internal rust merkle tree is eth merkle tree depth + 1
+            let mut tx = self.semaphore.create_group(
+                group_id.into(),
+                (tree_depth - 1).try_into()?,
+                0.into(),
+            );
+            let create_group_pending_tx = if self.eip1559 {
+                self.provider.fill_transaction(&mut tx.tx, None).await?;
+                tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
+                info!(?tx, "Sending transaction");
+                self.provider.send_transaction(tx.tx, None).await?
+            } else {
+                // Our tests use ganache which doesn't support EIP-1559 transactions yet.
+                tx = tx.legacy();
+                info!(?tx, "Sending transaction");
+                self.provider.send_transaction(tx.tx, None).await?
+            };
+
+            let receipt = create_group_pending_tx
+                .await
+                .map_err(|e| eyre!(e))?
+                .ok_or_else(|| eyre!("tx dropped from mempool"))?;
+            if receipt.status != Some(U64::from(1_u64)) {
+                return Err(eyre!("tx failed"));
+            }
+        }
+        let commitment = U256::from(commitment.to_be_bytes());
+        let mut tx = self.semaphore.add_member(group_id.into(), commitment);
         let pending_tx = if self.eip1559 {
+            self.provider.fill_transaction(&mut tx.tx, None).await?;
+            tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
+            info!(?tx, "Sending transaction");
             self.provider.send_transaction(tx.tx, None).await?
         } else {
             // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-            self.provider.send_transaction(tx.legacy().tx, None).await?
+            tx = tx.legacy();
+            info!(?tx, "Sending transaction");
+            self.provider.send_transaction(tx.tx, None).await?
         };
-        let receipt = pending_tx.await.map_err(|e| eyre!(e))?;
-        if receipt.is_none() {
-            // This should only happen if the tx is no longer in the mempool, meaning the tx
-            // was dropped.
-            return Err(eyre!("tx dropped from mempool"));
+        let receipt = pending_tx
+            .await
+            .map_err(|e| eyre!(e))?
+            .ok_or_else(|| eyre!("tx dropped from mempool"))?;
+        info!(?receipt, "Receipt");
+        if receipt.status != Some(U64::from(1_u64)) {
+            return Err(eyre!("tx failed"));
         }
         Ok(())
     }

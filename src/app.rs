@@ -159,10 +159,7 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if the provided index is out of bounds.
-    pub async fn get_root(
-        &self,
-        _group_id: usize,
-    ) -> Result<Hash, ServerError> {
+    pub async fn get_root(&self, _group_id: usize) -> Result<Hash, ServerError> {
         let merkle_tree = self.merkle_tree.read().await;
         Ok(merkle_tree.root())
     }

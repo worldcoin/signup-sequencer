@@ -161,10 +161,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
         (&Method::POST, "/getRoot") => {
             json_middleware(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
-                async move {
-                    app.get_root(request.group_id)
-                        .await
-                }
+                async move { app.get_root(request.group_id).await }
             })
             .await
         }

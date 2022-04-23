@@ -156,6 +156,17 @@ impl App {
         proof.ok_or(ServerError::IndexOutOfBounds)
     }
 
+    /// # Errors
+    ///
+    /// Will return `Err` if the provided index is out of bounds.
+    pub async fn get_root(
+        &self,
+        _group_id: usize,
+    ) -> Result<Hash, ServerError> {
+        let merkle_tree = self.merkle_tree.read().await;
+        Ok(merkle_tree.root())
+    }
+
     async fn store(&self) -> EyreResult<()> {
         let file = File::create(&self.storage_file)?;
         let last_block = self.ethereum.last_block().await?;

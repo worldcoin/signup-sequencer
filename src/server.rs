@@ -158,6 +158,16 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
             })
             .await
         }
+        (&Method::POST, "/getRoot") => {
+            json_middleware(request, |request: InsertCommitmentRequest| {
+                let app = app.clone();
+                async move {
+                    app.get_root(request.group_id)
+                        .await
+                }
+            })
+            .await
+        }
         (&Method::POST, _) => Err(Error::InvalidPath),
         _ => Err(Error::InvalidMethod),
     };

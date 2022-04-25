@@ -53,7 +53,7 @@ pub struct Options {
     #[structopt(
         long,
         env,
-        default_value = "1c4823575d154474ee3e5ac838d002456a815181437afd14f126da58a9912bbe"
+        default_value = "0000000000000000000000000000000000000000000000000000000000000000"
     )]
     pub initial_leaf: Hash,
 }

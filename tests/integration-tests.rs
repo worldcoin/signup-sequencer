@@ -15,7 +15,7 @@ use semaphore::poseidon_tree::PoseidonTree;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use signup_sequencer::{
-    app::{App, Hash},
+    app::{App, Hash, InclusionProofResponse},
     server, Options,
 };
 use std::{
@@ -184,8 +184,13 @@ async fn test_inclusion_proof(
 
     ref_tree.set(leaf_index, *leaf);
     let proof = ref_tree.proof(leaf_index).expect("Ref tree malfunctioning");
+    let inclusion_proof = InclusionProofResponse {
+        root: ref_tree.root(),
+        proof,
+    };
+
     let serialized_proof =
-        serde_json::to_string_pretty(&proof).expect("Proof serialization failed");
+        serde_json::to_string_pretty(&inclusion_proof).expect("Proof serialization failed");
 
     assert_eq!(result, serialized_proof);
 }

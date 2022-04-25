@@ -7,6 +7,7 @@ use eyre::Result as EyreResult;
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
+    Field,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -32,6 +33,13 @@ pub struct JsonCommitment {
 #[serde(rename_all = "camelCase")]
 pub struct IndexResponse {
     identity_index: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InclusionProofResponse {
+    pub root:  Field,
+    pub proof: Proof,
 }
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
@@ -146,7 +154,7 @@ impl App {
         &self,
         _group_id: usize,
         identity_commitment: &Hash,
-    ) -> Result<Proof, ServerError> {
+    ) -> Result<InclusionProofResponse, ServerError> {
         let merkle_tree = self.merkle_tree.read().await;
         let identity_index = match merkle_tree
             .leaves()
@@ -158,16 +166,12 @@ impl App {
         };
 
         let proof = merkle_tree.proof(identity_index);
-
-        proof.ok_or(ServerError::IndexOutOfBounds)
-    }
-
-    /// # Errors
-    ///
-    /// Will return `Err` if the provided index is out of bounds.
-    pub async fn get_root(&self, _group_id: usize) -> Result<Hash, ServerError> {
-        let merkle_tree = self.merkle_tree.read().await;
-        Ok(merkle_tree.root())
+        proof.map_or(Err(ServerError::IndexOutOfBounds), |proof| {
+            Ok(InclusionProofResponse {
+                root: merkle_tree.root(),
+                proof,
+            })
+        })
     }
 
     async fn store(&self) -> EyreResult<()> {

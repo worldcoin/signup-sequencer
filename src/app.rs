@@ -160,15 +160,12 @@ impl App {
         };
 
         let proof = merkle_tree.proof(identity_index);
-
-        if let Some(proof) = proof {
+        proof.map_or(Err(ServerError::IndexOutOfBounds), |proof| {
             Ok(InclusionProofResponse {
                 root: merkle_tree.root(),
                 proof,
             })
-        } else {
-            Err(ServerError::IndexOutOfBounds)
-        }
+        })
     }
 
     async fn store(&self) -> EyreResult<()> {

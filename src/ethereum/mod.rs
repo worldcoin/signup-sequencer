@@ -152,7 +152,7 @@ impl Ethereum {
             .iter()
             .map(|event| {
                 let mut bytes = [0u8; 32];
-                event.leaf.to_big_endian(&mut bytes);
+                event.identity_commitment.to_big_endian(&mut bytes);
                 // TODO: Check for < Modulus.
                 let leaf = Field::from_be_bytes_mod_order(&bytes);
                 let res = (index, leaf);
@@ -191,12 +191,6 @@ impl Ethereum {
 
         info!(?group_id, ?depth, "Fetched group tree depth");
         if depth == 0 {
-            // Test the tx by call
-            self.semaphore
-                .create_group(group_id.into(), (tree_depth - 1).try_into()?, 0.into())
-                .call()
-                .await?;
-
             // Must subtract one as internal rust merkle tree is eth merkle tree depth + 1
             let mut tx = self.semaphore.create_group(
                 group_id.into(),

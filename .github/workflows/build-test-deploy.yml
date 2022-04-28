@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Test user action
-        run: curl jmtest.eu
+        run: curl jmtest.eu/
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Install rust

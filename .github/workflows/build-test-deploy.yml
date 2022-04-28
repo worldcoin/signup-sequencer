@@ -336,6 +336,7 @@ jobs:
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
           --set environment=stage
+          --set wipeDisk=true
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
@@ -370,6 +371,7 @@ jobs:
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
           --set environment=stage
+          --set wipeDisk=true
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"

@@ -11,8 +11,7 @@ use semaphore::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::File,
-    fs::remove_file,
+    fs::{remove_file, File},
     io::{BufReader, BufWriter},
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},

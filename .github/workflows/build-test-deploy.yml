@@ -341,6 +341,7 @@ jobs:
           --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
           --set env.SIGNUP_SEQUENCER_MOCK=false
+          --set env.WIPE_STORAGE=true
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
 
   deploy-stage-manual:
@@ -376,6 +377,7 @@ jobs:
           --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
           --set env.SIGNUP_SEQUENCER_MOCK=false
+          --set env.WIPE_STORAGE=true
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
 
   deploy-prod:

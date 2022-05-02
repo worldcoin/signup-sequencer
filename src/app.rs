@@ -17,7 +17,7 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 use structopt::StructOpt;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{info, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -76,6 +76,7 @@ pub struct App {
     merkle_tree:  RwLock<PoseidonTree>,
     next_leaf:    AtomicUsize,
     tree_depth:   usize,
+    tree_mutex:   Mutex<u32>,
 }
 
 impl App {
@@ -125,6 +126,7 @@ impl App {
             merkle_tree: RwLock::new(merkle_tree),
             next_leaf: AtomicUsize::new(next_leaf),
             tree_depth: options.tree_depth,
+            tree_mutex: Mutex::new(0),
         })
     }
 
@@ -137,9 +139,7 @@ impl App {
         group_id: usize,
         commitment: &Hash,
     ) -> Result<IndexResponse, ServerError> {
-        // TODO: improve, this is misusing the mutex on the tree as a mutex on the whole
-        // function
-        let mut merkle_tree = self.merkle_tree.write().await;
+        let _guard = self.tree_mutex.lock().await;
 
         // Send Semaphore transaction
         self.ethereum
@@ -149,6 +149,7 @@ impl App {
         // Update merkle tree
         let identity_index;
         {
+            let mut merkle_tree = self.merkle_tree.write().await;
             identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
             merkle_tree.set(identity_index, *commitment);
         }

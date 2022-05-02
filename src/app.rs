@@ -137,6 +137,10 @@ impl App {
         group_id: usize,
         commitment: &Hash,
     ) -> Result<IndexResponse, ServerError> {
+        // TODO: improve, this is misusing the mutex on the tree as a mutex on the whole
+        // function
+        let mut merkle_tree = self.merkle_tree.write().await;
+
         // Send Semaphore transaction
         self.ethereum
             .insert_identity(group_id, commitment, self.tree_depth)
@@ -145,7 +149,6 @@ impl App {
         // Update merkle tree
         let identity_index;
         {
-            let mut merkle_tree = self.merkle_tree.write().await;
             identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
             merkle_tree.set(identity_index, *commitment);
         }

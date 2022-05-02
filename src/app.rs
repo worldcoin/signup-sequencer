@@ -118,9 +118,10 @@ impl App {
             merkle_tree.set(leaf, hash);
 
             // sanity check
-            if merkle_tree.root() != root {
-                panic!("sanity check failed, roots don't match");
-            }
+            assert!(
+                merkle_tree.root() == root,
+                "sanity check failed, roots don't match"
+            );
 
             next_leaf = max(next_leaf, leaf + 1);
         }

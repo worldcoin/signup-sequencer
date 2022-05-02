@@ -114,8 +114,15 @@ impl App {
 
         // Read events from blockchain
         let events = ethereum.fetch_events(last_block, num_leaves).await?;
-        for (leaf, hash) in events {
+        for (leaf, hash, root) in events {
             merkle_tree.set(leaf, hash);
+
+            // sanity check
+            assert!(
+                merkle_tree.root() == root,
+                "sanity check failed, roots don't match"
+            );
+
             next_leaf = max(next_leaf, leaf + 1);
         }
 

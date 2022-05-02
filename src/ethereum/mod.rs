@@ -133,7 +133,7 @@ impl Ethereum {
         &self,
         starting_block: u64,
         last_leaf: usize,
-    ) -> EyreResult<Vec<(usize, Field)>> {
+    ) -> EyreResult<Vec<(usize, Field, Field)>> {
         info!(starting_block, "Reading MemberAdded events from chains");
         // TODO: Some form of pagination.
         // TODO: Register to the event stream and track it going forward.
@@ -151,11 +151,16 @@ impl Ethereum {
         let insertions = events
             .iter()
             .map(|event| {
-                let mut bytes = [0u8; 32];
-                event.identity_commitment.to_big_endian(&mut bytes);
+                let mut id_bytes = [0u8; 32];
+                event.identity_commitment.to_big_endian(&mut id_bytes);
+
+                let mut root_bytes = [0u8; 32];
+                event.root.to_big_endian(&mut root_bytes);
+
                 // TODO: Check for < Modulus.
-                let leaf = Field::from_be_bytes_mod_order(&bytes);
-                let res = (index, leaf);
+                let root = Field::from_be_bytes_mod_order(&root_bytes);
+                let leaf = Field::from_be_bytes_mod_order(&id_bytes);
+                let res = (index, leaf, root);
                 index += 1;
                 res
             })

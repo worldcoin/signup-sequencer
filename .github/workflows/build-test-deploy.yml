@@ -412,3 +412,4 @@ jobs:
           --set env.SIGNING_KEY="${{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}"
           --set env.SIGNUP_SEQUENCER_MOCK=false
+          --set env.USE_EIP1559=false

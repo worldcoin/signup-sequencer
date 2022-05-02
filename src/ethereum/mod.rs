@@ -37,7 +37,7 @@ pub struct Options {
 
     /// If this module is being run with EIP-1559 support, useful in some places
     /// where EIP-1559 is not yet supported
-    #[structopt(short, parse(try_from_str), default_value = "true")]
+    #[structopt(short, parse(try_from_str), default_value = "true", env = "USE_EIP1559")]
     pub eip1559: bool,
 
     #[structopt(

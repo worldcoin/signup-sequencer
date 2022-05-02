@@ -11,7 +11,7 @@ use semaphore::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::File,
+    fs::{remove_file, File},
     io::{BufReader, BufWriter},
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
@@ -51,6 +51,10 @@ pub struct Options {
     #[structopt(long, env, default_value = "commitments.json")]
     pub storage_file: PathBuf,
 
+    /// Wipe database on startup
+    #[structopt(long, env, parse(try_from_str), default_value = "false")]
+    pub wipe_storage: bool,
+
     /// Number of layers in the tree. Defaults to 21 to match Semaphore.sol
     /// defaults.
     #[structopt(long, env, default_value = "21")]
@@ -83,6 +87,11 @@ impl App {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let mut merkle_tree = PoseidonTree::new(options.tree_depth, options.initial_leaf);
         let mut num_leaves = 0;
+
+        // Wipe storage to force sync from chain
+        if options.wipe_storage && options.storage_file.is_file() {
+            remove_file(&options.storage_file)?;
+        }
 
         // Read tree from file
         info!(path = ?&options.storage_file, "Reading tree from storage");

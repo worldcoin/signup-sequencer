@@ -2,6 +2,7 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
 pub mod app;
+mod db;
 mod ethereum;
 pub mod server;
 mod utils;
@@ -19,6 +20,9 @@ pub struct Options {
     pub app: app::Options,
 
     #[structopt(flatten)]
+    pub db: db::Options,
+
+    #[structopt(flatten)]
     pub server: server::Options,
 }
 
@@ -27,6 +31,9 @@ pub struct Options {
 /// ```
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<()> {
+    // Connect to database
+    let db = db::Db::new(&options.db).await?;
+
     // Create App struct
     let app = Arc::new(App::new(options.app).await?);
 

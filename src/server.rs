@@ -24,7 +24,7 @@ use url::{Host, Url};
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     /// API Server url
-    #[structopt(long, env = "SERVER", default_value = "http://127.0.0.1:8080/")]
+    #[structopt(long, env, default_value = "http://127.0.0.1:8080/")]
     pub server: Url,
 }
 
@@ -125,6 +125,7 @@ where
     let response = Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, CONTENT_JSON)
+        // No need to include cache-control since POST is not cached by default.
         .body(Body::from(json))
         .map_err(Error::Http)?;
     Ok(response)

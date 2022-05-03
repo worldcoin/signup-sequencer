@@ -16,9 +16,11 @@ readme = "Readme.md"
 license-file = "mit-license.md"
 
 [features]
-default = []
+default = [ "postgres" ]
 bench = [ "criterion", "proptest" ]
 tokio-console = [ "console-subscriber" ]
+postgres = [ "sqlx/postgres" ]
+sqlite = [ "sqlx/sqlite" ]
 
 [[bin]]
 name = "rust-app"
@@ -59,6 +61,7 @@ tracing-futures = "0.2"
 tracing-subscriber = { version = "0.3", features = [ "env-filter", "json" ] }
 url = "2.2"
 users = "0.11"
+sqlx = { version = "0.5", features = [ "runtime-tokio-native-tls", "any", "postgres" ] }
 zkp-u256 = "0.2"
 
 [dev-dependencies]

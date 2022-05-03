@@ -134,6 +134,14 @@ impl Ethereum {
         Ok(block_number.as_u64())
     }
 
+    pub async fn get_nonce(&self) -> EyreResult<usize> {
+        let nonce = self
+            .provider
+            .get_transaction_count(self.address, None)
+            .await?;
+        Ok(nonce.as_usize())
+    }
+
     pub async fn fetch_events(
         &self,
         starting_block: u64,
@@ -173,23 +181,52 @@ impl Ethereum {
         Ok(insertions)
     }
 
+    pub async fn is_manager(&self) -> EyreResult<bool> {
+        info!(?self.address, "My address");
+        let manager = self.semaphore.manager().call().await?;
+        info!(?manager, "Fetched manager address");
+        Ok(manager == self.address)
+    }
+
+    pub async fn create_group(&self, group_id: usize, tree_depth: usize) -> EyreResult<()> {
+        // Must subtract one as internal rust merkle tree is eth merkle tree depth + 1
+        let mut tx =
+            self.semaphore
+                .create_group(group_id.into(), (tree_depth - 1).try_into()?, 0.into());
+        let create_group_pending_tx = if self.eip1559 {
+            self.provider.fill_transaction(&mut tx.tx, None).await?;
+            tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
+            info!(?tx, "Sending transaction");
+            self.provider.send_transaction(tx.tx, None).await?
+        } else {
+            // Our tests use ganache which doesn't support EIP-1559 transactions yet.
+            tx = tx.legacy();
+            info!(?tx, "Sending transaction");
+            self.provider.send_transaction(tx.tx, None).await?
+        };
+
+        let receipt = create_group_pending_tx
+            .await
+            .map_err(|e| eyre!(e))?
+            .ok_or_else(|| eyre!("tx dropped from mempool"))?;
+        if receipt.status != Some(U64::from(1_u64)) {
+            return Err(eyre!("tx failed"));
+        }
+
+        Ok(())
+    }
+
     pub async fn insert_identity(
         &self,
         group_id: usize,
         commitment: &Field,
         tree_depth: usize,
+        nonce: usize,
     ) -> EyreResult<()> {
         info!(%group_id, %commitment, "Inserting identity in contract");
         if self.mock {
             info!(%commitment, "MOCK mode enabled, skipping");
             return Ok(());
-        }
-
-        info!(?self.address, "My address");
-        let manager = self.semaphore.manager().call().await?;
-        info!(?manager, "Fetched manager address");
-        if manager != self.address {
-            return Err(eyre!("Not the manager"));
         }
 
         let depth = self
@@ -201,42 +238,21 @@ impl Ethereum {
 
         info!(?group_id, ?depth, "Fetched group tree depth");
         if depth == 0 {
-            // Must subtract one as internal rust merkle tree is eth merkle tree depth + 1
-            let mut tx = self.semaphore.create_group(
-                group_id.into(),
-                (tree_depth - 1).try_into()?,
-                0.into(),
-            );
-            let create_group_pending_tx = if self.eip1559 {
-                self.provider.fill_transaction(&mut tx.tx, None).await?;
-                tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
-                info!(?tx, "Sending transaction");
-                self.provider.send_transaction(tx.tx, None).await?
-            } else {
-                // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-                tx = tx.legacy();
-                info!(?tx, "Sending transaction");
-                self.provider.send_transaction(tx.tx, None).await?
-            };
-
-            let receipt = create_group_pending_tx
-                .await
-                .map_err(|e| eyre!(e))?
-                .ok_or_else(|| eyre!("tx dropped from mempool"))?;
-            if receipt.status != Some(U64::from(1_u64)) {
-                return Err(eyre!("tx failed"));
-            }
+            self.create_group(group_id, tree_depth).await?;
         }
+
         let commitment = U256::from(commitment.to_be_bytes());
         let mut tx = self.semaphore.add_member(group_id.into(), commitment);
         let pending_tx = if self.eip1559 {
             self.provider.fill_transaction(&mut tx.tx, None).await?;
             tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
+            tx.tx.set_nonce(nonce);
             info!(?tx, "Sending transaction");
             self.provider.send_transaction(tx.tx, None).await?
         } else {
             // Our tests use ganache which doesn't support EIP-1559 transactions yet.
             tx = tx.legacy();
+            tx.tx.set_nonce(nonce);
             info!(?tx, "Sending transaction");
             self.provider.send_transaction(tx.tx, None).await?
         };

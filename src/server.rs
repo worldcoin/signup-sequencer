@@ -75,6 +75,8 @@ pub enum Error {
     Hyper(#[from] hyper::Error),
     #[error(transparent)]
     Http(#[from] hyper::http::Error),
+    #[error("not semaphore manager")]
+    NotManager,
     #[error(transparent)]
     Other(#[from] EyreError),
 }

@@ -84,6 +84,7 @@ impl App {
     ///
     /// Will return `Err` if the internal Ethereum handler errors or if the
     /// `options.storage_file` is not accessible.
+    #[allow(clippy::missing_panics_doc)] // TODO
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let mut merkle_tree = PoseidonTree::new(options.tree_depth, options.initial_leaf);

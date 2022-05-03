@@ -18,7 +18,7 @@ use std::{
 use structopt::StructOpt;
 use thiserror::Error;
 use tokio::sync::broadcast;
-use tracing::{error, info, trace};
+use tracing::{error, info, instrument, trace};
 use url::{Host, Url};
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
@@ -132,6 +132,7 @@ where
     Ok(response)
 }
 
+#[instrument(skip_all)]
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
@@ -163,7 +164,10 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
         (&Method::POST, _) => Err(Error::InvalidPath),
         _ => Err(Error::InvalidMethod),
     };
-    let response = result.unwrap_or_else(|err| err.to_response());
+    let response = result.unwrap_or_else(|err| {
+        error!(%err, "Error handling request");
+        err.to_response()
+    });
 
     // Measure result and return
     STATUS

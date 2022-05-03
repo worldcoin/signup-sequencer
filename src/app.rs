@@ -18,7 +18,7 @@ use std::{
 };
 use structopt::StructOpt;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::{info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
@@ -86,6 +86,7 @@ impl App {
     /// Will return `Err` if the internal Ethereum handler errors or if the
     /// `options.storage_file` is not accessible.
     #[allow(clippy::missing_panics_doc)] // TODO
+    #[instrument(skip_all)]
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let mut merkle_tree = PoseidonTree::new(options.tree_depth, options.initial_leaf);
@@ -152,6 +153,7 @@ impl App {
     ///
     /// Will return `Err` if the Eth handler cannot insert the identity to the
     /// contract, or if writing to the storage file fails.
+    #[instrument(skip(self))]
     pub async fn insert_identity(
         &self,
         group_id: usize,
@@ -189,6 +191,7 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if the provided index is out of bounds.
+    #[instrument(skip(self))]
     pub async fn inclusion_proof(
         &self,
         _group_id: usize,
@@ -213,6 +216,7 @@ impl App {
         })
     }
 
+    #[instrument(skip(self))]
     async fn store(&self) -> EyreResult<()> {
         let file = File::create(&self.storage_file)?;
         let last_block = self.ethereum.last_block().await?;

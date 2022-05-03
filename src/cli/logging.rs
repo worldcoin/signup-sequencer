@@ -6,7 +6,12 @@ use eyre::{bail, Error as EyreError, Result as EyreResult, WrapErr as _};
 use std::{process::id as pid, thread::available_parallelism};
 use structopt::StructOpt;
 use tracing::{info, Level, Subscriber};
-use tracing_subscriber::{filter::Targets, fmt, layer::SubscriberExt, Layer, Registry};
+use tracing_subscriber::{
+    filter::Targets,
+    fmt::{self, format::FmtSpan},
+    layer::SubscriberExt,
+    Layer, Registry,
+};
 use users::{get_current_gid, get_current_uid};
 
 #[derive(Debug, PartialEq)]
@@ -21,11 +26,12 @@ impl LogFormat {
     where
         S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a> + Send + Sync,
     {
+        let layer = fmt::Layer::new().with_span_events(FmtSpan::NEW | FmtSpan::CLOSE);
         match self {
-            Self::Compact => Box::new(fmt::Layer::new().event_format(fmt::format().compact()))
+            Self::Compact => Box::new(layer.event_format(fmt::format().compact()))
                 as Box<dyn Layer<S> + Send + Sync>,
-            Self::Pretty => Box::new(fmt::Layer::new().event_format(fmt::format().pretty())),
-            Self::Json => Box::new(fmt::Layer::new().event_format(fmt::format().json())),
+            Self::Pretty => Box::new(layer.event_format(fmt::format().pretty())),
+            Self::Json => Box::new(layer.event_format(fmt::format().json())),
         }
     }
 }
@@ -95,6 +101,8 @@ impl Options {
             .with(console_layer)
             .with(self.log_format.to_layer().with_filter(targets));
         tracing::subscriber::set_global_default(subscriber)?;
+
+        //         .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
 
         // Log version information
         info!(

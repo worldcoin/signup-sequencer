@@ -13,7 +13,7 @@ use eyre::{eyre, Result as EyreResult};
 use semaphore::Field;
 use std::sync::Arc;
 use structopt::StructOpt;
-use tracing::info;
+use tracing::{info, instrument};
 use url::Url;
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
@@ -70,6 +70,7 @@ pub struct Ethereum {
 }
 
 impl Ethereum {
+    #[instrument(skip_all)]
     pub async fn new(options: Options) -> EyreResult<Self> {
         // Connect to the Ethereum provider
         // TODO: Support WebSocket and IPC.
@@ -129,11 +130,13 @@ impl Ethereum {
         })
     }
 
+    #[instrument(skip_all)]
     pub async fn last_block(&self) -> EyreResult<u64> {
         let block_number = self.provider.get_block_number().await?;
         Ok(block_number.as_u64())
     }
 
+    #[instrument(skip_all)]
     pub async fn get_nonce(&self) -> EyreResult<usize> {
         let nonce = self
             .provider
@@ -142,6 +145,7 @@ impl Ethereum {
         Ok(nonce.as_usize())
     }
 
+    #[instrument(skip_all)]
     pub async fn fetch_events(
         &self,
         starting_block: u64,
@@ -181,6 +185,7 @@ impl Ethereum {
         Ok(insertions)
     }
 
+    #[instrument(skip_all)]
     pub async fn is_manager(&self) -> EyreResult<bool> {
         info!(?self.address, "My address");
         let manager = self.semaphore.manager().call().await?;
@@ -188,6 +193,7 @@ impl Ethereum {
         Ok(manager == self.address)
     }
 
+    #[instrument(skip_all)]
     pub async fn create_group(&self, group_id: usize, tree_depth: usize) -> EyreResult<()> {
         // Must subtract one as internal rust merkle tree is eth merkle tree depth + 1
         let mut tx =
@@ -216,11 +222,12 @@ impl Ethereum {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     pub async fn insert_identity(
         &self,
         group_id: usize,
         commitment: &Field,
-        tree_depth: usize,
+        _tree_depth: usize,
         nonce: usize,
     ) -> EyreResult<()> {
         info!(%group_id, %commitment, "Inserting identity in contract");
@@ -238,7 +245,7 @@ impl Ethereum {
 
         info!(?group_id, ?depth, "Fetched group tree depth");
         if depth == 0 {
-            self.create_group(group_id, tree_depth).await?;
+            return Err(eyre!("group {} not created", group_id));
         }
 
         let commitment = U256::from(commitment.to_be_bytes());

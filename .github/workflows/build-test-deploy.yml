@@ -291,7 +291,7 @@ jobs:
         uses: helm/kind-action@v1.2.0
       - name: Test install deploy
         run: helm upgrade ${{ github.event.repository.name }} ./deploy
-          --install --atomic --timeout 60s --debug
+          --install --atomic --timeout 120s --debug
           --set image.tag=${{ github.sha }}-amd64
           --set image.pullSecret=ghcr-secret
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
@@ -331,7 +331,7 @@ jobs:
           --name ${{ secrets.AWS_STAGE_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --atomic --timeout 60s
+          --install --atomic --timeout 120s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
@@ -367,7 +367,7 @@ jobs:
           --name ${{ secrets.AWS_STAGE_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --atomic --timeout 60s
+          --install --atomic --timeout 120s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
@@ -404,7 +404,7 @@ jobs:
           --name ${{ secrets.AWS_PROD_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --atomic --timeout 60s
+          --install --atomic --timeout 120s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set environment=prod

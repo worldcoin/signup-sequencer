@@ -259,7 +259,17 @@ impl Ethereum {
         } else {
             // Our tests use ganache which doesn't support EIP-1559 transactions yet.
             tx = tx.legacy();
+            self.provider.fill_transaction(&mut tx.tx, None).await?;
             tx.tx.set_nonce(nonce);
+
+            // quick hack to ensure tx is so overpriced that it won't get dropped
+            tx.tx.set_gas_price(
+                tx.tx
+                    .gas_price()
+                    .ok_or(eyre!("no gasPrice set"))?
+                    .checked_mul(2_u64.into())
+                    .ok_or(eyre!("overflow in gasPrice"))?,
+            );
             info!(?tx, "Sending transaction");
             self.provider.send_transaction(tx.tx, None).await?
         };

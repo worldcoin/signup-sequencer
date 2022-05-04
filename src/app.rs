@@ -17,8 +17,8 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 use structopt::StructOpt;
-use tokio::sync::{Mutex, RwLock};
-use tracing::{info, warn};
+use tokio::sync::RwLock;
+use tracing::{info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
@@ -76,7 +76,8 @@ pub struct App {
     merkle_tree:  RwLock<PoseidonTree>,
     next_leaf:    AtomicUsize,
     tree_depth:   usize,
-    tree_mutex:   Mutex<u32>,
+    is_manager:   bool,
+    nonce_offset: usize,
 }
 
 impl App {
@@ -85,6 +86,7 @@ impl App {
     /// Will return `Err` if the internal Ethereum handler errors or if the
     /// `options.storage_file` is not accessible.
     #[allow(clippy::missing_panics_doc)] // TODO
+    #[instrument(skip_all)]
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let mut merkle_tree = PoseidonTree::new(options.tree_depth, options.initial_leaf);
@@ -128,13 +130,22 @@ impl App {
             next_leaf = max(next_leaf, leaf + 1);
         }
 
+        let is_manager = ethereum.is_manager().await?;
+        let nonce_offset = ethereum.get_nonce().await? - next_leaf;
+        info!(
+            "current nonce: {}, nonce offset: {}",
+            ethereum.get_nonce().await?,
+            nonce_offset
+        );
+
         Ok(Self {
             ethereum,
             storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
             next_leaf: AtomicUsize::new(next_leaf),
             tree_depth: options.tree_depth,
-            tree_mutex: Mutex::new(0),
+            is_manager,
+            nonce_offset,
         })
     }
 
@@ -142,27 +153,36 @@ impl App {
     ///
     /// Will return `Err` if the Eth handler cannot insert the identity to the
     /// contract, or if writing to the storage file fails.
+    #[instrument(skip_all)]
     pub async fn insert_identity(
         &self,
         group_id: usize,
         commitment: &Hash,
     ) -> Result<IndexResponse, ServerError> {
-        let _guard = self.tree_mutex.lock().await;
+        // Check if manager
+        if !self.is_manager {
+            return Err(ServerError::NotManager);
+        }
 
-        // Send Semaphore transaction
+        // Fetch next leaf index
+        let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
+
+        // Send Semaphore transaction, nonce calculated to ensure ordering
         self.ethereum
-            .insert_identity(group_id, commitment, self.tree_depth)
+            .insert_identity(
+                group_id,
+                commitment,
+                self.tree_depth,
+                identity_index + self.nonce_offset,
+            )
             .await?;
 
-        // Update merkle tree
-        let identity_index;
+        // Update and write merkle tree
         {
             let mut merkle_tree = self.merkle_tree.write().await;
-            identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
             merkle_tree.set(identity_index, *commitment);
         }
 
-        // Write state file
         self.store().await?;
 
         Ok(IndexResponse { identity_index })
@@ -171,6 +191,7 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if the provided index is out of bounds.
+    #[instrument(skip_all)]
     pub async fn inclusion_proof(
         &self,
         _group_id: usize,
@@ -195,6 +216,7 @@ impl App {
         })
     }
 
+    #[instrument(skip_all)]
     async fn store(&self) -> EyreResult<()> {
         let file = File::create(&self.storage_file)?;
         let last_block = self.ethereum.last_block().await?;

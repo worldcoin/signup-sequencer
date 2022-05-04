@@ -5,7 +5,7 @@ use ethers::{
         Bytes, ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
         SignerMiddleware,
     },
-    types::H256,
+    types::{H256, U256},
     utils::{Ganache, GanacheInstance},
 };
 use eyre::{bail, Result as EyreResult};
@@ -29,6 +29,8 @@ use std::{
 use structopt::StructOpt;
 use tempfile::NamedTempFile;
 use tokio::{spawn, sync::broadcast};
+use tracing::{info, instrument};
+use tracing_subscriber::fmt::format::FmtSpan;
 use url::{Host, Url};
 
 const TEST_LEAFS: &[&str] = &[
@@ -43,6 +45,12 @@ const GANACHE_DEFAULT_WALLET_KEY: H256 = H256(hex!(
 
 #[tokio::test]
 async fn insert_identity_and_proofs() {
+    // Initialize logging for the test.
+    tracing_subscriber::fmt()
+        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        .init();
+    info!("Starting integration test");
+
     let mut options = Options::from_iter_safe(&[""]).expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
@@ -149,6 +157,7 @@ async fn insert_identity_and_proofs() {
         .expect("Failed to close temp file");
 }
 
+#[instrument(skip_all)]
 async fn test_inclusion_proof(
     uri: &str,
     client: &Client<HttpConnector>,
@@ -195,6 +204,7 @@ async fn test_inclusion_proof(
     assert_eq!(result, serialized_proof);
 }
 
+#[instrument(skip_all)]
 async fn test_insert_identity(
     uri: &str,
     client: &Client<HttpConnector>,
@@ -213,13 +223,14 @@ async fn test_insert_identity(
         .request(req)
         .await
         .expect("Failed to execute request.");
-    assert!(response.status().is_success());
-
     let bytes = hyper::body::to_bytes(response.body_mut())
         .await
         .expect("Failed to convert response body to bytes");
     let result = String::from_utf8(bytes.into_iter().collect())
         .expect("Could not parse response bytes to utf-8");
+    if !response.status().is_success() {
+        panic!("Failed to insert identity: {}", result);
+    }
 
     let expected = InsertIdentityResponse { identity_index };
     let expected = serde_json::to_string_pretty(&expected).expect("Index serialization failed");
@@ -256,6 +267,7 @@ fn construct_insert_identity_body(identity_commitment: &str) -> Body {
     )
 }
 
+#[instrument(skip_all)]
 async fn spawn_app(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<SocketAddr> {
     let app = Arc::new(App::new(options.app).await.expect("Failed to create App"));
 
@@ -296,6 +308,7 @@ fn deserialize_to_bytes(input: String) -> EyreResult<Bytes> {
     }
 }
 
+#[instrument(skip_all)]
 async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
     let ganache = Ganache::new().block_time(2u64).mnemonic("test").spawn();
 
@@ -370,6 +383,17 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
         .confirmations(0usize)
         .send()
         .await?;
+
+    // Create a group with id 1
+    let group_id = U256::from(1);
+    let depth = 21_u8;
+    let initial_leaf = U256::from(0);
+    semaphore_contract
+        .method::<_, ()>("createGroup", (group_id, depth, initial_leaf))?
+        .legacy()
+        .send()
+        .await? // Send TX
+        .await?; // Wait for TX to be mined
 
     Ok((ganache, semaphore_contract.address()))
 }

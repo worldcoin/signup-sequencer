@@ -153,7 +153,7 @@ impl App {
     ///
     /// Will return `Err` if the Eth handler cannot insert the identity to the
     /// contract, or if writing to the storage file fails.
-    #[instrument(skip(self))]
+    #[instrument(skip_all)]
     pub async fn insert_identity(
         &self,
         group_id: usize,
@@ -191,7 +191,7 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if the provided index is out of bounds.
-    #[instrument(skip(self))]
+    #[instrument(skip_all)]
     pub async fn inclusion_proof(
         &self,
         _group_id: usize,
@@ -216,7 +216,7 @@ impl App {
         })
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip_all)]
     async fn store(&self) -> EyreResult<()> {
         let file = File::create(&self.storage_file)?;
         let last_block = self.ethereum.last_block().await?;

@@ -5,7 +5,7 @@ use ethers::{
         Bytes, ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
         SignerMiddleware,
     },
-    types::H256,
+    types::{H256, U256},
     utils::{Ganache, GanacheInstance},
 };
 use eyre::{bail, Result as EyreResult};
@@ -223,19 +223,14 @@ async fn test_insert_identity(
         .request(req)
         .await
         .expect("Failed to execute request.");
-    dbg!(&response);
-
-    // assert!(response.status().is_success());
-
     let bytes = hyper::body::to_bytes(response.body_mut())
         .await
         .expect("Failed to convert response body to bytes");
     let result = String::from_utf8(bytes.into_iter().collect())
         .expect("Could not parse response bytes to utf-8");
-
-    println!("{}", &result);
-    dbg!(&result);
-    assert!(response.status().is_success());
+    if !response.status().is_success() {
+        panic!("Failed to insert identity: {}", result);
+    }
 
     let expected = InsertIdentityResponse { identity_index };
     let expected = serde_json::to_string_pretty(&expected).expect("Index serialization failed");
@@ -388,6 +383,17 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
         .confirmations(0usize)
         .send()
         .await?;
+
+    // Create a group with id 1
+    let group_id = U256::from(1);
+    let depth = 21_u8;
+    let initial_leaf = U256::from(0);
+    semaphore_contract
+        .method::<_, ()>("createGroup", (group_id, depth, initial_leaf))?
+        .legacy()
+        .send()
+        .await? // Send TX
+        .await?; // Wait for TX to be mined
 
     Ok((ganache, semaphore_contract.address()))
 }

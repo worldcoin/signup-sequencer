@@ -16,7 +16,7 @@ jobs:
   accept:
     name: Accept
     runs-on: ubuntu-latest
-    needs: [lint, test, build_and_push, image_manifest, snyk_scan_container, helm_lint, helm_test]
+    needs: [lint, test, build_and_push, image_manifest, snyk_scan_container, helm_lint]
     steps:
       - name: Accept
         run: true
@@ -279,33 +279,6 @@ jobs:
         run: helm template deploy | kube-score score -
       - name: Check if Chart.yaml is up to date
         run: ./deploy/generate.py | diff ./deploy/Chart.yaml -
-
-  helm_test:
-    name: Test deployment
-    runs-on: ubuntu-latest
-    needs: [build_and_push]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      - name: Create kind cluster
-        uses: helm/kind-action@v1.2.0
-      - name: Test install deploy
-        run: helm upgrade ${{ github.event.repository.name }} ./deploy
-          --install --atomic --timeout 120s --debug
-          --set image.tag=${{ github.sha }}-amd64
-          --set image.pullSecret=ghcr-secret
-          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
-          --set persistentStorage.enabled=false
-          --set ingress.cors.enabled=false
-      - name: Describe pods
-        if: always()
-        run: kubectl describe pod
-      - name: Dump logs
-        if: always()
-        run: kubectl get pods
-          | tail -n +2
-          | cut -f 1 -d ' '
-          | xargs -L 1 kubectl logs
 
   deploy-main-stage:
     name: Deploy main to staging

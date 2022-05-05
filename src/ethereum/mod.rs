@@ -261,6 +261,7 @@ impl Ethereum {
             tx = tx.legacy();
             self.provider.fill_transaction(&mut tx.tx, None).await?;
             tx.tx.set_nonce(nonce);
+            tx.tx.set_gas(5_000_000_u64); // HACK: ethers-rs estimate is wrong, needs to fit ganache block gas limit.
 
             // quick hack to ensure tx is so overpriced that it won't get dropped
             tx.tx.set_gas_price(

@@ -190,7 +190,7 @@ jobs:
           # See <https://github.com/moby/buildkit/pull/2433>
           driver-opts: image=moby/buildkit:v0.9.3
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -232,7 +232,7 @@ jobs:
     needs: [build_and_push]
     steps:
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -254,7 +254,7 @@ jobs:
       - name: Set up Snyk
         uses: snyk/actions/setup@master
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}

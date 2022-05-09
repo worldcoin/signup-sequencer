@@ -214,7 +214,7 @@ jobs:
             ghcr.io/recmo/rust-static-build:$RUST_VERSION-$ARCH \
             cargo build --locked --release --features "$FEATURES"
       - name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           context: .
           platforms: linux/${{ matrix.platform }}

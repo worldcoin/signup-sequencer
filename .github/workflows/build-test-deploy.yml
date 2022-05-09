@@ -183,7 +183,7 @@ jobs:
       - name: Available platforms
         run: echo ${{ steps.qemu.outputs.platforms }}
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           # Bump buildkit version because we need PR 2433 to fix a bug
           # in Github Actions Cache support.

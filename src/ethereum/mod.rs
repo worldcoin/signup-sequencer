@@ -1,17 +1,27 @@
 mod contract;
+mod rpc_logger;
+mod transport;
 
-use self::contract::{MemberAddedFilter, SemaphoreAirdrop};
+use self::{
+    contract::{MemberAddedFilter, SemaphoreAirdrop},
+    rpc_logger::RpcLogger,
+    transport::Transport,
+};
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    middleware::{NonceManagerMiddleware, SignerMiddleware},
+    middleware::{
+        gas_escalator::{Frequency as GasEscalatorFreq, GasEscalatorMiddleware, GeometricGasPrice},
+        gas_oracle::{EthGasStation, GasCategory, GasOracle, GasOracleMiddleware},
+        NonceManagerMiddleware, SignerMiddleware, TimeLag,
+    },
     prelude::{H160, U64},
     providers::{Http, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
-    types::{Address, H256, U256},
+    types::{Address, Chain, H256, U256},
 };
 use eyre::{eyre, Result as EyreResult};
 use semaphore::Field;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use structopt::StructOpt;
 use tracing::{info, instrument};
 use url::Url;
@@ -56,7 +66,7 @@ pub struct Options {
 
 // Code out the provider stack in types
 // Needed because of <https://github.com/gakonst/ethers-rs/issues/592>
-type Provider0 = Provider<Http>;
+type Provider0 = Provider<RpcLogger<Transport>>;
 type Provider1 = SignerMiddleware<Provider0, Wallet<SigningKey>>;
 type Provider2 = NonceManagerMiddleware<Provider1>;
 type ProviderStack = Provider2;
@@ -80,8 +90,9 @@ impl Ethereum {
                 provider = %&options.ethereum_provider,
                 "Connecting to Ethereum"
             );
-            let http = Http::new(options.ethereum_provider);
-            let provider = Provider::new(http);
+            let transport = Transport::new(options.ethereum_provider).await?;
+            let logger = RpcLogger::new(transport);
+            let provider = Provider::new(logger);
             let chain_id = provider.get_chainid().await?;
             let latest_block = provider.get_block_number().await?;
             info!(%chain_id, %latest_block, "Connected to Ethereum");
@@ -104,16 +115,45 @@ impl Ethereum {
             (provider, address)
         };
 
-        // TODO: Integrate gas price oracle to not rely on node's `eth_gasPrice`
-
         // Manage nonces locally
         let provider = { NonceManagerMiddleware::new(provider, address) };
+        let next_nonce = provider.initialize_nonce(None).await?;
+        info!(?next_nonce, "Initialized nonce manager");
+
+        // Add a gas price escalator
+        // TODO: Commit state to storage and load it on startup.
+        // let provider = {
+        //     let escalator = GeometricGasPrice::new(5.0, 10u64, None::<u64>);
+        //     GasEscalatorMiddleware::new(provider, escalator,
+        // GasEscalatorFreq::PerBlock) };
+
+        // Construct ReqWest client with timeout
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()?;
+
+        // Add a gas oracle
+        let chain = Chain::try_from(chain_id.as_u64())?;
+        let gas_oracle = ethers::middleware::gas_oracle::Polygon::with_client(client, chain)?;
+
+        let gas_price = gas_oracle.estimate_eip1559_fees().await?;
+        dbg!(gas_price);
+
+        todo!();
+
+        // Add gas price oracle
+        // TODO: Median over different sources
+        // let provider = {
+        //     let api_key = "";
+        //     let gas_oracle =
+        // EthGasStation::new(api_key).category(GasCategory::Standard);
+        //     GasOracleMiddleware::new(provider, gas_oracle)
+        // };
 
         // Add a 10 block delay to avoid having to handle re-orgs
-        // TODO: Pending <https://github.com/gakonst/ethers-rs/pull/568/files>
         // let provider = {
-        //     const BLOCK_DELAY: u8 = 10;
-        //     TimeLag::<BLOCK_DELAY>::new(provider)
+        //     let block_delay = 10;
+        //     TimeLag::new(provider, block_delay)
         // };
 
         // Connect to Contract
@@ -128,6 +168,43 @@ impl Ethereum {
             eip1559: options.eip1559,
             mock: options.mock,
         })
+    }
+
+    pub async fn send_tx() {
+        todo!();
+        // let commitment = U256::from(commitment.to_be_bytes());
+        // let mut tx = self.semaphore.add_member(group_id.into(), commitment);
+        // let pending_tx = if self.eip1559 {
+        // self.provider.fill_transaction(&mut tx.tx, None).await?;
+        // tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
+        // tx.tx.set_nonce(nonce);
+        // info!(?tx, "Sending transaction");
+        // self.provider.send_transaction(tx.tx, None).await?
+        // } else {
+        // Our tests use ganache which doesn't support EIP-1559 transactions
+        // yet. tx = tx.legacy();
+        // self.provider.fill_transaction(&mut tx.tx, None).await?;
+        // tx.tx.set_nonce(nonce);
+        //
+        // quick hack to ensure tx is so overpriced that it won't get dropped
+        // tx.tx.set_gas_price(
+        // tx.tx
+        // .gas_price()
+        // .ok_or(eyre!("no gasPrice set"))?
+        // .checked_mul(2_u64.into())
+        // .ok_or(eyre!("overflow in gasPrice"))?,
+        // );
+        // info!(?tx, "Sending transaction");
+        // self.provider.send_transaction(tx.tx, None).await?
+        // };
+        // let receipt = pending_tx
+        // .await
+        // .map_err(|e| eyre!(e))?
+        // .ok_or_else(|| eyre!("tx dropped from mempool"))?;
+        // info!(?receipt, "Receipt");
+        // if receipt.status != Some(U64::from(1_u64)) {
+        // return Err(eyre!("tx failed"));
+        // }
     }
 
     #[instrument(skip_all)]

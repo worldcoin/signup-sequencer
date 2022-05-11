@@ -1,11 +1,13 @@
 mod contract;
 mod estimator;
+mod gas_oracle_logger;
 mod rpc_logger;
 mod transport;
 
 use self::{
     contract::{MemberAddedFilter, SemaphoreAirdrop},
     estimator::Estimator,
+    gas_oracle_logger::GasOracleLogger,
     rpc_logger::RpcLogger,
     transport::Transport,
 };
@@ -69,13 +71,15 @@ pub struct Options {
     pub mock: bool,
 }
 
+type GasOracle = Cache<GasOracleLogger<Polygon>>;
+
 // Code out the provider stack in types
 // Needed because of <https://github.com/gakonst/ethers-rs/issues/592>
 type Provider0 = Provider<RpcLogger<Transport>>;
 type Provider1 = SignerMiddleware<Provider0, Wallet<SigningKey>>;
 type Provider2 = NonceManagerMiddleware<Provider1>;
 type Provider3 = Estimator<Provider2>;
-type Provider4 = GasOracleMiddleware<Provider3, Cache<Polygon>>;
+type Provider4 = GasOracleMiddleware<Provider3, GasOracle>;
 type ProviderStack = Provider4;
 
 pub struct Ethereum {
@@ -93,6 +97,9 @@ impl Ethereum {
         // TODO: Allow multiple providers with failover / broadcast.
         // TODO: Requests don't seem to process in parallel. Check if this is
         // a limitation client side or server side.
+        // TODO: Does the WebSocket impl handle dropped connections by
+        // reconnecting? What is the timeout on stalled connections? What is
+        // the retry policy?
         let (provider, chain_id) = {
             info!(
                 provider = %&options.ethereum_provider,
@@ -107,11 +114,12 @@ impl Ethereum {
                 provider.get_chainid(),
                 provider.get_block(BlockId::Number(BlockNumber::Latest))
             )?;
-            // Identify chain
+
+            // Identify chain.
             let chain = Chain::try_from(chain_id)
                 .map_or_else(|_| "Unknown".to_string(), |chain| chain.to_string());
 
-            // Identify latest block by number and hash
+            // Log chain state.
             let latest_block = latest_block
                 .ok_or_else(|| eyre!("Failed to get latest block from Ethereum provider"))?;
             let block_hash = latest_block
@@ -120,7 +128,6 @@ impl Ethereum {
             let block_number = latest_block
                 .number
                 .ok_or_else(|| eyre!("Could not read latest block number"))?;
-
             let block_time = latest_block.time()?;
             info!(%chain_id, %chain, %block_number, ?block_hash, %block_time, "Connected to Ethereum provider");
 
@@ -133,6 +140,7 @@ impl Ethereum {
                 block_age
             };
             if block_age_abs > ChronoDuration::minutes(30) {
+                // Log an error, but proceed anyway since this doesn't technically block us.
                 error!(%now, %block_time, %block_age, "Block time is more than 30 minutes from now.");
             }
             (provider, chain_id)
@@ -140,47 +148,50 @@ impl Ethereum {
 
         // Construct a local key signer
         let (provider, address) = {
+            // Create signer
             let signing_key = SigningKey::from_bytes(options.signing_key.as_bytes())?;
             let signer = LocalWallet::from(signing_key);
             let address = signer.address();
+
+            // Create signer middleware for provider.
             let chain_id: u64 = chain_id.try_into().map_err(|e| eyre!("{}", e))?;
             let signer = signer.with_chain_id(chain_id);
             let provider = SignerMiddleware::new(provider, signer);
+
+            // Create local nonce manager.
+            // TODO: This is state full. There may be unsettled TXs in the mempool.
             let provider = { NonceManagerMiddleware::new(provider, address) };
 
+            // Log wallet info.
             let (next_nonce, balance) = try_join!(
                 provider.initialize_nonce(PENDING),
                 provider.get_balance(address, PENDING)
             )?;
             info!(?address, %next_nonce, %balance, "Constructed wallet");
+
+            // Sanity check the balance
+            if balance.is_zero() {
+                // Log an error, but try proceeding anyway.
+                error!(?address, "Wallet has no funds.");
+            }
             (provider, address)
         };
-
         // TODO: Check signer balance regularly and keep the metric as a gauge.
-        // TODO: Keep gas_price, base_fee, priority_fee as a gauge.
 
         // Add a gas estimator with 10% and 10k gas bonus over provider.
         let provider = Estimator::new(provider, 1.10, 10e3);
 
-        // Add a gas oracle
+        // Add a gas oracle.
         let provider = {
             let client = reqwest::Client::builder()
                 .timeout(Duration::from_secs(30))
                 .build()?;
             let chain = Chain::try_from(chain_id)?;
             let gas_oracle = Polygon::with_client(client, chain)?;
+            let gas_oracle = GasOracleLogger::new(gas_oracle);
             let gas_oracle = Cache::new(Duration::from_secs(5), gas_oracle);
             GasOracleMiddleware::new(provider, gas_oracle)
         };
-
-        todo!();
-
-        // Add a gas price escalator
-        // TODO: Commit state to storage and load it on startup.
-        // let provider = {
-        //     let escalator = GeometricGasPrice::new(5.0, 10u64, None::<u64>);
-        //     GasEscalatorMiddleware::new(provider, escalator,
-        // GasEscalatorFreq::PerBlock) };
 
         // Connect to Contract
         let provider = Arc::new(provider);

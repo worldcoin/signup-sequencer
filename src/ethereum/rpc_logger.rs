@@ -8,8 +8,8 @@ use tracing::instrument;
 static REQUESTS: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!(
         "eth_requests",
-        "Number of Ethereum provider requests made by function.",
-        &["status_code"]
+        "Number of Ethereum provider requests made by method.",
+        &["method"]
     )
     .unwrap()
 });
@@ -32,8 +32,7 @@ impl<Inner> RpcLogger<Inner> {
     }
 }
 
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[async_trait]
 impl<Inner> JsonRpcClient for RpcLogger<Inner>
 where
     Inner: JsonRpcClient + 'static,

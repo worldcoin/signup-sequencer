@@ -1,3 +1,4 @@
+use ethers::types::U256;
 use eyre::{Error as EyreError, Result as EyreResult};
 use futures::FutureExt;
 use std::future::Future;
@@ -55,4 +56,8 @@ where
             std::process::abort();
         }
     }))
+}
+
+pub fn u256_to_f64(value: U256) -> f64 {
+    value.to_string().parse::<f64>().unwrap()
 }

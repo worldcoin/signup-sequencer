@@ -1,25 +1,27 @@
 mod contract;
+mod estimator;
 mod rpc_logger;
 mod transport;
 
 use self::{
     contract::{MemberAddedFilter, SemaphoreAirdrop},
+    estimator::Estimator,
     rpc_logger::RpcLogger,
     transport::Transport,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::{
-        gas_escalator::{Frequency as GasEscalatorFreq, GasEscalatorMiddleware, GeometricGasPrice},
-        gas_oracle::{EthGasStation, GasCategory, GasOracle, GasOracleMiddleware},
+        gas_oracle::{GasOracleMiddleware, Polygon},
         NonceManagerMiddleware, SignerMiddleware, TimeLag,
     },
-    prelude::{H160, U64},
-    providers::{Http, Middleware, Provider},
+    prelude::{gas_oracle::Cache, H160, U64},
+    providers::{Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
     types::{Address, Chain, H256, U256},
 };
 use eyre::{eyre, Result as EyreResult};
+use futures::try_join;
 use semaphore::Field;
 use std::{sync::Arc, time::Duration};
 use structopt::StructOpt;
@@ -69,7 +71,9 @@ pub struct Options {
 type Provider0 = Provider<RpcLogger<Transport>>;
 type Provider1 = SignerMiddleware<Provider0, Wallet<SigningKey>>;
 type Provider2 = NonceManagerMiddleware<Provider1>;
-type ProviderStack = Provider2;
+type Provider3 = Estimator<Provider2>;
+type Provider4 = GasOracleMiddleware<Provider3, Cache<Polygon>>;
+type ProviderStack = Provider4;
 
 pub struct Ethereum {
     provider:  Arc<ProviderStack>,
@@ -83,8 +87,7 @@ impl Ethereum {
     #[instrument(skip_all)]
     pub async fn new(options: Options) -> EyreResult<Self> {
         // Connect to the Ethereum provider
-        // TODO: Support WebSocket and IPC.
-        // Blocked on <https://github.com/gakonst/ethers-rs/issues/592>
+        // TODO: Allow multiple providers with failover / broadcast
         let (provider, chain_id) = {
             info!(
                 provider = %&options.ethereum_provider,
@@ -93,15 +96,14 @@ impl Ethereum {
             let transport = Transport::new(options.ethereum_provider).await?;
             let logger = RpcLogger::new(transport);
             let provider = Provider::new(logger);
-            let chain_id = provider.get_chainid().await?;
-            let latest_block = provider.get_block_number().await?;
-            info!(%chain_id, %latest_block, "Connected to Ethereum");
+
+            let (chain_id, latest_block) =
+                try_join!(provider.get_chainid(), provider.get_block_number())?;
+            let chain = Chain::try_from(chain_id)
+                .map_or_else(|chain| chain.to_string(), |_| "Unknown".to_string());
+            info!(%chain_id, %latest_block, %chain, "Connected to Ethereum provider");
             (provider, chain_id)
         };
-
-        // TODO: Add metrics layer that measures the time each rpc call takes.
-        // TODO: Add logging layer that logs calls to major RPC endpoints like
-        // send_transaction.
 
         // Construct a local key signer
         let (provider, address) = {
@@ -111,14 +113,27 @@ impl Ethereum {
             let chain_id: u64 = chain_id.try_into().map_err(|e| eyre!("{}", e))?;
             let signer = signer.with_chain_id(chain_id);
             let provider = SignerMiddleware::new(provider, signer);
-            info!(?address, "Constructed wallet");
+            let provider = { NonceManagerMiddleware::new(provider, address) };
+            let next_nonce = provider.initialize_nonce(None).await?;
+            info!(?address, ?next_nonce, "Constructed wallet");
             (provider, address)
         };
 
-        // Manage nonces locally
-        let provider = { NonceManagerMiddleware::new(provider, address) };
-        let next_nonce = provider.initialize_nonce(None).await?;
-        info!(?next_nonce, "Initialized nonce manager");
+        // Add a gas estimator with 10% and 10k gas bonus over provider.
+        let provider = Estimator::new(provider, 1.10, 10e3);
+
+        // Add a gas oracle
+        let provider = {
+            let client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()?;
+            let chain = Chain::try_from(chain_id)?;
+            let gas_oracle = Polygon::with_client(client, chain)?;
+            let gas_oracle = Cache::new(Duration::from_secs(5), gas_oracle);
+            GasOracleMiddleware::new(provider, gas_oracle)
+        };
+
+        todo!();
 
         // Add a gas price escalator
         // TODO: Commit state to storage and load it on startup.
@@ -126,35 +141,6 @@ impl Ethereum {
         //     let escalator = GeometricGasPrice::new(5.0, 10u64, None::<u64>);
         //     GasEscalatorMiddleware::new(provider, escalator,
         // GasEscalatorFreq::PerBlock) };
-
-        // Construct ReqWest client with timeout
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()?;
-
-        // Add a gas oracle
-        let chain = Chain::try_from(chain_id.as_u64())?;
-        let gas_oracle = ethers::middleware::gas_oracle::Polygon::with_client(client, chain)?;
-
-        let gas_price = gas_oracle.estimate_eip1559_fees().await?;
-        dbg!(gas_price);
-
-        todo!();
-
-        // Add gas price oracle
-        // TODO: Median over different sources
-        // let provider = {
-        //     let api_key = "";
-        //     let gas_oracle =
-        // EthGasStation::new(api_key).category(GasCategory::Standard);
-        //     GasOracleMiddleware::new(provider, gas_oracle)
-        // };
-
-        // Add a 10 block delay to avoid having to handle re-orgs
-        // let provider = {
-        //     let block_delay = 10;
-        //     TimeLag::new(provider, block_delay)
-        // };
 
         // Connect to Contract
         let provider = Arc::new(provider);

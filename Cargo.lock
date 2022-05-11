@@ -1522,11 +1522,11 @@ dependencies = [
 [[package]]
 name = "ethers"
 version = "0.6.0"
-source = "git+https://github.com/gakonst/ethers-rs?branch=master#0a031417d8ec9e8696229eb5d172f7155ec3c79c"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
 dependencies = [
  "ethers-addressbook",
  "ethers-contract",
- "ethers-core 0.6.0 (git+https://github.com/gakonst/ethers-rs?branch=master)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
  "ethers-etherscan",
  "ethers-middleware",
  "ethers-providers",
@@ -1537,9 +1537,9 @@ dependencies = [
 [[package]]
 name = "ethers-addressbook"
 version = "0.1.0"
-source = "git+https://github.com/gakonst/ethers-rs?branch=master#0a031417d8ec9e8696229eb5d172f7155ec3c79c"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
 dependencies = [
- "ethers-core 0.6.0 (git+https://github.com/gakonst/ethers-rs?branch=master)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
  "once_cell",
  "serde",
  "serde_json",
@@ -1548,11 +1548,11 @@ dependencies = [
 [[package]]
 name = "ethers-contract"
 version = "0.6.0"
-source = "git+https://github.com/gakonst/ethers-rs?branch=master#0a031417d8ec9e8696229eb5d172f7155ec3c79c"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
 dependencies = [
  "ethers-contract-abigen",
  "ethers-contract-derive",
- "ethers-core 0.6.0 (git+https://github.com/gakonst/ethers-rs?branch=master)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
  "ethers-providers",
  "futures-util",
  "hex",
@@ -1566,12 +1566,12 @@ dependencies = [
 [[package]]
 name = "ethers-contract-abigen"
 version = "0.6.0"
-source = "git+https://github.com/gakonst/ethers-rs?branch=master#0a031417d8ec9e8696229eb5d172f7155ec3c79c"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
 dependencies = [
  "Inflector",
  "cfg-if",
  "dunce",
- "ethers-core 0.6.0 (git+https://github.com/gakonst/ethers-rs?branch=master)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
  "eyre",
  "getrandom 0.2.6",
  "hex",
@@ -1588,10 +1588,10 @@ dependencies = [
 [[package]]
 name = "ethers-contract-derive"
 version = "0.6.0"
-source = "git+https://github.com/gakonst/ethers-rs?branch=master#0a031417d8ec9e8696229eb5d172f7155ec3c79c"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
 dependencies = [
  "ethers-contract-abigen",
- "ethers-core 0.6.0 (git+https://github.com/gakonst/ethers-rs?branch=master)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
  "hex",
  "proc-macro2",
  "quote",
@@ -1602,7 +1602,7 @@ dependencies = [
 [[package]]
 name = "ethers-core"
 version = "0.6.0"
-source = "git+https://github.com/gakonst/ethers-rs?branch=master#0a031417d8ec9e8696229eb5d172f7155ec3c79c"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
 dependencies = [
  "arrayvec 0.7.2",
  "bytes",
@@ -1651,9 +1651,9 @@ dependencies = [
 [[package]]
 name = "ethers-etherscan"
 version = "0.2.0"
-source = "git+https://github.com/gakonst/ethers-rs?branch=master#0a031417d8ec9e8696229eb5d172f7155ec3c79c"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
 dependencies = [
- "ethers-core 0.6.0 (git+https://github.com/gakonst/ethers-rs?branch=master)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
  "ethers-solc",
  "reqwest",
  "semver 1.0.9",
@@ -1667,11 +1667,11 @@ dependencies = [
 [[package]]
 name = "ethers-middleware"
 version = "0.6.0"
-source = "git+https://github.com/gakonst/ethers-rs?branch=master#0a031417d8ec9e8696229eb5d172f7155ec3c79c"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
 dependencies = [
  "async-trait",
  "ethers-contract",
- "ethers-core 0.6.0 (git+https://github.com/gakonst/ethers-rs?branch=master)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
  "ethers-etherscan",
  "ethers-providers",
  "ethers-signers",
@@ -1691,13 +1691,13 @@ dependencies = [
 [[package]]
 name = "ethers-providers"
 version = "0.6.0"
-source = "git+https://github.com/gakonst/ethers-rs?branch=master#0a031417d8ec9e8696229eb5d172f7155ec3c79c"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
 dependencies = [
  "async-trait",
  "auto_impl",
  "base64 0.13.0",
  "bytes",
- "ethers-core 0.6.0 (git+https://github.com/gakonst/ethers-rs?branch=master)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
  "futures-channel",
  "futures-core",
  "futures-timer",
@@ -1728,14 +1728,14 @@ dependencies = [
 [[package]]
 name = "ethers-signers"
 version = "0.6.0"
-source = "git+https://github.com/gakonst/ethers-rs?branch=master#0a031417d8ec9e8696229eb5d172f7155ec3c79c"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
 dependencies = [
  "async-trait",
  "coins-bip32",
  "coins-bip39",
  "elliptic-curve",
  "eth-keystore",
- "ethers-core 0.6.0 (git+https://github.com/gakonst/ethers-rs?branch=master)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
  "hex",
  "rand 0.8.5",
  "sha2 0.9.9",
@@ -1745,11 +1745,11 @@ dependencies = [
 [[package]]
 name = "ethers-solc"
 version = "0.3.0"
-source = "git+https://github.com/gakonst/ethers-rs?branch=master#0a031417d8ec9e8696229eb5d172f7155ec3c79c"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
 dependencies = [
  "colored",
  "dunce",
- "ethers-core 0.6.0 (git+https://github.com/gakonst/ethers-rs?branch=master)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
  "getrandom 0.2.6",
  "glob",
  "hex",

@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use ethers::providers::{Http, Ipc, JsonRpcClient, ProviderError, Ws};
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
-use tracing::instrument;
 use url::Url;
 
 // Todo: Enable IPC or WS based on feature flags
@@ -63,7 +62,6 @@ impl From<TransportError> for ProviderError {
 impl JsonRpcClient for Transport {
     type Error = TransportError;
 
-    #[instrument(skip(self))]
     async fn request<T: Serialize + Send + Sync, R: DeserializeOwned>(
         &self,
         method: &str,

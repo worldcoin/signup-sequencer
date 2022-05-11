@@ -708,6 +708,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "chrono"
+version = "0.4.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "670ad68c9088c2a963aaa298cb369688cf3f9465ce5e2d4ca10e6e0098a1ce73"
+dependencies = [
+ "libc",
+ "num-integer",
+ "num-traits",
+ "time 0.1.43",
+ "winapi",
+]
+
+[[package]]
 name = "cipher"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1522,11 +1535,11 @@ dependencies = [
 [[package]]
 name = "ethers"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
 dependencies = [
  "ethers-addressbook",
  "ethers-contract",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
  "ethers-etherscan",
  "ethers-middleware",
  "ethers-providers",
@@ -1537,9 +1550,9 @@ dependencies = [
 [[package]]
 name = "ethers-addressbook"
 version = "0.1.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
 dependencies = [
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
  "once_cell",
  "serde",
  "serde_json",
@@ -1548,11 +1561,11 @@ dependencies = [
 [[package]]
 name = "ethers-contract"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
 dependencies = [
  "ethers-contract-abigen",
  "ethers-contract-derive",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
  "ethers-providers",
  "futures-util",
  "hex",
@@ -1566,12 +1579,12 @@ dependencies = [
 [[package]]
 name = "ethers-contract-abigen"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
 dependencies = [
  "Inflector",
  "cfg-if",
  "dunce",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
  "eyre",
  "getrandom 0.2.6",
  "hex",
@@ -1588,10 +1601,10 @@ dependencies = [
 [[package]]
 name = "ethers-contract-derive"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
 dependencies = [
  "ethers-contract-abigen",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
  "hex",
  "proc-macro2",
  "quote",
@@ -1602,11 +1615,12 @@ dependencies = [
 [[package]]
 name = "ethers-core"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
 dependencies = [
  "arrayvec 0.7.2",
  "bytes",
  "cargo_metadata",
+ "chrono",
  "convert_case",
  "elliptic-curve",
  "ethabi",
@@ -1629,7 +1643,7 @@ dependencies = [
 [[package]]
 name = "ethers-core"
 version = "0.6.0"
-source = "git+https://github.com/gakonst/ethers-rs#0a031417d8ec9e8696229eb5d172f7155ec3c79c"
+source = "git+https://github.com/gakonst/ethers-rs#98fc8c88e45483566fd1eaa50f1b70531437fa5a"
 dependencies = [
  "arrayvec 0.7.2",
  "bytes",
@@ -1651,9 +1665,9 @@ dependencies = [
 [[package]]
 name = "ethers-etherscan"
 version = "0.2.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
 dependencies = [
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
  "ethers-solc",
  "reqwest",
  "semver 1.0.9",
@@ -1667,11 +1681,11 @@ dependencies = [
 [[package]]
 name = "ethers-middleware"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
 dependencies = [
  "async-trait",
  "ethers-contract",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
  "ethers-etherscan",
  "ethers-providers",
  "ethers-signers",
@@ -1691,13 +1705,13 @@ dependencies = [
 [[package]]
 name = "ethers-providers"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
 dependencies = [
  "async-trait",
  "auto_impl",
  "base64 0.13.0",
  "bytes",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
  "futures-channel",
  "futures-core",
  "futures-timer",
@@ -1728,14 +1742,14 @@ dependencies = [
 [[package]]
 name = "ethers-signers"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
 dependencies = [
  "async-trait",
  "coins-bip32",
  "coins-bip39",
  "elliptic-curve",
  "eth-keystore",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
  "hex",
  "rand 0.8.5",
  "sha2 0.9.9",
@@ -1745,11 +1759,11 @@ dependencies = [
 [[package]]
 name = "ethers-solc"
 version = "0.3.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256#462f0a6faa860d9a50b7b00f0f23331188c1cc3e"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
 dependencies = [
  "colored",
  "dunce",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/chain-from-u256)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
  "getrandom 0.2.6",
  "glob",
  "hex",
@@ -4288,6 +4302,7 @@ name = "signup-sequencer"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "color-eyre 0.6.1",
  "console-subscriber",
  "criterion",
@@ -4312,7 +4327,7 @@ dependencies = [
  "structopt",
  "tempfile",
  "thiserror",
- "time",
+ "time 0.3.9",
  "tokio",
  "tracing",
  "tracing-futures",
@@ -4608,6 +4623,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5516c27b78311c50bf42c071425c560ac799b11c30b31f87e3081965fe5e0180"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "time"
+version = "0.1.43"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca8a50ef2360fbd1eeb0ecd46795a87a19024eb4b53c5dc916ca1fd95fe62438"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]

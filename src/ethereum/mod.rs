@@ -9,6 +9,7 @@ use self::{
     rpc_logger::RpcLogger,
     transport::Transport,
 };
+use chrono::{Duration as ChronoDuration, Utc};
 use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::{
@@ -18,15 +19,17 @@ use ethers::{
     prelude::{gas_oracle::Cache, H160, U64},
     providers::{Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
-    types::{Address, Chain, H256, U256},
+    types::{Address, BlockId, BlockNumber, Chain, H256, U256},
 };
 use eyre::{eyre, Result as EyreResult};
 use futures::try_join;
 use semaphore::Field;
 use std::{sync::Arc, time::Duration};
 use structopt::StructOpt;
-use tracing::{info, instrument};
+use tracing::{error, info, instrument};
 use url::Url;
+
+const PENDING: Option<BlockId> = Some(BlockId::Number(BlockNumber::Pending));
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
@@ -87,7 +90,9 @@ impl Ethereum {
     #[instrument(skip_all)]
     pub async fn new(options: Options) -> EyreResult<Self> {
         // Connect to the Ethereum provider
-        // TODO: Allow multiple providers with failover / broadcast
+        // TODO: Allow multiple providers with failover / broadcast.
+        // TODO: Requests don't seem to process in parallel. Check if this is
+        // a limitation client side or server side.
         let (provider, chain_id) = {
             info!(
                 provider = %&options.ethereum_provider,
@@ -97,11 +102,39 @@ impl Ethereum {
             let logger = RpcLogger::new(transport);
             let provider = Provider::new(logger);
 
-            let (chain_id, latest_block) =
-                try_join!(provider.get_chainid(), provider.get_block_number())?;
+            // Fetch state of the chain.
+            let (chain_id, latest_block) = try_join!(
+                provider.get_chainid(),
+                provider.get_block(BlockId::Number(BlockNumber::Latest))
+            )?;
+            // Identify chain
             let chain = Chain::try_from(chain_id)
-                .map_or_else(|chain| chain.to_string(), |_| "Unknown".to_string());
-            info!(%chain_id, %latest_block, %chain, "Connected to Ethereum provider");
+                .map_or_else(|_| "Unknown".to_string(), |chain| chain.to_string());
+
+            // Identify latest block by number and hash
+            let latest_block = latest_block
+                .ok_or_else(|| eyre!("Failed to get latest block from Ethereum provider"))?;
+            let block_hash = latest_block
+                .hash
+                .ok_or_else(|| eyre!("Could not read latest block hash"))?;
+            let block_number = latest_block
+                .number
+                .ok_or_else(|| eyre!("Could not read latest block number"))?;
+
+            let block_time = latest_block.time()?;
+            info!(%chain_id, %chain, %block_number, ?block_hash, %block_time, "Connected to Ethereum provider");
+
+            // Sanity check the block timestamp
+            let now = Utc::now();
+            let block_age = now - block_time;
+            let block_age_abs = if block_age < ChronoDuration::zero() {
+                -block_age
+            } else {
+                block_age
+            };
+            if block_age_abs > ChronoDuration::minutes(30) {
+                error!(%now, %block_time, %block_age, "Block time is more than 30 minutes from now.");
+            }
             (provider, chain_id)
         };
 
@@ -114,10 +147,17 @@ impl Ethereum {
             let signer = signer.with_chain_id(chain_id);
             let provider = SignerMiddleware::new(provider, signer);
             let provider = { NonceManagerMiddleware::new(provider, address) };
-            let next_nonce = provider.initialize_nonce(None).await?;
-            info!(?address, ?next_nonce, "Constructed wallet");
+
+            let (next_nonce, balance) = try_join!(
+                provider.initialize_nonce(PENDING),
+                provider.get_balance(address, PENDING)
+            )?;
+            info!(?address, %next_nonce, %balance, "Constructed wallet");
             (provider, address)
         };
+
+        // TODO: Check signer balance regularly and keep the metric as a gauge.
+        // TODO: Keep gas_price, base_fee, priority_fee as a gauge.
 
         // Add a gas estimator with 10% and 10k gas bonus over provider.
         let provider = Estimator::new(provider, 1.10, 10e3);

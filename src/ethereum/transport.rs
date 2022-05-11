@@ -31,11 +31,11 @@ pub enum TransportError {
 impl Transport {
     pub async fn new(url: Url) -> Result<Self, TransportError> {
         match url.scheme() {
-            "http" | "https" => Ok(Transport::Http(Http::new(url))),
-            "ws" | "wss" => Ok(Transport::Ws(
+            "http" | "https" => Ok(Self::Http(Http::new(url))),
+            "ws" | "wss" => Ok(Self::Ws(
                 Ws::connect(url).await.map_err(TransportError::Ws)?,
             )),
-            "ipc" if url.host().is_none() => Ok(Transport::Ipc(
+            "ipc" if url.host().is_none() => Ok(Self::Ipc(
                 Ipc::connect(url.path())
                     .await
                     .map_err(TransportError::Ipc)?,
@@ -48,11 +48,11 @@ impl Transport {
 impl From<TransportError> for ProviderError {
     fn from(error: TransportError) -> Self {
         match error {
-            TransportError::Http(error) => ProviderError::from(error),
-            TransportError::Ws(error) => ProviderError::from(error),
-            TransportError::Ipc(error) => ProviderError::from(error),
+            TransportError::Http(error) => Self::from(error),
+            TransportError::Ws(error) => Self::from(error),
+            TransportError::Ipc(error) => Self::from(error),
             TransportError::InvalidScheme(url) => {
-                ProviderError::CustomError(format!("Unsupported transport: {}", url))
+                Self::CustomError(format!("Unsupported transport: {}", url))
             }
         }
     }

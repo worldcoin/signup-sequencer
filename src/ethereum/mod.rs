@@ -91,7 +91,7 @@ pub struct Ethereum {
 }
 
 impl Ethereum {
-    #[instrument(skip_all)]
+    #[instrument(level = "debug", skip_all)]
     pub async fn new(options: Options) -> EyreResult<Self> {
         // Connect to the Ethereum provider
         // TODO: Allow multiple providers with failover / broadcast.
@@ -244,13 +244,13 @@ impl Ethereum {
         // }
     }
 
-    #[instrument(skip_all)]
+    #[instrument(level = "debug", skip_all)]
     pub async fn last_block(&self) -> EyreResult<u64> {
         let block_number = self.provider.get_block_number().await?;
         Ok(block_number.as_u64())
     }
 
-    #[instrument(skip_all)]
+    #[instrument(level = "debug", skip_all)]
     pub async fn get_nonce(&self) -> EyreResult<usize> {
         let nonce = self
             .provider
@@ -259,7 +259,7 @@ impl Ethereum {
         Ok(nonce.as_usize())
     }
 
-    #[instrument(skip_all)]
+    #[instrument(level = "debug", skip_all)]
     pub async fn fetch_events(
         &self,
         starting_block: u64,
@@ -299,7 +299,7 @@ impl Ethereum {
         Ok(insertions)
     }
 
-    #[instrument(skip_all)]
+    #[instrument(level = "debug", skip_all)]
     pub async fn is_manager(&self) -> EyreResult<bool> {
         info!(?self.address, "My address");
         let manager = self.semaphore.manager().call().await?;
@@ -307,7 +307,7 @@ impl Ethereum {
         Ok(manager == self.address)
     }
 
-    #[instrument(skip_all)]
+    #[instrument(level = "debug", skip_all)]
     pub async fn create_group(&self, group_id: usize, tree_depth: usize) -> EyreResult<()> {
         // Must subtract one as internal rust merkle tree is eth merkle tree depth + 1
         let mut tx =
@@ -336,7 +336,7 @@ impl Ethereum {
         Ok(())
     }
 
-    #[instrument(skip_all)]
+    #[instrument(level = "debug", skip_all)]
     pub async fn insert_identity(
         &self,
         group_id: usize,

@@ -1,4 +1,5 @@
 use crate::{
+    contracts::{self, Contracts},
     ethereum::{self, Ethereum},
     server::Error as ServerError,
 };
@@ -47,6 +48,9 @@ pub struct Options {
     #[structopt(flatten)]
     pub ethereum: ethereum::Options,
 
+    #[structopt(flatten)]
+    pub contracts: contracts::Options,
+
     /// Storage location for the Merkle tree.
     #[structopt(long, env, default_value = "commitments.json")]
     pub storage_file: PathBuf,
@@ -72,6 +76,7 @@ pub struct Options {
 
 pub struct App {
     ethereum:     Ethereum,
+    contracts:    Contracts,
     storage_file: PathBuf,
     merkle_tree:  RwLock<PoseidonTree>,
     next_leaf:    AtomicUsize,
@@ -89,6 +94,8 @@ impl App {
     #[instrument(level = "debug", skip_all)]
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
+        let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
+
         let mut merkle_tree = PoseidonTree::new(options.tree_depth, options.initial_leaf);
         let mut num_leaves = 0;
 
@@ -117,7 +124,7 @@ impl App {
         };
 
         // Read events from blockchain
-        let events = ethereum.fetch_events(last_block, num_leaves).await?;
+        let events = contracts.fetch_events(last_block, num_leaves).await?;
         for (leaf, hash, root) in events {
             merkle_tree.set(leaf, hash);
 
@@ -130,16 +137,17 @@ impl App {
             next_leaf = max(next_leaf, leaf + 1);
         }
 
-        let is_manager = ethereum.is_manager().await?;
-        let nonce_offset = ethereum.get_nonce().await? - next_leaf;
-        info!(
-            "current nonce: {}, nonce offset: {}",
-            ethereum.get_nonce().await?,
-            nonce_offset
-        );
+        let is_manager = contracts.is_manager().await?;
+        let nonce_offset = todo!(); // contracts.get_nonce().await? - next_leaf;
+                                    // info!(
+                                    //     "current nonce: {}, nonce offset: {}",
+                                    //     contracts.get_nonce().await?,
+                                    //     nonce_offset
+                                    // );
 
         Ok(Self {
             ethereum,
+            contracts,
             storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
             next_leaf: AtomicUsize::new(next_leaf),
@@ -168,7 +176,7 @@ impl App {
         let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
 
         // Send Semaphore transaction, nonce calculated to ensure ordering
-        self.ethereum
+        self.contracts
             .insert_identity(
                 group_id,
                 commitment,
@@ -219,7 +227,8 @@ impl App {
     #[instrument(level = "debug", skip_all)]
     async fn store(&self) -> EyreResult<()> {
         let file = File::create(&self.storage_file)?;
-        let last_block = self.ethereum.last_block().await?;
+        let last_block = todo!();
+        // TODO let last_block = self.contracts.last_block().await?;
         let next_leaf = self.next_leaf.load(Ordering::Acquire);
         let commitments = {
             let lock = self.merkle_tree.read().await;

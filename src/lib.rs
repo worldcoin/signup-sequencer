@@ -2,6 +2,7 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
 pub mod app;
+mod contracts;
 mod ethereum;
 pub mod server;
 mod utils;

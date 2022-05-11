@@ -6,8 +6,6 @@ use ethers::{
     types::U256,
 };
 use once_cell::sync::Lazy;
-use serde::{de::DeserializeOwned, Serialize};
-use tracing::instrument;
 
 static GAS_PRICE: Lazy<Gauge> =
     Lazy::new(|| register_gauge!("eth_gas_price", "Ethereum gas price for transactions.").unwrap());

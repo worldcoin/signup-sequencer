@@ -66,7 +66,7 @@ async fn insert_identity_and_proofs() {
     options.app.ethereum.eip1559 = false;
     options.app.ethereum.ethereum_provider =
         Url::parse(&ganache.endpoint()).expect("Failed to parse ganache endpoint");
-    options.app.ethereum.semaphore_address = semaphore_address;
+    options.app.contracts.semaphore_address = semaphore_address;
     options.app.ethereum.signing_key = GANACHE_DEFAULT_WALLET_KEY;
 
     let local_addr = spawn_app(options.clone(), shutdown.clone())

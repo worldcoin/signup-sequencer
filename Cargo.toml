@@ -32,13 +32,14 @@ required-features = [ "bench", "proptest" ]
 
 [dependencies]
 async-trait = "0.1"
+auto_impl = "0.5"
 chrono = "0.4"
 color-eyre = "0.6"
 console-subscriber = { version = "0.1", optional = true }
 criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
 # ethers = "0.6"
 # ethers = { git = "https://github.com/gakonst/ethers-rs", branch = "master", features = [ "ws", "ipc", "openssl" ] }
-ethers = { git = "https://github.com/recmo/ethers-rs", branch = "remco/block_time", features = [ "ws", "ipc", "openssl" ] }
+ethers = { git = "https://github.com/recmo/ethers-rs", branch = "remco/gas-oracle-2", features = [ "ws", "ipc", "openssl" ] }
 eyre = "0.6"
 ff = { package="ff_ce", version="0.11"}
 futures = "0.3"

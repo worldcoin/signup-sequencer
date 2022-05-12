@@ -1535,11 +1535,11 @@ dependencies = [
 [[package]]
 name = "ethers"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2#055bb2b4ede30c0a7d154a04eb741af82b12cb69"
 dependencies = [
  "ethers-addressbook",
  "ethers-contract",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2)",
  "ethers-etherscan",
  "ethers-middleware",
  "ethers-providers",
@@ -1550,9 +1550,9 @@ dependencies = [
 [[package]]
 name = "ethers-addressbook"
 version = "0.1.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2#055bb2b4ede30c0a7d154a04eb741af82b12cb69"
 dependencies = [
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2)",
  "once_cell",
  "serde",
  "serde_json",
@@ -1561,11 +1561,11 @@ dependencies = [
 [[package]]
 name = "ethers-contract"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2#055bb2b4ede30c0a7d154a04eb741af82b12cb69"
 dependencies = [
  "ethers-contract-abigen",
  "ethers-contract-derive",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2)",
  "ethers-providers",
  "futures-util",
  "hex",
@@ -1579,12 +1579,12 @@ dependencies = [
 [[package]]
 name = "ethers-contract-abigen"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2#055bb2b4ede30c0a7d154a04eb741af82b12cb69"
 dependencies = [
  "Inflector",
  "cfg-if",
  "dunce",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2)",
  "eyre",
  "getrandom 0.2.6",
  "hex",
@@ -1601,10 +1601,10 @@ dependencies = [
 [[package]]
 name = "ethers-contract-derive"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2#055bb2b4ede30c0a7d154a04eb741af82b12cb69"
 dependencies = [
  "ethers-contract-abigen",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2)",
  "hex",
  "proc-macro2",
  "quote",
@@ -1615,7 +1615,7 @@ dependencies = [
 [[package]]
 name = "ethers-core"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2#055bb2b4ede30c0a7d154a04eb741af82b12cb69"
 dependencies = [
  "arrayvec 0.7.2",
  "bytes",
@@ -1643,10 +1643,11 @@ dependencies = [
 [[package]]
 name = "ethers-core"
 version = "0.6.0"
-source = "git+https://github.com/gakonst/ethers-rs#98fc8c88e45483566fd1eaa50f1b70531437fa5a"
+source = "git+https://github.com/gakonst/ethers-rs#4ba8adf87c40d160e999d403f168282f2fd000ee"
 dependencies = [
  "arrayvec 0.7.2",
  "bytes",
+ "chrono",
  "elliptic-curve",
  "ethabi",
  "generic-array 0.14.5",
@@ -1665,9 +1666,9 @@ dependencies = [
 [[package]]
 name = "ethers-etherscan"
 version = "0.2.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2#055bb2b4ede30c0a7d154a04eb741af82b12cb69"
 dependencies = [
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2)",
  "ethers-solc",
  "reqwest",
  "semver 1.0.9",
@@ -1681,11 +1682,12 @@ dependencies = [
 [[package]]
 name = "ethers-middleware"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2#055bb2b4ede30c0a7d154a04eb741af82b12cb69"
 dependencies = [
  "async-trait",
+ "auto_impl",
  "ethers-contract",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2)",
  "ethers-etherscan",
  "ethers-providers",
  "ethers-signers",
@@ -1705,13 +1707,13 @@ dependencies = [
 [[package]]
 name = "ethers-providers"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2#055bb2b4ede30c0a7d154a04eb741af82b12cb69"
 dependencies = [
  "async-trait",
  "auto_impl",
  "base64 0.13.0",
  "bytes",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2)",
  "futures-channel",
  "futures-core",
  "futures-timer",
@@ -1742,14 +1744,14 @@ dependencies = [
 [[package]]
 name = "ethers-signers"
 version = "0.6.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2#055bb2b4ede30c0a7d154a04eb741af82b12cb69"
 dependencies = [
  "async-trait",
  "coins-bip32",
  "coins-bip39",
  "elliptic-curve",
  "eth-keystore",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2)",
  "hex",
  "rand 0.8.5",
  "sha2 0.9.9",
@@ -1759,11 +1761,11 @@ dependencies = [
 [[package]]
 name = "ethers-solc"
 version = "0.3.0"
-source = "git+https://github.com/recmo/ethers-rs?branch=remco/block_time#4232dec81af58a0b748508c390fc2bc800c5c42d"
+source = "git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2#055bb2b4ede30c0a7d154a04eb741af82b12cb69"
 dependencies = [
  "colored",
  "dunce",
- "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/block_time)",
+ "ethers-core 0.6.0 (git+https://github.com/recmo/ethers-rs?branch=remco/gas-oracle-2)",
  "getrandom 0.2.6",
  "glob",
  "hex",
@@ -4302,6 +4304,7 @@ name = "signup-sequencer"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "auto_impl",
  "chrono",
  "color-eyre 0.6.1",
  "console-subscriber",

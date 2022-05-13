@@ -304,7 +304,7 @@ jobs:
           --name ${{ secrets.AWS_STAGE_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --timeout 60s
+          --install --atomic --timeout 600s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
@@ -340,7 +340,7 @@ jobs:
           --name ${{ secrets.AWS_STAGE_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --timeout 60s
+          --install --atomic --timeout 600s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
@@ -377,7 +377,7 @@ jobs:
           --name ${{ secrets.AWS_PROD_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --timeout 60s
+          --install --atomic --timeout 600s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set environment=prod
@@ -385,4 +385,5 @@ jobs:
           --set env.SIGNING_KEY="${{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}"
           --set env.SIGNUP_SEQUENCER_MOCK=false
+          --set env.WIPE_STORAGE=true
           --set env.USE_EIP1559=false

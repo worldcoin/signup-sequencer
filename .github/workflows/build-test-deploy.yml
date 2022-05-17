@@ -316,6 +316,8 @@ jobs:
           --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
+          --set env.BLOCK_QUERY_RANGE=1000000
+          --set env.STARTING_BLOCK=0      
 
   deploy-stage-manual:
     name: Manual deploy to staging
@@ -352,6 +354,8 @@ jobs:
           --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
+          --set env.BLOCK_QUERY_RANGE=1000000
+          --set env.STARTING_BLOCK=0
 
   deploy-prod:
     name: Deploy main to production
@@ -387,3 +391,5 @@ jobs:
           --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
           --set env.USE_EIP1559=false
+          --set env.BLOCK_QUERY_RANGE=100000
+          --set env.STARTING_BLOCK=27829300

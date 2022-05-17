@@ -60,6 +60,14 @@ pub struct Options {
     #[structopt(long, env, default_value = "21")]
     pub tree_depth: usize,
 
+    /// Block number to start syncing from
+    #[structopt(long, env, default_value = "0")]
+    pub starting_block: u64,
+
+    /// Range of blocks to sync (2k can be synced without limit)
+    #[structopt(long, env, default_value = "2000")]
+    pub block_query_range: usize,
+
     /// Initial value of the Merkle tree leaves. Defaults to the initial value
     /// in Semaphore.sol.
     #[structopt(
@@ -109,15 +117,17 @@ impl App {
                 (next_leaf, file.last_block)
             } else {
                 warn!(path = ?&options.storage_file, "Storage file empty, skipping.");
-                (0, 0)
+                (0, options.starting_block)
             }
         } else {
             warn!(path = ?&options.storage_file, "Storage file not found, skipping.");
-            (0, 0)
+            (0, options.starting_block)
         };
 
         // Read events from blockchain
-        let events = ethereum.fetch_events(last_block, num_leaves).await?;
+        let events = ethereum
+            .fetch_events(last_block, num_leaves, options.block_query_range)
+            .await?;
         for (leaf, hash, root) in events {
             merkle_tree.set(leaf, hash);
 

@@ -150,6 +150,7 @@ impl Ethereum {
         &self,
         starting_block: u64,
         last_leaf: usize,
+        query_range: usize,
     ) -> EyreResult<Vec<(usize, Field, Field)>> {
         info!(starting_block, "Reading MemberAdded events from chains");
         // TODO: Some form of pagination.
@@ -158,11 +159,19 @@ impl Ethereum {
             info!(starting_block, "MOCK mode enabled, skipping");
             return Ok(vec![]);
         }
-        let filter = self
-            .semaphore
-            .member_added_filter()
-            .from_block(starting_block);
-        let events: Vec<MemberAddedFilter> = filter.query().await?;
+
+        let last_block = self.last_block().await?;
+        let mut events: Vec<MemberAddedFilter> = vec![];
+
+        for current_block in (starting_block..last_block).step_by(query_range) {
+            let filter = self
+                .semaphore
+                .member_added_filter()
+                .from_block(current_block)
+                .to_block(current_block + (query_range as u64));
+            events.extend(filter.query().await?);
+        }
+
         info!(count = events.len(), "Read events");
         let mut index = last_leaf;
         let insertions = events

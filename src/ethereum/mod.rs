@@ -286,7 +286,7 @@ impl Ethereum {
         let receipt = pending_tx
             .await
             .map_err(|e| eyre!(e))?
-            .ok_or_else(|| eyre!("tx dropped from mempool"))?;
+            .expect("tx dropped from mempool");
         info!(?receipt, "Receipt");
         if receipt.status != Some(U64::from(1_u64)) {
             return Err(eyre!("tx failed"));

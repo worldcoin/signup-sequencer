@@ -168,7 +168,7 @@ impl Ethereum {
                 .semaphore
                 .member_added_filter()
                 .from_block(current_block)
-                .to_block(current_block + (query_range as u64));
+                .to_block(current_block + (query_range as u64) - 1);
             events.extend(filter.query().await?);
         }
 

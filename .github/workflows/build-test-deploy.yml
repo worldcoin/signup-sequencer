@@ -391,5 +391,5 @@ jobs:
           --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
           --set env.USE_EIP1559=false
-          --set env.BLOCK_QUERY_RANGE=100000
+          --set env.BLOCK_QUERY_RANGE=50000
           --set env.STARTING_BLOCK=27829300

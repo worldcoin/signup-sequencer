@@ -339,7 +339,7 @@ jobs:
       - name: Connect to EKS cluster
         run: aws eks update-kubeconfig
           --region ${{ secrets.AWS_STAGE_REGION }}
-          --name ${{ secrets.AWS_STAGE_CLUSTER }}
+          --name crypto-stage-us-east-1
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
           --install --timeout 60s
@@ -353,7 +353,7 @@ jobs:
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
           --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
-          --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
+          --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
           --set env.BLOCK_QUERY_RANGE=1000000
           --set env.STARTING_BLOCK=0
 

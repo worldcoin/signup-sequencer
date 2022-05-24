@@ -34,36 +34,8 @@ spec:
       {{ end -}}
       nodeSelector:
         beta.kubernetes.io/arch: {{ .Values.image.arch }}
-      {{- if .Values.persistentStorage.enabled }}
-      initContainers:
-        - name: set-volume-permissions
-          image: alpine:3.15
-          imagePullPolicy: Always
-          command:
-            - chown
-            - -R
-            - 10001:10001
-            - /volume
-          volumeMounts:
-            - name: {{ include "mychart.fullname" . }}-storage
-              mountPath: "/volume"
-          resources:
-            limits:
-              cpu: 100m
-              memory: 64Mi
-            requests:
-              cpu: 100m
-              memory: 64Mi
-          securityContext:
-            capabilities:
-              drop:
-                - all
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            readOnlyRootFilesystem: true
-            runAsUser: 10001
-            runAsGroup: 10001
-      {{- end }}
+      securityContext:
+        fsGroup: 10001
       containers:
         - name: app
           image: "{{ .Values.image.image }}:{{ .Values.image.tag | default (print "v" .Chart.AppVersion)}}"

@@ -21,6 +21,18 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9998"
         prometheus.io/path: "/metrics"
+        ad.datadoghq.com/{{ .Chart.Name }}.check_names: |
+          ["openmetrics"]
+        ad.datadoghq.com/{{ .Chart.Name }}.init_configs: |
+          [{}]
+        ad.datadoghq.com/{{ .Chart.Name }}.instances: |
+          [
+            {
+              "openmetrics_endpoint": "http://%%host%%:9998/metrics",
+              "namespace": "{{ .Release.Namespace }}",
+              "metrics": [".*"]
+            }
+          ]
     spec:
       {{- if .Values.persistentStorage.enabled }}
       volumes:

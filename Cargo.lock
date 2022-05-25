@@ -673,9 +673,9 @@ dependencies = [
 
 [[package]]
 name = "cli-batteries"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c7e3195eb0dcdb9173cfd721b7df0dfbddd80f35fde20d569aab62b92585159"
+checksum = "54a2f9d989784c38928dda7c5f7e2a4a453714df64b0d5a3c854570be4258c2f"
 dependencies = [
  "chrono",
  "color-eyre 0.6.1",
@@ -685,6 +685,7 @@ dependencies = [
  "hex-literal",
  "hyper",
  "itertools",
+ "mimalloc",
  "once_cell",
  "prometheus",
  "structopt",
@@ -2342,6 +2343,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "libmimalloc-sys"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11ca136052550448f55df7898c6dbe651c6b574fe38a0d9ea687a9f8088a2e2c"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2438,6 +2448,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "mimalloc"
+version = "0.1.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f64ad83c969af2e732e907564deb0d0ed393cec4af80776f77dd77a1a427698"
+dependencies = [
+ "libmimalloc-sys",
 ]
 
 [[package]]

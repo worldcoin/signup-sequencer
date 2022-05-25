@@ -1,7 +1,7 @@
 use ethers::contract::abigen;
 
 abigen!(
-    SemaphoreAirdrop,
+    Semaphore,
     r#"[
         event MemberAdded(uint256 indexed groupId, uint256 identityCommitment, uint256 root)
         function manager() public view returns (address)

@@ -1,6 +1,6 @@
 mod abi;
 
-use self::abi::{MemberAddedFilter, SemaphoreAirdrop};
+use self::abi::{MemberAddedFilter, Semaphore};
 use crate::ethereum::{Ethereum, ProviderStack};
 use ethers::{
     providers::Middleware,
@@ -10,6 +10,8 @@ use eyre::{eyre, Result as EyreResult};
 use semaphore::Field;
 use structopt::StructOpt;
 use tracing::{error, info, instrument};
+
+pub type MemberAddedEvent = MemberAddedFilter;
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
@@ -29,7 +31,7 @@ pub struct Options {
 
 pub struct Contracts {
     ethereum:  Ethereum,
-    semaphore: SemaphoreAirdrop<ProviderStack>,
+    semaphore: Semaphore<ProviderStack>,
     mock:      bool,
 }
 
@@ -49,57 +51,20 @@ impl Contracts {
         }
 
         // Connect to Contract
-        let semaphore =
-            SemaphoreAirdrop::new(options.semaphore_address, ethereum.provider().clone());
+        let semaphore = Semaphore::new(options.semaphore_address, ethereum.provider().clone());
 
         // Test contract by calling a view function and make sure we are manager.
         let manager = semaphore.manager().call().await?;
         if manager != ethereum.address() {
             error!(?manager, signer = ?ethereum.address(), "Signer is not the manager of the Semaphore contract");
         }
+        info!(?address, ?manager, "Connected to Semaphore contract");
 
         Ok(Self {
             ethereum,
             semaphore,
             mock: options.mock,
         })
-    }
-
-    pub async fn send_tx() {
-        todo!();
-        // let commitment = U256::from(commitment.to_be_bytes());
-        // let mut tx = self.semaphore.add_member(group_id.into(), commitment);
-        // let pending_tx = if self.eip1559 {
-        // self.provider.fill_transaction(&mut tx.tx, None).await?;
-        // tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
-        // tx.tx.set_nonce(nonce);
-        // info!(?tx, "Sending transaction");
-        // self.provider.send_transaction(tx.tx, None).await?
-        // } else {
-        // Our tests use ganache which doesn't support EIP-1559 transactions
-        // yet. tx = tx.legacy();
-        // self.provider.fill_transaction(&mut tx.tx, None).await?;
-        // tx.tx.set_nonce(nonce);
-        //
-        // quick hack to ensure tx is so overpriced that it won't get dropped
-        // tx.tx.set_gas_price(
-        // tx.tx
-        // .gas_price()
-        // .ok_or(eyre!("no gasPrice set"))?
-        // .checked_mul(2_u64.into())
-        // .ok_or(eyre!("overflow in gasPrice"))?,
-        // );
-        // info!(?tx, "Sending transaction");
-        // self.provider.send_transaction(tx.tx, None).await?
-        // };
-        // let receipt = pending_tx
-        // .await
-        // .map_err(|e| eyre!(e))?
-        // .ok_or_else(|| eyre!("tx dropped from mempool"))?;
-        // info!(?receipt, "Receipt");
-        // if receipt.status != Some(U64::from(1_u64)) {
-        // return Err(eyre!("tx failed"));
-        // }
     }
 
     #[instrument(level = "debug", skip_all)]
@@ -131,11 +96,17 @@ impl Contracts {
             info!(starting_block, "MOCK mode enabled, skipping");
             return Ok(vec![]);
         }
+
+        //
         let filter = self
             .semaphore
             .member_added_filter()
             .from_block(starting_block);
+
         let events: Vec<MemberAddedFilter> = filter.query().await?;
+
+        dbg!(&events);
+
         info!(count = events.len(), "Read events");
         let mut index = last_leaf;
         let insertions = events
@@ -155,6 +126,8 @@ impl Contracts {
                 res
             })
             .collect::<Vec<_>>();
+
+        dbg!(&insertions);
         Ok(insertions)
     }
 

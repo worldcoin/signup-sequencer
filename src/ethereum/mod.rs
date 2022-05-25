@@ -31,6 +31,8 @@ use url::Url;
 
 const PENDING: Option<BlockId> = Some(BlockId::Number(BlockNumber::Pending));
 
+// TODO: Log and metrics for signer / nonces.
+
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     /// Ethereum API Provider
@@ -205,6 +207,15 @@ impl Ethereum {
             let logger = GasOracleLogger::new(median);
             let cache = Cache::new(Duration::from_secs(5), logger);
             let gas_oracle: Box<dyn GasOracle> = Box::new(cache);
+
+            // Sanity check. fetch current prices.
+            let legacy_fee = gas_oracle.fetch().await?;
+            if eip1559 {
+                let (max_fee, priority_fee) = gas_oracle.estimate_eip1559_fees().await?;
+                info!(%legacy_fee, %max_fee, %priority_fee, "Fetched gas prices");
+            } else {
+                info!(%legacy_fee, "Fetched gas prices (no eip1559)");
+            };
 
             // Wrap in a middleware
             GasOracleMiddleware::new(provider, gas_oracle)

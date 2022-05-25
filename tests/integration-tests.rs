@@ -6,7 +6,7 @@ use ethers::{
         SignerMiddleware,
     },
     types::{H256, U256},
-    utils::{Ganache, GanacheInstance},
+    utils::{Anvil, AnvilInstance, Ganache, GanacheInstance},
 };
 use eyre::{bail, Result as EyreResult};
 use hex_literal::hex;
@@ -309,8 +309,9 @@ fn deserialize_to_bytes(input: String) -> EyreResult<Bytes> {
 }
 
 #[instrument(skip_all)]
-async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
-    let ganache = Ganache::new().block_time(2u64).mnemonic("test").spawn();
+async fn spawn_mock_chain() -> EyreResult<(AnvilInstance, Address)> {
+    let ganache = Anvil::new().block_time(2u64).spawn();
+    // Ganache::new().block_time(2u64).mnemonic("test").spawn();
 
     let provider = Provider::<Http>::try_from(ganache.endpoint())
         .expect("Failed to initialize ganache endpoint")
@@ -385,9 +386,9 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
         .await?;
 
     // Create a group with id 1
-    let group_id = U256::from(1);
+    let group_id = U256::from(1_u64);
     let depth = 21_u8;
-    let initial_leaf = U256::from(0);
+    let initial_leaf = U256::from(0_u64);
     semaphore_contract
         .method::<_, ()>("createGroup", (group_id, depth, initial_leaf))?
         .legacy()

@@ -7,6 +7,8 @@ use ethers::{
 };
 use once_cell::sync::Lazy;
 
+// TODO: Log fetches
+
 static GAS_PRICE: Lazy<Gauge> =
     Lazy::new(|| register_gauge!("eth_gas_price", "Ethereum gas price for transactions.").unwrap());
 static MAX_FEE: Lazy<Gauge> = Lazy::new(|| {

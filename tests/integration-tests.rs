@@ -284,7 +284,7 @@ async fn spawn_app(options: Options, shutdown: broadcast::Sender<()>) -> EyreRes
 
     spawn({
         async move {
-            server::bind_from_listener(app, listener, shutdown)
+            server::bind_from_listener(app, listener)
                 .await
                 .expect("Failed to bind address");
         }

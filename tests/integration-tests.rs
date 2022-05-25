@@ -28,7 +28,7 @@ use std::{
 };
 use structopt::StructOpt;
 use tempfile::NamedTempFile;
-use tokio::{spawn, sync::broadcast};
+use tokio::spawn;
 use tracing::{info, instrument};
 use tracing_subscriber::fmt::format::FmtSpan;
 use url::{Host, Url};
@@ -57,8 +57,6 @@ async fn insert_identity_and_proofs() {
     let temp_commitments_file = NamedTempFile::new().expect("Failed to create named temp file");
     options.app.storage_file = temp_commitments_file.path().to_path_buf();
 
-    let (shutdown, _) = broadcast::channel(1);
-
     let (ganache, semaphore_address) = spawn_mock_chain()
         .await
         .expect("Failed to spawn ganache chain");
@@ -69,7 +67,7 @@ async fn insert_identity_and_proofs() {
     options.app.ethereum.semaphore_address = semaphore_address;
     options.app.ethereum.signing_key = GANACHE_DEFAULT_WALLET_KEY;
 
-    let local_addr = spawn_app(options.clone(), shutdown.clone())
+    let local_addr = spawn_app(options.clone())
         .await
         .expect("Failed to spawn app.");
 
@@ -126,9 +124,10 @@ async fn insert_identity_and_proofs() {
     .await;
 
     // Shutdown app and spawn new one from file
-    let _ = shutdown.send(()).expect("Failed to send shutdown signal");
+    // TODO: Allow mock shutdowns for tests in cli-batteries
+    // let _ = shutdown.send(()).expect("Failed to send shutdown signal");
 
-    let local_addr = spawn_app(options.clone(), shutdown.clone())
+    let local_addr = spawn_app(options.clone())
         .await
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
@@ -268,7 +267,7 @@ fn construct_insert_identity_body(identity_commitment: &str) -> Body {
 }
 
 #[instrument(skip_all)]
-async fn spawn_app(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<SocketAddr> {
+async fn spawn_app(options: Options) -> EyreResult<SocketAddr> {
     let app = Arc::new(App::new(options.app).await.expect("Failed to create App"));
 
     let ip: IpAddr = match options.server.server.host() {

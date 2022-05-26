@@ -8,10 +8,10 @@ pub mod server;
 mod utils;
 
 use crate::{app::App, utils::spawn_or_abort};
+use cli_batteries::await_shutdown;
 use eyre::Result as EyreResult;
 use std::sync::Arc;
 use structopt::StructOpt;
-use tokio::sync::broadcast;
 use tracing::info;
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
@@ -27,22 +27,21 @@ pub struct Options {
 /// assert!(true);
 /// ```
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<()> {
+pub async fn main(options: Options) -> EyreResult<()> {
     // Create App struct
     let app = Arc::new(App::new(options.app).await?);
 
     // Start server
     let server = spawn_or_abort({
-        let shutdown = shutdown.clone();
         async move {
-            server::main(app, options.server, shutdown).await?;
+            server::main(app, options.server).await?;
             EyreResult::Ok(())
         }
     });
 
     // Wait for shutdown
     info!("Program started, waiting for shutdown signal");
-    shutdown.subscribe().recv().await?;
+    await_shutdown().await;
 
     // Wait for server
     info!("Stopping server");

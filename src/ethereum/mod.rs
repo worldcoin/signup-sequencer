@@ -33,7 +33,7 @@ const PENDING: Option<BlockId> = Some(BlockId::Number(BlockNumber::Pending));
 
 // TODO: Log and metrics for signer / nonces.
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
 pub struct Options {
     /// Ethereum API Provider
     #[structopt(long, env, default_value = "http://localhost:8545")]

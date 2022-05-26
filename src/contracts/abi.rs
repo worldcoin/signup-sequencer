@@ -1,3 +1,5 @@
+#![allow(clippy::extra_unused_lifetimes)]
+
 use ethers::contract::abigen;
 
 abigen!(

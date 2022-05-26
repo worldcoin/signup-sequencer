@@ -1,4 +1,4 @@
-FROM rust:1.60 as build-env
+FROM rust:1.61 as build-env
 WORKDIR /src
 
 RUN apt-get update &&\
@@ -17,7 +17,7 @@ RUN cp ./target/$(uname -m)-unknown-linux-musl/release/${BIN} ./bin
 RUN setcap cap_net_bind_service=+ep ./bin
 
 # Make sure it runs
-RUN ./bin --version 
+RUN ./bin --version
 
 # Fetch latest certificates
 RUN update-ca-certificates --verbose

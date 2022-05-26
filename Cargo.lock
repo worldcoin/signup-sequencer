@@ -673,9 +673,9 @@ dependencies = [
 
 [[package]]
 name = "cli-batteries"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54a2f9d989784c38928dda7c5f7e2a4a453714df64b0d5a3c854570be4258c2f"
+checksum = "893dbf8e1358cd16565da62e476567c0d40a7b7af78334859129235100902b2e"
 dependencies = [
  "chrono",
  "color-eyre 0.6.1",

@@ -125,14 +125,17 @@ async fn insert_identity_and_proofs() {
     .await;
 
     // Shutdown app and reset mock shutdown
+    info!("Stopping app");
     shutdown();
     app.await.unwrap();
     reset_shutdown();
 
+    info!("Starting app");
     let (app, local_addr) = spawn_app(options.clone())
         .await
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
+    info!(?uri, "App started");
 
     test_inclusion_proof(
         &uri,
@@ -173,6 +176,7 @@ async fn test_inclusion_proof(
     expect_failure: bool,
 ) {
     let body = construct_inclusion_proof_body(TEST_LEAFS[leaf_index]);
+    info!(?uri, "Contacting");
     let req = Request::builder()
         .method("POST")
         .uri(uri.to_owned() + "/inclusionProof")
@@ -290,9 +294,11 @@ async fn spawn_app(options: Options) -> EyreResult<(JoinHandle<()>, SocketAddr)>
 
     let app = spawn({
         async move {
+            info!("App thread starting");
             server::bind_from_listener(app, listener)
                 .await
                 .expect("Failed to bind address");
+            info!("App thread stopping");
         }
     });
 

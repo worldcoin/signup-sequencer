@@ -4,8 +4,8 @@ on:
   push
 
 env:
-  RUST_VERSION: "1.60"
-  NIGHTLY_VERSION: nightly-2022-04-18
+  RUST_VERSION: "1.61"
+  NIGHTLY_VERSION: nightly-2022-05-25
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
@@ -317,7 +317,7 @@ jobs:
           --set env.WIPE_STORAGE=true
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
           --set env.BLOCK_QUERY_RANGE=1000000
-          --set env.STARTING_BLOCK=0      
+          --set env.STARTING_BLOCK=0
 
   deploy-stage-manual:
     name: Manual deploy to staging

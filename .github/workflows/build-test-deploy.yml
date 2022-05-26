@@ -315,7 +315,7 @@ jobs:
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
           --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
-          --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
+          --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
           --set env.BLOCK_QUERY_RANGE=1000000
           --set env.STARTING_BLOCK=0      
 
@@ -342,7 +342,7 @@ jobs:
           --name ${{ secrets.AWS_STAGE_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --timeout 60s
+          --install --timeout 120s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
@@ -353,7 +353,7 @@ jobs:
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
           --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
-          --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
+          --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
           --set env.BLOCK_QUERY_RANGE=1000000
           --set env.STARTING_BLOCK=0
 

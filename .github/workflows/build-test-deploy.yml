@@ -218,7 +218,7 @@ jobs:
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: BIN="${{ env.BIN }}"
+          build-args: BIN=${{ env.BIN }}
       - name: Test image
         run:
           docker run --pull always --platform linux/${{ matrix.platform }} --rm $IMAGE_ID-${{ matrix.platform }} --version

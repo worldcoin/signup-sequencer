@@ -78,6 +78,7 @@ pub type ProviderStack = Provider4;
 pub struct Ethereum {
     provider: Arc<ProviderStack>,
     address:  H160,
+    legacy:   bool,
 }
 
 impl Ethereum {
@@ -228,7 +229,11 @@ impl Ethereum {
         };
 
         let provider = Arc::new(provider);
-        Ok(Self { provider, address })
+        Ok(Self {
+            provider,
+            address,
+            legacy: !eip1559,
+        })
     }
 
     #[must_use]
@@ -241,19 +246,34 @@ impl Ethereum {
     }
 
     pub async fn send_transaction(&self, tx: TypedTransaction) -> Result<(), TxError> {
-        // TODO: EIP1559 conversion
+        // Convert to legacy transaction if required
+        let tx = if self.legacy {
+            TypedTransaction::Legacy(match tx {
+                TypedTransaction::Legacy(tx) => tx,
+                TypedTransaction::Eip1559(tx) => tx.into(),
+                TypedTransaction::Eip2930(tx) => tx.tx,
+            })
+        } else {
+            tx
+        };
+
+        // Send TX to mempool
         let pending = self
             .provider
             .send_transaction(tx, None)
             .await
             .map_err(|e| TxError::Send(Box::new(e)))?;
         let tx_hash: H256 = *pending;
+
+        // Wait for TX to be mined
         let receipt = pending
             .await
             .map_err(TxError::Confirmation)?
             .ok_or(TxError::Dropped(tx_hash))?;
+
+        // Check receipt status for success
         if receipt.status != Some(U64::from(1_u64)) {
-            return Err(TxError::Failed(receipt));
+            return Err(TxError::Failed(Box::new(receipt)));
         }
         Ok(())
     }
@@ -271,5 +291,5 @@ pub enum TxError {
     Dropped(H256),
 
     #[error("Transaction failed.")]
-    Failed(TransactionReceipt),
+    Failed(Box<TransactionReceipt>),
 }

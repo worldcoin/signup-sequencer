@@ -304,7 +304,7 @@ jobs:
           --name ${{ secrets.AWS_STAGE_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --atomic --timeout 120s
+          --install --timeout 60s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
@@ -315,7 +315,9 @@ jobs:
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
           --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
-          --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
+          --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
+          --set env.BLOCK_QUERY_RANGE=1000000
+          --set env.STARTING_BLOCK=0      
 
   deploy-stage-manual:
     name: Manual deploy to staging
@@ -340,7 +342,7 @@ jobs:
           --name ${{ secrets.AWS_STAGE_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --atomic --timeout 120s
+          --install --timeout 120s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
@@ -351,7 +353,9 @@ jobs:
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
           --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
-          --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
+          --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
+          --set env.BLOCK_QUERY_RANGE=1000000
+          --set env.STARTING_BLOCK=0
 
   deploy-prod:
     name: Deploy main to production
@@ -377,7 +381,7 @@ jobs:
           --name ${{ secrets.AWS_PROD_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --atomic --timeout 120s
+          --install --timeout 60s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set environment=prod
@@ -385,4 +389,7 @@ jobs:
           --set env.SIGNING_KEY="${{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}"
           --set env.SIGNUP_SEQUENCER_MOCK=false
+          --set env.WIPE_STORAGE=true
           --set env.USE_EIP1559=false
+          --set env.BLOCK_QUERY_RANGE=50000
+          --set env.STARTING_BLOCK=27829300

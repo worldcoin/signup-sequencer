@@ -23,6 +23,7 @@ use std::{
     fs::File,
     io::BufReader,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
+    ops::Add,
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -40,10 +41,6 @@ const TEST_LEAFS: &[&str] = &[
     "0000000000000000000000000000000000000000000000000000000000000003",
 ];
 
-const GANACHE_DEFAULT_WALLET_KEY: H256 = H256(hex!(
-    "1ce6a4cc4c9941a4781349f988e129accdc35a55bb3d5b1a7b342bc2171db484"
-));
-
 #[tokio::test]
 async fn insert_identity_and_proofs() {
     // Initialize logging for the test.
@@ -58,15 +55,15 @@ async fn insert_identity_and_proofs() {
     let temp_commitments_file = NamedTempFile::new().expect("Failed to create named temp file");
     options.app.storage_file = temp_commitments_file.path().to_path_buf();
 
-    let (ganache, semaphore_address) = spawn_mock_chain()
+    let (chain, private_key, semaphore_address) = spawn_mock_chain()
         .await
         .expect("Failed to spawn ganache chain");
 
     options.app.ethereum.eip1559 = false;
     options.app.ethereum.ethereum_provider =
-        Url::parse(&ganache.endpoint()).expect("Failed to parse ganache endpoint");
+        Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.contracts.semaphore_address = semaphore_address;
-    options.app.ethereum.signing_key = GANACHE_DEFAULT_WALLET_KEY;
+    options.app.ethereum.signing_key = private_key.clone();
 
     let (app, local_addr) = spawn_app(options.clone())
         .await
@@ -321,15 +318,15 @@ fn deserialize_to_bytes(input: String) -> EyreResult<Bytes> {
 }
 
 #[instrument(skip_all)]
-async fn spawn_mock_chain() -> EyreResult<(AnvilInstance, Address)> {
-    let ganache = Anvil::new().block_time(2u64).spawn();
-    // Ganache::new().block_time(2u64).mnemonic("test").spawn();
+async fn spawn_mock_chain() -> EyreResult<(AnvilInstance, H256, Address)> {
+    let chain = Anvil::new().block_time(2u64).spawn();
+    let private_key = H256::from_slice(&chain.keys()[0].to_be_bytes());
 
-    let provider = Provider::<Http>::try_from(ganache.endpoint())
-        .expect("Failed to initialize ganache endpoint")
+    let provider = Provider::<Http>::try_from(chain.endpoint())
+        .expect("Failed to initialize chain endpoint")
         .interval(Duration::from_millis(500u64));
 
-    let wallet: LocalWallet = ganache.keys()[0].clone().into();
+    let wallet: LocalWallet = chain.keys()[0].clone().into();
 
     // connect the wallet to the provider
     let client = SignerMiddleware::new(provider, wallet.clone());
@@ -408,5 +405,5 @@ async fn spawn_mock_chain() -> EyreResult<(AnvilInstance, Address)> {
         .await? // Send TX
         .await?; // Wait for TX to be mined
 
-    Ok((ganache, semaphore_contract.address()))
+    Ok((chain, private_key, semaphore_contract.address()))
 }

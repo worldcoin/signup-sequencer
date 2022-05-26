@@ -7,25 +7,31 @@ use self::{
     estimator::Estimator, gas_oracle_logger::GasOracleLogger, rpc_logger::RpcLogger,
     transport::Transport,
 };
+use crate::contracts::MemberAddedEvent;
 use chrono::{Duration as ChronoDuration, Utc};
 use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::{
         gas_oracle::{
             Cache, EthGasStation, Etherchain, GasNow, GasOracle, GasOracleMiddleware, Median,
-            Polygon, ProviderOracle,
+            MiddlewareError, Polygon, ProviderOracle,
         },
         NonceManagerMiddleware, SignerMiddleware,
     },
+    prelude::ProviderError,
     providers::{Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
-    types::{BlockId, BlockNumber, Chain, H160, H256},
+    types::{
+        transaction::eip2718::TypedTransaction, Address, BlockId, BlockNumber, Chain,
+        TransactionReceipt, H160, H256, U256, U64,
+    },
 };
 use eyre::{eyre, Result as EyreResult};
 use futures::{try_join, FutureExt};
 use reqwest::Client as ReqwestClient;
-use std::{sync::Arc, time::Duration};
+use std::{error::Error, sync::Arc, time::Duration};
 use structopt::StructOpt;
+use thiserror::Error;
 use tracing::{error, info, instrument};
 use url::Url;
 
@@ -230,161 +236,40 @@ impl Ethereum {
         &self.provider
     }
 
-    #[instrument(skip_all)]
-    pub async fn get_nonce(&self) -> EyreResult<usize> {
-        let nonce = self
+    pub fn address(&self) -> Address {
+        self.address
+    }
+
+    pub async fn send_transaction(&self, tx: TypedTransaction) -> Result<(), TxError> {
+        // TODO: EIP1559 conversion
+        let pending = self
             .provider
-            .get_transaction_count(self.address, None)
-            .await?;
-        Ok(nonce.as_usize())
-    }
-
-    #[instrument(skip_all)]
-    pub async fn fetch_events(
-        &self,
-        starting_block: u64,
-        last_leaf: usize,
-        query_range: usize,
-    ) -> EyreResult<Vec<(usize, Field, Field)>> {
-        info!(starting_block, "Reading MemberAdded events from chains");
-        // TODO: Some form of pagination.
-        // TODO: Register to the event stream and track it going forward.
-        if self.mock {
-            info!(starting_block, "MOCK mode enabled, skipping");
-            return Ok(vec![]);
-        }
-
-        let last_block = self.last_block().await?;
-        let mut events: Vec<MemberAddedFilter> = vec![];
-
-        for current_block in (starting_block..last_block).step_by(query_range) {
-            let filter = self
-                .semaphore
-                .member_added_filter()
-                .from_block(current_block)
-                .to_block(current_block + (query_range as u64) - 1);
-            events.extend(filter.query().await?);
-        }
-
-        info!(count = events.len(), "Read events");
-        let mut index = last_leaf;
-        let insertions = events
-            .iter()
-            .map(|event| {
-                let mut id_bytes = [0u8; 32];
-                event.identity_commitment.to_big_endian(&mut id_bytes);
-
-                let mut root_bytes = [0u8; 32];
-                event.root.to_big_endian(&mut root_bytes);
-
-                // TODO: Check for < Modulus.
-                let root = Field::from_be_bytes_mod_order(&root_bytes);
-                let leaf = Field::from_be_bytes_mod_order(&id_bytes);
-                let res = (index, leaf, root);
-                index += 1;
-                res
-            })
-            .collect::<Vec<_>>();
-        Ok(insertions)
-    }
-
-    #[instrument(skip_all)]
-    pub async fn is_manager(&self) -> EyreResult<bool> {
-        info!(?self.address, "My address");
-        let manager = self.semaphore.manager().call().await?;
-        info!(?manager, "Fetched manager address");
-        Ok(manager == self.address)
-    }
-
-    #[instrument(skip_all)]
-    pub async fn create_group(&self, group_id: usize, tree_depth: usize) -> EyreResult<()> {
-        // Must subtract one as internal rust merkle tree is eth merkle tree depth + 1
-        let mut tx =
-            self.semaphore
-                .create_group(group_id.into(), (tree_depth - 1).try_into()?, 0.into());
-        let create_group_pending_tx = if self.eip1559 {
-            self.provider.fill_transaction(&mut tx.tx, None).await?;
-            tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
-            info!(?tx, "Sending transaction");
-            self.provider.send_transaction(tx.tx, None).await?
-        } else {
-            // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-            tx = tx.legacy();
-            info!(?tx, "Sending transaction");
-            self.provider.send_transaction(tx.tx, None).await?
-        };
-
-        let receipt = create_group_pending_tx
+            .send_transaction(tx, None)
             .await
-            .map_err(|e| eyre!(e))?
-            .ok_or_else(|| eyre!("tx dropped from mempool"))?;
-        if receipt.status != Some(U64::from(1_u64)) {
-            return Err(eyre!("tx failed"));
-        }
-
-        Ok(())
-    }
-
-    #[instrument(skip_all)]
-    pub async fn insert_identity(
-        &self,
-        group_id: usize,
-        commitment: &Field,
-        _tree_depth: usize,
-        nonce: usize,
-    ) -> EyreResult<()> {
-        info!(%group_id, %commitment, "Inserting identity in contract");
-        if self.mock {
-            info!(%commitment, "MOCK mode enabled, skipping");
-            return Ok(());
-        }
-
-        let depth = self
-            .semaphore
-            .get_depth(group_id.into())
-            .from(self.address)
-            .call()
-            .await?;
-
-        info!(?group_id, ?depth, "Fetched group tree depth");
-        if depth == 0 {
-            return Err(eyre!("group {} not created", group_id));
-        }
-
-        let commitment = U256::from(commitment.to_be_bytes());
-        let mut tx = self.semaphore.add_member(group_id.into(), commitment);
-        let pending_tx = if self.eip1559 {
-            self.provider.fill_transaction(&mut tx.tx, None).await?;
-            tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
-            tx.tx.set_nonce(nonce);
-            info!(?tx, "Sending transaction");
-            self.provider.send_transaction(tx.tx, None).await?
-        } else {
-            // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-            tx = tx.legacy();
-            self.provider.fill_transaction(&mut tx.tx, None).await?;
-            tx.tx.set_nonce(nonce);
-            tx.tx.set_gas(5_000_000_u64); // HACK: ethers-rs estimate is wrong, needs to fit ganache block gas limit.
-
-            // quick hack to ensure tx is so overpriced that it won't get dropped
-            tx.tx.set_gas_price(
-                tx.tx
-                    .gas_price()
-                    .ok_or(eyre!("no gasPrice set"))?
-                    .checked_mul(2_u64.into())
-                    .ok_or(eyre!("overflow in gasPrice"))?,
-            );
-            info!(?tx, "Sending transaction");
-            self.provider.send_transaction(tx.tx, None).await?
-        };
-        let receipt = pending_tx
+            .map_err(|e| TxError::Send(Box::new(e)))?;
+        let tx_hash: H256 = *pending;
+        let receipt = pending
             .await
-            .map_err(|e| eyre!(e))?
-            .expect("tx dropped from mempool");
-        info!(?receipt, "Receipt");
+            .map_err(TxError::Confirmation)?
+            .ok_or(TxError::Dropped(tx_hash))?;
         if receipt.status != Some(U64::from(1_u64)) {
-            return Err(eyre!("tx failed"));
+            return Err(TxError::Failed(receipt));
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Error)]
+pub enum TxError {
+    #[error("Error sending transaction: {0}")]
+    Send(Box<dyn Error + Send + Sync + 'static>),
+
+    #[error("Error waiting for confirmations: {0}")]
+    Confirmation(ProviderError),
+
+    #[error("Transaction dropped from mempool.")]
+    Dropped(H256),
+
+    #[error("Transaction failed.")]
+    Failed(TransactionReceipt),
 }

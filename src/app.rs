@@ -132,7 +132,7 @@ impl App {
         };
 
         // Read events from blockchain
-        let events = ethereum
+        let events = contracts
             .fetch_events(last_block, num_leaves, options.block_query_range)
             .await?;
         for (leaf, hash, root) in events {

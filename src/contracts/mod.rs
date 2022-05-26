@@ -88,24 +88,23 @@ impl Contracts {
         &self,
         starting_block: u64,
         last_leaf: usize,
+        query_range: usize,
     ) -> EyreResult<Vec<(usize, Field, Field)>> {
         info!(starting_block, "Reading MemberAdded events from chains");
         // TODO: Some form of pagination.
         // TODO: Register to the event stream and track it going forward.
-        if self.mock {
-            info!(starting_block, "MOCK mode enabled, skipping");
-            return Ok(vec![]);
+
+        let last_block = self.last_block().await?;
+        let mut events: Vec<MemberAddedEvent> = vec![];
+
+        for current_block in (starting_block..last_block).step_by(query_range) {
+            let filter = self
+                .semaphore
+                .member_added_filter()
+                .from_block(current_block)
+                .to_block(current_block + (query_range as u64) - 1);
+            events.extend(filter.query().await?);
         }
-
-        //
-        let filter = self
-            .semaphore
-            .member_added_filter()
-            .from_block(starting_block);
-
-        let events: Vec<MemberAddedFilter> = filter.query().await?;
-
-        dbg!(&events);
 
         info!(count = events.len(), "Read events");
         let mut index = last_leaf;
@@ -126,8 +125,6 @@ impl Contracts {
                 res
             })
             .collect::<Vec<_>>();
-
-        dbg!(&insertions);
         Ok(insertions)
     }
 
@@ -141,42 +138,15 @@ impl Contracts {
 
     #[instrument(level = "debug", skip_all)]
     pub async fn create_group(&self, group_id: usize, tree_depth: usize) -> EyreResult<()> {
-        // Must subtract one as internal rust merkle tree is eth merkle tree
-        // depth + 1
-        let mut tx =
-            self.semaphore
-                .create_group(group_id.into(), (tree_depth - 1).try_into()?, 0.into());
-
-        let use_eip1559 = false; // TODO
-        let create_group_pending_tx = if use_eip1559 {
-            self.ethereum
-                .provider()
-                .fill_transaction(&mut tx.tx, None)
-                .await?;
-            tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
-            info!(?tx, "Sending transaction");
-            self.ethereum
-                .provider()
-                .send_transaction(tx.tx, None)
-                .await?
-        } else {
-            // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-            tx = tx.legacy();
-            info!(?tx, "Sending transaction");
-            self.ethereum
-                .provider()
-                .send_transaction(tx.tx, None)
-                .await?
-        };
-
-        let receipt = create_group_pending_tx
-            .await
-            .map_err(|e| eyre!(e))?
-            .ok_or_else(|| eyre!("tx dropped from mempool"))?;
-        if receipt.status != Some(U64::from(1_u64)) {
-            return Err(eyre!("tx failed"));
-        }
-
+        // Must subtract one as internal rust merkle tree is eth merkle tree depth + 1
+        let depth = tree_depth - 1;
+        self.ethereum
+            .send_transaction(
+                self.semaphore
+                    .create_group(group_id.into(), depth.try_into()?, 0.into())
+                    .tx,
+            )
+            .await?;
         Ok(())
     }
 
@@ -247,7 +217,7 @@ impl Contracts {
         let receipt = pending_tx
             .await
             .map_err(|e| eyre!(e))?
-            .ok_or_else(|| eyre!("tx dropped from mempool"))?;
+            .expect("tx dropped from mempool"); // TODO: Handle instead of panic.
         info!(?receipt, "Receipt");
         if receipt.status != Some(U64::from(1_u64)) {
             return Err(eyre!("tx failed"));

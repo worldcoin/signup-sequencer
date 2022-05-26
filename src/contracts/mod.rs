@@ -164,6 +164,7 @@ impl Contracts {
             return Ok(());
         }
 
+        // Check group existence
         let depth = self
             .semaphore
             .get_depth(group_id.into())
@@ -176,52 +177,11 @@ impl Contracts {
             return Err(eyre!("group {} not created", group_id));
         }
 
-        let use_eip1559 = false; // TODO
+        // Send create tx
         let commitment = U256::from(commitment.to_be_bytes());
-        let mut tx = self.semaphore.add_member(group_id.into(), commitment);
-        let pending_tx = if use_eip1559 {
-            self.ethereum
-                .provider()
-                .fill_transaction(&mut tx.tx, None)
-                .await?;
-            tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
-            tx.tx.set_nonce(nonce);
-            info!(?tx, "Sending transaction");
-            self.ethereum
-                .provider()
-                .send_transaction(tx.tx, None)
-                .await?
-        } else {
-            // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-            tx = tx.legacy();
-            self.ethereum
-                .provider()
-                .fill_transaction(&mut tx.tx, None)
-                .await?;
-            tx.tx.set_nonce(nonce);
-
-            // quick hack to ensure tx is so overpriced that it won't get dropped
-            tx.tx.set_gas_price(
-                tx.tx
-                    .gas_price()
-                    .ok_or(eyre!("no gasPrice set"))?
-                    .checked_mul(2_u64.into())
-                    .ok_or(eyre!("overflow in gasPrice"))?,
-            );
-            info!(?tx, "Sending transaction");
-            self.ethereum
-                .provider()
-                .send_transaction(tx.tx, None)
-                .await?
-        };
-        let receipt = pending_tx
-            .await
-            .map_err(|e| eyre!(e))?
-            .expect("tx dropped from mempool"); // TODO: Handle instead of panic.
-        info!(?receipt, "Receipt");
-        if receipt.status != Some(U64::from(1_u64)) {
-            return Err(eyre!("tx failed"));
-        }
+        self.ethereum
+            .send_transaction(self.semaphore.add_member(group_id.into(), commitment).tx)
+            .await?;
         Ok(())
     }
 }

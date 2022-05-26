@@ -1,3 +1,4 @@
+use cli_batteries::{reset_shutdown, shutdown};
 use ethers::{
     abi::Address,
     core::abi::Abi,
@@ -28,7 +29,7 @@ use std::{
 };
 use structopt::StructOpt;
 use tempfile::NamedTempFile;
-use tokio::spawn;
+use tokio::{spawn, task::JoinHandle};
 use tracing::{info, instrument};
 use tracing_subscriber::fmt::format::FmtSpan;
 use url::{Host, Url};
@@ -67,7 +68,7 @@ async fn insert_identity_and_proofs() {
     options.app.ethereum.semaphore_address = semaphore_address;
     options.app.ethereum.signing_key = GANACHE_DEFAULT_WALLET_KEY;
 
-    let local_addr = spawn_app(options.clone())
+    let (app, local_addr) = spawn_app(options.clone())
         .await
         .expect("Failed to spawn app.");
 
@@ -123,11 +124,12 @@ async fn insert_identity_and_proofs() {
     )
     .await;
 
-    // Shutdown app and spawn new one from file
-    // TODO: Allow mock shutdowns for tests in cli-batteries
-    // let _ = shutdown.send(()).expect("Failed to send shutdown signal");
+    // Shutdown app and reset mock shutdown
+    shutdown();
+    app.await.unwrap();
+    reset_shutdown();
 
-    let local_addr = spawn_app(options.clone())
+    let (app, local_addr) = spawn_app(options.clone())
         .await
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
@@ -154,6 +156,11 @@ async fn insert_identity_and_proofs() {
     temp_commitments_file
         .close()
         .expect("Failed to close temp file");
+
+    // Shutdown app and reset mock shutdown
+    shutdown();
+    app.await.unwrap();
+    reset_shutdown();
 }
 
 #[instrument(skip_all)]
@@ -267,7 +274,7 @@ fn construct_insert_identity_body(identity_commitment: &str) -> Body {
 }
 
 #[instrument(skip_all)]
-async fn spawn_app(options: Options) -> EyreResult<SocketAddr> {
+async fn spawn_app(options: Options) -> EyreResult<(JoinHandle<()>, SocketAddr)> {
     let app = Arc::new(App::new(options.app).await.expect("Failed to create App"));
 
     let ip: IpAddr = match options.server.server.host() {
@@ -281,7 +288,7 @@ async fn spawn_app(options: Options) -> EyreResult<SocketAddr> {
     let listener = TcpListener::bind(&addr).expect("Failed to bind random port");
     let local_addr = listener.local_addr()?;
 
-    spawn({
+    let app = spawn({
         async move {
             server::bind_from_listener(app, listener)
                 .await
@@ -289,7 +296,7 @@ async fn spawn_app(options: Options) -> EyreResult<SocketAddr> {
         }
     });
 
-    Ok(local_addr)
+    Ok((app, local_addr))
 }
 
 #[derive(Deserialize, Serialize, Debug)]

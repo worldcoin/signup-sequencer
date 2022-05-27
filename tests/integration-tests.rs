@@ -74,7 +74,7 @@ async fn insert_identity_and_proofs() {
         .expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
-    let mut ref_tree = PoseidonTree::new(options.app.tree_depth, options.app.initial_leaf);
+    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
     let client = Client::new();
 
     test_inclusion_proof(
@@ -82,7 +82,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &options.app.initial_leaf,
+        &options.app.contracts.initial_leaf,
         true,
     )
     .await;
@@ -91,7 +91,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &options.app.initial_leaf,
+        &options.app.contracts.initial_leaf,
         true,
     )
     .await;
@@ -120,7 +120,7 @@ async fn insert_identity_and_proofs() {
         &client,
         2,
         &mut ref_tree,
-        &options.app.initial_leaf,
+        &options.app.contracts.initial_leaf,
         true,
     )
     .await;

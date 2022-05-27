@@ -115,6 +115,8 @@ impl Contracts {
             info!(group_id = ?options.group_id, ?tree_depth, "Semaphore group found.");
         }
 
+        // TODO: Some way to check the initial leaf
+
         Ok(Self {
             ethereum,
             semaphore,

@@ -4,10 +4,10 @@ use crate::{
     server::Error as ServerError,
 };
 use core::cmp::max;
-use ethers::providers::Middleware;
+use ethers::{providers::Middleware, types::U256};
 use eyre::Result as EyreResult;
 use semaphore::{
-    merkle_tree::Hasher,
+    merkle_tree::{self, Hasher},
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
     Field,
 };
@@ -20,7 +20,7 @@ use std::{
 };
 use structopt::StructOpt;
 use tokio::sync::RwLock;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
@@ -60,23 +60,9 @@ pub struct Options {
     #[structopt(long, env, parse(try_from_str), default_value = "false")]
     pub wipe_storage: bool,
 
-    /// Number of layers in the tree. Defaults to 21 to match Semaphore.sol
-    /// defaults.
-    #[structopt(long, env, default_value = "21")]
-    pub tree_depth: usize,
-
     /// Block number to start syncing from
     #[structopt(long, env, default_value = "0")]
     pub starting_block: u64,
-
-    /// Initial value of the Merkle tree leaves. Defaults to the initial value
-    /// in Semaphore.sol.
-    #[structopt(
-        long,
-        env,
-        default_value = "0000000000000000000000000000000000000000000000000000000000000000"
-    )]
-    pub initial_leaf: Hash,
 }
 
 pub struct App {
@@ -85,9 +71,6 @@ pub struct App {
     storage_file: PathBuf,
     merkle_tree:  RwLock<PoseidonTree>,
     next_leaf:    AtomicUsize,
-    tree_depth:   usize,
-    is_manager:   bool,
-    nonce_offset: usize,
 }
 
 impl App {
@@ -101,7 +84,9 @@ impl App {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
 
-        let mut merkle_tree = PoseidonTree::new(options.tree_depth, options.initial_leaf);
+        // Poseidon tree depth is one more than the contract's tree depth
+        let mut merkle_tree =
+            PoseidonTree::new(contracts.tree_depth() + 1, contracts.initial_leaf());
         let mut num_leaves = 0;
 
         // Wipe storage to force sync from chain
@@ -132,24 +117,61 @@ impl App {
         let events = contracts.fetch_events(last_block, num_leaves).await?;
         for (leaf, hash, root) in events {
             debug!(?leaf, ?hash, ?root, "Received event");
+
+            debug!(root = ?merkle_tree.root(), "Prior root");
+
+            // Check leaf index is valid
+            if leaf >= merkle_tree.num_leaves() {
+                error!(?leaf, num_leaves = ?merkle_tree.num_leaves(), "Received event out of range");
+                panic!("Received event out of range");
+            }
+
+            // Check leaf value with existing value
+            let existing = merkle_tree.leaves()[leaf];
+            if existing != contracts.initial_leaf() {
+                if existing == hash {
+                    warn!(
+                        ?leaf,
+                        ?existing,
+                        "Leaf was already correctly set, skipping."
+                    );
+                    continue;
+                } else {
+                    error!(
+                        ?leaf,
+                        ?existing,
+                        ?hash,
+                        "Event hash contradicts existing leaf."
+                    );
+                    panic!("Event hash contradicts existing leaf.");
+                }
+            }
+
+            // Check insertion counter
+            if leaf != next_leaf {
+                error!(
+                    ?leaf,
+                    ?next_leaf,
+                    ?hash,
+                    "Event leaf index does not match expected leaf."
+                );
+                panic!("Event leaf does not match expected leaf.");
+            }
+
+            // Insert
             merkle_tree.set(leaf, hash);
-
-            // sanity check
-            assert!(
-                merkle_tree.root() == root,
-                "sanity check failed, roots don't match"
-            );
-
             next_leaf = max(next_leaf, leaf + 1);
+
+            // Check root
+            if root != merkle_tree.root() {
+                error!(computed_root = ?merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
+                panic!("Root mismatch between event and computed tree.");
+            }
         }
 
+        // TODO: Final root check
+
         let is_manager = contracts.is_manager().await?;
-        let nonce_offset = contracts.get_nonce().await? - next_leaf;
-        info!(
-            "current nonce: {}, nonce offset: {}",
-            contracts.get_nonce().await?,
-            nonce_offset
-        );
 
         Ok(Self {
             ethereum,
@@ -157,9 +179,6 @@ impl App {
             storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
             next_leaf: AtomicUsize::new(next_leaf),
-            tree_depth: options.tree_depth,
-            is_manager,
-            nonce_offset,
         })
     }
 
@@ -173,22 +192,15 @@ impl App {
         group_id: usize,
         commitment: &Hash,
     ) -> Result<IndexResponse, ServerError> {
-        // Check if manager
-        if !self.is_manager {
-            return Err(ServerError::NotManager);
-        }
+        // TODO: Error, not panic
+        assert_eq!(U256::from(group_id), self.contracts.group_id());
 
         // Fetch next leaf index
         let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
 
         // Send Semaphore transaction, nonce calculated to ensure ordering
         self.contracts
-            .insert_identity(
-                group_id,
-                commitment,
-                self.tree_depth,
-                identity_index + self.nonce_offset,
-            )
+            .insert_identity(commitment, identity_index)
             .await?;
 
         // Update and write merkle tree
@@ -237,7 +249,7 @@ impl App {
         // TODO: What we really want here is the last block we processed events from.
         // Also, we need to keep some re-org depth into account (which should be covered
         // by the events already).
-        let last_block = self.contracts.last_block().await?;
+        let last_block = self.ethereum.provider().get_block_number().await?.as_u64();
         let next_leaf = self.next_leaf.load(Ordering::Acquire);
         let commitments = {
             let lock = self.merkle_tree.read().await;

@@ -3,6 +3,8 @@ mod abi;
 use self::abi::{MemberAddedFilter, Semaphore};
 use crate::ethereum::{Ethereum, ProviderStack};
 use ethers::{
+    abi::RawLog,
+    contract::EthEvent,
     providers::Middleware,
     types::{Address, U256, U64},
 };
@@ -90,23 +92,19 @@ impl Contracts {
         &self,
         starting_block: u64,
         last_leaf: usize,
-        query_range: usize,
     ) -> EyreResult<Vec<(usize, Field, Field)>> {
         info!(starting_block, "Reading MemberAdded events from chains");
-        // TODO: Some form of pagination.
         // TODO: Register to the event stream and track it going forward.
 
-        let last_block = self.last_block().await?;
-        let mut events: Vec<MemberAddedEvent> = vec![];
-
-        for current_block in (starting_block..last_block).step_by(query_range) {
-            let filter = self
-                .semaphore
-                .member_added_filter()
-                .from_block(current_block)
-                .to_block(current_block + (query_range as u64) - 1);
-            events.extend(filter.query().await?);
-        }
+        // Fetch MemberAdded log events
+        let filter = self
+            .semaphore
+            .member_added_filter()
+            .from_block(starting_block);
+        let events = self
+            .ethereum
+            .fetch_events::<MemberAddedEvent>(&filter.filter)
+            .await?;
 
         info!(count = events.len(), "Read events");
         let mut index = last_leaf;

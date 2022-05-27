@@ -20,7 +20,7 @@ use std::{
 };
 use structopt::StructOpt;
 use tokio::sync::RwLock;
-use tracing::{info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
@@ -68,10 +68,6 @@ pub struct Options {
     /// Block number to start syncing from
     #[structopt(long, env, default_value = "0")]
     pub starting_block: u64,
-
-    /// Range of blocks to sync (2k can be synced without limit)
-    #[structopt(long, env, default_value = "2000")]
-    pub block_query_range: usize,
 
     /// Initial value of the Merkle tree leaves. Defaults to the initial value
     /// in Semaphore.sol.
@@ -133,10 +129,9 @@ impl App {
         };
 
         // Read events from blockchain
-        let events = contracts
-            .fetch_events(last_block, num_leaves, options.block_query_range)
-            .await?;
+        let events = contracts.fetch_events(last_block, num_leaves).await?;
         for (leaf, hash, root) in events {
+            debug!(?leaf, ?hash, ?root, "Received event");
             merkle_tree.set(leaf, hash);
 
             // sanity check

@@ -1,3 +1,4 @@
+/// TODO: Upstream most of these to ethers-rs
 mod estimator;
 mod gas_oracle_logger;
 mod rpc_logger;
@@ -10,6 +11,8 @@ use self::{
 use crate::contracts::MemberAddedEvent;
 use chrono::{Duration as ChronoDuration, Utc};
 use ethers::{
+    abi::{Error as AbiError, RawLog},
+    contract::EthEvent,
     core::k256::ecdsa::SigningKey,
     middleware::{
         gas_oracle::{
@@ -22,12 +25,12 @@ use ethers::{
     providers::{Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
     types::{
-        transaction::eip2718::TypedTransaction, Address, BlockId, BlockNumber, Chain,
+        transaction::eip2718::TypedTransaction, Address, BlockId, BlockNumber, Chain, Filter, Log,
         TransactionReceipt, H160, H256, U256, U64,
     },
 };
 use eyre::{eyre, Result as EyreResult};
-use futures::{try_join, FutureExt};
+use futures::{try_join, FutureExt, StreamExt};
 use reqwest::Client as ReqwestClient;
 use std::{error::Error, sync::Arc, time::Duration};
 use structopt::StructOpt;
@@ -56,6 +59,7 @@ pub struct Options {
 
     /// If this module is being run with EIP-1559 support, useful in some places
     /// where EIP-1559 is not yet supported
+    // TODO: Remove, we autodetect now.
     #[structopt(
         short,
         parse(try_from_str),
@@ -63,6 +67,10 @@ pub struct Options {
         env = "USE_EIP1559"
     )]
     pub eip1559: bool,
+
+    /// Maximum number of blocks to pull events from in one request.
+    #[structopt(long, env, default_value = "1000")]
+    pub max_log_blocks: usize,
 }
 
 // Code out the provider stack in types
@@ -89,11 +97,18 @@ pub enum TxError {
     Failed(Box<TransactionReceipt>),
 }
 
+#[derive(Debug, Error)]
+pub enum EventError {
+    #[error("Error parsing log event: {0}")]
+    Parsing(#[from] AbiError),
+}
+
 #[derive(Clone, Debug)]
 pub struct Ethereum {
-    provider: Arc<ProviderStack>,
-    address:  H160,
-    legacy:   bool,
+    provider:       Arc<ProviderStack>,
+    address:        H160,
+    legacy:         bool,
+    max_log_blocks: usize,
 }
 
 impl Ethereum {
@@ -248,6 +263,7 @@ impl Ethereum {
             provider,
             address,
             legacy: !eip1559,
+            max_log_blocks: options.max_log_blocks,
         })
     }
 
@@ -300,5 +316,26 @@ impl Ethereum {
             return Err(TxError::Failed(Box::new(receipt)));
         }
         Ok(())
+    }
+
+    pub async fn fetch_events_raw(&self, filter: &Filter) -> Vec<Log> {
+        // TODO: Add Error handling to `get_logs_paginated`, make it a `TryStream`.
+        self.provider
+            .get_logs_paginated(filter, self.max_log_blocks as u64)
+            .collect()
+            .await
+    }
+
+    pub async fn fetch_events<T: EthEvent>(&self, filter: &Filter) -> Result<Vec<T>, EventError> {
+        Ok(self
+            .fetch_events_raw(filter)
+            .await
+            .into_iter()
+            .map(|log| RawLog {
+                topics: log.topics,
+                data:   log.data.to_vec(),
+            })
+            .map(|raw_log| T::decode_log(&raw_log))
+            .collect::<Result<Vec<_>, _>>()?)
     }
 }

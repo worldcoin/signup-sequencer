@@ -44,7 +44,7 @@ pub struct InclusionProofResponse {
     pub proof: Proof,
 }
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
 pub struct Options {
     #[structopt(flatten)]
     pub ethereum: ethereum::Options,
@@ -196,9 +196,7 @@ impl App {
         let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
 
         // Send Semaphore transaction, nonce calculated to ensure ordering
-        self.contracts
-            .insert_identity(commitment, identity_index)
-            .await?;
+        self.contracts.insert_identity(commitment).await?;
 
         // Update and write merkle tree
         {

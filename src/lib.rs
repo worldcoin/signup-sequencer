@@ -14,7 +14,7 @@ use std::sync::Arc;
 use structopt::StructOpt;
 use tracing::info;
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
 pub struct Options {
     #[structopt(flatten)]
     pub app: app::Options,

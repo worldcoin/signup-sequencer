@@ -7,10 +7,9 @@ use ethers::{
         SignerMiddleware,
     },
     types::{H256, U256},
-    utils::{Anvil, AnvilInstance, Ganache, GanacheInstance},
+    utils::{Anvil, AnvilInstance},
 };
 use eyre::{bail, Result as EyreResult};
-use hex_literal::hex;
 use hyper::{client::HttpConnector, Body, Client, Request};
 use semaphore::poseidon_tree::PoseidonTree;
 use serde::{Deserialize, Serialize};
@@ -23,7 +22,6 @@ use std::{
     fs::File,
     io::BufReader,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    ops::Add,
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -67,7 +65,7 @@ async fn insert_identity_and_proofs() {
     options.app.ethereum.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.contracts.semaphore_address = semaphore_address;
-    options.app.ethereum.signing_key = private_key.clone();
+    options.app.ethereum.signing_key = private_key;
 
     let (app, local_addr) = spawn_app(options.clone())
         .await

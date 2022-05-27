@@ -36,15 +36,6 @@ pub struct Options {
         default_value = "0000000000000000000000000000000000000000000000000000000000000000"
     )]
     pub initial_leaf: Field,
-
-    /// Mock mode: do not actually submit transactions.
-    #[structopt(
-        short,
-        parse(try_from_str),
-        default_value = "false",
-        env = "SIGNUP_SEQUENCER_MOCK"
-    )]
-    pub mock: bool,
 }
 
 pub struct Contracts {
@@ -53,7 +44,6 @@ pub struct Contracts {
     group_id:     U256,
     tree_depth:   usize,
     initial_leaf: Field,
-    mock:         bool,
 }
 
 impl Contracts {
@@ -121,7 +111,6 @@ impl Contracts {
             group_id: options.group_id,
             tree_depth: usize::from(tree_depth),
             initial_leaf: options.initial_leaf,
-            mock: options.mock,
         })
     }
 
@@ -191,12 +180,8 @@ impl Contracts {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn insert_identity(&self, commitment: &Field, nonce: usize) -> EyreResult<()> {
+    pub async fn insert_identity(&self, commitment: &Field) -> EyreResult<()> {
         info!(%commitment, "Inserting identity in contract");
-        if self.mock {
-            info!(%commitment, "MOCK mode enabled, skipping");
-            return Ok(());
-        }
 
         // Send create tx
         let commitment = U256::from(commitment.to_be_bytes());

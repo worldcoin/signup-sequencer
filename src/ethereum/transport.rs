@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use ethers::providers::{Http, Ipc, JsonRpcClient, ProviderError, Ws};
 use serde::{de::DeserializeOwned, Serialize};
+use std::fmt::Debug;
 use thiserror::Error;
 use url::Url;
 
@@ -14,6 +15,7 @@ pub enum Transport {
 }
 
 #[derive(Debug, Error)]
+#[allow(clippy::module_name_repetitions)]
 pub enum TransportError {
     #[error("Http error: {0}")]
     Http(<Http as JsonRpcClient>::Error),
@@ -62,13 +64,9 @@ impl From<TransportError> for ProviderError {
 impl JsonRpcClient for Transport {
     type Error = TransportError;
 
-    async fn request<T: Serialize + Send + Sync, R: DeserializeOwned>(
-        &self,
-        method: &str,
-        params: T,
-    ) -> Result<R, Self::Error>
+    async fn request<T, R>(&self, method: &str, params: T) -> Result<R, Self::Error>
     where
-        T: std::fmt::Debug + Serialize + Send + Sync,
+        T: Debug + Serialize + Send + Sync,
         R: DeserializeOwned,
     {
         match self {

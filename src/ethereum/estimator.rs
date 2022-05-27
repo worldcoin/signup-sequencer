@@ -7,6 +7,7 @@ use thiserror::Error;
 
 /// Estimator Provider Errors
 #[derive(Error, Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub enum EstimatorError<Inner: Middleware> {
     #[error("{0}")]
     /// Thrown when an internal middleware errors
@@ -21,7 +22,7 @@ impl<Inner: Middleware> FromErr<Inner::Error> for EstimatorError<Inner> {
 }
 
 #[derive(Debug)]
-/// Middleware used for setting gas_limit. Uses the gas_limit from
+/// Middleware used for setting gas limit. Uses the gas limit from
 /// the inner middleware, scales it by a factor and adds extra gas.
 pub struct Estimator<Inner> {
     inner: Inner,
@@ -30,7 +31,7 @@ pub struct Estimator<Inner> {
 }
 
 impl<Inner: Middleware> Estimator<Inner> {
-    pub fn new(inner: Inner, scale: f64, extra: f64) -> Self {
+    pub const fn new(inner: Inner, scale: f64, extra: f64) -> Self {
         Self {
             inner,
             scale,
@@ -38,13 +39,15 @@ impl<Inner: Middleware> Estimator<Inner> {
         }
     }
 
+    #[allow(clippy::cast_precision_loss)]
+    #[allow(clippy::cast_lossless)]
     pub fn rescale(&self, gas: U256) -> U256 {
         let gas = {
             let n = (256_u32 - 64).saturating_sub(gas.leading_zeros());
             let gas = (gas >> n).as_u64() as f64;
             gas * (n as f64).exp2()
         };
-        let gas = gas * self.scale + self.extra;
+        let gas = gas.mul_add(self.scale, self.extra);
         u256_from_f64_saturating(gas)
     }
 }

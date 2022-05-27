@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use ethers::providers::JsonRpcClient;
 use once_cell::sync::Lazy;
 use serde::{de::DeserializeOwned, Serialize};
+use std::fmt::Debug;
 use tracing::instrument;
 
 static REQUESTS: Lazy<IntCounterVec> = Lazy::new(|| {
@@ -27,7 +28,7 @@ pub struct RpcLogger<Inner> {
 }
 
 impl<Inner> RpcLogger<Inner> {
-    pub fn new(inner: Inner) -> Self {
+    pub const fn new(inner: Inner) -> Self {
         Self { inner }
     }
 }
@@ -41,13 +42,9 @@ where
     type Error = Inner::Error;
 
     #[instrument(level = "debug", skip(self))]
-    async fn request<T: Serialize + Send + Sync, R: DeserializeOwned>(
-        &self,
-        method: &str,
-        params: T,
-    ) -> Result<R, Self::Error>
+    async fn request<T, R>(&self, method: &str, params: T) -> Result<R, Self::Error>
     where
-        T: std::fmt::Debug + Serialize + Send + Sync,
+        T: Debug + Serialize + Send + Sync,
         R: DeserializeOwned,
     {
         REQUESTS.with_label_values(&[method]).inc();

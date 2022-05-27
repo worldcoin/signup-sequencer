@@ -220,7 +220,7 @@ impl Ethereum {
                 ReqwestClient::builder()
                     .timeout(Duration::from_secs(30))
                     .build()
-                    .map_err(|err| err.into())
+                    .map_err(Into::into)
             };
 
             // Add more oracles to the median based on the chain we are on.

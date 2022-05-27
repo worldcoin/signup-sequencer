@@ -4,6 +4,7 @@ use crate::{
     server::Error as ServerError,
 };
 use core::cmp::max;
+use ethers::providers::Middleware;
 use eyre::Result as EyreResult;
 use semaphore::{
     merkle_tree::Hasher,
@@ -148,12 +149,12 @@ impl App {
         }
 
         let is_manager = contracts.is_manager().await?;
-        let nonce_offset = todo!(); // contracts.get_nonce().await? - next_leaf;
-                                    // info!(
-                                    //     "current nonce: {}, nonce offset: {}",
-                                    //     contracts.get_nonce().await?,
-                                    //     nonce_offset
-                                    // );
+        let nonce_offset = contracts.get_nonce().await? - next_leaf;
+        info!(
+            "current nonce: {}, nonce offset: {}",
+            contracts.get_nonce().await?,
+            nonce_offset
+        );
 
         Ok(Self {
             ethereum,
@@ -237,8 +238,11 @@ impl App {
     #[instrument(level = "debug", skip_all)]
     async fn store(&self) -> EyreResult<()> {
         let file = File::create(&self.storage_file)?;
-        let last_block = todo!();
-        // TODO let last_block = self.contracts.last_block().await?;
+
+        // TODO: What we really want here is the last block we processed events from.
+        // Also, we need to keep some re-org depth into account (which should be covered
+        // by the events already).
+        let last_block = self.ethereum.provider().get_block_number().await?.as_u64();
         let next_leaf = self.next_leaf.load(Ordering::Acquire);
         let commitments = {
             let lock = self.merkle_tree.read().await;

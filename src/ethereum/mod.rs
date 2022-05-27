@@ -245,7 +245,15 @@ impl Ethereum {
         self.address
     }
 
+    #[instrument(level = "debug", skip_all)]
     pub async fn send_transaction(&self, tx: TypedTransaction) -> Result<(), TxError> {
+        self.send_transaction_unlogged(tx).await.map_err(|e| {
+            error!(?e, "Transaction failed");
+            e
+        })
+    }
+
+    async fn send_transaction_unlogged(&self, tx: TypedTransaction) -> Result<(), TxError> {
         // Convert to legacy transaction if required
         let tx = if self.legacy {
             TypedTransaction::Legacy(match tx {

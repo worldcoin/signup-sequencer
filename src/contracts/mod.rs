@@ -3,19 +3,17 @@ mod abi;
 use self::abi::{MemberAddedFilter, Semaphore};
 use crate::ethereum::{Ethereum, ProviderStack};
 use ethers::{
-    abi::RawLog,
-    contract::EthEvent,
     providers::Middleware,
-    types::{Address, H256, U256, U64},
+    types::{Address, U256},
 };
 use eyre::{eyre, Result as EyreResult};
 use semaphore::Field;
 use structopt::StructOpt;
-use tracing::{error, info, instrument, warn};
+use tracing::{error, info, instrument};
 
 pub type MemberAddedEvent = MemberAddedFilter;
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
 pub struct Options {
     /// Semaphore contract address.
     #[structopt(long, env, default_value = "174ee9b5fBb5Eb68B6C61032946486dD9c2Dc4b6")]

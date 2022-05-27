@@ -8,7 +8,6 @@ use self::{
     estimator::Estimator, gas_oracle_logger::GasOracleLogger, rpc_logger::RpcLogger,
     transport::Transport,
 };
-use crate::contracts::MemberAddedEvent;
 use chrono::{Duration as ChronoDuration, Utc};
 use ethers::{
     abi::{Error as AbiError, RawLog},
@@ -17,7 +16,7 @@ use ethers::{
     middleware::{
         gas_oracle::{
             Cache, EthGasStation, Etherchain, GasNow, GasOracle, GasOracleMiddleware, Median,
-            MiddlewareError, Polygon, ProviderOracle,
+            Polygon, ProviderOracle,
         },
         NonceManagerMiddleware, SignerMiddleware,
     },
@@ -26,7 +25,7 @@ use ethers::{
     signers::{LocalWallet, Signer, Wallet},
     types::{
         transaction::eip2718::TypedTransaction, Address, BlockId, BlockNumber, Chain, Filter, Log,
-        TransactionReceipt, H160, H256, U256, U64,
+        TransactionReceipt, H160, H256, U64,
     },
 };
 use eyre::{eyre, Result as EyreResult};

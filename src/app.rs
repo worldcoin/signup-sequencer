@@ -7,7 +7,7 @@ use core::cmp::max;
 use ethers::{providers::Middleware, types::U256};
 use eyre::Result as EyreResult;
 use semaphore::{
-    merkle_tree::{self, Hasher},
+    merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
     Field,
 };
@@ -136,15 +136,14 @@ impl App {
                         "Leaf was already correctly set, skipping."
                     );
                     continue;
-                } else {
-                    error!(
-                        ?leaf,
-                        ?existing,
-                        ?hash,
-                        "Event hash contradicts existing leaf."
-                    );
-                    panic!("Event hash contradicts existing leaf.");
                 }
+                error!(
+                    ?leaf,
+                    ?existing,
+                    ?hash,
+                    "Event hash contradicts existing leaf."
+                );
+                panic!("Event hash contradicts existing leaf.");
             }
 
             // Check insertion counter
@@ -170,8 +169,6 @@ impl App {
         }
 
         // TODO: Final root check
-
-        let is_manager = contracts.is_manager().await?;
 
         Ok(Self {
             ethereum,

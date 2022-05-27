@@ -6,12 +6,12 @@ use ethers::{
     abi::RawLog,
     contract::EthEvent,
     providers::Middleware,
-    types::{Address, U256, U64},
+    types::{Address, H256, U256, U64},
 };
 use eyre::{eyre, Result as EyreResult};
 use semaphore::Field;
 use structopt::StructOpt;
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 
 pub type MemberAddedEvent = MemberAddedFilter;
 
@@ -25,6 +25,20 @@ pub struct Options {
     #[structopt(long, env, default_value = "1")]
     pub group_id: U256,
 
+    /// When set, it will create the group if it does not exist with the given
+    /// depth.
+    #[structopt(long, env)]
+    pub create_group_depth: Option<usize>,
+
+    /// Initial value of the Merkle tree leaves. Defaults to the initial value
+    /// in Semaphore.sol.
+    #[structopt(
+        long,
+        env,
+        default_value = "0000000000000000000000000000000000000000000000000000000000000000"
+    )]
+    pub initial_leaf: Field,
+
     /// Mock mode: do not actually submit transactions.
     #[structopt(
         short,
@@ -36,11 +50,12 @@ pub struct Options {
 }
 
 pub struct Contracts {
-    ethereum:   Ethereum,
-    semaphore:  Semaphore<ProviderStack>,
-    group_id:   U256,
-    tree_depth: usize,
-    mock:       bool,
+    ethereum:     Ethereum,
+    semaphore:    Semaphore<ProviderStack>,
+    group_id:     U256,
+    tree_depth:   usize,
+    initial_leaf: Field,
+    mock:         bool,
 }
 
 impl Contracts {
@@ -72,52 +87,57 @@ impl Contracts {
         if manager != ethereum.address() {
             error!(?manager, signer = ?ethereum.address(), "Signer is not the manager of the Semaphore contract");
             return Err(eyre!("Signer is not manager"));
+            // TODO: If not manager, proceed in read-only mode.
         }
         info!(?address, ?manager, "Connected to Semaphore contract");
 
         // Make sure the group exists.
         let tree_depth = semaphore.get_depth(options.group_id).call().await?;
         if tree_depth == 0 {
-            error!(group_id = ?options.group_id, "Group does not exist");
-            return Err(eyre!("Group does not exist"));
+            if let Some(new_depth) = options.create_group_depth {
+                info!(
+                    "Group {} not found, creating it with depth {}",
+                    options.group_id, new_depth
+                );
+                let tx = semaphore
+                    .create_group(
+                        options.group_id,
+                        new_depth.try_into()?,
+                        options.initial_leaf.to_be_bytes().into(),
+                    )
+                    .tx;
+                ethereum.send_transaction(tx).await?;
+            } else {
+                error!(group_id = ?options.group_id, "Group does not exist");
+                return Err(eyre!("Group does not exist"));
+            }
+        } else {
+            info!(group_id = ?options.group_id, ?tree_depth, "Semaphore group found.");
         }
-        info!(?tree_depth, "Semaphore group found.");
-
-        // TODO: Create group if not exists and flag is set.
 
         Ok(Self {
             ethereum,
             semaphore,
             group_id: options.group_id,
             tree_depth: usize::from(tree_depth),
+            initial_leaf: options.initial_leaf,
             mock: options.mock,
         })
     }
 
-    pub fn group_id(&self) -> U256 {
+    #[must_use]
+    pub const fn group_id(&self) -> U256 {
         self.group_id
     }
 
-    pub fn tree_depth(&self) -> usize {
+    #[must_use]
+    pub const fn tree_depth(&self) -> usize {
         self.tree_depth
     }
 
-    // TODO: Remove this function
-    #[instrument(level = "debug", skip_all)]
-    pub async fn last_block(&self) -> EyreResult<u64> {
-        let block_number = self.ethereum.provider().get_block_number().await?;
-        Ok(block_number.as_u64())
-    }
-
-    // TODO: Remove this function
-    #[instrument(level = "debug", skip_all)]
-    pub async fn get_nonce(&self) -> EyreResult<usize> {
-        let nonce = self
-            .ethereum
-            .provider()
-            .get_transaction_count(self.ethereum.address(), None)
-            .await?;
-        Ok(nonce.as_usize())
+    #[must_use]
+    pub const fn initial_leaf(&self) -> Field {
+        self.initial_leaf
     }
 
     #[instrument(level = "debug", skip_all)]
@@ -128,8 +148,6 @@ impl Contracts {
     ) -> EyreResult<Vec<(usize, Field, Field)>> {
         info!(starting_block, "Reading MemberAdded events from chains");
         // TODO: Register to the event stream and track it going forward.
-
-        // TODO: Filter by group id.
 
         // Fetch MemberAdded log events
         let filter = self
@@ -170,20 +188,6 @@ impl Contracts {
         let manager = self.semaphore.manager().call().await?;
         info!(?manager, "Fetched manager address");
         Ok(manager == self.ethereum.address())
-    }
-
-    #[instrument(level = "debug", skip_all)]
-    pub async fn create_group(&self, group_id: usize, tree_depth: usize) -> EyreResult<()> {
-        // Must subtract one as internal rust merkle tree is eth merkle tree depth + 1
-        let depth = tree_depth - 1;
-        self.ethereum
-            .send_transaction(
-                self.semaphore
-                    .create_group(group_id.into(), depth.try_into()?, 0.into())
-                    .tx,
-            )
-            .await?;
-        Ok(())
     }
 
     #[instrument(level = "debug", skip_all)]

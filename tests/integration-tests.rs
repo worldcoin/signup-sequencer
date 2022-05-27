@@ -32,7 +32,7 @@ use structopt::StructOpt;
 use tempfile::NamedTempFile;
 use tokio::{spawn, task::JoinHandle};
 use tracing::{info, instrument};
-use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
 use url::{Host, Url};
 
 const TEST_LEAFS: &[&str] = &[
@@ -46,6 +46,10 @@ async fn insert_identity_and_proofs() {
     // Initialize logging for the test.
     tracing_subscriber::fmt()
         .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        .with_line_number(true)
+        .with_env_filter("info,signup_sequencer=debug")
+        .with_timer(Uptime::default())
+        .pretty()
         .init();
     info!("Starting integration test");
 

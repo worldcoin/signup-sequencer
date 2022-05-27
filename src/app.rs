@@ -19,7 +19,7 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 use structopt::StructOpt;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -189,22 +189,27 @@ impl App {
         group_id: usize,
         commitment: &Hash,
     ) -> Result<IndexResponse, ServerError> {
-        // TODO: Error, not panic
-        assert_eq!(U256::from(group_id), self.contracts.group_id());
+        if U256::from(group_id) != self.contracts.group_id() {
+            return Err(ServerError::InvalidGroupId);
+        }
+
+        // Get a lock on the tree for the duration of this operation.
+        let mut tree = self.merkle_tree.write().await;
 
         // Fetch next leaf index
         let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
 
-        // Send Semaphore transaction, nonce calculated to ensure ordering
+        // Send Semaphore transaction
         self.contracts.insert_identity(commitment).await?;
 
         // Update and write merkle tree
-        {
-            let mut merkle_tree = self.merkle_tree.write().await;
-            merkle_tree.set(identity_index, *commitment);
-        }
+        tree.set(identity_index, *commitment);
 
-        self.store().await?;
+        // Downgrade write lock to read lock
+        let tree = tree.downgrade();
+
+        // Immediately write the tree to storage, before anyone else can write.
+        self.store(tree).await?;
 
         Ok(IndexResponse { identity_index })
     }
@@ -215,9 +220,13 @@ impl App {
     #[instrument(level = "debug", skip_all)]
     pub async fn inclusion_proof(
         &self,
-        _group_id: usize,
+        group_id: usize,
         identity_commitment: &Hash,
     ) -> Result<InclusionProofResponse, ServerError> {
+        if U256::from(group_id) != self.contracts.group_id() {
+            return Err(ServerError::InvalidGroupId);
+        }
+
         let merkle_tree = self.merkle_tree.read().await;
         let identity_index = match merkle_tree
             .leaves()
@@ -238,7 +247,7 @@ impl App {
     }
 
     #[instrument(level = "debug", skip_all)]
-    async fn store(&self) -> EyreResult<()> {
+    async fn store(&self, tree: RwLockReadGuard<'_, PoseidonTree>) -> EyreResult<()> {
         let file = File::create(&self.storage_file)?;
 
         // TODO: What we really want here is the last block we processed events from.
@@ -246,10 +255,7 @@ impl App {
         // by the events already).
         let last_block = self.ethereum.provider().get_block_number().await?.as_u64();
         let next_leaf = self.next_leaf.load(Ordering::Acquire);
-        let commitments = {
-            let lock = self.merkle_tree.read().await;
-            lock.leaves()[..next_leaf].to_vec()
-        };
+        let commitments = tree.leaves()[..next_leaf].to_vec();
         let data = JsonCommitment {
             last_block,
             commitments,

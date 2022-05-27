@@ -242,7 +242,7 @@ impl App {
         // TODO: What we really want here is the last block we processed events from.
         // Also, we need to keep some re-org depth into account (which should be covered
         // by the events already).
-        let last_block = self.ethereum.provider().get_block_number().await?.as_u64();
+        let last_block = self.contracts.last_block().await?;
         let next_leaf = self.next_leaf.load(Ordering::Acquire);
         let commitments = {
             let lock = self.merkle_tree.read().await;

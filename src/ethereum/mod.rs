@@ -74,6 +74,21 @@ type Provider3 = Estimator<Provider2>;
 type Provider4 = GasOracleMiddleware<Arc<Provider3>, Box<dyn GasOracle>>;
 pub type ProviderStack = Provider4;
 
+#[derive(Debug, Error)]
+pub enum TxError {
+    #[error("Error sending transaction: {0}")]
+    Send(Box<dyn Error + Send + Sync + 'static>),
+
+    #[error("Error waiting for confirmations: {0}")]
+    Confirmation(ProviderError),
+
+    #[error("Transaction dropped from mempool.")]
+    Dropped(H256),
+
+    #[error("Transaction failed.")]
+    Failed(Box<TransactionReceipt>),
+}
+
 #[derive(Clone, Debug)]
 pub struct Ethereum {
     provider: Arc<ProviderStack>,
@@ -241,7 +256,8 @@ impl Ethereum {
         &self.provider
     }
 
-    pub fn address(&self) -> Address {
+    #[must_use]
+    pub const fn address(&self) -> Address {
         self.address
     }
 
@@ -285,19 +301,4 @@ impl Ethereum {
         }
         Ok(())
     }
-}
-
-#[derive(Debug, Error)]
-pub enum TxError {
-    #[error("Error sending transaction: {0}")]
-    Send(Box<dyn Error + Send + Sync + 'static>),
-
-    #[error("Error waiting for confirmations: {0}")]
-    Confirmation(ProviderError),
-
-    #[error("Transaction dropped from mempool.")]
-    Dropped(H256),
-
-    #[error("Transaction failed.")]
-    Failed(Box<TransactionReceipt>),
 }

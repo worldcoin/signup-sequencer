@@ -67,12 +67,14 @@ impl Contracts {
         })
     }
 
+    // TODO: Remove this function
     #[instrument(level = "debug", skip_all)]
     pub async fn last_block(&self) -> EyreResult<u64> {
         let block_number = self.ethereum.provider().get_block_number().await?;
         Ok(block_number.as_u64())
     }
 
+    // TODO: Remove this function
     #[instrument(level = "debug", skip_all)]
     pub async fn get_nonce(&self) -> EyreResult<usize> {
         let nonce = self

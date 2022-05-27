@@ -127,6 +127,7 @@ async fn insert_identity_and_proofs() {
     app.await.unwrap();
     reset_shutdown();
 
+    // Test loading state from file, onchain tree has leafs
     info!("Starting app");
     let (app, local_addr) = spawn_app(options.clone())
         .await
@@ -153,14 +154,55 @@ async fn insert_identity_and_proofs() {
     )
     .await;
 
+    // Shutdown app and reset mock shutdown
+    shutdown();
+    app.await.unwrap();
+    reset_shutdown();
+
+    // Test loading state from tree, onchain tree has leafs
+
+    // Create new empty temp file
     temp_commitments_file
         .close()
         .expect("Failed to close temp file");
+    let temp_commitments_file = NamedTempFile::new().expect("Failed to create named temp file");
+    options.app.storage_file = temp_commitments_file.path().to_path_buf();
+
+    info!("Starting app");
+    let (app, local_addr) = spawn_app(options.clone())
+        .await
+        .expect("Failed to spawn app.");
+    let uri = "http://".to_owned() + &local_addr.to_string();
+    info!(?uri, "App started");
+
+    test_inclusion_proof(
+        &uri,
+        &client,
+        0,
+        &mut ref_tree,
+        &Hash::from_str(TEST_LEAFS[0]).expect("Failed to parse Hash from test leaf 0"),
+        false,
+    )
+    .await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        1,
+        &mut ref_tree,
+        &Hash::from_str(TEST_LEAFS[1]).expect("Failed to parse Hash from test leaf 1"),
+        false,
+    )
+    .await;
 
     // Shutdown app and reset mock shutdown
     shutdown();
     app.await.unwrap();
     reset_shutdown();
+
+    // Delete temp file
+    temp_commitments_file
+        .close()
+        .expect("Failed to close temp file");
 }
 
 #[instrument(skip_all)]

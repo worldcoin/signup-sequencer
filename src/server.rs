@@ -1,5 +1,6 @@
 use crate::app::{App, Hash};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
+use cli_batteries::await_shutdown;
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
 use hyper::{
@@ -17,11 +18,10 @@ use std::{
 };
 use structopt::StructOpt;
 use thiserror::Error;
-use tokio::sync::broadcast;
 use tracing::{error, info, instrument, trace};
 use url::{Host, Url};
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
 pub struct Options {
     /// API Server url
     #[structopt(long, env = "SERVER", default_value = "http://127.0.0.1:8080/")]
@@ -181,11 +181,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
 /// a path beyond `/`, or cannot be cast into an IP address. Also returns an
 /// `Err` if the server cannot bind to the given address.
-pub async fn main(
-    app: Arc<App>,
-    options: Options,
-    shutdown: broadcast::Sender<()>,
-) -> EyreResult<()> {
+pub async fn main(app: Arc<App>, options: Options) -> EyreResult<()> {
     ensure!(
         options.server.scheme() == "http",
         "Only http:// is supported in {}",
@@ -207,7 +203,7 @@ pub async fn main(
 
     let listener = TcpListener::bind(&addr)?;
 
-    bind_from_listener(app, listener, shutdown).await?;
+    bind_from_listener(app, listener).await?;
 
     Ok(())
 }
@@ -216,11 +212,7 @@ pub async fn main(
 ///
 /// Will return `Err` if the provided `listener` address cannot be accessed or
 /// if the server fails to bind to the given address.
-pub async fn bind_from_listener(
-    app: Arc<App>,
-    listener: TcpListener,
-    shutdown: broadcast::Sender<()>,
-) -> EyreResult<()> {
+pub async fn bind_from_listener(app: Arc<App>, listener: TcpListener) -> EyreResult<()> {
     let local_addr = listener.local_addr()?;
     let make_svc = make_service_fn(move |_| {
         // Clone here as `make_service_fn` is called for every connection
@@ -237,9 +229,7 @@ pub async fn bind_from_listener(
     let server = Server::from_tcp(listener)
         .wrap_err("Failed to bind address")?
         .serve(make_svc)
-        .with_graceful_shutdown(async move {
-            shutdown.subscribe().recv().await.ok();
-        });
+        .with_graceful_shutdown(await_shutdown());
 
     info!(url = %local_addr, "Server listening");
 

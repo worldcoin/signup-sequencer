@@ -16,7 +16,7 @@ use structopt::StructOpt;
 use tracing::{info, instrument};
 use url::Url;
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
 pub struct Options {
     /// Ethereum API Provider
     #[structopt(long, env, default_value = "http://localhost:8545")]

@@ -194,6 +194,7 @@ impl App {
         }
 
         // Get a lock on the tree for the duration of this operation.
+        // OPT: Sequence operations and allow concurrent inserts / transactions.
         let mut tree = self.merkle_tree.write().await;
 
         // Fetch next leaf index
@@ -207,6 +208,16 @@ impl App {
 
         // Downgrade write lock to read lock
         let tree = tree.downgrade();
+
+        // Check tree root
+        if let Err(error) = self.contracts.assert_valid_root(tree.root()).await {
+            error!(
+                computed_root = ?tree.root(),
+                ?error,
+                "Root mismatch between tree and contract."
+            );
+            panic!("Root mismatch between tree and contract.");
+        }
 
         // Immediately write the tree to storage, before anyone else can write.
         self.store(tree).await?;
@@ -237,13 +248,34 @@ impl App {
             None => return Err(ServerError::IdentityCommitmentNotFound),
         };
 
-        let proof = merkle_tree.proof(identity_index);
-        proof.map_or(Err(ServerError::IndexOutOfBounds), |proof| {
-            Ok(InclusionProofResponse {
-                root: merkle_tree.root(),
-                proof,
-            })
-        })
+        let proof = merkle_tree
+            .proof(identity_index)
+            .ok_or(ServerError::IndexOutOfBounds)?;
+        let root = merkle_tree.root();
+
+        // Locally check the proof
+        // TODO: Check the leaf index / path
+        if !merkle_tree.verify(*identity_commitment, &proof) {
+            error!(
+                ?identity_commitment,
+                ?identity_index,
+                ?root,
+                "Proof does not verify locally."
+            );
+            panic!("Proof does not verify locally.");
+        }
+
+        // Verify the root on chain
+        if let Err(error) = self.contracts.assert_valid_root(root).await {
+            error!(
+                computed_root = ?root,
+                ?error,
+                "Root mismatch between tree and contract."
+            );
+            panic!("Root mismatch between tree and contract.");
+        }
+
+        Ok(InclusionProofResponse { root, proof })
     }
 
     #[instrument(level = "debug", skip_all)]

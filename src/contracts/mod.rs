@@ -7,6 +7,7 @@ use ethers::{
     types::{Address, U256},
 };
 use eyre::{eyre, Result as EyreResult};
+use futures::TryStreamExt;
 use semaphore::Field;
 use structopt::StructOpt;
 use tracing::{error, info, instrument};
@@ -135,39 +136,43 @@ impl Contracts {
         starting_block: u64,
         last_leaf: usize,
     ) -> EyreResult<Vec<(usize, Field, Field)>> {
-        info!(starting_block, "Reading MemberAdded events from chains");
+        info!(
+            starting_block,
+            last_leaf, "Reading MemberAdded events from chains"
+        );
         // TODO: Register to the event stream and track it going forward.
 
-        // Fetch MemberAdded log events
+        // Start MemberAdded log event stream
         let filter = self
             .semaphore
             .member_added_filter()
             .from_block(starting_block);
-        let events = self
+        let mut events = self
             .ethereum
-            .fetch_events::<MemberAddedEvent>(&filter.filter)
-            .await?;
+            .fetch_events::<MemberAddedEvent>(&filter.filter);
 
-        info!(count = events.len(), "Read events");
         let mut index = last_leaf;
-        let insertions = events
-            .iter()
-            .filter(|event| event.group_id == self.group_id)
-            .map(|event| {
-                let mut id_bytes = [0u8; 32];
-                event.identity_commitment.to_big_endian(&mut id_bytes);
+        let mut insertions = Vec::new();
 
-                let mut root_bytes = [0u8; 32];
-                event.root.to_big_endian(&mut root_bytes);
+        while let Some(event) = events.try_next().await? {
+            if event.group_id != self.group_id {
+                continue;
+            }
 
-                // TODO: Check for < Modulus.
-                let root = Field::from_be_bytes_mod_order(&root_bytes);
-                let leaf = Field::from_be_bytes_mod_order(&id_bytes);
-                let res = (index, leaf, root);
-                index += 1;
-                res
-            })
-            .collect::<Vec<_>>();
+            let mut id_bytes = [0u8; 32];
+            event.identity_commitment.to_big_endian(&mut id_bytes);
+
+            let mut root_bytes = [0u8; 32];
+            event.root.to_big_endian(&mut root_bytes);
+
+            // TODO: Check for < Modulus.
+            let root = Field::from_be_bytes_mod_order(&root_bytes);
+            let leaf = Field::from_be_bytes_mod_order(&id_bytes);
+            let res = (index, leaf, root);
+            index += 1;
+
+            insertions.push(res);
+        }
         Ok(insertions)
     }
 

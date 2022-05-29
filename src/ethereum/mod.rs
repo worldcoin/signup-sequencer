@@ -29,7 +29,7 @@ use ethers::{
     },
 };
 use eyre::{eyre, Result as EyreResult};
-use futures::{try_join, FutureExt, StreamExt};
+use futures::{try_join, FutureExt, Stream, StreamExt, TryStream};
 use reqwest::Client as ReqwestClient;
 use std::{error::Error, sync::Arc, time::Duration};
 use structopt::StructOpt;
@@ -317,24 +317,21 @@ impl Ethereum {
         Ok(())
     }
 
-    pub async fn fetch_events_raw(&self, filter: &Filter) -> Vec<Log> {
+    pub fn fetch_events_raw(&self, filter: &Filter) -> impl Stream<Item = Log> + '_ {
         // TODO: Add Error handling to `get_logs_paginated`, make it a `TryStream`.
         self.provider
             .get_logs_paginated(filter, self.max_log_blocks as u64)
-            .collect()
-            .await
     }
 
-    pub async fn fetch_events<T: EthEvent>(&self, filter: &Filter) -> Result<Vec<T>, EventError> {
-        Ok(self
-            .fetch_events_raw(filter)
-            .await
-            .into_iter()
+    pub fn fetch_events<T: EthEvent>(
+        &self,
+        filter: &Filter,
+    ) -> impl TryStream<Ok = T, Error = EventError> + '_ {
+        self.fetch_events_raw(filter)
             .map(|log| RawLog {
                 topics: log.topics,
                 data:   log.data.to_vec(),
             })
-            .map(|raw_log| T::decode_log(&raw_log))
-            .collect::<Result<Vec<_>, _>>()?)
+            .map(|raw_log| T::decode_log(&raw_log).map_err(Into::into))
     }
 }

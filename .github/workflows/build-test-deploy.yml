@@ -316,10 +316,9 @@ jobs:
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
-          --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
-          --set env.BLOCK_QUERY_RANGE=1000000
+          --set env.MAX_LOG_BLOCKS=1000000
           --set env.STARTING_BLOCK=0
 
   deploy-stage-manual:
@@ -354,10 +353,9 @@ jobs:
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
-          --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
-          --set env.BLOCK_QUERY_RANGE=1000000
+          --set env.MAX_LOG_BLOCKS=1000000
           --set env.STARTING_BLOCK=0
 
   deploy-prod:
@@ -391,8 +389,7 @@ jobs:
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_POLYGON_MAINNET_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}"
-          --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
           --set env.USE_EIP1559=false
-          --set env.BLOCK_QUERY_RANGE=50000
+          --set env.MAX_LOG_BLOCKS=50000
           --set env.STARTING_BLOCK=27829300

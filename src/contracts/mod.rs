@@ -150,7 +150,7 @@ impl Contracts {
             .from_block(starting_block);
         self.ethereum
             .fetch_events::<MemberAddedEvent>(&filter.filter)
-            .try_filter(|event| future::ready(event.group_id != self.group_id))
+            .try_filter(|event| future::ready(event.group_id == self.group_id))
             .enumerate()
             .map(|(index, res)| res.map(|event| (index, event)))
             .map_ok(|(index, event)| {

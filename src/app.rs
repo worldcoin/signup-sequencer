@@ -420,6 +420,23 @@ impl App {
                 "Merkle tree has duplicate or skipped leaves."
             );
         }
+        if next_leaf > available * 3 {
+            if next_leaf > available * 19 {
+                error!(
+                    used = %next_leaf,
+                    available = %available,
+                    total = %total,
+                    "Merkle tree is over 95% full."
+                );
+            } else {
+                warn!(
+                    used = %next_leaf,
+                    available = %available,
+                    total = %total,
+                    "Merkle tree is over 75% full."
+                );
+            }
+        }
         Ok(())
     }
 }

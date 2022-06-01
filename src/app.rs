@@ -8,7 +8,7 @@ use ethers::{providers::Middleware, types::U256};
 use eyre::Result as EyreResult;
 use futures::{StreamExt, TryStreamExt};
 use semaphore::{
-    merkle_tree::Hasher,
+    merkle_tree::{self, Hasher},
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
     Field,
 };
@@ -104,6 +104,7 @@ impl App {
                 let next_leaf = file.commitments.len();
                 num_leaves = file.commitments.len();
                 merkle_tree.set_range(0, file.commitments);
+                info!(path = ?&options.storage_file, %num_leaves, "Read tree from storage");
                 (next_leaf, file.last_block)
             } else {
                 warn!(path = ?&options.storage_file, "Storage file empty, skipping.");
@@ -117,6 +118,7 @@ impl App {
         // Read events from blockchain
         // TODO: Allow for shutdowns. Write trait to make it easy to add shutdowns (and
         // timeouts?) to futures.
+        info!(%last_block, %num_leaves, "Updating tree from events");
         let mut events = contracts.fetch_events(last_block, num_leaves).boxed();
         while let Some((leaf, hash, root)) = events.try_next().await? {
             debug!(?leaf, ?hash, ?root, "Received event");
@@ -176,8 +178,18 @@ impl App {
             }
         }
         drop(events);
+        info!(?next_leaf, "Updated tree from events.");
 
-        // TODO: Final root check
+        // At this point the merkle root should match the on-chain one (modulo
+        // some pending TXs that may have just got in, or a small re-org)
+        // TODO: A re-org undoing events would cause this to fail.
+        if next_leaf > 0 {
+            contracts.assert_valid_root(merkle_tree.root()).await?;
+            info!(root = ?merkle_tree.root(), "Root matches on-chain root.");
+        } else {
+            // TODO: This should still be checkable.
+            info!(root = ?merkle_tree.root(), "Empty tree, not checking root.");
+        }
 
         Ok(Self {
             ethereum,

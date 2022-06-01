@@ -8,7 +8,7 @@ use ethers::{
     types::{Address, U256},
 };
 use eyre::{eyre, Result as EyreResult};
-use futures::{Stream, StreamExt, TryStream, TryStreamExt};
+use futures::{Stream, StreamExt, TryStreamExt};
 use semaphore::Field;
 use structopt::StructOpt;
 use tracing::{error, info, instrument};

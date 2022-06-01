@@ -70,7 +70,10 @@ jobs:
         uses: Swatinem/rust-cache@v1
         with:
           key: cache-v1
-      - run:  npm install ganache-cli@latest --global
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
       # Cargo doc test is not included in `--all-targets`
       # See <https://github.com/rust-lang/cargo/issues/6669>
       # Cargo doc test also doesn't support `--no-run`, so we run it but
@@ -108,7 +111,10 @@ jobs:
           key: cache-v1
       - name: Install cargo-binutils
         run: cargo install cargo-binutils
-      - run:  npm install ganache-cli@latest --global
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
       - name: Build tests with coverage
         run: |
           cargo test --locked --all-features --all-targets --no-fail-fast --no-run
@@ -310,10 +316,9 @@ jobs:
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
-          --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
-          --set env.BLOCK_QUERY_RANGE=1000000
+          --set env.MAX_LOG_BLOCKS=1000000
           --set env.STARTING_BLOCK=0
 
   deploy-stage-manual:
@@ -348,10 +353,9 @@ jobs:
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
-          --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
-          --set env.BLOCK_QUERY_RANGE=1000000
+          --set env.MAX_LOG_BLOCKS=1000000
           --set env.STARTING_BLOCK=0
 
   deploy-prod:
@@ -385,8 +389,7 @@ jobs:
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_POLYGON_MAINNET_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}"
-          --set env.SIGNUP_SEQUENCER_MOCK=false
           --set env.WIPE_STORAGE=true
           --set env.USE_EIP1559=false
-          --set env.BLOCK_QUERY_RANGE=50000
+          --set env.MAX_LOG_BLOCKS=50000
           --set env.STARTING_BLOCK=27829300

@@ -65,6 +65,8 @@ pub enum Error {
     InvalidPath,
     #[error("invalid content type")]
     InvalidContentType,
+    #[error("invalid group id")]
+    InvalidGroupId,
     #[error("provided identity index out of bounds")]
     IndexOutOfBounds,
     #[error("provided identity commitment not found")]

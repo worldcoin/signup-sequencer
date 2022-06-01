@@ -2,6 +2,7 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
 pub mod app;
+mod contracts;
 mod ethereum;
 pub mod server;
 mod utils;
@@ -13,7 +14,7 @@ use std::sync::Arc;
 use structopt::StructOpt;
 use tracing::info;
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
 pub struct Options {
     #[structopt(flatten)]
     pub app: app::Options,

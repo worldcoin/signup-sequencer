@@ -76,7 +76,7 @@ impl Contracts {
         let manager = semaphore.manager().call().await?;
         if manager != ethereum.address() {
             error!(?manager, signer = ?ethereum.address(), "Signer is not the manager of the Semaphore contract");
-            return Err(eyre!("Signer is not manager"));
+            // return Err(eyre!("Signer is not manager"));
             // TODO: If not manager, proceed in read-only mode.
         }
         info!(?address, ?manager, "Connected to Semaphore contract");

@@ -21,7 +21,7 @@ use ethers::{
         NonceManagerMiddleware, SignerMiddleware,
     },
     prelude::ProviderError,
-    providers::{Middleware, Provider},
+    providers::{LogQueryError, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
     types::{
         transaction::eip2718::TypedTransaction, Address, BlockId, BlockNumber, Chain, Filter, Log,
@@ -29,7 +29,7 @@ use ethers::{
     },
 };
 use eyre::{eyre, Result as EyreResult};
-use futures::{try_join, FutureExt, Stream, StreamExt, TryStream};
+use futures::{try_join, FutureExt, Stream, StreamExt, TryStreamExt};
 use reqwest::Client as ReqwestClient;
 use std::{error::Error, sync::Arc, time::Duration};
 use structopt::StructOpt;
@@ -98,6 +98,9 @@ pub enum TxError {
 
 #[derive(Debug, Error)]
 pub enum EventError {
+    #[error("Error fetching log event: {0}")]
+    Fetching(#[from] LogQueryError<ProviderError>),
+
     #[error("Error parsing log event: {0}")]
     Parsing(#[from] AbiError),
 }
@@ -317,21 +320,27 @@ impl Ethereum {
         Ok(())
     }
 
-    pub fn fetch_events_raw(&self, filter: &Filter) -> impl Stream<Item = Log> + '_ {
-        // TODO: Add Error handling to `get_logs_paginated`, make it a `TryStream`.
+    pub fn fetch_events_raw(
+        &self,
+        filter: &Filter,
+    ) -> impl Stream<Item = Result<Log, EventError>> + '_ {
         self.provider
             .get_logs_paginated(filter, self.max_log_blocks as u64)
+            .map_err(Into::into)
     }
 
     pub fn fetch_events<T: EthEvent>(
         &self,
         filter: &Filter,
-    ) -> impl TryStream<Ok = T, Error = EventError> + '_ {
-        self.fetch_events_raw(filter)
-            .map(|log| RawLog {
-                topics: log.topics,
-                data:   log.data.to_vec(),
+    ) -> impl Stream<Item = Result<T, EventError>> + '_ {
+        self.fetch_events_raw(filter).map(|res| {
+            res.and_then(|log| {
+                T::decode_log(&RawLog {
+                    topics: log.topics,
+                    data:   log.data.to_vec(),
+                })
+                .map_err(Into::into)
             })
-            .map(|raw_log| T::decode_log(&raw_log).map_err(Into::into))
+        })
     }
 }

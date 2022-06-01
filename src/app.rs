@@ -148,8 +148,6 @@ impl App {
         }
 
         // Read events from blockchain
-        // TODO: Allow for shutdowns. Write trait to make it easy to add shutdowns (and
-        // timeouts?) to futures.
         info!(%last_block, %num_leaves, "Updating tree from events");
         let mut events = contracts.fetch_events(last_block, num_leaves).boxed();
         let shutdown = await_shutdown();
@@ -160,7 +158,7 @@ impl App {
                     Some(a) => a,
                     None => break,
                 },
-                _ = &mut shutdown => return Err(eyre!("Interupted")),
+                _ = &mut shutdown => return Err(eyre!("Interrupted")),
             };
             debug!(?index, ?leaf, ?root, "Received event");
 
@@ -173,6 +171,7 @@ impl App {
             // Check if leaf value is valid
             if leaf == contracts.initial_leaf() {
                 error!(?index, ?leaf, "Inserting empty leaf");
+                continue;
             }
 
             // Check leaf value with existing value

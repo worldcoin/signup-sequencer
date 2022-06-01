@@ -236,6 +236,39 @@ impl App {
             info!(root = ?merkle_tree.root(), "Empty tree, not checking root.");
         }
 
+        // Check tree health
+        let next_leaf = merkle_tree
+            .leaves()
+            .iter()
+            .rposition(|&l| l != contracts.initial_leaf())
+            .map_or(0, |i| i + 1);
+        let used_leaves = &merkle_tree.leaves()[..next_leaf];
+        let skipped = used_leaves
+            .iter()
+            .filter(|&&l| l == contracts.initial_leaf())
+            .count();
+        let mut dedup = used_leaves
+            .iter()
+            .filter(|&&l| l != contracts.initial_leaf())
+            .collect::<Vec<_>>();
+        dedup.sort();
+        dedup.dedup();
+        let unique = dedup.len();
+        let duplicates = used_leaves.len() - skipped - unique;
+        if skipped == 0 && duplicates == 0 {
+            info!(
+                ?next_leaf,
+                "Merkle tree is healthy, no duplicates or skipped leaves."
+            );
+        } else {
+            error!(
+                ?duplicates,
+                ?skipped,
+                ?next_leaf,
+                "Merkle tree has duplicate or skipped leaves."
+            );
+        }
+
         Ok(Self {
             ethereum,
             contracts,

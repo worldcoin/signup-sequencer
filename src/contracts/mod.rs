@@ -1,13 +1,13 @@
 mod abi;
 
 use self::abi::{MemberAddedFilter, Semaphore};
-use crate::ethereum::{Ethereum, ProviderStack};
+use crate::ethereum::{Ethereum, EventError, ProviderStack};
 use ethers::{
     providers::Middleware,
     types::{Address, U256},
 };
 use eyre::{eyre, Result as EyreResult};
-use futures::TryStreamExt;
+use futures::{Stream, TryStreamExt};
 use semaphore::Field;
 use structopt::StructOpt;
 use tracing::{error, info, instrument};
@@ -131,11 +131,11 @@ impl Contracts {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn fetch_events(
+    pub fn fetch_events(
         &self,
         starting_block: u64,
         last_leaf: usize,
-    ) -> EyreResult<Vec<(usize, Field, Field)>> {
+    ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
         info!(
             starting_block,
             last_leaf, "Reading MemberAdded events from chains"
@@ -147,33 +147,27 @@ impl Contracts {
             .semaphore
             .member_added_filter()
             .from_block(starting_block);
-        let mut events = self
-            .ethereum
-            .fetch_events::<MemberAddedEvent>(&filter.filter);
-
         let mut index = last_leaf;
-        let mut insertions = Vec::new();
+        self.ethereum
+            .fetch_events::<MemberAddedEvent>(&filter.filter)
+            .try_filter_map(move |event| async move {
+                if event.group_id != self.group_id {
+                    return Ok(None);
+                }
 
-        while let Some(event) = events.try_next().await? {
-            if event.group_id != self.group_id {
-                continue;
-            }
+                let mut id_bytes = [0u8; 32];
+                event.identity_commitment.to_big_endian(&mut id_bytes);
 
-            let mut id_bytes = [0u8; 32];
-            event.identity_commitment.to_big_endian(&mut id_bytes);
+                let mut root_bytes = [0u8; 32];
+                event.root.to_big_endian(&mut root_bytes);
 
-            let mut root_bytes = [0u8; 32];
-            event.root.to_big_endian(&mut root_bytes);
-
-            // TODO: Check for < Modulus.
-            let root = Field::from_be_bytes_mod_order(&root_bytes);
-            let leaf = Field::from_be_bytes_mod_order(&id_bytes);
-            let res = (index, leaf, root);
-            index += 1;
-
-            insertions.push(res);
-        }
-        Ok(insertions)
+                // TODO: Check for < Modulus.
+                let root = Field::from_be_bytes_mod_order(&root_bytes);
+                let leaf = Field::from_be_bytes_mod_order(&id_bytes);
+                let res = (index, leaf, root);
+                index += 1;
+                Ok(Some(res))
+            })
     }
 
     #[instrument(level = "debug", skip_all)]

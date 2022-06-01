@@ -6,6 +6,7 @@ use crate::{
 use core::cmp::max;
 use ethers::{providers::Middleware, types::U256};
 use eyre::Result as EyreResult;
+use futures::StreamExt;
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
@@ -114,8 +115,10 @@ impl App {
         };
 
         // Read events from blockchain
-        let events = contracts.fetch_events(last_block, num_leaves).await?;
-        for (leaf, hash, root) in events {
+        // TODO: Allow for shutdowns. Write trait to make it easy to add shutdowns (and
+        // timeouts?) to futures.
+        let mut events = contracts.fetch_events(last_block, num_leaves).boxed();
+        while let Some((leaf, hash, root)) = events.next().await.transpose()? {
             debug!(?leaf, ?hash, ?root, "Received event");
 
             debug!(root = ?merkle_tree.root(), "Prior root");
@@ -167,6 +170,7 @@ impl App {
                 panic!("Root mismatch between event and computed tree.");
             }
         }
+        drop(events);
 
         // TODO: Final root check
 

@@ -115,61 +115,77 @@ impl App {
             (0, options.starting_block)
         };
 
+        // Check leaves
+        for (index, &leaf) in merkle_tree.leaves().iter().enumerate() {
+            if index < next_leaf && leaf == contracts.initial_leaf() {
+                error!(?index, ?leaf, ?next_leaf, "Leaf in non-empty spot set to initial leaf value.");
+            }
+            if index >= next_leaf && leaf != contracts.initial_leaf() {
+                error!(?index, ?leaf, ?next_leaf, "Leaf in empty spot not set to initial leaf value.");
+            }
+            if leaf != contracts.initial_leaf() {
+                if let Some(previous) = merkle_tree.leaves()[..index].iter().position(|&l| l == leaf) {
+                    error!(?index, ?leaf, ?previous, "Leaf not unique.");
+                }
+            }
+        }
+
         // Read events from blockchain
         // TODO: Allow for shutdowns. Write trait to make it easy to add shutdowns (and
         // timeouts?) to futures.
         info!(%last_block, %num_leaves, "Updating tree from events");
         let mut events = contracts.fetch_events(last_block, num_leaves).boxed();
-        while let Some((leaf, hash, root)) = events.try_next().await? {
-            debug!(?leaf, ?hash, ?root, "Received event");
-
-            debug!(root = ?merkle_tree.root(), "Prior root");
+        while let Some((index, leaf, root)) = events.try_next().await? {
+            debug!(?index, ?leaf, ?root, "Received event");
 
             // Check leaf index is valid
-            if leaf >= merkle_tree.num_leaves() {
-                error!(?leaf, num_leaves = ?merkle_tree.num_leaves(), "Received event out of range");
+            if index >= merkle_tree.num_leaves() {
+                error!(?index, ?leaf, num_leaves = ?merkle_tree.num_leaves(), "Received event out of range");
                 panic!("Received event out of range");
             }
 
             // Check if leaf value is valid
-            if hash == contracts.initial_leaf() {
-                warn!(?leaf, "Trying to add empty leaf, skipping.");
+            if leaf == contracts.initial_leaf() {
+                error!(?index, ?leaf, "Inserting empty leaf");
             }
 
             // Check leaf value with existing value
-            let existing = merkle_tree.leaves()[leaf];
+            let existing = merkle_tree.leaves()[index];
             if existing != contracts.initial_leaf() {
-                if existing == hash {
-                    warn!(
+                if existing == leaf {
+                    error!(
+                        ?index,
                         ?leaf,
-                        ?existing,
-                        "Leaf was already correctly set, skipping."
+                        "Received event for already existing leaf."
                     );
                     continue;
                 }
                 error!(
+                    ?index,
                     ?leaf,
                     ?existing,
-                    ?hash,
-                    "Event hash contradicts existing leaf."
+                    "Received event for already set leaf."
                 );
-                panic!("Event hash contradicts existing leaf.");
             }
 
             // Check insertion counter
-            if leaf != next_leaf {
+            if index != next_leaf {
                 error!(
-                    ?leaf,
+                    ?index,
                     ?next_leaf,
-                    ?hash,
-                    "Event leaf index does not match expected leaf."
+                    ?leaf,
+                    "Event leaf index does not match expected leaf index."
                 );
-                panic!("Event leaf does not match expected leaf.");
+            }
+
+            // Check duplicates
+            if let Some(previous) = merkle_tree.leaves()[..index].iter().position(|&l| l == leaf) {
+                error!(?index, ?leaf, ?previous, "Received event for already inserted leaf.");
             }
 
             // Insert
-            merkle_tree.set(leaf, hash);
-            next_leaf = max(next_leaf, leaf + 1);
+            merkle_tree.set(index, leaf);
+            next_leaf = max(next_leaf, index + 1);
 
             // Check root
             if root != merkle_tree.root() {

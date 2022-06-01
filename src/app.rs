@@ -3,12 +3,13 @@ use crate::{
     ethereum::{self, Ethereum},
     server::Error as ServerError,
 };
+use cli_batteries::await_shutdown;
 use core::cmp::max;
 use ethers::{providers::Middleware, types::U256};
-use eyre::Result as EyreResult;
-use futures::{StreamExt, TryStreamExt};
+use eyre::{eyre, Result as EyreResult};
+use futures::{pin_mut, StreamExt, TryStreamExt};
 use semaphore::{
-    merkle_tree::{self, Hasher},
+    merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
     Field,
 };
@@ -20,7 +21,10 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 use structopt::StructOpt;
-use tokio::sync::{RwLock, RwLockReadGuard};
+use tokio::{
+    select,
+    sync::{RwLock, RwLockReadGuard},
+};
 use tracing::{debug, error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -118,13 +122,26 @@ impl App {
         // Check leaves
         for (index, &leaf) in merkle_tree.leaves().iter().enumerate() {
             if index < next_leaf && leaf == contracts.initial_leaf() {
-                error!(?index, ?leaf, ?next_leaf, "Leaf in non-empty spot set to initial leaf value.");
+                error!(
+                    ?index,
+                    ?leaf,
+                    ?next_leaf,
+                    "Leaf in non-empty spot set to initial leaf value."
+                );
             }
             if index >= next_leaf && leaf != contracts.initial_leaf() {
-                error!(?index, ?leaf, ?next_leaf, "Leaf in empty spot not set to initial leaf value.");
+                error!(
+                    ?index,
+                    ?leaf,
+                    ?next_leaf,
+                    "Leaf in empty spot not set to initial leaf value."
+                );
             }
             if leaf != contracts.initial_leaf() {
-                if let Some(previous) = merkle_tree.leaves()[..index].iter().position(|&l| l == leaf) {
+                if let Some(previous) = merkle_tree.leaves()[..index]
+                    .iter()
+                    .position(|&l| l == leaf)
+                {
                     error!(?index, ?leaf, ?previous, "Leaf not unique.");
                 }
             }
@@ -135,7 +152,16 @@ impl App {
         // timeouts?) to futures.
         info!(%last_block, %num_leaves, "Updating tree from events");
         let mut events = contracts.fetch_events(last_block, num_leaves).boxed();
-        while let Some((index, leaf, root)) = events.try_next().await? {
+        let shutdown = await_shutdown();
+        pin_mut!(shutdown);
+        loop {
+            let (index, leaf, root) = select! {
+                v = events.try_next() => match v? {
+                    Some(a) => a,
+                    None => break,
+                },
+                _ = &mut shutdown => return Err(eyre!("Interupted")),
+            };
             debug!(?index, ?leaf, ?root, "Received event");
 
             // Check leaf index is valid
@@ -153,11 +179,7 @@ impl App {
             let existing = merkle_tree.leaves()[index];
             if existing != contracts.initial_leaf() {
                 if existing == leaf {
-                    error!(
-                        ?index,
-                        ?leaf,
-                        "Received event for already existing leaf."
-                    );
+                    error!(?index, ?leaf, "Received event for already existing leaf.");
                     continue;
                 }
                 error!(
@@ -179,8 +201,16 @@ impl App {
             }
 
             // Check duplicates
-            if let Some(previous) = merkle_tree.leaves()[..index].iter().position(|&l| l == leaf) {
-                error!(?index, ?leaf, ?previous, "Received event for already inserted leaf.");
+            if let Some(previous) = merkle_tree.leaves()[..index]
+                .iter()
+                .position(|&l| l == leaf)
+            {
+                error!(
+                    ?index,
+                    ?leaf,
+                    ?previous,
+                    "Received event for already inserted leaf."
+                );
             }
 
             // Insert

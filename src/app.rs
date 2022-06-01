@@ -402,11 +402,14 @@ impl App {
         let duplicates = used_leaves.len() - skipped - unique;
         let total = merkle_tree.num_leaves();
         let available = total - next_leaf;
+        #[allow(clippy::cast_precision_loss)]
+        let fill = (next_leaf as f64) / (total as f64);
         if skipped == 0 && duplicates == 0 {
             info!(
                 healthy = %unique,
                 %available,
                 %total,
+                %fill,
                 "Merkle tree is healthy, no duplicates or skipped leaves."
             );
         } else {
@@ -417,6 +420,7 @@ impl App {
                 used = %next_leaf,
                 %available,
                 %total,
+                %fill,
                 "Merkle tree has duplicate or skipped leaves."
             );
         }

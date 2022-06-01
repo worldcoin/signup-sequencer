@@ -205,15 +205,14 @@ impl Contracts {
         // See <https://github.com/worldcoin/world-id-example-airdrop/blob/03de53d2cb016ddef28b26e8237e85b62ec385c7/src/Semaphore.sol#L141>
         // See <https://sig.eth.samczsun.com/>
         // HACK: There's really no good way to parse these errors
-        match result.to_string().as_str() {
-            "(code: -32003, message: execution reverted: , data: Some(String(\"0x09bde339\")))" => {
-                Ok(())
-            }
-            "(code: -32003, message: execution reverted: , data: Some(String(\"0x504570e3\")))" => {
-                Err(eyre!("Invalid root"))
-            }
-            _ => Err(eyre!("Error verifiying root: {}", result)),
+        let error = result.to_string();
+        if error.contains("0x09bde339") {
+            return Ok(());
         }
+        if error.contains("0x504570e3") {
+            return Err(eyre!("Invalid root"));
+        }
+        Err(eyre!("Error verifiying root: {}", result))
     }
 }
 

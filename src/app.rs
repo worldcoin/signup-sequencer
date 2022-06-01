@@ -400,17 +400,23 @@ impl App {
         dedup.dedup();
         let unique = dedup.len();
         let duplicates = used_leaves.len() - skipped - unique;
+        let total = merkle_tree.num_leaves();
+        let available = total - next_leaf;
         if skipped == 0 && duplicates == 0 {
             info!(
-                healthy = ?unique,
+                healthy = %unique,
+                %available,
+                %total,
                 "Merkle tree is healthy, no duplicates or skipped leaves."
             );
         } else {
             error!(
-                ?duplicates,
-                ?skipped,
-                healthy = ?unique,
-                used = ?next_leaf,
+                healthy = %unique,
+                %duplicates,
+                %skipped,
+                used = %next_leaf,
+                %available,
+                %total,
                 "Merkle tree has duplicate or skipped leaves."
             );
         }

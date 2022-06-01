@@ -2,12 +2,13 @@ mod abi;
 
 use self::abi::{MemberAddedFilter, Semaphore};
 use crate::ethereum::{Ethereum, EventError, ProviderStack};
+use core::future;
 use ethers::{
     providers::Middleware,
     types::{Address, U256},
 };
 use eyre::{eyre, Result as EyreResult};
-use futures::{Stream, TryStreamExt};
+use futures::{Stream, StreamExt, TryStream, TryStreamExt};
 use semaphore::Field;
 use structopt::StructOpt;
 use tracing::{error, info, instrument};
@@ -147,26 +148,17 @@ impl Contracts {
             .semaphore
             .member_added_filter()
             .from_block(starting_block);
-        let mut index = last_leaf;
         self.ethereum
             .fetch_events::<MemberAddedEvent>(&filter.filter)
-            .try_filter_map(move |event| async move {
-                if event.group_id != self.group_id {
-                    return Ok(None);
-                }
-
-                let mut id_bytes = [0u8; 32];
-                event.identity_commitment.to_big_endian(&mut id_bytes);
-
-                let mut root_bytes = [0u8; 32];
-                event.root.to_big_endian(&mut root_bytes);
-
-                // TODO: Check for < Modulus.
-                let root = Field::from_be_bytes_mod_order(&root_bytes);
-                let leaf = Field::from_be_bytes_mod_order(&id_bytes);
-                let res = (index, leaf, root);
-                index += 1;
-                Ok(Some(res))
+            .try_filter(|event| future::ready(event.group_id != self.group_id))
+            .enumerate()
+            .map(|(index, res)| res.map(|event| (index, event)))
+            .map_ok(|(index, event)| {
+                (
+                    index,
+                    field_from_u256(event.identity_commitment),
+                    field_from_u256(event.root),
+                )
             })
     }
 
@@ -223,4 +215,12 @@ impl Contracts {
             _ => Err(eyre!("Error verifiying root: {}", result)),
         }
     }
+}
+
+// TODO: Check the value is less than the modulus.
+// TODO: Move to semaphore-rs crate (or ruint)
+fn field_from_u256(value: U256) -> Field {
+    let mut be_bytes = [0u8; 32];
+    value.to_big_endian(&mut be_bytes);
+    Field::from_be_bytes_mod_order(&be_bytes)
 }

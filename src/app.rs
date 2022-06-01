@@ -6,7 +6,7 @@ use crate::{
 use core::cmp::max;
 use ethers::{providers::Middleware, types::U256};
 use eyre::Result as EyreResult;
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
@@ -118,7 +118,7 @@ impl App {
         // TODO: Allow for shutdowns. Write trait to make it easy to add shutdowns (and
         // timeouts?) to futures.
         let mut events = contracts.fetch_events(last_block, num_leaves).boxed();
-        while let Some((leaf, hash, root)) = events.next().await.transpose()? {
+        while let Some((leaf, hash, root)) = events.try_next().await? {
             debug!(?leaf, ?hash, ?root, "Received event");
 
             debug!(root = ?merkle_tree.root(), "Prior root");
@@ -127,6 +127,11 @@ impl App {
             if leaf >= merkle_tree.num_leaves() {
                 error!(?leaf, num_leaves = ?merkle_tree.num_leaves(), "Received event out of range");
                 panic!("Received event out of range");
+            }
+
+            // Check if leaf value is valid
+            if hash == contracts.initial_leaf() {
+                warn!(?leaf, "Trying to add empty leaf, skipping.");
             }
 
             // Check leaf value with existing value

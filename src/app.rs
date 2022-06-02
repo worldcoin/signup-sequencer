@@ -127,10 +127,19 @@ impl App {
         if U256::from(group_id) != self.contracts.group_id() {
             return Err(ServerError::InvalidGroupId);
         }
+        if commitment == &self.contracts.initial_leaf() {
+            warn!(?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Attempt to insert initial leaf.");
+            return Err(ServerError::InvalidCommitment);
+        }
 
         // Get a lock on the tree for the duration of this operation.
         // OPT: Sequence operations and allow concurrent inserts / transactions.
         let mut tree = self.merkle_tree.write().await;
+
+        if let Some(existing) = tree.leaves().iter().position(|&x| x == *commitment) {
+            warn!(?existing, ?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Commitment already exists in tree.");
+            return Err(ServerError::DuplicateCommitment);
+        };
 
         // Fetch next leaf index
         let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
@@ -167,18 +176,17 @@ impl App {
     pub async fn inclusion_proof(
         &self,
         group_id: usize,
-        identity_commitment: &Hash,
+        commitment: &Hash,
     ) -> Result<InclusionProofResponse, ServerError> {
         if U256::from(group_id) != self.contracts.group_id() {
             return Err(ServerError::InvalidGroupId);
         }
+        if commitment == &self.contracts.initial_leaf() {
+            return Err(ServerError::InvalidCommitment);
+        }
 
         let merkle_tree = self.merkle_tree.read().await;
-        let identity_index = match merkle_tree
-            .leaves()
-            .iter()
-            .position(|&x| x == *identity_commitment)
-        {
+        let identity_index = match merkle_tree.leaves().iter().position(|&x| x == *commitment) {
             Some(i) => i,
             None => return Err(ServerError::IdentityCommitmentNotFound),
         };
@@ -190,9 +198,9 @@ impl App {
 
         // Locally check the proof
         // TODO: Check the leaf index / path
-        if !merkle_tree.verify(*identity_commitment, &proof) {
+        if !merkle_tree.verify(*commitment, &proof) {
             error!(
-                ?identity_commitment,
+                ?commitment,
                 ?identity_index,
                 ?root,
                 "Proof does not verify locally."

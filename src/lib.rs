@@ -2,19 +2,20 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
 pub mod app;
+mod contracts;
 mod db;
 mod ethereum;
 pub mod server;
 mod utils;
 
 use crate::{app::App, utils::spawn_or_abort};
+use cli_batteries::await_shutdown;
 use eyre::Result as EyreResult;
 use std::sync::Arc;
 use structopt::StructOpt;
-use tokio::sync::broadcast;
 use tracing::info;
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
 pub struct Options {
     #[structopt(flatten)]
     pub app: app::Options,
@@ -30,7 +31,7 @@ pub struct Options {
 /// assert!(true);
 /// ```
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<()> {
+pub async fn main(options: Options) -> EyreResult<()> {
     // Connect to database
     let db = db::Db::new(&options.db).await?;
 
@@ -39,16 +40,15 @@ pub async fn main(options: Options, shutdown: broadcast::Sender<()>) -> EyreResu
 
     // Start server
     let server = spawn_or_abort({
-        let shutdown = shutdown.clone();
         async move {
-            server::main(app, options.server, shutdown).await?;
+            server::main(app, options.server).await?;
             EyreResult::Ok(())
         }
     });
 
     // Wait for shutdown
     info!("Program started, waiting for shutdown signal");
-    shutdown.subscribe().recv().await?;
+    await_shutdown().await;
 
     // Wait for server
     info!("Stopping server");

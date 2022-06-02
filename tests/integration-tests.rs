@@ -1,3 +1,4 @@
+use cli_batteries::{reset_shutdown, shutdown};
 use ethers::{
     abi::Address,
     core::abi::Abi,
@@ -5,11 +6,10 @@ use ethers::{
         Bytes, ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
         SignerMiddleware,
     },
-    types::H256,
-    utils::{Ganache, GanacheInstance},
+    types::{H256, U256},
+    utils::{Anvil, AnvilInstance},
 };
 use eyre::{bail, Result as EyreResult};
-use hex_literal::hex;
 use hyper::{client::HttpConnector, Body, Client, Request};
 use semaphore::poseidon_tree::PoseidonTree;
 use serde::{Deserialize, Serialize};
@@ -28,45 +28,51 @@ use std::{
 };
 use structopt::StructOpt;
 use tempfile::NamedTempFile;
-use tokio::{spawn, sync::broadcast};
+use tokio::{spawn, task::JoinHandle};
+use tracing::{info, instrument};
+use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
 use url::{Host, Url};
 
 const TEST_LEAFS: &[&str] = &[
-    "0000000000000000000000000000000000000000000000000000000000000001",
-    "0000000000000000000000000000000000000000000000000000000000000002",
-    "0000000000000000000000000000000000000000000000000000000000000003",
+    "0000F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0",
+    "0000F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1",
+    "0000F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2",
 ];
-
-const GANACHE_DEFAULT_WALLET_KEY: H256 = H256(hex!(
-    "1ce6a4cc4c9941a4781349f988e129accdc35a55bb3d5b1a7b342bc2171db484"
-));
 
 #[tokio::test]
 async fn insert_identity_and_proofs() {
+    // Initialize logging for the test.
+    tracing_subscriber::fmt()
+        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        .with_line_number(true)
+        .with_env_filter("info,signup_sequencer=debug")
+        .with_timer(Uptime::default())
+        .pretty()
+        .init();
+    info!("Starting integration test");
+
     let mut options = Options::from_iter_safe(&[""]).expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
     let temp_commitments_file = NamedTempFile::new().expect("Failed to create named temp file");
     options.app.storage_file = temp_commitments_file.path().to_path_buf();
 
-    let (shutdown, _) = broadcast::channel(1);
-
-    let (ganache, semaphore_address) = spawn_mock_chain()
+    let (chain, private_key, semaphore_address) = spawn_mock_chain()
         .await
         .expect("Failed to spawn ganache chain");
 
     options.app.ethereum.eip1559 = false;
     options.app.ethereum.ethereum_provider =
-        Url::parse(&ganache.endpoint()).expect("Failed to parse ganache endpoint");
-    options.app.ethereum.semaphore_address = semaphore_address;
-    options.app.ethereum.signing_key = GANACHE_DEFAULT_WALLET_KEY;
+        Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
+    options.app.contracts.semaphore_address = semaphore_address;
+    options.app.ethereum.signing_key = private_key;
 
-    let local_addr = spawn_app(options.clone(), shutdown.clone())
+    let (app, local_addr) = spawn_app(options.clone())
         .await
         .expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
-    let mut ref_tree = PoseidonTree::new(options.app.tree_depth, options.app.initial_leaf);
+    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
     let client = Client::new();
 
     test_inclusion_proof(
@@ -74,7 +80,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &options.app.initial_leaf,
+        &options.app.contracts.initial_leaf,
         true,
     )
     .await;
@@ -83,7 +89,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &options.app.initial_leaf,
+        &options.app.contracts.initial_leaf,
         true,
     )
     .await;
@@ -112,18 +118,24 @@ async fn insert_identity_and_proofs() {
         &client,
         2,
         &mut ref_tree,
-        &options.app.initial_leaf,
+        &options.app.contracts.initial_leaf,
         true,
     )
     .await;
 
-    // Shutdown app and spawn new one from file
-    let _ = shutdown.send(()).expect("Failed to send shutdown signal");
+    // Shutdown app and reset mock shutdown
+    info!("Stopping app");
+    shutdown();
+    app.await.unwrap();
+    reset_shutdown();
 
-    let local_addr = spawn_app(options.clone(), shutdown.clone())
+    // Test loading state from file, onchain tree has leafs
+    info!("Starting app");
+    let (app, local_addr) = spawn_app(options.clone())
         .await
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
+    info!(?uri, "App started");
 
     test_inclusion_proof(
         &uri,
@@ -144,11 +156,58 @@ async fn insert_identity_and_proofs() {
     )
     .await;
 
+    // Shutdown app and reset mock shutdown
+    shutdown();
+    app.await.unwrap();
+    reset_shutdown();
+
+    // Test loading state from tree, onchain tree has leafs
+
+    // Create new empty temp file
+    temp_commitments_file
+        .close()
+        .expect("Failed to close temp file");
+    let temp_commitments_file = NamedTempFile::new().expect("Failed to create named temp file");
+    options.app.storage_file = temp_commitments_file.path().to_path_buf();
+
+    info!("Starting app");
+    let (app, local_addr) = spawn_app(options.clone())
+        .await
+        .expect("Failed to spawn app.");
+    let uri = "http://".to_owned() + &local_addr.to_string();
+    info!(?uri, "App started");
+
+    test_inclusion_proof(
+        &uri,
+        &client,
+        0,
+        &mut ref_tree,
+        &Hash::from_str(TEST_LEAFS[0]).expect("Failed to parse Hash from test leaf 0"),
+        false,
+    )
+    .await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        1,
+        &mut ref_tree,
+        &Hash::from_str(TEST_LEAFS[1]).expect("Failed to parse Hash from test leaf 1"),
+        false,
+    )
+    .await;
+
+    // Shutdown app and reset mock shutdown
+    shutdown();
+    app.await.unwrap();
+    reset_shutdown();
+
+    // Delete temp file
     temp_commitments_file
         .close()
         .expect("Failed to close temp file");
 }
 
+#[instrument(skip_all)]
 async fn test_inclusion_proof(
     uri: &str,
     client: &Client<HttpConnector>,
@@ -158,6 +217,7 @@ async fn test_inclusion_proof(
     expect_failure: bool,
 ) {
     let body = construct_inclusion_proof_body(TEST_LEAFS[leaf_index]);
+    info!(?uri, "Contacting");
     let req = Request::builder()
         .method("POST")
         .uri(uri.to_owned() + "/inclusionProof")
@@ -195,6 +255,7 @@ async fn test_inclusion_proof(
     assert_eq!(result, serialized_proof);
 }
 
+#[instrument(skip_all)]
 async fn test_insert_identity(
     uri: &str,
     client: &Client<HttpConnector>,
@@ -213,13 +274,14 @@ async fn test_insert_identity(
         .request(req)
         .await
         .expect("Failed to execute request.");
-    assert!(response.status().is_success());
-
     let bytes = hyper::body::to_bytes(response.body_mut())
         .await
         .expect("Failed to convert response body to bytes");
     let result = String::from_utf8(bytes.into_iter().collect())
         .expect("Could not parse response bytes to utf-8");
+    if !response.status().is_success() {
+        panic!("Failed to insert identity: {}", result);
+    }
 
     let expected = InsertIdentityResponse { identity_index };
     let expected = serde_json::to_string_pretty(&expected).expect("Index serialization failed");
@@ -236,7 +298,6 @@ struct InsertIdentityResponse {
 fn construct_inclusion_proof_body(identity_commitment: &str) -> Body {
     Body::from(
         json!({
-            "id": 0,
             "groupId": 1,
             "identityCommitment": identity_commitment,
         })
@@ -247,7 +308,6 @@ fn construct_inclusion_proof_body(identity_commitment: &str) -> Body {
 fn construct_insert_identity_body(identity_commitment: &str) -> Body {
     Body::from(
         json!({
-            "id": 0,
             "groupId": 1,
             "identityCommitment": identity_commitment,
 
@@ -256,7 +316,8 @@ fn construct_insert_identity_body(identity_commitment: &str) -> Body {
     )
 }
 
-async fn spawn_app(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<SocketAddr> {
+#[instrument(skip_all)]
+async fn spawn_app(options: Options) -> EyreResult<(JoinHandle<()>, SocketAddr)> {
     let app = Arc::new(App::new(options.app).await.expect("Failed to create App"));
 
     let ip: IpAddr = match options.server.server.host() {
@@ -270,15 +331,17 @@ async fn spawn_app(options: Options, shutdown: broadcast::Sender<()>) -> EyreRes
     let listener = TcpListener::bind(&addr).expect("Failed to bind random port");
     let local_addr = listener.local_addr()?;
 
-    spawn({
+    let app = spawn({
         async move {
-            server::bind_from_listener(app, listener, shutdown)
+            info!("App thread starting");
+            server::bind_from_listener(app, listener)
                 .await
                 .expect("Failed to bind address");
+            info!("App thread stopping");
         }
     });
 
-    Ok(local_addr)
+    Ok((app, local_addr))
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -296,14 +359,16 @@ fn deserialize_to_bytes(input: String) -> EyreResult<Bytes> {
     }
 }
 
-async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
-    let ganache = Ganache::new().block_time(2u64).mnemonic("test").spawn();
+#[instrument(skip_all)]
+async fn spawn_mock_chain() -> EyreResult<(AnvilInstance, H256, Address)> {
+    let chain = Anvil::new().block_time(2u64).spawn();
+    let private_key = H256::from_slice(&chain.keys()[0].to_be_bytes());
 
-    let provider = Provider::<Http>::try_from(ganache.endpoint())
-        .expect("Failed to initialize ganache endpoint")
+    let provider = Provider::<Http>::try_from(chain.endpoint())
+        .expect("Failed to initialize chain endpoint")
         .interval(Duration::from_millis(500u64));
 
-    let wallet: LocalWallet = ganache.keys()[0].clone().into();
+    let wallet: LocalWallet = chain.keys()[0].clone().into();
 
     // connect the wallet to the provider
     let client = SignerMiddleware::new(provider, wallet.clone());
@@ -371,5 +436,16 @@ async fn spawn_mock_chain() -> EyreResult<(GanacheInstance, Address)> {
         .send()
         .await?;
 
-    Ok((ganache, semaphore_contract.address()))
+    // Create a group with id 1
+    let group_id = U256::from(1_u64);
+    let depth = 21_u8;
+    let initial_leaf = U256::from(0_u64);
+    semaphore_contract
+        .method::<_, ()>("createGroup", (group_id, depth, initial_leaf))?
+        .legacy()
+        .send()
+        .await? // Send TX
+        .await?; // Wait for TX to be mined
+
+    Ok((chain, private_key, semaphore_contract.address()))
 }

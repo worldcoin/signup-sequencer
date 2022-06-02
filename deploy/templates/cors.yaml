@@ -14,6 +14,7 @@ spec:
       - "*"
     accessControlAllowHeaders:
       - "content-type"
+      - "authorization"
     accessControlMaxAge: 100
     addVaryHeader: true
 {{- end }}

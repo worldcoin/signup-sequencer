@@ -18,13 +18,9 @@ license-file = "mit-license.md"
 [features]
 default = [ "postgres" ]
 bench = [ "criterion", "proptest" ]
-tokio-console = [ "console-subscriber" ]
 postgres = [ "sqlx/postgres" ]
 sqlite = [ "sqlx/sqlite" ]
-
-[[bin]]
-name = "rust-app"
-path = "src/cli/main.rs"
+mimalloc = [ "cli-batteries/mimalloc" ]
 
 [[bench]]
 name = "criterion"
@@ -33,45 +29,43 @@ path = "criterion.rs"
 required-features = [ "bench", "proptest" ]
 
 [dependencies]
-color-eyre = "0.6"
-console-subscriber = { version = "0.1", optional = true }
-criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
-ethers = "0.6"
+async-trait = "0.1.53"
+cli-batteries = { version = "0.1.3", features = [ "prometheus", "metered_allocator" ] }
+# ethers = { git = "https://github.com/gakonst/ethers-rs.git", branch = "master", rev = "4d99165", features = [ "ws", "ipc", ]  }
+ethers = { git = "https://github.com/recmo/ethers-rs.git", rev = "93e8e52", features = [ "ws", "ipc", ]  }
 eyre = "0.6"
-ff = { package="ff_ce", version="0.11"}
 futures = "0.3"
-hex = "0.4.3"
-hex-literal = "0.3"
 hyper = { version = "^0.14.17", features = [ "server", "tcp", "http1", "http2" ] }
-itertools = "0.10"
-mimalloc = { version = "0.1", default-features = false, optional = true }
 once_cell = "1.8"
-poseidon-rs = "0.0.8"
-prometheus = { version = "0.13", features = [ "process" ] }
-proptest = { version = "1.0", optional = true }
+prometheus = "0.13"
 semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main" }
 serde = "1.0"
 serde_json = "1.0"
-smallvec = { version = "^1.6.1", features = [ "serde" ] }
 structopt = "0.3"
 thiserror = "1.0"
 tokio = { version = "1.17", features = [ "signal", "macros", "rt", "sync", "time", "rt-multi-thread", "tracing" ] }
 tracing = "0.1"
 tracing-futures = "0.2"
-tracing-subscriber = { version = "0.3", features = [ "env-filter", "json" ] }
 url = "2.2"
-users = "0.11"
 sqlx = { version = "0.5", features = [ "runtime-tokio-native-tls", "any", "postgres" ] }
-zkp-u256 = "0.2"
+chrono = "0.4.19"
+reqwest = "0.11.10"
+
+# Build dependencies required for `cargo criterion`, so really more `dev-deps`.
+proptest = { version = "1.0", optional = true }
+criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
 
 [dev-dependencies]
+cli-batteries = { version = "0.1.3", features = [ "mock_shutdown" ] }
 proptest = { version = "1.0" }
 tempfile = "3.0"
 tracing-test = "0.2"
+tracing-subscriber = "0.3.11"
+hex = "0.4.3"
+hex-literal = "0.3"
 
 [build-dependencies]
-eyre = "0.6"
-time = { version = "0.3.5", features = [ "formatting", "parsing" ] }
+cli-batteries = "0.1.3"
 
 [profile.release]
 codegen-units = 1

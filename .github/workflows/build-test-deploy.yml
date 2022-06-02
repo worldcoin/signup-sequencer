@@ -4,19 +4,20 @@ on:
   push
 
 env:
-  RUST_VERSION: "1.60"
-  NIGHTLY_VERSION: nightly-2022-04-18
+  RUST_VERSION: "1.61"
+  NIGHTLY_VERSION: nightly-2022-05-25
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
   CARGO_PROFILE_DEV_DEBUG: 0
   IMAGE_ID: ghcr.io/${{ github.repository }}:${{ github.sha }}
+  BIN: ${{ github.event.repository.name }}
 
 jobs:
   accept:
     name: Accept
     runs-on: ubuntu-latest
-    needs: [lint, test, build_and_push, image_manifest, snyk_scan_container, helm_lint, helm_test]
+    needs: [lint, test, build_and_push, image_manifest, snyk_scan_container, helm_lint]
     steps:
       - name: Accept
         run: true
@@ -69,7 +70,10 @@ jobs:
         uses: Swatinem/rust-cache@v1
         with:
           key: cache-v1
-      - run:  npm install ganache-cli@latest --global
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
       # Cargo doc test is not included in `--all-targets`
       # See <https://github.com/rust-lang/cargo/issues/6669>
       # Cargo doc test also doesn't support `--no-run`, so we run it but
@@ -107,7 +111,10 @@ jobs:
           key: cache-v1
       - name: Install cargo-binutils
         run: cargo install cargo-binutils
-      - run:  npm install ganache-cli@latest --global
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
       - name: Build tests with coverage
         run: |
           cargo test --locked --all-features --all-targets --no-fail-fast --no-run
@@ -179,18 +186,13 @@ jobs:
           default: true
       - name: Set up QEMU
         id: qemu
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       - name: Available platforms
         run: echo ${{ steps.qemu.outputs.platforms }}
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-        with:
-          # Bump buildkit version because we need PR 2433 to fix a bug
-          # in Github Actions Cache support.
-          # See <https://github.com/moby/buildkit/pull/2433>
-          driver-opts: image=moby/buildkit:v0.9.3
+        uses: docker/setup-buildx-action@v2
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -214,7 +216,7 @@ jobs:
             ghcr.io/recmo/rust-static-build:$RUST_VERSION-$ARCH \
             cargo build --locked --release --features "$FEATURES"
       - name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           context: .
           platforms: linux/${{ matrix.platform }}
@@ -222,6 +224,7 @@ jobs:
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: BIN=${{ env.BIN }}
       - name: Test image
         run:
           docker run --pull always --platform linux/${{ matrix.platform }} --rm $IMAGE_ID-${{ matrix.platform }} --version
@@ -232,7 +235,7 @@ jobs:
     needs: [build_and_push]
     steps:
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -254,7 +257,7 @@ jobs:
       - name: Set up Snyk
         uses: snyk/actions/setup@master
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -280,33 +283,6 @@ jobs:
       - name: Check if Chart.yaml is up to date
         run: ./deploy/generate.py | diff ./deploy/Chart.yaml -
 
-  helm_test:
-    name: Test deployment
-    runs-on: ubuntu-latest
-    needs: [build_and_push]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      - name: Create kind cluster
-        uses: helm/kind-action@v1.2.0
-      - name: Test install deploy
-        run: helm upgrade ${{ github.event.repository.name }} ./deploy
-          --install --atomic --timeout 60s --debug
-          --set image.tag=${{ github.sha }}-amd64
-          --set image.pullSecret=ghcr-secret
-          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
-          --set persistentStorage.enabled=false
-          --set ingress.cors.enabled=false
-      - name: Describe pods
-        if: always()
-        run: kubectl describe pod
-      - name: Dump logs
-        if: always()
-        run: kubectl get pods
-          | tail -n +2
-          | cut -f 1 -d ' '
-          | xargs -L 1 kubectl logs
-
   deploy-main-stage:
     name: Deploy main to staging
     runs-on: ubuntu-latest
@@ -331,16 +307,19 @@ jobs:
           --name ${{ secrets.AWS_STAGE_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --atomic --timeout 60s
+          --install --timeout 60s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
           --set environment=stage
+          --set wipeDisk=true
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
-          --set env.SIGNUP_SEQUENCER_MOCK=false
-          --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
+          --set env.WIPE_STORAGE=true
+          --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
+          --set env.MAX_LOG_BLOCKS=1000000
+          --set env.STARTING_BLOCK=0
 
   deploy-stage-manual:
     name: Manual deploy to staging
@@ -365,16 +344,19 @@ jobs:
           --name ${{ secrets.AWS_STAGE_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --atomic --timeout 60s
+          --install --timeout 120s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set ingress.host=signup.stage-crypto.worldcoin.dev
           --set environment=stage
+          --set wipeDisk=true
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
-          --set env.SIGNUP_SEQUENCER_MOCK=false
-          --set persistentStorage.volumeID=aws://us-east-1a/vol-0b4f10016a30379d7
+          --set env.WIPE_STORAGE=true
+          --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
+          --set env.MAX_LOG_BLOCKS=1000000
+          --set env.STARTING_BLOCK=0
 
   deploy-prod:
     name: Deploy main to production
@@ -400,8 +382,14 @@ jobs:
           --name ${{ secrets.AWS_PROD_CLUSTER }}
       - name: Helm install
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --atomic --timeout 60s
+          --install --timeout 60s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set environment=prod
-          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_POLYGON_MAINNET_RPC_ENDPOINT }}"
+          --set env.SIGNING_KEY="${{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}"
+          --set env.SEMAPHORE_ADDRESS="${{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}"
+          --set env.WIPE_STORAGE=true
+          --set env.USE_EIP1559=false
+          --set env.MAX_LOG_BLOCKS=50000
+          --set env.STARTING_BLOCK=27829300

@@ -1,0 +1,40 @@
+openapi: 3.0.0
+info:
+  version: '1.0.0'
+  title: 'semaphore-sequencer'
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:8080
+paths:
+  /metrics:
+    servers:
+      - url: http://localhost:9998
+    get:
+      summary: 'Returns Prometheus application metrics'
+      responses:
+        '200':
+          description: 'Sample response: Details about a user by ID'
+          content:
+            'application/text':
+                example: ""
+        default:
+          description: Unexpected error
+  /inclusionProof:
+    post:
+      summary: 'Get Merkle inclusion proof'
+      requestBody:
+        description: user to add to the system
+        content:
+          'application/json':
+            example:
+              groupId: 1
+              identityCommitment: '0x29e6e65081384cf703af5ef3e9708deeb3d7b3c42b6da709d3335b19d224bdce'
+      responses:
+        '200':
+          description: 'Sample response: Details about a user by ID'
+          content:
+            'application/json':
+                example: ""
+        default:
+          description: Unexpected error

@@ -1,5 +1,6 @@
 use crate::app::{App, Hash};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
+use cli_batteries::await_shutdown;
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
 use hyper::{
@@ -17,11 +18,10 @@ use std::{
 };
 use structopt::StructOpt;
 use thiserror::Error;
-use tokio::sync::broadcast;
-use tracing::{error, info, trace};
+use tracing::{error, info, instrument, trace};
 use url::{Host, Url};
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
 pub struct Options {
     /// API Server url
     #[structopt(long, env, default_value = "http://127.0.0.1:8080/")]
@@ -45,6 +45,7 @@ const CONTENT_JSON: &str = "application/json";
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 pub struct InsertCommitmentRequest {
     group_id:            usize,
     identity_commitment: Hash,
@@ -52,6 +53,7 @@ pub struct InsertCommitmentRequest {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 pub struct InclusionProofRequest {
     pub group_id:            usize,
     pub identity_commitment: Hash,
@@ -65,16 +67,24 @@ pub enum Error {
     InvalidPath,
     #[error("invalid content type")]
     InvalidContentType,
+    #[error("invalid group id")]
+    InvalidGroupId,
     #[error("provided identity index out of bounds")]
     IndexOutOfBounds,
     #[error("provided identity commitment not found")]
     IdentityCommitmentNotFound,
+    #[error("provided identity commitment is invalid")]
+    InvalidCommitment,
+    #[error("provided identity commitment is already included")]
+    DuplicateCommitment,
     #[error("invalid JSON request: {0}")]
     InvalidSerialization(#[from] serde_json::Error),
     #[error(transparent)]
     Hyper(#[from] hyper::Error),
     #[error(transparent)]
     Http(#[from] hyper::http::Error),
+    #[error("not semaphore manager")]
+    NotManager,
     #[error(transparent)]
     Other(#[from] EyreError),
 }
@@ -87,9 +97,11 @@ impl Error {
             InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
             InvalidPath => StatusCode::NOT_FOUND,
             InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            IndexOutOfBounds | IdentityCommitmentNotFound | InvalidSerialization(_) => {
-                StatusCode::BAD_REQUEST
-            }
+            IndexOutOfBounds
+            | IdentityCommitmentNotFound
+            | InvalidCommitment
+            | DuplicateCommitment
+            | InvalidSerialization(_) => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         hyper::Response::builder()
@@ -131,6 +143,7 @@ where
     Ok(response)
 }
 
+#[instrument(skip_all)]
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
@@ -162,7 +175,10 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
         (&Method::POST, _) => Err(Error::InvalidPath),
         _ => Err(Error::InvalidMethod),
     };
-    let response = result.unwrap_or_else(|err| err.to_response());
+    let response = result.unwrap_or_else(|err| {
+        error!(%err, "Error handling request");
+        err.to_response()
+    });
 
     // Measure result and return
     STATUS
@@ -176,11 +192,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
 /// a path beyond `/`, or cannot be cast into an IP address. Also returns an
 /// `Err` if the server cannot bind to the given address.
-pub async fn main(
-    app: Arc<App>,
-    options: Options,
-    shutdown: broadcast::Sender<()>,
-) -> EyreResult<()> {
+pub async fn main(app: Arc<App>, options: Options) -> EyreResult<()> {
     ensure!(
         options.server.scheme() == "http",
         "Only http:// is supported in {}",
@@ -202,7 +214,7 @@ pub async fn main(
 
     let listener = TcpListener::bind(&addr)?;
 
-    bind_from_listener(app, listener, shutdown).await?;
+    bind_from_listener(app, listener).await?;
 
     Ok(())
 }
@@ -211,11 +223,7 @@ pub async fn main(
 ///
 /// Will return `Err` if the provided `listener` address cannot be accessed or
 /// if the server fails to bind to the given address.
-pub async fn bind_from_listener(
-    app: Arc<App>,
-    listener: TcpListener,
-    shutdown: broadcast::Sender<()>,
-) -> EyreResult<()> {
+pub async fn bind_from_listener(app: Arc<App>, listener: TcpListener) -> EyreResult<()> {
     let local_addr = listener.local_addr()?;
     let make_svc = make_service_fn(move |_| {
         // Clone here as `make_service_fn` is called for every connection
@@ -232,9 +240,7 @@ pub async fn bind_from_listener(
     let server = Server::from_tcp(listener)
         .wrap_err("Failed to bind address")?
         .serve(make_svc)
-        .with_graceful_shutdown(async move {
-            shutdown.subscribe().recv().await.ok();
-        });
+        .with_graceful_shutdown(await_shutdown());
 
     info!(url = %local_addr, "Server listening");
 

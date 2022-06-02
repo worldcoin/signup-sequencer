@@ -5,7 +5,7 @@ use structopt::StructOpt;
 use tracing::{debug, info};
 use url::Url;
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
 pub struct Options {
     /// Database server connection string
     #[structopt(

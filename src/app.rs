@@ -3,9 +3,11 @@ use crate::{
     ethereum::{self, Ethereum},
     server::Error as ServerError,
 };
+use cli_batteries::await_shutdown;
 use core::cmp::max;
 use ethers::{providers::Middleware, types::U256};
-use eyre::Result as EyreResult;
+use eyre::{eyre, Result as EyreResult};
+use futures::{pin_mut, StreamExt, TryStreamExt};
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
@@ -19,7 +21,10 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 use structopt::StructOpt;
-use tokio::sync::{RwLock, RwLockReadGuard};
+use tokio::{
+    select,
+    sync::{RwLock, RwLockReadGuard},
+};
 use tracing::{debug, error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -66,11 +71,12 @@ pub struct Options {
 }
 
 pub struct App {
-    ethereum:     Ethereum,
-    contracts:    Contracts,
-    storage_file: PathBuf,
-    merkle_tree:  RwLock<PoseidonTree>,
-    next_leaf:    AtomicUsize,
+    ethereum:       Ethereum,
+    contracts:      Contracts,
+    storage_file:   PathBuf,
+    merkle_tree:    RwLock<PoseidonTree>,
+    next_leaf:      AtomicUsize,
+    starting_block: u64,
 }
 
 impl App {
@@ -85,98 +91,27 @@ impl App {
         let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
 
         // Poseidon tree depth is one more than the contract's tree depth
-        let mut merkle_tree =
-            PoseidonTree::new(contracts.tree_depth() + 1, contracts.initial_leaf());
-        let mut num_leaves = 0;
+        let merkle_tree = PoseidonTree::new(contracts.tree_depth() + 1, contracts.initial_leaf());
 
         // Wipe storage to force sync from chain
         if options.wipe_storage && options.storage_file.is_file() {
             remove_file(&options.storage_file)?;
         }
 
-        // Read tree from file
-        info!(path = ?&options.storage_file, "Reading tree from storage");
-        let (mut next_leaf, last_block) = if options.storage_file.is_file() {
-            let file = File::open(&options.storage_file)?;
-            if file.metadata()?.len() > 0 {
-                let file: JsonCommitment = serde_json::from_reader(BufReader::new(file))?;
-                let next_leaf = file.commitments.len();
-                num_leaves = file.commitments.len();
-                merkle_tree.set_range(0, file.commitments);
-                (next_leaf, file.last_block)
-            } else {
-                warn!(path = ?&options.storage_file, "Storage file empty, skipping.");
-                (0, options.starting_block)
-            }
-        } else {
-            warn!(path = ?&options.storage_file, "Storage file not found, skipping.");
-            (0, options.starting_block)
-        };
-
-        // Read events from blockchain
-        let events = contracts.fetch_events(last_block, num_leaves).await?;
-        for (leaf, hash, root) in events {
-            debug!(?leaf, ?hash, ?root, "Received event");
-
-            debug!(root = ?merkle_tree.root(), "Prior root");
-
-            // Check leaf index is valid
-            if leaf >= merkle_tree.num_leaves() {
-                error!(?leaf, num_leaves = ?merkle_tree.num_leaves(), "Received event out of range");
-                panic!("Received event out of range");
-            }
-
-            // Check leaf value with existing value
-            let existing = merkle_tree.leaves()[leaf];
-            if existing != contracts.initial_leaf() {
-                if existing == hash {
-                    warn!(
-                        ?leaf,
-                        ?existing,
-                        "Leaf was already correctly set, skipping."
-                    );
-                    continue;
-                }
-                error!(
-                    ?leaf,
-                    ?existing,
-                    ?hash,
-                    "Event hash contradicts existing leaf."
-                );
-                panic!("Event hash contradicts existing leaf.");
-            }
-
-            // Check insertion counter
-            if leaf != next_leaf {
-                error!(
-                    ?leaf,
-                    ?next_leaf,
-                    ?hash,
-                    "Event leaf index does not match expected leaf."
-                );
-                panic!("Event leaf does not match expected leaf.");
-            }
-
-            // Insert
-            merkle_tree.set(leaf, hash);
-            next_leaf = max(next_leaf, leaf + 1);
-
-            // Check root
-            if root != merkle_tree.root() {
-                error!(computed_root = ?merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
-                panic!("Root mismatch between event and computed tree.");
-            }
-        }
-
-        // TODO: Final root check
-
-        Ok(Self {
+        let mut result = Self {
             ethereum,
             contracts,
             storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
-            next_leaf: AtomicUsize::new(next_leaf),
-        })
+            next_leaf: AtomicUsize::new(0),
+            starting_block: options.starting_block,
+        };
+
+        result.read_file().await?;
+        result.check_leaves().await?;
+        result.process_events().await?;
+        result.check_health().await?;
+        Ok(result)
     }
 
     /// # Errors
@@ -293,6 +228,219 @@ impl App {
             commitments,
         };
         serde_json::to_writer(BufWriter::new(file), &data)?;
+        Ok(())
+    }
+
+    #[instrument(level = "info", skip_all)]
+    async fn read_file(&mut self) -> EyreResult<()> {
+        let mut merkle_tree = self.merkle_tree.write().await;
+        if self.storage_file.is_file() {
+            let file = File::open(&self.storage_file)?;
+            if file.metadata()?.len() > 0 {
+                let file: JsonCommitment = serde_json::from_reader(BufReader::new(file))?;
+                self.next_leaf
+                    .store(file.commitments.len(), Ordering::Release);
+                merkle_tree.set_range(0, file.commitments);
+                info!(path = ?&self.storage_file, num_leaves = %self.next_leaf.load(Ordering::Acquire), "Read tree from storage");
+            } else {
+                warn!(path = ?&self.storage_file, "Storage file empty, skipping.");
+            }
+        } else {
+            warn!(path = ?&self.storage_file, "Storage file not found, skipping.");
+        }
+        Ok(())
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    async fn check_leaves(&self) -> EyreResult<()> {
+        let merkle_tree = self.merkle_tree.read().await;
+        let next_leaf = self.next_leaf.load(Ordering::Acquire);
+        let initial_leaf = self.contracts.initial_leaf();
+        for (index, &leaf) in merkle_tree.leaves().iter().enumerate() {
+            if index < next_leaf && leaf == initial_leaf {
+                error!(
+                    ?index,
+                    ?leaf,
+                    ?next_leaf,
+                    "Leaf in non-empty spot set to initial leaf value."
+                );
+            }
+            if index >= next_leaf && leaf != initial_leaf {
+                error!(
+                    ?index,
+                    ?leaf,
+                    ?next_leaf,
+                    "Leaf in empty spot not set to initial leaf value."
+                );
+            }
+            if leaf != initial_leaf {
+                if let Some(previous) = merkle_tree.leaves()[..index]
+                    .iter()
+                    .position(|&l| l == leaf)
+                {
+                    error!(?index, ?leaf, ?previous, "Leaf not unique.");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[instrument(level = "info", skip_all)]
+    async fn process_events(&mut self) -> EyreResult<()> {
+        let mut merkle_tree = self.merkle_tree.write().await;
+        let initial_leaf = self.contracts.initial_leaf();
+        let mut events = self
+            .contracts
+            .fetch_events(self.starting_block, self.next_leaf.load(Ordering::Acquire))
+            .boxed();
+        let shutdown = await_shutdown();
+        pin_mut!(shutdown);
+        loop {
+            let (index, leaf, root) = select! {
+                v = events.try_next() => match v? {
+                    Some(a) => a,
+                    None => break,
+                },
+                _ = &mut shutdown => return Err(eyre!("Interrupted")),
+            };
+            debug!(?index, ?leaf, ?root, "Received event");
+
+            // Check leaf index is valid
+            if index >= merkle_tree.num_leaves() {
+                error!(?index, ?leaf, num_leaves = ?merkle_tree.num_leaves(), "Received event out of range");
+                panic!("Received event out of range");
+            }
+
+            // Check if leaf value is valid
+            if leaf == initial_leaf {
+                error!(?index, ?leaf, "Inserting empty leaf");
+                continue;
+            }
+
+            // Check leaf value with existing value
+            let existing = merkle_tree.leaves()[index];
+            if existing != initial_leaf {
+                if existing == leaf {
+                    error!(?index, ?leaf, "Received event for already existing leaf.");
+                    continue;
+                }
+                error!(
+                    ?index,
+                    ?leaf,
+                    ?existing,
+                    "Received event for already set leaf."
+                );
+            }
+
+            // Check insertion counter
+            if index != self.next_leaf.load(Ordering::Acquire) {
+                error!(
+                    ?index,
+                    ?self.next_leaf,
+                    ?leaf,
+                    "Event leaf index does not match expected leaf index."
+                );
+            }
+
+            // Check duplicates
+            if let Some(previous) = merkle_tree.leaves()[..index]
+                .iter()
+                .position(|&l| l == leaf)
+            {
+                error!(
+                    ?index,
+                    ?leaf,
+                    ?previous,
+                    "Received event for already inserted leaf."
+                );
+            }
+
+            // Insert
+            merkle_tree.set(index, leaf);
+            self.next_leaf.store(
+                max(self.next_leaf.load(Ordering::Acquire), index + 1),
+                Ordering::Release,
+            );
+
+            // Check root
+            if root != merkle_tree.root() {
+                error!(computed_root = ?merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
+                panic!("Root mismatch between event and computed tree.");
+            }
+        }
+        Ok(())
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    async fn check_health(&self) -> EyreResult<()> {
+        let merkle_tree = self.merkle_tree.read().await;
+        let initial_leaf = self.contracts.initial_leaf();
+        // TODO: A re-org undoing events would cause this to fail.
+        if self.next_leaf.load(Ordering::Acquire) > 0 {
+            self.contracts.assert_valid_root(merkle_tree.root()).await?;
+            info!(root = ?merkle_tree.root(), "Root matches on-chain root.");
+        } else {
+            // TODO: This should still be checkable.
+            info!(root = ?merkle_tree.root(), "Empty tree, not checking root.");
+        }
+
+        // Check tree health
+        let next_leaf = merkle_tree
+            .leaves()
+            .iter()
+            .rposition(|&l| l != initial_leaf)
+            .map_or(0, |i| i + 1);
+        let used_leaves = &merkle_tree.leaves()[..next_leaf];
+        let skipped = used_leaves.iter().filter(|&&l| l == initial_leaf).count();
+        let mut dedup = used_leaves
+            .iter()
+            .filter(|&&l| l != initial_leaf)
+            .collect::<Vec<_>>();
+        dedup.sort();
+        dedup.dedup();
+        let unique = dedup.len();
+        let duplicates = used_leaves.len() - skipped - unique;
+        let total = merkle_tree.num_leaves();
+        let available = total - next_leaf;
+        #[allow(clippy::cast_precision_loss)]
+        let fill = (next_leaf as f64) / (total as f64);
+        if skipped == 0 && duplicates == 0 {
+            info!(
+                healthy = %unique,
+                %available,
+                %total,
+                %fill,
+                "Merkle tree is healthy, no duplicates or skipped leaves."
+            );
+        } else {
+            error!(
+                healthy = %unique,
+                %duplicates,
+                %skipped,
+                used = %next_leaf,
+                %available,
+                %total,
+                %fill,
+                "Merkle tree has duplicate or skipped leaves."
+            );
+        }
+        if next_leaf > available * 3 {
+            if next_leaf > available * 19 {
+                error!(
+                    used = %next_leaf,
+                    available = %available,
+                    total = %total,
+                    "Merkle tree is over 95% full."
+                );
+            } else {
+                warn!(
+                    used = %next_leaf,
+                    available = %available,
+                    total = %total,
+                    "Merkle tree is over 75% full."
+                );
+            }
+        }
         Ok(())
     }
 }

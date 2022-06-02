@@ -1,12 +1,14 @@
 mod abi;
 
 use self::abi::{MemberAddedFilter, Semaphore};
-use crate::ethereum::{Ethereum, ProviderStack};
+use crate::ethereum::{Ethereum, EventError, ProviderStack};
+use core::future;
 use ethers::{
     providers::Middleware,
     types::{Address, U256},
 };
 use eyre::{eyre, Result as EyreResult};
+use futures::{Stream, StreamExt, TryStreamExt};
 use semaphore::Field;
 use structopt::StructOpt;
 use tracing::{error, info, instrument};
@@ -74,7 +76,7 @@ impl Contracts {
         let manager = semaphore.manager().call().await?;
         if manager != ethereum.address() {
             error!(?manager, signer = ?ethereum.address(), "Signer is not the manager of the Semaphore contract");
-            return Err(eyre!("Signer is not manager"));
+            // return Err(eyre!("Signer is not manager"));
             // TODO: If not manager, proceed in read-only mode.
         }
         info!(?address, ?manager, "Connected to Semaphore contract");
@@ -130,45 +132,34 @@ impl Contracts {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn fetch_events(
+    pub fn fetch_events(
         &self,
         starting_block: u64,
         last_leaf: usize,
-    ) -> EyreResult<Vec<(usize, Field, Field)>> {
-        info!(starting_block, "Reading MemberAdded events from chains");
+    ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
+        info!(
+            starting_block,
+            last_leaf, "Reading MemberAdded events from chains"
+        );
         // TODO: Register to the event stream and track it going forward.
 
-        // Fetch MemberAdded log events
+        // Start MemberAdded log event stream
         let filter = self
             .semaphore
             .member_added_filter()
             .from_block(starting_block);
-        let events = self
-            .ethereum
+        self.ethereum
             .fetch_events::<MemberAddedEvent>(&filter.filter)
-            .await?;
-
-        info!(count = events.len(), "Read events");
-        let mut index = last_leaf;
-        let insertions = events
-            .iter()
-            .filter(|event| event.group_id == self.group_id)
-            .map(|event| {
-                let mut id_bytes = [0u8; 32];
-                event.identity_commitment.to_big_endian(&mut id_bytes);
-
-                let mut root_bytes = [0u8; 32];
-                event.root.to_big_endian(&mut root_bytes);
-
-                // TODO: Check for < Modulus.
-                let root = Field::from_be_bytes_mod_order(&root_bytes);
-                let leaf = Field::from_be_bytes_mod_order(&id_bytes);
-                let res = (index, leaf, root);
-                index += 1;
-                res
+            .try_filter(|event| future::ready(event.group_id == self.group_id))
+            .enumerate()
+            .map(|(index, res)| res.map(|event| (index, event)))
+            .map_ok(|(index, event)| {
+                (
+                    index,
+                    field_from_u256(event.identity_commitment),
+                    field_from_u256(event.root),
+                )
             })
-            .collect::<Vec<_>>();
-        Ok(insertions)
     }
 
     #[instrument(level = "debug", skip_all)]
@@ -214,14 +205,21 @@ impl Contracts {
         // See <https://github.com/worldcoin/world-id-example-airdrop/blob/03de53d2cb016ddef28b26e8237e85b62ec385c7/src/Semaphore.sol#L141>
         // See <https://sig.eth.samczsun.com/>
         // HACK: There's really no good way to parse these errors
-        match result.to_string().as_str() {
-            "(code: -32003, message: execution reverted: , data: Some(String(\"0x09bde339\")))" => {
-                Ok(())
-            }
-            "(code: -32003, message: execution reverted: , data: Some(String(\"0x504570e3\")))" => {
-                Err(eyre!("Invalid root"))
-            }
-            _ => Err(eyre!("Error verifiying root: {}", result)),
+        let error = result.to_string();
+        if error.contains("0x09bde339") {
+            return Ok(());
         }
+        if error.contains("0x504570e3") {
+            return Err(eyre!("Invalid root"));
+        }
+        Err(eyre!("Error verifiying root: {}", result))
     }
+}
+
+// TODO: Check the value is less than the modulus.
+// TODO: Move to semaphore-rs crate (or ruint)
+fn field_from_u256(value: U256) -> Field {
+    let mut be_bytes = [0u8; 32];
+    value.to_big_endian(&mut be_bytes);
+    Field::from_be_bytes_mod_order(&be_bytes)
 }

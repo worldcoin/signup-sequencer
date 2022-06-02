@@ -30,14 +30,59 @@ use ethers::{
 };
 use eyre::{eyre, Result as EyreResult};
 use futures::{try_join, FutureExt, Stream, StreamExt, TryStreamExt};
+use once_cell::sync::Lazy;
+use prometheus::{
+    exponential_buckets, register_counter, IntCounterVec, register_int_counter_vec, register_gauge, register_histogram, Counter, Gauge,
+    Histogram,
+};
 use reqwest::Client as ReqwestClient;
 use std::{error::Error, sync::Arc, time::Duration};
 use structopt::StructOpt;
 use thiserror::Error;
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 use url::Url;
 
 const PENDING: Option<BlockId> = Some(BlockId::Number(BlockNumber::Pending));
+
+static TX_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
+    register_int_counter_vec!(
+        "eth_tx_count",
+        "The transaction count by bytes4.",
+        &["bytes4"]
+    )
+    .unwrap()
+});
+static TX_LATENCY: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "eth_tx_latency_seconds",
+        "The transaction inclusion latency in seconds.",
+        exponential_buckets(0.1, 1.5, 25).unwrap()
+    )
+    .unwrap()
+});
+static TX_GAS_FRACTION: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "eth_tx_gas_fraction",
+        "The fraction of the gas_limit used by the transaction.",
+        vec![
+            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.975, 0.99, 0.999, 1.0
+        ]
+    )
+    .unwrap()
+});
+static TX_GAS_PRICE: Lazy<Gauge> = Lazy::new(|| {
+    register_gauge!(
+        "eth_tx_gas_price",
+        "Effective gas price for mined transaction."
+    )
+    .unwrap()
+});
+static TX_GAS_USED: Lazy<Counter> = Lazy::new(|| {
+    register_counter!("eth_tx_gas_used", "Cumulative gas used for transactions.").unwrap()
+});
+static TX_WEI_USED: Lazy<Counter> = Lazy::new(|| {
+    register_counter!("eth_tx_wei_used", "Cumulative wei used for transactions.").unwrap()
+});
 
 // TODO: Log and metrics for signer / nonces.
 
@@ -290,6 +335,8 @@ impl Ethereum {
         })
     }
 
+    #[allow(clippy::option_if_let_else)] // Less readable
+    #[allow(clippy::cast_precision_loss)]
     async fn send_transaction_unlogged(&self, tx: TypedTransaction) -> Result<(), TxError> {
         // Convert to legacy transaction if required
         let mut tx = if self.legacy {
@@ -307,17 +354,24 @@ impl Ethereum {
             .fill_transaction(&mut tx, None)
             .await
             .map_err(|error| {
-            error!(?error, "Failed to fill transaction");
-            TxError::Fill(Box::new(error))
-        })?;
+                error!(?error, "Failed to fill transaction");
+                TxError::Fill(Box::new(error))
+            })?;
 
         // Log transaction
         info!(?tx, "Sending transaction.");
+        let bytes4: u32 = tx.data().map_or(0, |data|{
+            let mut buffer = [0; 4];
+            buffer.copy_from_slice(&data.as_ref()[..4]); // TODO: Don't panic.
+            u32::from_be_bytes(buffer)
+        });
+        let bytes4 = format!("{:8x}", bytes4);
+        TX_COUNT.with_label_values(&[&bytes4]).inc();
 
         // Send TX to mempool
         let pending = self
             .provider
-            .send_transaction(tx, None)
+            .send_transaction(tx.clone(), None)
             .await
             .map_err(|error| {
                 error!(?error, "Failed to send transaction");
@@ -326,10 +380,45 @@ impl Ethereum {
         let tx_hash: H256 = *pending;
 
         // Wait for TX to be mined
+        let timer = TX_LATENCY.start_timer();
         let receipt = pending
             .await
             .map_err(TxError::Confirmation)?
             .ok_or(TxError::Dropped(tx_hash))?;
+        timer.observe_duration();
+        info!(?tx, ?receipt, "Transaction mined");
+
+        // Check receipt for gas used
+        if let Some(gas_price) = receipt.effective_gas_price {
+            TX_GAS_PRICE.set(gas_price.as_u128() as f64);
+        } else {
+            error!(
+                ?tx,
+                ?receipt,
+                "Receipt did not include effective gas price."
+            );
+        }
+        if let Some(gas_used) = receipt.gas_used {
+            TX_GAS_USED.inc_by(gas_used.as_u128() as f64);
+            if let Some(gas_limit) = tx.gas() {
+                let gas_fraction = gas_used.as_u128() as f64 / gas_limit.as_u128() as f64;
+                TX_GAS_FRACTION.observe(gas_fraction);
+                if gas_fraction > 0.9 {
+                    warn!(
+                        %gas_used,
+                        %gas_limit,
+                        %gas_fraction,
+                        "Transaction used more than 90% of the gas limit."
+                    );
+                }
+            }
+            if let Some(gas_price) = receipt.effective_gas_price {
+                let cost_wei = gas_used * gas_price;
+                TX_WEI_USED.inc_by(cost_wei.as_u128() as f64);
+            }
+        } else {
+            error!(?tx, ?receipt, "Receipt did not include gas used.");
+        }
 
         // Check receipt status for success
         if receipt.status != Some(U64::from(1_u64)) {
@@ -351,6 +440,7 @@ impl Ethereum {
         &self,
         filter: &Filter,
     ) -> impl Stream<Item = Result<T, EventError>> + '_ {
+        // TODO: Add `Log` struct for blocknumber and other metadata.
         self.fetch_events_raw(filter).map(|res| {
             res.and_then(|log| {
                 T::decode_log(&RawLog {

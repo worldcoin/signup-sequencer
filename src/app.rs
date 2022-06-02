@@ -71,12 +71,12 @@ pub struct Options {
 }
 
 pub struct App {
-    ethereum:       Ethereum,
-    contracts:      Contracts,
-    storage_file:   PathBuf,
-    merkle_tree:    RwLock<PoseidonTree>,
-    next_leaf:      AtomicUsize,
-    starting_block: u64,
+    ethereum:     Ethereum,
+    contracts:    Contracts,
+    storage_file: PathBuf,
+    merkle_tree:  RwLock<PoseidonTree>,
+    next_leaf:    AtomicUsize,
+    last_block:   u64,
 }
 
 impl App {
@@ -104,12 +104,13 @@ impl App {
             storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
             next_leaf: AtomicUsize::new(0),
-            starting_block: options.starting_block,
+            last_block: options.starting_block,
         };
 
         result.read_file().await?;
         result.check_leaves().await?;
         result.process_events().await?;
+        // TODO: Store file after processing events.
         result.check_health().await?;
         Ok(result)
     }
@@ -249,7 +250,8 @@ impl App {
                 self.next_leaf
                     .store(file.commitments.len(), Ordering::Release);
                 merkle_tree.set_range(0, file.commitments);
-                info!(path = ?&self.storage_file, num_leaves = %self.next_leaf.load(Ordering::Acquire), "Read tree from storage");
+                self.last_block = file.last_block;
+                info!(path = ?&self.storage_file, num_leaves = %self.next_leaf.load(Ordering::Acquire), last_block = %self.last_block, "Read tree from storage");
             } else {
                 warn!(path = ?&self.storage_file, "Storage file empty, skipping.");
             }
@@ -299,7 +301,7 @@ impl App {
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
             .contracts
-            .fetch_events(self.starting_block, self.next_leaf.load(Ordering::Acquire))
+            .fetch_events(self.last_block, self.next_leaf.load(Ordering::Acquire))
             .boxed();
         let shutdown = await_shutdown();
         pin_mut!(shutdown);

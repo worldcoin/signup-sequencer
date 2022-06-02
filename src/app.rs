@@ -385,8 +385,11 @@ impl App {
         let initial_leaf = self.contracts.initial_leaf();
         // TODO: A re-org undoing events would cause this to fail.
         if self.next_leaf.load(Ordering::Acquire) > 0 {
-            self.contracts.assert_valid_root(merkle_tree.root()).await?;
-            info!(root = ?merkle_tree.root(), "Root matches on-chain root.");
+            if let Err(error) = self.contracts.assert_valid_root(merkle_tree.root()).await {
+                error!(root = ?merkle_tree.root(), %error, "Root not valid on-chain.");
+            } else {
+                info!(root = ?merkle_tree.root(), "Root matches on-chain root.");
+            }
         } else {
             // TODO: This should still be checkable.
             info!(root = ?merkle_tree.root(), "Empty tree, not checking root.");

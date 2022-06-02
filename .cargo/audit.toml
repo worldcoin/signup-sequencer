@@ -8,4 +8,6 @@ ignore = [
     # Well know problems in the chrono crate that are blocked upstream.
     # See <https://github.com/chronotope/chrono/issues/499>
     "RUSTSEC-2020-0159",
+    # Chrono forces dependency time down to a broken version.
+    "RUSTSEC-2020-0071",
 ]

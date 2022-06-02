@@ -32,8 +32,8 @@ use eyre::{eyre, Result as EyreResult};
 use futures::{try_join, FutureExt, Stream, StreamExt, TryStreamExt};
 use once_cell::sync::Lazy;
 use prometheus::{
-    exponential_buckets, register_counter, IntCounterVec, register_int_counter_vec, register_gauge, register_histogram, Counter, Gauge,
-    Histogram,
+    exponential_buckets, register_counter, register_gauge, register_histogram,
+    register_int_counter_vec, Counter, Gauge, Histogram, IntCounterVec,
 };
 use reqwest::Client as ReqwestClient;
 use std::{error::Error, sync::Arc, time::Duration};
@@ -45,11 +45,9 @@ use url::Url;
 const PENDING: Option<BlockId> = Some(BlockId::Number(BlockNumber::Pending));
 
 static TX_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
-    register_int_counter_vec!(
-        "eth_tx_count",
-        "The transaction count by bytes4.",
-        &["bytes4"]
-    )
+    register_int_counter_vec!("eth_tx_count", "The transaction count by bytes4.", &[
+        "bytes4"
+    ])
     .unwrap()
 });
 static TX_LATENCY: Lazy<Histogram> = Lazy::new(|| {
@@ -360,7 +358,7 @@ impl Ethereum {
 
         // Log transaction
         info!(?tx, "Sending transaction.");
-        let bytes4: u32 = tx.data().map_or(0, |data|{
+        let bytes4: u32 = tx.data().map_or(0, |data| {
             let mut buffer = [0; 4];
             buffer.copy_from_slice(&data.as_ref()[..4]); // TODO: Don't panic.
             u32::from_be_bytes(buffer)

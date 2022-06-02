@@ -6,8 +6,7 @@ use ethers::{
     types::U256,
 };
 use once_cell::sync::Lazy;
-
-// TODO: Log fetches
+use tracing::debug;
 
 static GAS_PRICE: Lazy<Gauge> =
     Lazy::new(|| register_gauge!("eth_gas_price", "Ethereum gas price for transactions.").unwrap());
@@ -42,6 +41,7 @@ impl<Inner: GasOracle> GasOracle for GasOracleLogger<Inner> {
     async fn fetch(&self) -> Result<U256, GasOracleError> {
         let value = self.inner.fetch().await?;
         GAS_PRICE.set(u256_to_f64(value));
+        debug!(gas_price = ?value, "Fetched legacy gas price");
         Ok(value)
     }
 
@@ -49,6 +49,7 @@ impl<Inner: GasOracle> GasOracle for GasOracleLogger<Inner> {
         let (max_fee, priority_fee) = self.inner.estimate_eip1559_fees().await?;
         MAX_FEE.set(u256_to_f64(max_fee));
         PRIORITY_FEE.set(u256_to_f64(priority_fee));
+        debug!(?max_fee, ?priority_fee, "Fetched gas price");
         Ok((max_fee, priority_fee))
     }
 }

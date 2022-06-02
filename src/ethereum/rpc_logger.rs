@@ -8,7 +8,7 @@ use tracing::instrument;
 
 static REQUESTS: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!(
-        "eth_requests",
+        "eth_rpc_requests",
         "Number of Ethereum provider requests made by method.",
         &["method"]
     )
@@ -16,7 +16,7 @@ static REQUESTS: Lazy<IntCounterVec> = Lazy::new(|| {
 });
 static LATENCY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
-        "eth_latency_seconds",
+        "eth_rpc_latency_seconds",
         "The Ethereum provider latency in seconds."
     )
     .unwrap()

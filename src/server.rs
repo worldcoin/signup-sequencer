@@ -45,6 +45,7 @@ const CONTENT_JSON: &str = "application/json";
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 pub struct InsertCommitmentRequest {
     group_id:            usize,
     identity_commitment: Hash,
@@ -52,6 +53,7 @@ pub struct InsertCommitmentRequest {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 pub struct InclusionProofRequest {
     pub group_id:            usize,
     pub identity_commitment: Hash,
@@ -71,6 +73,10 @@ pub enum Error {
     IndexOutOfBounds,
     #[error("provided identity commitment not found")]
     IdentityCommitmentNotFound,
+    #[error("provided identity commitment is invalid")]
+    InvalidCommitment,
+    #[error("provided identity commitment is already included")]
+    DuplicateCommitment,
     #[error("invalid JSON request: {0}")]
     InvalidSerialization(#[from] serde_json::Error),
     #[error(transparent)]
@@ -91,9 +97,11 @@ impl Error {
             InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
             InvalidPath => StatusCode::NOT_FOUND,
             InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            IndexOutOfBounds | IdentityCommitmentNotFound | InvalidSerialization(_) => {
-                StatusCode::BAD_REQUEST
-            }
+            IndexOutOfBounds
+            | IdentityCommitmentNotFound
+            | InvalidCommitment
+            | DuplicateCommitment
+            | InvalidSerialization(_) => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         hyper::Response::builder()

@@ -298,7 +298,6 @@ struct InsertIdentityResponse {
 fn construct_inclusion_proof_body(identity_commitment: &str) -> Body {
     Body::from(
         json!({
-            "id": 0,
             "groupId": 1,
             "identityCommitment": identity_commitment,
         })
@@ -309,7 +308,6 @@ fn construct_inclusion_proof_body(identity_commitment: &str) -> Body {
 fn construct_insert_identity_body(identity_commitment: &str) -> Body {
     Body::from(
         json!({
-            "id": 0,
             "groupId": 1,
             "identityCommitment": identity_commitment,
 

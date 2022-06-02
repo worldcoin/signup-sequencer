@@ -71,12 +71,12 @@ pub struct Options {
 }
 
 pub struct App {
-    ethereum:       Ethereum,
-    contracts:      Contracts,
-    storage_file:   PathBuf,
-    merkle_tree:    RwLock<PoseidonTree>,
-    next_leaf:      AtomicUsize,
-    starting_block: u64,
+    ethereum:     Ethereum,
+    contracts:    Contracts,
+    storage_file: PathBuf,
+    merkle_tree:  RwLock<PoseidonTree>,
+    next_leaf:    AtomicUsize,
+    last_block:   u64,
 }
 
 impl App {
@@ -104,12 +104,13 @@ impl App {
             storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
             next_leaf: AtomicUsize::new(0),
-            starting_block: options.starting_block,
+            last_block: options.starting_block,
         };
 
         result.read_file().await?;
         result.check_leaves().await?;
         result.process_events().await?;
+        // TODO: Store file after processing events.
         result.check_health().await?;
         Ok(result)
     }
@@ -127,10 +128,19 @@ impl App {
         if U256::from(group_id) != self.contracts.group_id() {
             return Err(ServerError::InvalidGroupId);
         }
+        if commitment == &self.contracts.initial_leaf() {
+            warn!(?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Attempt to insert initial leaf.");
+            return Err(ServerError::InvalidCommitment);
+        }
 
         // Get a lock on the tree for the duration of this operation.
         // OPT: Sequence operations and allow concurrent inserts / transactions.
         let mut tree = self.merkle_tree.write().await;
+
+        if let Some(existing) = tree.leaves().iter().position(|&x| x == *commitment) {
+            warn!(?existing, ?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Commitment already exists in tree.");
+            return Err(ServerError::DuplicateCommitment);
+        };
 
         // Fetch next leaf index
         let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
@@ -167,18 +177,17 @@ impl App {
     pub async fn inclusion_proof(
         &self,
         group_id: usize,
-        identity_commitment: &Hash,
+        commitment: &Hash,
     ) -> Result<InclusionProofResponse, ServerError> {
         if U256::from(group_id) != self.contracts.group_id() {
             return Err(ServerError::InvalidGroupId);
         }
+        if commitment == &self.contracts.initial_leaf() {
+            return Err(ServerError::InvalidCommitment);
+        }
 
         let merkle_tree = self.merkle_tree.read().await;
-        let identity_index = match merkle_tree
-            .leaves()
-            .iter()
-            .position(|&x| x == *identity_commitment)
-        {
+        let identity_index = match merkle_tree.leaves().iter().position(|&x| x == *commitment) {
             Some(i) => i,
             None => return Err(ServerError::IdentityCommitmentNotFound),
         };
@@ -190,9 +199,9 @@ impl App {
 
         // Locally check the proof
         // TODO: Check the leaf index / path
-        if !merkle_tree.verify(*identity_commitment, &proof) {
+        if !merkle_tree.verify(*commitment, &proof) {
             error!(
-                ?identity_commitment,
+                ?commitment,
                 ?identity_index,
                 ?root,
                 "Proof does not verify locally."
@@ -241,7 +250,8 @@ impl App {
                 self.next_leaf
                     .store(file.commitments.len(), Ordering::Release);
                 merkle_tree.set_range(0, file.commitments);
-                info!(path = ?&self.storage_file, num_leaves = %self.next_leaf.load(Ordering::Acquire), "Read tree from storage");
+                self.last_block = file.last_block;
+                info!(path = ?&self.storage_file, num_leaves = %self.next_leaf.load(Ordering::Acquire), last_block = %self.last_block, "Read tree from storage");
             } else {
                 warn!(path = ?&self.storage_file, "Storage file empty, skipping.");
             }
@@ -291,7 +301,7 @@ impl App {
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
             .contracts
-            .fetch_events(self.starting_block, self.next_leaf.load(Ordering::Acquire))
+            .fetch_events(self.last_block, self.next_leaf.load(Ordering::Acquire))
             .boxed();
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
@@ -377,8 +387,11 @@ impl App {
         let initial_leaf = self.contracts.initial_leaf();
         // TODO: A re-org undoing events would cause this to fail.
         if self.next_leaf.load(Ordering::Acquire) > 0 {
-            self.contracts.assert_valid_root(merkle_tree.root()).await?;
-            info!(root = ?merkle_tree.root(), "Root matches on-chain root.");
+            if let Err(error) = self.contracts.assert_valid_root(merkle_tree.root()).await {
+                error!(root = ?merkle_tree.root(), %error, "Root not valid on-chain.");
+            } else {
+                info!(root = ?merkle_tree.root(), "Root matches on-chain root.");
+            }
         } else {
             // TODO: This should still be checkable.
             info!(root = ?merkle_tree.root(), "Empty tree, not checking root.");

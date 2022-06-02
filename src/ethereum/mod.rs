@@ -83,6 +83,9 @@ pub type ProviderStack = Provider4;
 
 #[derive(Debug, Error)]
 pub enum TxError {
+    #[error("Error filling transaction: {0}")]
+    Fill(Box<dyn Error + Send + Sync + 'static>),
+
     #[error("Error sending transaction: {0}")]
     Send(Box<dyn Error + Send + Sync + 'static>),
 
@@ -289,7 +292,7 @@ impl Ethereum {
 
     async fn send_transaction_unlogged(&self, tx: TypedTransaction) -> Result<(), TxError> {
         // Convert to legacy transaction if required
-        let tx = if self.legacy {
+        let mut tx = if self.legacy {
             TypedTransaction::Legacy(match tx {
                 TypedTransaction::Legacy(tx) => tx,
                 TypedTransaction::Eip1559(tx) => tx.into(),
@@ -299,12 +302,24 @@ impl Ethereum {
             tx
         };
 
+        // Fill in transaction
+        self.provider.fill_transaction(&mut tx, None).await.map_err(|error| {
+            error!(?error, "Failed to fill transaction");
+            TxError::Fill(Box::new(error))
+        })?;
+
+        // Log transaction
+        info!(?tx, "Sending transaction.");
+
         // Send TX to mempool
         let pending = self
             .provider
             .send_transaction(tx, None)
             .await
-            .map_err(|e| TxError::Send(Box::new(e)))?;
+            .map_err(|error| {
+                error!(?error, "Failed to send transaction");
+                TxError::Send(Box::new(error))
+            })?;
         let tx_hash: H256 = *pending;
 
         // Wait for TX to be mined

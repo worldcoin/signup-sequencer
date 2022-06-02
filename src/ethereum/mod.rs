@@ -75,10 +75,10 @@ pub struct Options {
 // Code out the provider stack in types
 // Needed because of <https://github.com/gakonst/ethers-rs/issues/592>
 type Provider0 = Provider<RpcLogger<Transport>>;
-type Provider1 = SignerMiddleware<Provider0, Wallet<SigningKey>>;
-type Provider2 = NonceManagerMiddleware<Provider1>;
-type Provider3 = Estimator<Provider2>;
-type Provider4 = GasOracleMiddleware<Arc<Provider3>, Box<dyn GasOracle>>;
+type Provider1 = Estimator<Provider0>;
+type Provider2 = GasOracleMiddleware<Arc<Provider1>, Box<dyn GasOracle>>;
+type Provider3 = SignerMiddleware<Provider2, Wallet<SigningKey>>;
+type Provider4 = NonceManagerMiddleware<Provider3>;
 pub type ProviderStack = Provider4;
 
 #[derive(Debug, Error)]
@@ -176,38 +176,6 @@ impl Ethereum {
             (provider, chain_id, eip1559)
         };
 
-        // Construct a local key signer
-        let (provider, address) = {
-            // Create signer
-            let signing_key = SigningKey::from_bytes(options.signing_key.as_bytes())?;
-            let signer = LocalWallet::from(signing_key);
-            let address = signer.address();
-
-            // Create signer middleware for provider.
-            let chain_id: u64 = chain_id.try_into().map_err(|e| eyre!("{}", e))?;
-            let signer = signer.with_chain_id(chain_id);
-            let provider = SignerMiddleware::new(provider, signer);
-
-            // Create local nonce manager.
-            // TODO: This is state full. There may be unsettled TXs in the mempool.
-            let provider = { NonceManagerMiddleware::new(provider, address) };
-
-            // Log wallet info.
-            let (next_nonce, balance) = try_join!(
-                provider.initialize_nonce(PENDING),
-                provider.get_balance(address, PENDING)
-            )?;
-            info!(?address, %next_nonce, %balance, "Constructed wallet");
-
-            // Sanity check the balance
-            if balance.is_zero() {
-                // Log an error, but try proceeding anyway.
-                error!(?address, "Wallet has no funds.");
-            }
-            (provider, address)
-        };
-        // TODO: Check signer balance regularly and keep the metric as a gauge.
-
         // Add a gas estimator with 10% and 10k gas bonus over provider.
         // TODO: Use local EVM evaluation?
         let provider = Estimator::new(provider, 1.10, 10e3);
@@ -263,6 +231,38 @@ impl Ethereum {
             GasOracleMiddleware::new(provider, gas_oracle)
         };
 
+        // Construct a local key signer
+        let (provider, address) = {
+            // Create signer
+            let signing_key = SigningKey::from_bytes(options.signing_key.as_bytes())?;
+            let signer = LocalWallet::from(signing_key);
+            let address = signer.address();
+
+            // Create signer middleware for provider.
+            let chain_id: u64 = chain_id.try_into().map_err(|e| eyre!("{}", e))?;
+            let signer = signer.with_chain_id(chain_id);
+            let provider = SignerMiddleware::new(provider, signer);
+
+            // Create local nonce manager.
+            // TODO: This is state full. There may be unsettled TXs in the mempool.
+            let provider = { NonceManagerMiddleware::new(provider, address) };
+
+            // Log wallet info.
+            let (next_nonce, balance) = try_join!(
+                provider.initialize_nonce(PENDING),
+                provider.get_balance(address, PENDING)
+            )?;
+            info!(?address, %next_nonce, %balance, "Constructed wallet");
+
+            // Sanity check the balance
+            if balance.is_zero() {
+                // Log an error, but try proceeding anyway.
+                error!(?address, "Wallet has no funds.");
+            }
+            (provider, address)
+        };
+        // TODO: Check signer balance regularly and keep the metric as a gauge.
+
         let provider = Arc::new(provider);
         Ok(Self {
             provider,
@@ -303,7 +303,10 @@ impl Ethereum {
         };
 
         // Fill in transaction
-        self.provider.fill_transaction(&mut tx, None).await.map_err(|error| {
+        self.provider
+            .fill_transaction(&mut tx, None)
+            .await
+            .map_err(|error| {
             error!(?error, "Failed to fill transaction");
             TxError::Fill(Box::new(error))
         })?;

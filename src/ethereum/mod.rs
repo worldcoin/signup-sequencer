@@ -99,17 +99,6 @@ pub struct Options {
     // NOTE: We abuse `Hash` here because it has the right `FromStr` implementation.
     pub signing_key: H256,
 
-    /// If this module is being run with EIP-1559 support, useful in some places
-    /// where EIP-1559 is not yet supported
-    // TODO: Remove, we autodetect now.
-    #[structopt(
-        short,
-        parse(try_from_str),
-        default_value = "true",
-        env = "USE_EIP1559"
-    )]
-    pub eip1559: bool,
-
     /// Maximum number of blocks to pull events from in one request.
     #[structopt(long, env, default_value = "1000")]
     pub max_log_blocks: usize,

@@ -61,12 +61,15 @@ type Provider1 = SignerMiddleware<Provider0, Wallet<SigningKey>>;
 type Provider2 = NonceManagerMiddleware<Provider1>;
 type ProviderStack = Provider2;
 
+/// Max number identity insertions that can happen in a given batch
+pub const MAX_BATCH_SIZE: usize = 4;
+
 pub struct Ethereum {
-    provider:  Arc<ProviderStack>,
-    address:   H160,
+    provider: Arc<ProviderStack>,
+    address: H160,
     semaphore: SemaphoreAirdrop<ProviderStack>,
-    eip1559:   bool,
-    mock:      bool,
+    eip1559: bool,
+    mock: bool,
 }
 
 impl Ethereum {
@@ -291,6 +294,75 @@ impl Ethereum {
         if receipt.status != Some(U64::from(1_u64)) {
             return Err(eyre!("tx failed"));
         }
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    pub async fn insert_identities(
+        &self,
+        group_id: usize,
+        commitments: [&Field; MAX_BATCH_SIZE],
+        _tree_depth: usize,
+        nonce: usize,
+    ) -> EyreResult<()> {
+        if self.mock {
+            info!("MOCK mode enabled, skipping");
+            return Ok(());
+        }
+
+        let depth = self
+            .semaphore
+            .get_depth(group_id.into())
+            .from(self.address)
+            .call()
+            .await?;
+        info!(?group_id, ?depth, "Fetched group tree depth");
+        if depth == 0 {
+            return Err(eyre!("group {} not created", group_id));
+        }
+
+        let c_uints = commitments
+            .iter()
+            .map(|c| {
+                info!(%group_id, %c, %MAX_BATCH_SIZE, "Inserting identity in contract");
+                U256::from(c.to_be_bytes())
+            })
+            .collect();
+
+        let mut tx = self.semaphore.add_members(group_id.into(), c_uints);
+        let pending_tx = if self.eip1559 {
+            self.provider.fill_transaction(&mut tx.tx, None).await?;
+            tx.tx.set_gas(10_000_000_u64); // HACK: ethers-rs estimate is wrong.
+            tx.tx.set_nonce(nonce);
+            info!(?tx, "Sending transaction");
+            self.provider.send_transaction(tx.tx, None).await?
+        } else {
+            // Our tests use ganache which doesn't support EIP-1559 transactions yet.
+            tx = tx.legacy();
+            self.provider.fill_transaction(&mut tx.tx, None).await?;
+            tx.tx.set_nonce(nonce);
+            tx.tx.set_gas(5_000_000_u64); // HACK: ethers-rs estimate is wrong, needs to fit ganache block gas limit.
+
+            // quick hack to ensure tx is so overpriced that it won't get dropped
+            tx.tx.set_gas_price(
+                tx.tx
+                    .gas_price()
+                    .ok_or(eyre!("no gasPrice set"))?
+                    .checked_mul(2_u64.into())
+                    .ok_or(eyre!("overflow in gasPrice"))?,
+            );
+            info!(?tx, "Sending transaction");
+            self.provider.send_transaction(tx.tx, None).await?
+        };
+        let receipt = pending_tx
+            .await
+            .map_err(|e| eyre!(e))?
+            .expect("tx dropped from mempool");
+        info!(?receipt, "Receipt");
+        if receipt.status != Some(U64::from(1_u64)) {
+            return Err(eyre!("tx failed"));
+        }
+
         Ok(())
     }
 }

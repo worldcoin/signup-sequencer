@@ -10,6 +10,7 @@ abigen!(
         function getDepth(uint256 groupId) public view returns (uint8)
         function createGroup(uint256 groupId, uint8 depth, uint256 zeroValue) public override
         function addMember(uint256 groupId, uint256 identityCommitment) public override
+        function addMembers(uint256 groupId, uint256[] memory identityCommitments) public override
     ]"#,
     event_derives(serde::Deserialize, serde::Serialize)
 );

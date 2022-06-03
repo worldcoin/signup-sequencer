@@ -1,5 +1,5 @@
 use crate::{
-    ethereum::{self, Ethereum},
+    ethereum::{self, Ethereum, MAX_BATCH_SIZE},
     server::Error as ServerError,
 };
 use core::cmp::max;
@@ -25,7 +25,7 @@ pub type Hash = <PoseidonHash as Hasher>::Hash;
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsonCommitment {
-    pub last_block:  u64,
+    pub last_block: u64,
     pub commitments: Vec<Hash>,
 }
 
@@ -38,7 +38,7 @@ pub struct IndexResponse {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProofResponse {
-    pub root:  Field,
+    pub root: Field,
     pub proof: Proof,
 }
 
@@ -79,12 +79,12 @@ pub struct Options {
 }
 
 pub struct App {
-    ethereum:     Ethereum,
+    ethereum: Ethereum,
     storage_file: PathBuf,
-    merkle_tree:  RwLock<PoseidonTree>,
-    next_leaf:    AtomicUsize,
-    tree_depth:   usize,
-    is_manager:   bool,
+    merkle_tree: RwLock<PoseidonTree>,
+    next_leaf: AtomicUsize,
+    tree_depth: usize,
+    is_manager: bool,
     nonce_offset: usize,
 }
 
@@ -191,6 +191,41 @@ impl App {
         {
             let mut merkle_tree = self.merkle_tree.write().await;
             merkle_tree.set(identity_index, *commitment);
+        }
+
+        self.store().await?;
+
+        Ok(IndexResponse { identity_index })
+    }
+
+    pub async fn batch_insert_identity(
+        &self,
+        group_id: usize,
+        commitments: [&Hash; MAX_BATCH_SIZE],
+    ) -> Result<IndexResponse, ServerError> {
+        // Check if manager
+        if !self.is_manager {
+            return Err(ServerError::NotManager);
+        }
+
+        // Fetch next leaf index
+        let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
+
+        self.ethereum
+            .insert_identities(
+                group_id,
+                commitments,
+                self.tree_depth,
+                identity_index + self.nonce_offset,
+            )
+            .await?;
+
+        // Update and write merkle tree
+        for commitment in commitments {
+            {
+                let mut merkle_tree = self.merkle_tree.write().await;
+                merkle_tree.set(identity_index, *commitment);
+            }
         }
 
         self.store().await?;

@@ -46,14 +46,14 @@ const CONTENT_JSON: &str = "application/json";
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InsertCommitmentRequest {
-    group_id:            usize,
+    group_id: usize,
     identity_commitment: Hash,
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProofRequest {
-    pub group_id:            usize,
+    pub group_id: usize,
     pub identity_commitment: Hash,
 }
 

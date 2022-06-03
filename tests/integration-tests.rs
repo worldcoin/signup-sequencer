@@ -307,7 +307,7 @@ async fn spawn_app(options: Options) -> EyreResult<(JoinHandle<()>, SocketAddr)>
 
 #[derive(Deserialize, Serialize, Debug)]
 struct CompiledContract {
-    abi:      Abi,
+    abi: Abi,
     bytecode: String,
 }
 

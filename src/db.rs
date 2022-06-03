@@ -1,5 +1,5 @@
 use crate::app::Hash;
-use eyre::{Context, Result, WrapErr};
+use eyre::{Context, Result};
 use sqlx::{any::AnyKind, pool::PoolOptions, Any, Executor, Pool, Row};
 use structopt::StructOpt;
 use tracing::{debug, info};
@@ -43,6 +43,8 @@ impl Db {
             #[cfg(feature = "postgres")]
             AnyKind::Postgres => "version()",
 
+            // Depending on compilation flags there may be more patterns.
+            #[allow(unreachable_patterns)]
             _ => "'unknown'",
         };
         let version = pool

@@ -351,9 +351,12 @@ impl Ethereum {
                 error!(?error, "Failed to fill transaction");
                 TxError::Fill(Box::new(error))
             })?;
+        let nonce = tx.nonce().unwrap().as_u64();
+        let gas_limit = tx.gas().unwrap().as_u128() as f64;
+        let gas_price = tx.gas_price().unwrap().as_u128() as f64;
 
         // Log transaction
-        info!(?tx, "Sending transaction.");
+        info!(?tx, ?nonce, ?gas_limit, ?gas_price, "Sending transaction.");
         let bytes4: u32 = tx.data().map_or(0, |data| {
             let mut buffer = [0; 4];
             buffer.copy_from_slice(&data.as_ref()[..4]); // TODO: Don't panic.
@@ -368,25 +371,34 @@ impl Ethereum {
             .send_transaction(tx.clone(), None)
             .await
             .map_err(|error| {
-                error!(?error, "Failed to send transaction");
+                error!(?nonce, ?error, "Failed to send transaction");
                 TxError::Send(Box::new(error))
             })?;
         let tx_hash: H256 = *pending;
+        info!(?nonce, ?tx_hash, "Transaction in mempool");
 
         // Wait for TX to be mined
         let timer = TX_LATENCY.start_timer();
         let receipt = pending
             .await
-            .map_err(TxError::Confirmation)?
-            .ok_or(TxError::Dropped(tx_hash))?;
+            .map_err(|err| {
+                error!(?nonce, ?tx_hash, ?err, "Transaction failed to confirm");
+
+                TxError::Confirmation(err)
+            })?
+            .ok_or_else(|| {
+                error!(?nonce, ?tx_hash, "Transaction dropped");
+                TxError::Dropped(tx_hash)
+            })?;
         timer.observe_duration();
-        info!(?tx, ?receipt, "Transaction mined");
+        info!(?nonce, ?tx_hash, ?receipt, "Transaction mined");
 
         // Check receipt for gas used
         if let Some(gas_price) = receipt.effective_gas_price {
             TX_GAS_PRICE.set(gas_price.as_u128() as f64);
         } else {
             error!(
+                ?nonce,
                 ?tx,
                 ?receipt,
                 "Receipt did not include effective gas price."
@@ -399,6 +411,7 @@ impl Ethereum {
                 TX_GAS_FRACTION.observe(gas_fraction);
                 if gas_fraction > 0.9 {
                     warn!(
+                        ?nonce,
                         %gas_used,
                         %gas_limit,
                         %gas_fraction,
@@ -411,7 +424,7 @@ impl Ethereum {
                 TX_WEI_USED.inc_by(cost_wei.as_u128() as f64);
             }
         } else {
-            error!(?tx, ?receipt, "Receipt did not include gas used.");
+            error!(?nonce, ?tx, ?receipt, "Receipt did not include gas used.");
         }
 
         // Check receipt status for success

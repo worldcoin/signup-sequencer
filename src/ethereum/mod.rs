@@ -1,12 +1,13 @@
 /// TODO: Upstream most of these to ethers-rs
 mod estimator;
 mod gas_oracle_logger;
+mod min_gas_fees;
 mod rpc_logger;
 mod transport;
 
 use self::{
-    estimator::Estimator, gas_oracle_logger::GasOracleLogger, rpc_logger::RpcLogger,
-    transport::Transport,
+    estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees,
+    rpc_logger::RpcLogger, transport::Transport,
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use ethers::{
@@ -18,14 +19,14 @@ use ethers::{
             Cache, EthGasStation, Etherchain, GasNow, GasOracle, GasOracleMiddleware, Median,
             Polygon, ProviderOracle,
         },
-        NonceManagerMiddleware, SignerMiddleware,
+        SignerMiddleware,
     },
     prelude::ProviderError,
     providers::{LogQueryError, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
     types::{
-        transaction::eip2718::TypedTransaction, Address, BlockId, BlockNumber, Chain, Filter, Log,
-        TransactionReceipt, H160, H256, U64,
+        transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,
+        BlockNumber, Chain, Filter, Log, TransactionReceipt, H160, H256, U64,
     },
 };
 use eyre::{eyre, Result as EyreResult};
@@ -84,7 +85,7 @@ static TX_WEI_USED: Lazy<Counter> = Lazy::new(|| {
 
 // TODO: Log and metrics for signer / nonces.
 
-#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     /// Ethereum API Provider
     #[structopt(long, env, default_value = "http://localhost:8545")]
@@ -102,6 +103,16 @@ pub struct Options {
     /// Maximum number of blocks to pull events from in one request.
     #[structopt(long, env, default_value = "1000")]
     pub max_log_blocks: usize,
+
+    /// Minimum `max_fee_per_gas` to use in GWei. The default is for Polygon
+    /// mainnet.
+    #[structopt(long, env, default_value = "750.0")]
+    pub min_max_fee: f64,
+
+    /// Minimum `priority_fee_per_gas` to use in GWei. The default is for
+    /// Polygon mainnet.
+    #[structopt(long, env, default_value = "31.0")]
+    pub min_priority_fee: f64,
 }
 
 // Code out the provider stack in types
@@ -245,22 +256,27 @@ impl Ethereum {
                 }
             }
 
+            // Add minimum gas fees.
+            let min_max_fee = u256_from_f64_saturating(options.min_max_fee * 1e9);
+            let min_priority_fee = u256_from_f64_saturating(options.min_priority_fee * 1e9);
+            let oracle = MinGasFees::new(median, min_max_fee, min_priority_fee);
+
             // Add a logging, caching and abstract the type.
-            let logger = GasOracleLogger::new(median);
-            let cache = Cache::new(Duration::from_secs(5), logger);
-            let gas_oracle: Box<dyn GasOracle> = Box::new(cache);
+            let oracle = GasOracleLogger::new(oracle);
+            let oracle = Cache::new(Duration::from_secs(5), oracle);
+            let oracle: Box<dyn GasOracle> = Box::new(oracle);
 
             // Sanity check. fetch current prices.
-            let legacy_fee = gas_oracle.fetch().await?;
+            let legacy_fee = oracle.fetch().await?;
             if eip1559 {
-                let (max_fee, priority_fee) = gas_oracle.estimate_eip1559_fees().await?;
+                let (max_fee, priority_fee) = oracle.estimate_eip1559_fees().await?;
                 info!(%legacy_fee, %max_fee, %priority_fee, "Fetched gas prices");
             } else {
-                info!(%legacy_fee, "Fetched gas prices (no eip1559)");
+                info!(%legacy_fee, "Fetched gas price (no eip1559)");
             };
 
             // Wrap in a middleware
-            GasOracleMiddleware::new(provider, gas_oracle)
+            GasOracleMiddleware::new(provider, oracle)
         };
 
         // Construct a local key signer

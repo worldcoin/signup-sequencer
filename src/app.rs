@@ -146,7 +146,11 @@ impl App {
         let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
 
         // Send Semaphore transaction
-        self.contracts.insert_identity(commitment).await?;
+        self.contracts.insert_identity(commitment).await.map_err(|e| {
+            error!(?e, "Failed to insert identity to contract.");
+            panic!("Failed to submit transaction, state synchronization lost.");
+            e
+        })?;
 
         // Update and write merkle tree
         tree.set(identity_index, *commitment);

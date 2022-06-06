@@ -49,7 +49,7 @@ pub struct InclusionProofResponse {
     pub proof: Proof,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     #[structopt(flatten)]
     pub ethereum: ethereum::Options,
@@ -146,7 +146,15 @@ impl App {
         let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
 
         // Send Semaphore transaction
-        self.contracts.insert_identity(commitment).await?;
+        self.contracts
+            .insert_identity(commitment)
+            .await
+            .map_err(|e| {
+                error!(?e, "Failed to insert identity to contract.");
+                panic!("Failed to submit transaction, state synchronization lost.");
+                #[allow(unreachable_code)]
+                e
+            })?;
 
         // Update and write merkle tree
         tree.set(identity_index, *commitment);

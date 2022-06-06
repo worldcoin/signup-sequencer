@@ -110,8 +110,8 @@ type Provider0 = Provider<RpcLogger<Transport>>;
 type Provider1 = Estimator<Provider0>;
 type Provider2 = GasOracleMiddleware<Arc<Provider1>, Box<dyn GasOracle>>;
 type Provider3 = SignerMiddleware<Provider2, Wallet<SigningKey>>;
-type Provider4 = NonceManagerMiddleware<Provider3>;
-pub type ProviderStack = Provider4;
+// type Provider4 = NonceManagerMiddleware<Provider3>;
+pub type ProviderStack = Provider3;
 
 #[derive(Debug, Error)]
 pub enum TxError {
@@ -277,11 +277,18 @@ impl Ethereum {
 
             // Create local nonce manager.
             // TODO: This is state full. There may be unsettled TXs in the mempool.
-            let provider = { NonceManagerMiddleware::new(provider, address) };
+            // let provider = { NonceManagerMiddleware::new(provider, address) };
+            //
+            // // Log wallet info.
+            // let (next_nonce, balance) = try_join!(
+            //     provider.initialize_nonce(PENDING),
+            //     provider.get_balance(address, PENDING)
+            // )?;
+            // info!(?address, %next_nonce, %balance, "Constructed wallet");
 
             // Log wallet info.
             let (next_nonce, balance) = try_join!(
-                provider.initialize_nonce(PENDING),
+                provider.get_transaction_count(address, PENDING),
                 provider.get_balance(address, PENDING)
             )?;
             info!(?address, %next_nonce, %balance, "Constructed wallet");

@@ -77,6 +77,8 @@ pub enum Error {
     InvalidCommitment,
     #[error("provided identity commitment is already included")]
     DuplicateCommitment,
+    #[error("Root mismatch between tree and contract.")]
+    RootMismatch,
     #[error("invalid JSON request: {0}")]
     InvalidSerialization(#[from] serde_json::Error),
     #[error(transparent)]

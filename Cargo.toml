@@ -47,6 +47,7 @@ tracing-futures = "0.2"
 url = "2.2"
 chrono = "0.4.19"
 reqwest = "0.11.10"
+ruint = { version = "1.2", features = ["primitive-types"] }
 
 # Build dependencies required for `cargo criterion`, so really more `dev-deps`.
 proptest = { version = "1.0", optional = true }

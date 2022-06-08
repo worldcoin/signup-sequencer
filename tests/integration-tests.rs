@@ -22,7 +22,6 @@ use std::{
     fs::File,
     io::BufReader,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    str::FromStr,
     sync::Arc,
     time::Duration,
 };
@@ -98,7 +97,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str(TEST_LEAFS[0]).expect("Failed to parse Hash from test leaf 0"),
+        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
         false,
     )
     .await;
@@ -108,7 +107,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str(TEST_LEAFS[1]).expect("Failed to parse Hash from test leaf 1"),
+        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
         false,
     )
     .await;
@@ -141,7 +140,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str(TEST_LEAFS[0]).expect("Failed to parse Hash from test leaf 0"),
+        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
         false,
     )
     .await;
@@ -150,7 +149,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str(TEST_LEAFS[1]).expect("Failed to parse Hash from test leaf 1"),
+        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
         false,
     )
     .await;
@@ -181,7 +180,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str(TEST_LEAFS[0]).expect("Failed to parse Hash from test leaf 0"),
+        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
         false,
     )
     .await;
@@ -190,7 +189,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str(TEST_LEAFS[1]).expect("Failed to parse Hash from test leaf 1"),
+        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
         false,
     )
     .await;

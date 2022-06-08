@@ -3422,6 +3422,7 @@ checksum = "f562b2460495f49a2866c5fce19634937ebe42370e2fb7a1599426a8d92aaa46"
 dependencies = [
  "ark-ff",
  "num-bigint",
+ "primitive-types",
  "ruint-macro",
  "rustc_version 0.4.0",
  "serde",
@@ -3875,6 +3876,7 @@ dependencies = [
  "prometheus",
  "proptest",
  "reqwest",
+ "ruint",
  "semaphore",
  "serde",
  "serde_json",

@@ -27,9 +27,9 @@ spec:
             {
               "openmetrics_endpoint": "http://%%host%%:9998/metrics",
               "namespace": "{{ .Release.Namespace }}",
-              "metrics": [".*"]
+              "metrics": [".*"],
               "send_distribution_buckets": true,
-              "send_distribution_counts_as_monotonic": true,
+              "send_distribution_counts_as_monotonic": true
             }
           ]
     spec:

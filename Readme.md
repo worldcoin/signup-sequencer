@@ -10,7 +10,7 @@
 
 ## Database
 
-```
+```shell
 docker run --rm -ti -e POSTGRES_PASSWORD=password -d postgres
 ```
 

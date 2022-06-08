@@ -224,7 +224,7 @@ impl App {
                 ?error,
                 "Root mismatch between tree and contract."
             );
-            panic!("Root mismatch between tree and contract.");
+            return Err(ServerError::RootMismatch);
         }
 
         Ok(InclusionProofResponse { root, proof })

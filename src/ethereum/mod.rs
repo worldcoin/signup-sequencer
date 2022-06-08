@@ -1,12 +1,13 @@
 /// TODO: Upstream most of these to ethers-rs
 mod estimator;
 mod gas_oracle_logger;
+mod min_gas_fees;
 mod rpc_logger;
 mod transport;
 
 use self::{
-    estimator::Estimator, gas_oracle_logger::GasOracleLogger, rpc_logger::RpcLogger,
-    transport::Transport,
+    estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees,
+    rpc_logger::RpcLogger, transport::Transport,
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use ethers::{
@@ -18,14 +19,14 @@ use ethers::{
             Cache, EthGasStation, Etherchain, GasNow, GasOracle, GasOracleMiddleware, Median,
             Polygon, ProviderOracle,
         },
-        NonceManagerMiddleware, SignerMiddleware,
+        SignerMiddleware,
     },
     prelude::ProviderError,
     providers::{LogQueryError, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
     types::{
-        transaction::eip2718::TypedTransaction, Address, BlockId, BlockNumber, Chain, Filter, Log,
-        TransactionReceipt, H160, H256, U64,
+        transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,
+        BlockNumber, Chain, Filter, Log, TransactionReceipt, H160, H256, U64,
     },
 };
 use eyre::{eyre, Result as EyreResult};
@@ -84,7 +85,7 @@ static TX_WEI_USED: Lazy<Counter> = Lazy::new(|| {
 
 // TODO: Log and metrics for signer / nonces.
 
-#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     /// Ethereum API Provider
     #[structopt(long, env, default_value = "http://localhost:8545")]
@@ -99,20 +100,19 @@ pub struct Options {
     // NOTE: We abuse `Hash` here because it has the right `FromStr` implementation.
     pub signing_key: H256,
 
-    /// If this module is being run with EIP-1559 support, useful in some places
-    /// where EIP-1559 is not yet supported
-    // TODO: Remove, we autodetect now.
-    #[structopt(
-        short,
-        parse(try_from_str),
-        default_value = "true",
-        env = "USE_EIP1559"
-    )]
-    pub eip1559: bool,
-
     /// Maximum number of blocks to pull events from in one request.
     #[structopt(long, env, default_value = "1000")]
     pub max_log_blocks: usize,
+
+    /// Minimum `max_fee_per_gas` to use in GWei. The default is for Polygon
+    /// mainnet.
+    #[structopt(long, env, default_value = "750.0")]
+    pub min_max_fee: f64,
+
+    /// Minimum `priority_fee_per_gas` to use in GWei. The default is for
+    /// Polygon mainnet.
+    #[structopt(long, env, default_value = "31.0")]
+    pub min_priority_fee: f64,
 }
 
 // Code out the provider stack in types
@@ -121,8 +121,8 @@ type Provider0 = Provider<RpcLogger<Transport>>;
 type Provider1 = Estimator<Provider0>;
 type Provider2 = GasOracleMiddleware<Arc<Provider1>, Box<dyn GasOracle>>;
 type Provider3 = SignerMiddleware<Provider2, Wallet<SigningKey>>;
-type Provider4 = NonceManagerMiddleware<Provider3>;
-pub type ProviderStack = Provider4;
+// type Provider4 = NonceManagerMiddleware<Provider3>;
+pub type ProviderStack = Provider3;
 
 #[derive(Debug, Error)]
 pub enum TxError {
@@ -256,22 +256,27 @@ impl Ethereum {
                 }
             }
 
+            // Add minimum gas fees.
+            let min_max_fee = u256_from_f64_saturating(options.min_max_fee * 1e9);
+            let min_priority_fee = u256_from_f64_saturating(options.min_priority_fee * 1e9);
+            let oracle = MinGasFees::new(median, min_max_fee, min_priority_fee);
+
             // Add a logging, caching and abstract the type.
-            let logger = GasOracleLogger::new(median);
-            let cache = Cache::new(Duration::from_secs(5), logger);
-            let gas_oracle: Box<dyn GasOracle> = Box::new(cache);
+            let oracle = GasOracleLogger::new(oracle);
+            let oracle = Cache::new(Duration::from_secs(5), oracle);
+            let oracle: Box<dyn GasOracle> = Box::new(oracle);
 
             // Sanity check. fetch current prices.
-            let legacy_fee = gas_oracle.fetch().await?;
+            let legacy_fee = oracle.fetch().await?;
             if eip1559 {
-                let (max_fee, priority_fee) = gas_oracle.estimate_eip1559_fees().await?;
+                let (max_fee, priority_fee) = oracle.estimate_eip1559_fees().await?;
                 info!(%legacy_fee, %max_fee, %priority_fee, "Fetched gas prices");
             } else {
-                info!(%legacy_fee, "Fetched gas prices (no eip1559)");
+                info!(%legacy_fee, "Fetched gas price (no eip1559)");
             };
 
             // Wrap in a middleware
-            GasOracleMiddleware::new(provider, gas_oracle)
+            GasOracleMiddleware::new(provider, oracle)
         };
 
         // Construct a local key signer
@@ -288,11 +293,18 @@ impl Ethereum {
 
             // Create local nonce manager.
             // TODO: This is state full. There may be unsettled TXs in the mempool.
-            let provider = { NonceManagerMiddleware::new(provider, address) };
+            // let provider = { NonceManagerMiddleware::new(provider, address) };
+            //
+            // // Log wallet info.
+            // let (next_nonce, balance) = try_join!(
+            //     provider.initialize_nonce(PENDING),
+            //     provider.get_balance(address, PENDING)
+            // )?;
+            // info!(?address, %next_nonce, %balance, "Constructed wallet");
 
             // Log wallet info.
             let (next_nonce, balance) = try_join!(
-                provider.initialize_nonce(PENDING),
+                provider.get_transaction_count(address, PENDING),
                 provider.get_balance(address, PENDING)
             )?;
             info!(?address, %next_nonce, %balance, "Constructed wallet");
@@ -355,9 +367,12 @@ impl Ethereum {
                 error!(?error, "Failed to fill transaction");
                 TxError::Fill(Box::new(error))
             })?;
+        let nonce = tx.nonce().unwrap().as_u64();
+        let gas_limit = tx.gas().unwrap().as_u128() as f64;
+        let gas_price = tx.gas_price().unwrap().as_u128() as f64;
 
         // Log transaction
-        info!(?tx, "Sending transaction.");
+        info!(?tx, ?nonce, ?gas_limit, ?gas_price, "Sending transaction.");
         let bytes4: u32 = tx.data().map_or(0, |data| {
             let mut buffer = [0; 4];
             buffer.copy_from_slice(&data.as_ref()[..4]); // TODO: Don't panic.
@@ -372,25 +387,34 @@ impl Ethereum {
             .send_transaction(tx.clone(), None)
             .await
             .map_err(|error| {
-                error!(?error, "Failed to send transaction");
+                error!(?nonce, ?error, "Failed to send transaction");
                 TxError::Send(Box::new(error))
             })?;
         let tx_hash: H256 = *pending;
+        info!(?nonce, ?tx_hash, "Transaction in mempool");
 
         // Wait for TX to be mined
         let timer = TX_LATENCY.start_timer();
         let receipt = pending
             .await
-            .map_err(TxError::Confirmation)?
-            .ok_or(TxError::Dropped(tx_hash))?;
+            .map_err(|err| {
+                error!(?nonce, ?tx_hash, ?err, "Transaction failed to confirm");
+
+                TxError::Confirmation(err)
+            })?
+            .ok_or_else(|| {
+                error!(?nonce, ?tx_hash, "Transaction dropped");
+                TxError::Dropped(tx_hash)
+            })?;
         timer.observe_duration();
-        info!(?tx, ?receipt, "Transaction mined");
+        info!(?nonce, ?tx_hash, ?receipt, "Transaction mined");
 
         // Check receipt for gas used
         if let Some(gas_price) = receipt.effective_gas_price {
             TX_GAS_PRICE.set(gas_price.as_u128() as f64);
         } else {
             error!(
+                ?nonce,
                 ?tx,
                 ?receipt,
                 "Receipt did not include effective gas price."
@@ -403,6 +427,7 @@ impl Ethereum {
                 TX_GAS_FRACTION.observe(gas_fraction);
                 if gas_fraction > 0.9 {
                     warn!(
+                        ?nonce,
                         %gas_used,
                         %gas_limit,
                         %gas_fraction,
@@ -415,7 +440,7 @@ impl Ethereum {
                 TX_WEI_USED.inc_by(cost_wei.as_u128() as f64);
             }
         } else {
-            error!(?tx, ?receipt, "Receipt did not include gas used.");
+            error!(?nonce, ?tx, ?receipt, "Receipt did not include gas used.");
         }
 
         // Check receipt status for success

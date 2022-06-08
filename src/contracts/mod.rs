@@ -156,8 +156,9 @@ impl Contracts {
             .map_ok(|(index, event)| {
                 (
                     index,
-                    field_from_u256(event.identity_commitment),
-                    field_from_u256(event.root),
+                    // TODO: Validate values < modulus
+                    Field::from(event.identity_commitment),
+                    Field::from(event.root),
                 )
             })
     }
@@ -214,12 +215,4 @@ impl Contracts {
         }
         Err(eyre!("Error verifiying root: {}", result))
     }
-}
-
-// TODO: Check the value is less than the modulus.
-// TODO: Move to semaphore-rs crate (or ruint)
-fn field_from_u256(value: U256) -> Field {
-    let mut be_bytes = [0u8; 32];
-    value.to_big_endian(&mut be_bytes);
-    Field::from_be_bytes_mod_order(&be_bytes)
 }

@@ -18,9 +18,6 @@ spec:
         app: {{ include "mychart.fullname" . }}
         {{- include "mychart.labels" . | nindent 8 }}
       annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "9998"
-        prometheus.io/path: "/metrics"
         ad.datadoghq.com/{{ .Chart.Name }}.check_names: |
           ["openmetrics"]
         ad.datadoghq.com/{{ .Chart.Name }}.init_configs: |
@@ -49,7 +46,7 @@ spec:
       securityContext:
         fsGroup: 10001
       containers:
-        - name: app
+        - name: {{ .Chart.Name }}
           image: "{{ .Values.image.image }}:{{ .Values.image.tag | default (print "v" .Chart.AppVersion)}}"
           imagePullPolicy: {{ .Values.image.pullPolicy | default "Always" }}
           {{- if .Values.persistentStorage.enabled }}

@@ -152,20 +152,20 @@ jobs:
           fail_ci_if_error: true
           verbose: true
 
-  security_audit:
-    name: Dependency Security Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_VERSION }}
-          default: true
-      - uses: actions-rs/audit-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+  # security_audit:
+  #   name: Dependency Security Audit
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - name: Set up Rust
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         toolchain: ${{ env.RUST_VERSION }}
+  #         default: true
+  #     - uses: actions-rs/audit-check@v1
+  #       with:
+  #         token: ${{ secrets.GITHUB_TOKEN }}
 
   build_and_push:
     name: Build image
@@ -390,6 +390,5 @@ jobs:
           --set env.SIGNING_KEY="${{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}"
           --set env.WIPE_STORAGE=true
-          --set env.USE_EIP1559=false
           --set env.MAX_LOG_BLOCKS=50000
           --set env.STARTING_BLOCK=27829300

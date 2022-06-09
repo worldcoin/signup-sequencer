@@ -1,31 +1,24 @@
 use crate::{
     contracts::{self, Contracts},
-    ethereum::{self, Ethereum},
     database::{self, Database},
+    ethereum::{self, Ethereum},
     server::Error as ServerError,
 };
 use cli_batteries::await_shutdown;
 use core::cmp::max;
-use ethers::{ types::U256};
+use ethers::types::U256;
 use eyre::{eyre, Result as EyreResult};
-use futures::{pin_mut, StreamExt, TryStreamExt};
+use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
     Field,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use structopt::StructOpt;
-use tokio::{
-    select,
-    sync::{RwLock},
-};
+use tokio::{select, sync::RwLock, try_join};
 use tracing::{debug, error, info, instrument, warn};
-use tokio::try_join;
-use futures::TryFutureExt;
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
@@ -66,12 +59,12 @@ pub struct Options {
 }
 
 pub struct App {
-    database:     Database,
-    ethereum:     Ethereum,
-    contracts:    Contracts,
-    merkle_tree:  RwLock<PoseidonTree>,
-    next_leaf:    AtomicUsize,
-    last_block:   u64,
+    database:    Database,
+    ethereum:    Ethereum,
+    contracts:   Contracts,
+    merkle_tree: RwLock<PoseidonTree>,
+    next_leaf:   AtomicUsize,
+    last_block:  u64,
 }
 
 impl App {
@@ -86,7 +79,7 @@ impl App {
         let (database, (ethereum, contracts)) = {
             let db = Database::new(options.database);
             let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
-               let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
+                let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
                 Ok((ethereum, contracts))
             });
 
@@ -115,8 +108,6 @@ impl App {
     }
 
     async fn sync(&self) -> EyreResult<()> {
-        
-
         Ok(())
     }
 

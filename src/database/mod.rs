@@ -10,6 +10,7 @@ use sqlx::{
 use structopt::StructOpt;
 use tracing::{debug, error, info, instrument, warn};
 use url::Url;
+use sqlx::migrate::MigrateDatabase;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
@@ -45,12 +46,12 @@ impl Database {
     pub async fn new(options: Options) -> Result<Self> {
         info!(url = %&options.database, "Connecting to database");
 
-        // // Create database if requested and does not exist
-        // if options.database_migrate &&
-        // !Any::database_exists(options.database.as_str()).await? {
-        //     warn!(url = %&options.database, "Database does not exist, creating
-        // database");     Any::create_database(options.database.as_str()).
-        // await?; }
+        // Create database if requested and does not exist
+        if options.database_migrate && !Any::database_exists(options.database.as_str()).await? {
+            warn!(url = %&options.database, "Database does not exist, creating
+        database");
+            Any::create_database(options.database.as_str()).await?;
+        }
 
         // Create a connection pool
         let pool = PoolOptions::<Any>::new()
@@ -124,9 +125,7 @@ impl Database {
             );
         } else {
             error!(url = %&options.database, "Could not get database version");
-            return Err(eyre!(
-                "Could not get database version."
-            ));
+            return Err(eyre!("Could not get database version."));
         }
 
         Ok(Self { pool })

@@ -282,6 +282,7 @@ mod test {
 }
 #[cfg(feature = "bench")]
 #[allow(clippy::wildcard_imports, unused_imports)]
+#[doc(hidden)]
 pub mod bench {
     use super::*;
     use crate::bench::runtime;

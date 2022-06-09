@@ -3,7 +3,7 @@
 
 pub mod app;
 mod contracts;
-mod db;
+mod database;
 mod ethereum;
 pub mod server;
 mod utils;
@@ -21,9 +21,6 @@ pub struct Options {
     pub app: app::Options,
 
     #[structopt(flatten)]
-    pub db: db::Options,
-
-    #[structopt(flatten)]
     pub server: server::Options,
 }
 
@@ -32,9 +29,6 @@ pub struct Options {
 /// ```
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 pub async fn main(options: Options) -> EyreResult<()> {
-    // Connect to database
-    let db = db::Db::new(&options.db).await?;
-
     // Create App struct
     let app = Arc::new(App::new(options.app).await?);
 
@@ -100,6 +94,7 @@ pub mod test {
 }
 
 #[cfg(feature = "bench")]
+#[doc(hidden)]
 pub mod bench {
     use criterion::{black_box, BatchSize, Criterion};
     use proptest::{

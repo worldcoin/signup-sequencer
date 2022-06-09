@@ -1,11 +1,12 @@
 use crate::{
     contracts::{self, Contracts},
     ethereum::{self, Ethereum},
+    database::{self, Database},
     server::Error as ServerError,
 };
 use cli_batteries::await_shutdown;
 use core::cmp::max;
-use ethers::{providers::Middleware, types::U256};
+use ethers::{ types::U256};
 use eyre::{eyre, Result as EyreResult};
 use futures::{pin_mut, StreamExt, TryStreamExt};
 use semaphore::{
@@ -15,17 +16,16 @@ use semaphore::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{remove_file, File},
-    io::{BufReader, BufWriter},
-    path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
 };
 use structopt::StructOpt;
 use tokio::{
     select,
-    sync::{RwLock, RwLockReadGuard},
+    sync::{RwLock},
 };
 use tracing::{debug, error, info, instrument, warn};
+use tokio::try_join;
+use futures::TryFutureExt;
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
@@ -57,13 +57,8 @@ pub struct Options {
     #[structopt(flatten)]
     pub contracts: contracts::Options,
 
-    /// Storage location for the Merkle tree.
-    #[structopt(long, env, default_value = "commitments.json")]
-    pub storage_file: PathBuf,
-
-    /// Wipe database on startup
-    #[structopt(long, env, parse(try_from_str), default_value = "false")]
-    pub wipe_storage: bool,
+    #[structopt(flatten)]
+    pub database: database::Options,
 
     /// Block number to start syncing from
     #[structopt(long, env, default_value = "0")]
@@ -71,9 +66,9 @@ pub struct Options {
 }
 
 pub struct App {
+    database:     Database,
     ethereum:     Ethereum,
     contracts:    Contracts,
-    storage_file: PathBuf,
     merkle_tree:  RwLock<PoseidonTree>,
     next_leaf:    AtomicUsize,
     last_block:   u64,
@@ -87,32 +82,42 @@ impl App {
     #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(level = "debug", skip_all)]
     pub async fn new(options: Options) -> EyreResult<Self> {
-        let ethereum = Ethereum::new(options.ethereum).await?;
-        let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
+        // Connect to Ethereum and Database
+        let (database, (ethereum, contracts)) = {
+            let db = Database::new(options.database);
+            let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
+               let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
+                Ok((ethereum, contracts))
+            });
+
+            // Connect to both in parallel
+            try_join!(db, eth)?
+        };
 
         // Poseidon tree depth is one more than the contract's tree depth
         let merkle_tree = PoseidonTree::new(contracts.tree_depth() + 1, contracts.initial_leaf());
 
-        // Wipe storage to force sync from chain
-        if options.wipe_storage && options.storage_file.is_file() {
-            remove_file(&options.storage_file)?;
-        }
-
-        let mut result = Self {
+        let mut app = Self {
+            database,
             ethereum,
             contracts,
-            storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
             next_leaf: AtomicUsize::new(0),
             last_block: options.starting_block,
         };
 
-        result.read_file().await?;
-        result.check_leaves().await?;
-        result.process_events().await?;
+        // Sync with chain on start up
+        app.check_leaves().await?;
+        app.process_events().await?;
         // TODO: Store file after processing events.
-        result.check_health().await?;
-        Ok(result)
+        app.check_health().await?;
+        Ok(app)
+    }
+
+    async fn sync(&self) -> EyreResult<()> {
+        
+
+        Ok(())
     }
 
     /// # Errors
@@ -173,7 +178,7 @@ impl App {
         }
 
         // Immediately write the tree to storage, before anyone else can write.
-        self.store(tree).await?;
+        // TODO: Store tree
 
         Ok(IndexResponse { identity_index })
     }
@@ -228,45 +233,6 @@ impl App {
         }
 
         Ok(InclusionProofResponse { root, proof })
-    }
-
-    #[instrument(level = "debug", skip_all)]
-    async fn store(&self, tree: RwLockReadGuard<'_, PoseidonTree>) -> EyreResult<()> {
-        let file = File::create(&self.storage_file)?;
-
-        // TODO: What we really want here is the last block we processed events from.
-        // Also, we need to keep some re-org depth into account (which should be covered
-        // by the events already).
-        let last_block = self.ethereum.provider().get_block_number().await?.as_u64();
-        let next_leaf = self.next_leaf.load(Ordering::Acquire);
-        let commitments = tree.leaves()[..next_leaf].to_vec();
-        let data = JsonCommitment {
-            last_block,
-            commitments,
-        };
-        serde_json::to_writer(BufWriter::new(file), &data)?;
-        Ok(())
-    }
-
-    #[instrument(level = "info", skip_all)]
-    async fn read_file(&mut self) -> EyreResult<()> {
-        let mut merkle_tree = self.merkle_tree.write().await;
-        if self.storage_file.is_file() {
-            let file = File::open(&self.storage_file)?;
-            if file.metadata()?.len() > 0 {
-                let file: JsonCommitment = serde_json::from_reader(BufReader::new(file))?;
-                self.next_leaf
-                    .store(file.commitments.len(), Ordering::Release);
-                merkle_tree.set_range(0, file.commitments);
-                self.last_block = file.last_block;
-                info!(path = ?&self.storage_file, num_leaves = %self.next_leaf.load(Ordering::Acquire), last_block = %self.last_block, "Read tree from storage");
-            } else {
-                warn!(path = ?&self.storage_file, "Storage file empty, skipping.");
-            }
-        } else {
-            warn!(path = ?&self.storage_file, "Storage file not found, skipping.");
-        }
-        Ok(())
     }
 
     #[instrument(level = "debug", skip_all)]

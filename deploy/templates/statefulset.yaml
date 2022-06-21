@@ -66,18 +66,8 @@ spec:
           env:
             - name: LOG_FORMAT
               value: json
-            - name: DD_AGENT_HOST
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
-            - name: DD_VERSION
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.labels['pod-template-hash']
-            - name: DD_ENV
-              value: {{ .Values.environment }}
-            - name: DD_SERVICE
-              value: signup-sequencer
+            - name: TRACE_DATADOG
+              value: "http://127.0.0.1:8126"
             - name: SERVER
               value: http://0.0.0.0:8080
             {{- range $name, $item := .Values.env }}

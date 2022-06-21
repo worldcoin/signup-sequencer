@@ -66,8 +66,12 @@ spec:
           env:
             - name: LOG_FORMAT
               value: json
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
             - name: TRACE_DATADOG
-              value: "http://127.0.0.1:8126"
+              value: "http://$(HOST_IP):8126"
             - name: SERVER
               value: http://0.0.0.0:8080
             {{- range $name, $item := .Values.env }}

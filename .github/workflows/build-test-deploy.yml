@@ -320,6 +320,7 @@ jobs:
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
           --set env.MAX_LOG_BLOCKS=1000000
           --set env.STARTING_BLOCK=0
+          --set env.CREATE_GROUP_DEPTH=20
 
   deploy-stage-manual:
     name: Manual deploy to staging
@@ -357,6 +358,7 @@ jobs:
           --set persistentStorage.volumeID=aws://us-east-1a/vol-0af0c762d4294742a
           --set env.MAX_LOG_BLOCKS=1000000
           --set env.STARTING_BLOCK=0
+          --set env.CREATE_GROUP_DEPTH=20
 
   deploy-prod:
     name: Deploy main to production

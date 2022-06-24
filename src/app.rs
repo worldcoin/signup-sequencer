@@ -115,6 +115,9 @@ impl App {
         Ok(result)
     }
 
+    /// Inserts a new commitment into the Merkle tree. This will also update the
+    /// contract's commitment tree.
+    ///
     /// # Errors
     ///
     /// Will return `Err` if the Eth handler cannot insert the identity to the
@@ -230,6 +233,7 @@ impl App {
         Ok(InclusionProofResponse { root, proof })
     }
 
+    /// Stores the Merkle tree to the storage file.
     #[instrument(level = "debug", skip_all)]
     async fn store(&self, tree: RwLockReadGuard<'_, PoseidonTree>) -> EyreResult<()> {
         let file = File::create(&self.storage_file)?;

@@ -730,9 +730,9 @@ dependencies = [
 
 [[package]]
 name = "cli-batteries"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "385273298d47b47e22048b80eba4b917c71911cc76800da7be3205203aa98700"
+checksum = "e88e12c0bce59d9c49e480ce78a04b62afc9465ab6e36fb52915225e45e77527"
 dependencies = [
  "chrono",
  "color-eyre 0.6.1",
@@ -746,8 +746,10 @@ dependencies = [
  "once_cell",
  "opentelemetry",
  "opentelemetry-datadog",
+ "opentelemetry-http",
  "opentelemetry-otlp",
  "prometheus",
+ "reqwest",
  "structopt",
  "thiserror",
  "time 0.3.10",

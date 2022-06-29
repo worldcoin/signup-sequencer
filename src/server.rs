@@ -1,6 +1,5 @@
 use crate::app::{App, Hash};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
-use cli_batteries::await_shutdown;
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
 use hyper::{
@@ -240,8 +239,7 @@ pub async fn bind_from_listener(app: Arc<App>, listener: TcpListener) -> EyreRes
 
     let server = Server::from_tcp(listener)
         .wrap_err("Failed to bind address")?
-        .serve(make_svc)
-        .with_graceful_shutdown(await_shutdown());
+        .serve(make_svc);
 
     info!(url = %local_addr, "Server listening");
 

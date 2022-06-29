@@ -1,4 +1,4 @@
-#![doc = include_str!("../Readme.md")]
+#![doc = include_str ! ("../Readme.md")]
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
 pub mod app;
@@ -8,11 +8,43 @@ pub mod server;
 mod utils;
 
 use crate::{app::App, utils::spawn_or_abort};
-use cli_batteries::await_shutdown;
 use eyre::Result as EyreResult;
 use std::sync::Arc;
 use structopt::StructOpt;
-use tracing::info;
+
+use tracing_subscriber::prelude::*;
+use opentelemetry::global;
+use tracing::{error, span, debug, warn, info, Level};
+use opentelemetry::global::shutdown_tracer_provider;
+use opentelemetry::{
+    KeyValue,
+    trace::{Span, Tracer},
+    Key,
+};
+
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry::sdk::{trace::{self, IdGenerator, Sampler}, Resource};
+
+use std::thread;
+use std::time::Duration;
+use std::env;
+use tracing_subscriber::fmt::format;
+
+fn bar() {
+    let tracer = global::tracer("component-bar");
+    let mut span = tracer.start("bar");
+    span.set_attribute(Key::new("span.type").string("sql"));
+    span.set_attribute(Key::new("sql.query").string("SELECT * FROM table"));
+    thread::sleep(Duration::from_millis(6));
+    span.end()
+}
+
+#[tracing::instrument]
+fn foo() {
+    span!(tracing::Level::INFO, "expensive_step_2")
+        .in_scope(|| thread::sleep(Duration::from_millis(25)));
+    info!("foo bar");
+}
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
@@ -27,25 +59,41 @@ pub struct Options {
 /// assert!(true);
 /// ```
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-pub async fn main(options: Options) -> EyreResult<()> {
-    // Create App struct
-    let app = Arc::new(App::new(options.app).await?);
+pub async fn main() -> EyreResult<()> {
+    let dd_agent_host = env::var("DD_AGENT_HOST")?;
 
-    // Start server
-    let server = spawn_or_abort({
-        async move {
-            server::main(app, options.server).await?;
-            EyreResult::Ok(())
-        }
-    });
+    let tracer = opentelemetry_otlp::new_pipeline()
+        .tracing().with_exporter(
+        opentelemetry_otlp::new_exporter()
+            .tonic()
+            .with_endpoint(format!("http://{}:4317", dd_agent_host))
+            .with_timeout(Duration::from_secs(3)))
+        .with_trace_config(
+            trace::config()
+                .with_resource(
+                    Resource::new(vec![
+                        KeyValue::new("service.name", "signup-sequencer-test"),
+                        KeyValue::new("env", "stage"),
+                        KeyValue::new("version", "0.0.0")])))
+        .install_batch(opentelemetry::runtime::Tokio)?;
+
+    tracing_subscriber::registry()
+        .with(tracing_opentelemetry::layer().with_tracer(tracer))
+        .try_init()?;
+
+    loop {
+        foo();
+        thread::sleep(Duration::from_millis(200));
+    }
 
     // Wait for shutdown
     info!("Program started, waiting for shutdown signal");
-    await_shutdown().await;
+    // await_shutdown().await;
 
     // Wait for server
     info!("Stopping server");
-    server.await?;
+    // server.await?;
+    shutdown_tracer_provider();
     Ok(())
 }
 
@@ -82,8 +130,8 @@ pub mod test {
         tokio::spawn(async {
             warn!("This is being logged on the warn level from a spawned task");
         })
-        .await
-        .unwrap();
+            .await
+            .unwrap();
 
         // Ensure that `logs_contain` works as intended
         assert!(logs_contain("logged on the info level"));

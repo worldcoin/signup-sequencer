@@ -3,7 +3,6 @@ use crate::{
     ethereum::{self, Ethereum},
     server::Error as ServerError,
 };
-use cli_batteries::await_shutdown;
 use core::cmp::max;
 use ethers::{providers::Middleware, types::U256};
 use eyre::{eyre, Result as EyreResult};
@@ -311,15 +310,15 @@ impl App {
             .contracts
             .fetch_events(self.last_block, self.next_leaf.load(Ordering::Acquire))
             .boxed();
-        let shutdown = await_shutdown();
-        pin_mut!(shutdown);
+        // let shutdown = await_shutdown();
+        // pin_mut!(shutdown);
         loop {
             let (index, leaf, root) = select! {
                 v = events.try_next() => match v? {
                     Some(a) => a,
                     None => break,
                 },
-                _ = &mut shutdown => return Err(eyre!("Interrupted")),
+                // _ = &mut shutdown => return Err(eyre!("Interrupted")),
             };
             debug!(?index, ?leaf, ?root, "Received event");
 

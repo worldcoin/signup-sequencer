@@ -70,8 +70,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
-            - name: TRACE_DATADOG
-              value: "http://$(HOST_IP):8126"
+            - name: TRACE_OTLP
+              value: "http://$(HOST_IP):4317"
             - name: SERVER
               value: http://0.0.0.0:8080
             {{- range $name, $item := .Values.env }}

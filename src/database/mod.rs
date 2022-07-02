@@ -1,27 +1,26 @@
 use crate::app::Hash;
+use clap::Parser;
 use eyre::{eyre, Context, Result};
 use ruint::{aliases::U256, uint};
 use sqlx::{
     any::AnyKind,
-    migrate::{Migrate, Migrator},
+    migrate::{Migrate, MigrateDatabase, Migrator},
     pool::PoolOptions,
     Any, Executor, Pool, Row,
 };
-use structopt::StructOpt;
 use tracing::{debug, error, info, instrument, warn};
 use url::Url;
-use sqlx::migrate::MigrateDatabase;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 
-#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, Parser)]
 pub struct Options {
     /// Database server connection string.
     /// Example: `postgres://user:password@localhost:5432/database`
     /// Sqlite file: ``
     /// In memory DB: `sqlite::memory:`
-    #[structopt(
+    #[clap(
         long,
         env,
         default_value = "postgres://postgres:password@localhost/test"
@@ -29,11 +28,11 @@ pub struct Options {
     pub database: Url,
 
     /// Allow creation or migration of the database schema.
-    #[structopt(long)]
+    #[clap(long)]
     pub database_migrate: bool,
 
     /// Maximum number of connections in the database connection pool
-    #[structopt(long, env, default_value = "10")]
+    #[clap(long, env, default_value = "10")]
     pub database_max_connections: u32,
 }
 

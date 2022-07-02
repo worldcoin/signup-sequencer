@@ -30,7 +30,7 @@ required-features = [ "bench", "proptest" ]
 
 [dependencies]
 async-trait = "0.1.53"
-cli-batteries = { version = "0.1.5", features = [ "prometheus", "metered_allocator" ] }
+cli-batteries = { version = "0.2", features = [ "prometheus", "metered-allocator", "otlp" ] }
 # ethers = { git = "https://github.com/gakonst/ethers-rs.git", branch = "master", rev = "4d99165", features = [ "ws", "ipc", ]  }
 ethers = { git = "https://github.com/recmo/ethers-rs.git", rev = "93e8e52", features = [ "ws", "ipc", "openssl" ]  }
 eyre = "0.6"
@@ -41,7 +41,7 @@ prometheus = "0.13"
 semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main" }
 serde = "1.0"
 serde_json = "1.0"
-structopt = "0.3"
+clap = { version = "3.2", features = [ "derive" ] }
 thiserror = "1.0"
 tokio = { version = "1.17", features = [ "signal", "macros", "rt", "sync", "time", "rt-multi-thread", "tracing" ] }
 tracing = "0.1"
@@ -57,7 +57,7 @@ proptest = { version = "1.0", optional = true }
 criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
 
 [dev-dependencies]
-cli-batteries = { version = "0.1.5", features = [ "mock_shutdown" ] }
+cli-batteries = { version = "0.2", features = [ "mock-shutdown" ] }
 proptest = { version = "1.0" }
 tempfile = "3.0"
 tracing-test = "0.2"
@@ -66,7 +66,7 @@ hex = "0.4.3"
 hex-literal = "0.3"
 
 [build-dependencies]
-cli-batteries = "0.1.5"
+cli-batteries = "0.2"
 
 [profile.release]
 codegen-units = 1

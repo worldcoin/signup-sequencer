@@ -4,6 +4,7 @@ use crate::{
     ethereum::{self, Ethereum},
     server::Error as ServerError,
 };
+use clap::Parser;
 use cli_batteries::await_shutdown;
 use core::cmp::max;
 use ethers::types::U256;
@@ -15,9 +16,17 @@ use semaphore::{
     Field,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use structopt::StructOpt;
-use tokio::{select, sync::RwLock, try_join};
+use std::{
+    fs::{remove_file, File},
+    io::{BufReader, BufWriter},
+    path::PathBuf,
+    sync::atomic::{AtomicUsize, Ordering},
+};
+use tokio::{
+    select,
+    sync::{RwLock, RwLockReadGuard},
+    try_join,
+};
 use tracing::{debug, error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -42,29 +51,27 @@ pub struct InclusionProofResponse {
     pub proof: Proof,
 }
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Parser)]
 pub struct Options {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub ethereum: ethereum::Options,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub contracts: contracts::Options,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub database: database::Options,
 
     /// Block number to start syncing from
-    #[structopt(long, env, default_value = "0")]
     pub starting_block: u64,
 }
 
 pub struct App {
-    database:    Database,
-    ethereum:    Ethereum,
-    contracts:   Contracts,
-    merkle_tree: RwLock<PoseidonTree>,
-    next_leaf:   AtomicUsize,
-    last_block:  u64,
+    database:   Database,
+    ethereum:   Ethereum,
+    contracts:  Contracts,
+    next_leaf:  AtomicUsize,
+    last_block: u64,
 }
 
 impl App {
@@ -111,6 +118,9 @@ impl App {
         Ok(())
     }
 
+    /// Inserts a new commitment into the Merkle tree. This will also update the
+    /// contract's commitment tree.
+    ///
     /// # Errors
     ///
     /// Will return `Err` if the Eth handler cannot insert the identity to the
@@ -226,6 +236,7 @@ impl App {
         Ok(InclusionProofResponse { root, proof })
     }
 
+    /// Stores the Merkle tree to the storage file.
     #[instrument(level = "debug", skip_all)]
     async fn check_leaves(&self) -> EyreResult<()> {
         let merkle_tree = self.merkle_tree.read().await;

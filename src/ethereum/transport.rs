@@ -70,15 +70,15 @@ impl JsonRpcClient for Transport {
         R: DeserializeOwned,
     {
         match self {
-            Transport::Http(inner) => inner
+            Self::Http(inner) => inner
                 .request(method, params)
                 .await
                 .map_err(TransportError::Http),
-            Transport::Ws(inner) => inner
+            Self::Ws(inner) => inner
                 .request(method, params)
                 .await
                 .map_err(TransportError::Ws),
-            Transport::Ipc(inner) => inner
+            Self::Ipc(inner) => inner
                 .request(method, params)
                 .await
                 .map_err(TransportError::Ipc),

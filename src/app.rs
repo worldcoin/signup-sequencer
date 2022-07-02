@@ -101,7 +101,6 @@ impl App {
             database,
             ethereum,
             contracts,
-            merkle_tree: RwLock::new(merkle_tree),
             next_leaf: AtomicUsize::new(0),
             last_block: options.starting_block,
         };
@@ -141,7 +140,7 @@ impl App {
 
         // Get a lock on the tree for the duration of this operation.
         // OPT: Sequence operations and allow concurrent inserts / transactions.
-        let mut tree = self.merkle_tree.write().await;
+        let mut tree: PoseidonTree = todo!(); // self.merkle_tree.write().await;
 
         if let Some(existing) = tree.leaves().iter().position(|&x| x == *commitment) {
             warn!(?existing, ?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Commitment already exists in tree.");
@@ -166,7 +165,7 @@ impl App {
         tree.set(identity_index, *commitment);
 
         // Downgrade write lock to read lock
-        let tree = tree.downgrade();
+        todo!(); // let tree = tree.downgrade();
 
         // Check tree root
         if let Err(error) = self.contracts.assert_valid_root(tree.root()).await {
@@ -200,7 +199,7 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        let merkle_tree = self.merkle_tree.read().await;
+        let merkle_tree: PoseidonTree = todo!(); // self.merkle_tree.read().await;
         let identity_index = match merkle_tree.leaves().iter().position(|&x| x == *commitment) {
             Some(i) => i,
             None => return Err(ServerError::IdentityCommitmentNotFound),
@@ -239,7 +238,7 @@ impl App {
     /// Stores the Merkle tree to the storage file.
     #[instrument(level = "debug", skip_all)]
     async fn check_leaves(&self) -> EyreResult<()> {
-        let merkle_tree = self.merkle_tree.read().await;
+        let merkle_tree: PoseidonTree = todo!(); // self.merkle_tree.read().await;
         let next_leaf = self.next_leaf.load(Ordering::Acquire);
         let initial_leaf = self.contracts.initial_leaf();
         for (index, &leaf) in merkle_tree.leaves().iter().enumerate() {
@@ -273,7 +272,7 @@ impl App {
 
     #[instrument(level = "info", skip_all)]
     async fn process_events(&mut self) -> EyreResult<()> {
-        let mut merkle_tree = self.merkle_tree.write().await;
+        let mut merkle_tree: PoseidonTree = todo!(); // self.merkle_tree.write().await;
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
             .contracts
@@ -359,7 +358,7 @@ impl App {
 
     #[instrument(level = "debug", skip_all)]
     async fn check_health(&self) -> EyreResult<()> {
-        let merkle_tree = self.merkle_tree.read().await;
+        let merkle_tree: PoseidonTree = todo!(); // self.merkle_tree.read().await;
         let initial_leaf = self.contracts.initial_leaf();
         // TODO: A re-org undoing events would cause this to fail.
         if self.next_leaf.load(Ordering::Acquire) > 0 {

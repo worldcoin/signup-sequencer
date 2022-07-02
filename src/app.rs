@@ -3,6 +3,7 @@ use crate::{
     ethereum::{self, Ethereum},
     server::Error as ServerError,
 };
+use clap::Parser;
 use cli_batteries::await_shutdown;
 use core::cmp::max;
 use ethers::{providers::Middleware, types::U256};
@@ -20,7 +21,6 @@ use std::{
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
 };
-use structopt::StructOpt;
 use tokio::{
     select,
     sync::{RwLock, RwLockReadGuard},
@@ -49,24 +49,24 @@ pub struct InclusionProofResponse {
     pub proof: Proof,
 }
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Parser)]
 pub struct Options {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub ethereum: ethereum::Options,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub contracts: contracts::Options,
 
     /// Storage location for the Merkle tree.
-    #[structopt(long, env, default_value = "commitments.json")]
+    #[clap(long, env, default_value = "commitments.json")]
     pub storage_file: PathBuf,
 
     /// Wipe database on startup
-    #[structopt(long, env, parse(try_from_str), default_value = "false")]
+    #[clap(long, env, parse(try_from_str), default_value = "false")]
     pub wipe_storage: bool,
 
     /// Block number to start syncing from
-    #[structopt(long, env, default_value = "0")]
+    #[clap(long, env, default_value = "0")]
     pub starting_block: u64,
 }
 
@@ -115,6 +115,9 @@ impl App {
         Ok(result)
     }
 
+    /// Inserts a new commitment into the Merkle tree. This will also update the
+    /// contract's commitment tree.
+    ///
     /// # Errors
     ///
     /// Will return `Err` if the Eth handler cannot insert the identity to the
@@ -230,6 +233,7 @@ impl App {
         Ok(InclusionProofResponse { root, proof })
     }
 
+    /// Stores the Merkle tree to the storage file.
     #[instrument(level = "debug", skip_all)]
     async fn store(&self, tree: RwLockReadGuard<'_, PoseidonTree>) -> EyreResult<()> {
         let file = File::create(&self.storage_file)?;

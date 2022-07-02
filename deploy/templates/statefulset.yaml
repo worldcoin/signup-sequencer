@@ -66,18 +66,14 @@ spec:
           env:
             - name: LOG_FORMAT
               value: json
-            - name: DD_AGENT_HOST
+            - name: HOST_IP
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
-            - name: DD_VERSION
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.labels['pod-template-hash']
-            - name: DD_ENV
+            - name: TRACE_OTLP
+              value: "grpc://$(HOST_IP):4317"
+            - name: TRACE_RESOURCE_ENV
               value: {{ .Values.environment }}
-            - name: DD_SERVICE
-              value: signup-sequencer
             - name: SERVER
               value: http://0.0.0.0:8080
             {{- range $name, $item := .Values.env }}

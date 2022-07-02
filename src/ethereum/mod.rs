@@ -10,6 +10,7 @@ use self::{
     rpc_logger::RpcLogger, transport::Transport,
 };
 use chrono::{Duration as ChronoDuration, Utc};
+use clap::Parser;
 use ethers::{
     abi::{Error as AbiError, RawLog},
     contract::EthEvent,
@@ -38,7 +39,6 @@ use prometheus::{
 };
 use reqwest::Client as ReqwestClient;
 use std::{error::Error, sync::Arc, time::Duration};
-use structopt::StructOpt;
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;
@@ -85,14 +85,14 @@ static TX_WEI_USED: Lazy<Counter> = Lazy::new(|| {
 
 // TODO: Log and metrics for signer / nonces.
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Parser)]
 pub struct Options {
     /// Ethereum API Provider
-    #[structopt(long, env, default_value = "http://localhost:8545")]
+    #[clap(long, env, default_value = "http://localhost:8545")]
     pub ethereum_provider: Url,
 
     /// Private key used for transaction signing
-    #[structopt(
+    #[clap(
         long,
         env,
         default_value = "ee79b5f6e221356af78cf4c36f4f7885a11b67dfcc81c34d80249947330c0f82"
@@ -101,17 +101,17 @@ pub struct Options {
     pub signing_key: H256,
 
     /// Maximum number of blocks to pull events from in one request.
-    #[structopt(long, env, default_value = "1000")]
+    #[clap(long, env, default_value = "1000")]
     pub max_log_blocks: usize,
 
     /// Minimum `max_fee_per_gas` to use in GWei. The default is for Polygon
     /// mainnet.
-    #[structopt(long, env, default_value = "750.0")]
+    #[clap(long, env, default_value = "750.0")]
     pub min_max_fee: f64,
 
     /// Minimum `priority_fee_per_gas` to use in GWei. The default is for
     /// Polygon mainnet.
-    #[structopt(long, env, default_value = "31.0")]
+    #[clap(long, env, default_value = "31.0")]
     pub min_priority_fee: f64,
 }
 

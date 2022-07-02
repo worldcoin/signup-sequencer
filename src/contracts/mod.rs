@@ -2,6 +2,7 @@ mod abi;
 
 use self::abi::{MemberAddedFilter, Semaphore};
 use crate::ethereum::{Ethereum, EventError, ProviderStack};
+use clap::Parser;
 use core::future;
 use ethers::{
     providers::Middleware,
@@ -10,29 +11,28 @@ use ethers::{
 use eyre::{eyre, Result as EyreResult};
 use futures::{Stream, StreamExt, TryStreamExt};
 use semaphore::Field;
-use structopt::StructOpt;
 use tracing::{error, info, instrument};
 
 pub type MemberAddedEvent = MemberAddedFilter;
 
-#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, Parser)]
 pub struct Options {
     /// Semaphore contract address.
-    #[structopt(long, env, default_value = "174ee9b5fBb5Eb68B6C61032946486dD9c2Dc4b6")]
+    #[clap(long, env, default_value = "174ee9b5fBb5Eb68B6C61032946486dD9c2Dc4b6")]
     pub semaphore_address: Address,
 
     /// The Semaphore group id to use
-    #[structopt(long, env, default_value = "1")]
+    #[clap(long, env, default_value = "1")]
     pub group_id: U256,
 
     /// When set, it will create the group if it does not exist with the given
     /// depth.
-    #[structopt(long, env)]
+    #[clap(long, env)]
     pub create_group_depth: Option<usize>,
 
     /// Initial value of the Merkle tree leaves. Defaults to the initial value
     /// in Semaphore.sol.
-    #[structopt(
+    #[clap(
         long,
         env,
         default_value = "0000000000000000000000000000000000000000000000000000000000000000"

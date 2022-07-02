@@ -1,3 +1,4 @@
+use clap::Parser;
 use cli_batteries::{reset_shutdown, shutdown};
 use ethers::{
     abi::Address,
@@ -25,7 +26,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use structopt::StructOpt;
 use tempfile::NamedTempFile;
 use tokio::{spawn, task::JoinHandle};
 use tracing::{info, instrument};

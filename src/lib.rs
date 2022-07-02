@@ -8,18 +8,18 @@ pub mod server;
 mod utils;
 
 use crate::{app::App, utils::spawn_or_abort};
+use clap::Parser;
 use cli_batteries::await_shutdown;
 use eyre::Result as EyreResult;
 use std::sync::Arc;
-use structopt::StructOpt;
 use tracing::info;
 
-#[derive(Clone, Debug, PartialEq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Parser)]
 pub struct Options {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub app: app::Options,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub server: server::Options,
 }
 

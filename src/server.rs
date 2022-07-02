@@ -1,5 +1,6 @@
 use crate::app::{App, Hash};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
+use clap::Parser;
 use cli_batteries::await_shutdown;
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
@@ -16,15 +17,14 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     sync::Arc,
 };
-use structopt::StructOpt;
 use thiserror::Error;
 use tracing::{error, info, instrument, trace};
 use url::{Host, Url};
 
-#[derive(Clone, Debug, PartialEq, Eq, StructOpt)]
+#[derive(Clone, Debug, PartialEq, Eq, Parser)]
 pub struct Options {
     /// API Server url
-    #[structopt(long, env = "SERVER", default_value = "http://127.0.0.1:8080/")]
+    #[clap(long, env = "SERVER", default_value = "http://127.0.0.1:8080/")]
     pub server: Url,
 }
 

@@ -33,7 +33,7 @@ cli-batteries = { version = "0.2.1", features = [ "prometheus", "metered-allocat
 ethers = { git = "https://github.com/recmo/ethers-rs.git", rev = "93e8e52", features = [ "ws", "ipc", "openssl" ]  }
 eyre = "0.6"
 futures = "0.3"
-hyper = { version = "^0.14.17", features = [ "server", "tcp", "http1", "http2" ] }
+hyper = { version = "^0.14.20", features = [ "server", "tcp", "http1", "http2" ] }
 once_cell = "1.8"
 prometheus = "0.13"
 semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main" }

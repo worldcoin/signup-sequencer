@@ -24,7 +24,7 @@ use url::{Host, Url};
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 pub struct Options {
     /// API Server url
-    #[clap(long, env = "SERVER", default_value = "http://127.0.0.1:8080/")]
+    #[clap(long, env, default_value = "http://127.0.0.1:8080/")]
     pub server: Url,
 }
 
@@ -139,6 +139,7 @@ where
     let response = Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, CONTENT_JSON)
+        // No need to include cache-control since POST is not cached by default.
         .body(Body::from(json))
         .map_err(Error::Http)?;
     Ok(response)
@@ -281,6 +282,7 @@ mod test {
 }
 #[cfg(feature = "bench")]
 #[allow(clippy::wildcard_imports, unused_imports)]
+#[doc(hidden)]
 pub mod bench {
     use super::*;
     use crate::bench::runtime;

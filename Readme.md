@@ -5,6 +5,15 @@
 [![codecov](https://codecov.io/gh/worldcoin/signup-sequencer/branch/main/graph/badge.svg?token=WBPZ9U4TTO)](https://codecov.io/gh/worldcoin/signup-sequencer)
 [![CI](https://github.com/worldcoin/signup-sequencer/actions/workflows/build-test-deploy.yml/badge.svg)](https://github.com/worldcoin/signup-sequencer/actions/workflows/build-test-deploy.yml)
 
+## API
+
+
+## Database
+
+```shell
+docker run --rm -ti -p 5432:5432 -e POSTGRES_PASSWORD=password postgres
+```
+
 ## Hints
 
 Lint, build, test, run

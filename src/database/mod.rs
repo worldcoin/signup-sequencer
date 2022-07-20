@@ -157,4 +157,16 @@ impl Database {
 
         Ok(Hash::default())
     }
+
+    pub async fn pending_commitment(&self, commitment: &Hash) -> Result<usize> {
+        let row = self.pool
+            .execute(sqlx::query(r#"INSERT INTO pending_commitments ( hash ) VALUES ( $1 );"#).bind(uint!(commitment)))
+            .await?;
+
+        let idx = row.last_insert_id();
+        match idx {
+            Some(idx) => Ok(idx as usize),
+            None => Err(eyre!("Could not add identity commitment to pending pool"))
+        }
+    }
 }

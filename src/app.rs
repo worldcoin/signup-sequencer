@@ -7,7 +7,7 @@ use crate::{
 use clap::Parser;
 use cli_batteries::await_shutdown;
 use core::cmp::max;
-use ethers::types::U256;
+use ethers::{providers::Middleware, types::U256};
 use eyre::{eyre, Result as EyreResult};
 use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
 use semaphore::{
@@ -64,12 +64,22 @@ pub struct Options {
 
     /// Block number to start syncing from
     pub starting_block: u64,
+
+    /// Storage location for the Merkle tree.
+    #[clap(long, env, default_value = "commitments.json")]
+    pub storage_file: PathBuf,
+
+    /// Wipe database on startup
+    #[clap(long, env, parse(try_from_str), default_value = "false")]
+    pub wipe_storage: bool,
 }
 
 pub struct App {
     database:   Database,
     ethereum:   Ethereum,
     contracts:  Contracts,
+    storage_file: PathBuf,
+    merkle_tree:  RwLock<PoseidonTree>,
     next_leaf:  AtomicUsize,
     last_block: u64,
 }
@@ -97,16 +107,23 @@ impl App {
         // Poseidon tree depth is one more than the contract's tree depth
         let merkle_tree = PoseidonTree::new(contracts.tree_depth() + 1, contracts.initial_leaf());
 
+        // Wipe storage to force sync from chain
+        if options.wipe_storage && options.storage_file.is_file() {
+            remove_file(&options.storage_file)?;
+        }
+
         let mut app = Self {
             database,
             ethereum,
             contracts,
+            storage_file: options.storage_file,
             merkle_tree: RwLock::new(merkle_tree),
             next_leaf: AtomicUsize::new(0),
             last_block: options.starting_block,
         };
 
         // Sync with chain on start up
+        app.read_file().await?;
         app.check_leaves().await?;
         app.process_events().await?;
         // TODO: Store file after processing events.
@@ -179,9 +196,51 @@ impl App {
         }
 
         // Immediately write the tree to storage, before anyone else can write.
-        // TODO: Store tree
-
+        // TODO: Store tree to db
+        self.store(tree).await?;
+ 
+        // Add to pending commitment database
+        let identity_index = self.database.pending_commitment(commitment).await?;
         Ok(IndexResponse { identity_index })
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    async fn store(&self, tree: RwLockReadGuard<'_, PoseidonTree>) -> EyreResult<()> {
+        let file = File::create(&self.storage_file)?;
+
+        // TODO: What we really want here is the last block we processed events from.
+        // Also, we need to keep some re-org depth into account (which should be covered
+        // by the events already).
+        let last_block = self.ethereum.provider().get_block_number().await?.as_u64();
+        let next_leaf = self.next_leaf.load(Ordering::Acquire);
+        let commitments = tree.leaves()[..next_leaf].to_vec();
+        let data = JsonCommitment {
+            last_block,
+            commitments,
+        };
+        serde_json::to_writer(BufWriter::new(file), &data)?;
+        Ok(())
+    }
+
+    #[instrument(level = "info", skip_all)]
+    async fn read_file(&mut self) -> EyreResult<()> {
+        let mut merkle_tree = self.merkle_tree.write().await;
+        if self.storage_file.is_file() {
+            let file = File::open(&self.storage_file)?;
+            if file.metadata()?.len() > 0 {
+                let file: JsonCommitment = serde_json::from_reader(BufReader::new(file))?;
+                self.next_leaf
+                    .store(file.commitments.len(), Ordering::Release);
+                merkle_tree.set_range(0, file.commitments);
+                self.last_block = file.last_block;
+                info!(path = ?&self.storage_file, num_leaves = %self.next_leaf.load(Ordering::Acquire), last_block = %self.last_block, "Read tree from storage");
+            } else {
+                warn!(path = ?&self.storage_file, "Storage file empty, skipping.");
+            }
+        } else {
+            warn!(path = ?&self.storage_file, "Storage file not found, skipping.");
+        }
+        Ok(())
     }
 
     /// # Errors

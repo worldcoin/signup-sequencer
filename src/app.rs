@@ -7,7 +7,7 @@ use crate::{
 use clap::Parser;
 use cli_batteries::await_shutdown;
 use core::cmp::max;
-use ethers::{providers::Middleware, types::U256};
+use ethers::{providers::Middleware, types::U256, types::TxHash};
 use eyre::{eyre, Result as EyreResult};
 use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
 use semaphore::{
@@ -42,6 +42,14 @@ pub struct JsonCommitment {
 #[serde(rename_all = "camelCase")]
 pub struct IndexResponse {
     identity_index: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchResponse {
+    pub last_block: u64,
+    pub tx_hash: TxHash,
+    pub commitments: Vec<Hash>
 }
 
 #[derive(Serialize)]
@@ -133,6 +141,26 @@ impl App {
 
     async fn sync(&self) -> EyreResult<()> {
         Ok(())
+    }
+
+    async fn batch_insertions(
+        &self,
+        group_id: usize,
+        commitments: Vec<Hash>
+    ) -> Result<BatchResponse, ServerError> {
+
+        if commitments.len() == 0 {
+            return Err(ServerError::EmptyBatch)
+        }
+
+        // commitments to the contract
+
+        return Ok(BatchResponse
+        {
+            last_block: 0,
+            tx_hash: TxHash([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]),
+            commitments: commitments
+        })
     }
 
     /// Inserts a new commitment into the Merkle tree. This will also update the

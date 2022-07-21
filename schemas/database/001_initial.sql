@@ -13,5 +13,6 @@ CREATE TABLE pending_commitments (
     idx         INT8      PRIMARY KEY    NOT NULL,
     commitment  BYTEA                    NOT NULL,
     tx_hash     BYTEA                    NULL,
-    tx_time     TIMESTAMP                NULL
+    tx_time     TIMESTAMP                NULL,
+    block       INT8                     NULL
 );

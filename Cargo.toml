@@ -30,7 +30,7 @@ required-features = [ "bench", "proptest" ]
 
 [dependencies]
 async-trait = "0.1.53"
-cli-batteries = { version = "0.2", features = [ "prometheus", "metered-allocator", "otlp" ] }
+cli-batteries = { version = "0.2.1", features = [ "prometheus", "metered-allocator", "otlp" ] }
 # ethers = { git = "https://github.com/gakonst/ethers-rs.git", branch = "master", rev = "4d99165", features = [ "ws", "ipc", ]  }
 ethers = { git = "https://github.com/recmo/ethers-rs.git", rev = "93e8e52", features = [ "ws", "ipc", "openssl" ]  }
 eyre = "0.6"

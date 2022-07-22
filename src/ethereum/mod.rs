@@ -338,16 +338,18 @@ impl Ethereum {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn send_transaction(&self, tx: TypedTransaction) -> Result<(), TxError> {
-        self.send_transaction_unlogged(tx).await.map_err(|e| {
+    pub async fn send_transaction(&self, tx: TypedTransaction) -> Result<H256, TxError> {
+        let tx_hash = self.send_transaction_unlogged(tx).await.map_err(|e| {
             error!(?e, "Transaction failed");
             e
-        })
+        });
+
+        Ok(tx_hash.unwrap())
     }
 
     #[allow(clippy::option_if_let_else)] // Less readable
     #[allow(clippy::cast_precision_loss)]
-    async fn send_transaction_unlogged(&self, tx: TypedTransaction) -> Result<(), TxError> {
+    async fn send_transaction_unlogged(&self, tx: TypedTransaction) -> Result<H256, TxError> {
         // Convert to legacy transaction if required
         let mut tx = if self.legacy {
             TypedTransaction::Legacy(match tx {
@@ -447,7 +449,7 @@ impl Ethereum {
         if receipt.status != Some(U64::from(1_u64)) {
             return Err(TxError::Failed(Box::new(receipt)));
         }
-        Ok(())
+        Ok(tx_hash)
     }
 
     pub fn fetch_events_raw(

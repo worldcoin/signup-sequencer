@@ -6,14 +6,20 @@ use clap::Parser;
 use core::future;
 use ethers::{
     providers::Middleware,
-    types::{Address, U256},
+    types::{Address, TxHash, H256, U256},
 };
 use eyre::{eyre, Result as EyreResult};
 use futures::{Stream, StreamExt, TryStreamExt};
-use semaphore::Field;
+use semaphore::{
+    merkle_tree::Hasher,
+    poseidon_tree::PoseidonHash,
+    Field,
+};
+
 use tracing::{error, info, instrument};
 
 pub type MemberAddedEvent = MemberAddedFilter;
+pub type Hash = <PoseidonHash as Hasher>::Hash;
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 pub struct Options {
@@ -46,6 +52,11 @@ pub struct Contracts {
     group_id:     U256,
     tree_depth:   usize,
     initial_leaf: Field,
+}
+
+pub struct PendingBatch {
+    pub tx_hash: H256,
+    pub block_number: u64
 }
 
 impl Contracts {
@@ -169,6 +180,29 @@ impl Contracts {
         let manager = self.semaphore.manager().call().await?;
         info!(?manager, "Fetched manager address");
         Ok(manager == self.ethereum.address())
+    }
+
+    #[instrument(skip_all)]
+    pub async fn insert_identities(
+        &self,
+        group_id: usize,
+        commitments: &Vec<Hash>
+    ) -> EyreResult<PendingBatch> {
+        let c_uints = commitments
+            .iter()
+            .map(|c| {
+                info!(%group_id, %c, "Inserting identity in contract");
+                U256::from(c.to_be_bytes())
+            })
+            .collect();
+
+        let block_number = self.ethereum.provider().get_block_number().await?.as_u64();
+
+        let tx_hash = self.ethereum
+            .send_transaction(self.semaphore.add_members(group_id.into(), c_uints).tx)
+            .await?;
+
+        Ok(PendingBatch { tx_hash, block_number })
     }
 
     #[instrument(level = "debug", skip_all)]

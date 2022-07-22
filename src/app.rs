@@ -148,17 +148,31 @@ impl App {
         group_id: usize,
         commitments: Vec<Hash>
     ) -> Result<BatchResponse, ServerError> {
+        // Error handling
+        if U256::from(group_id) != self.contracts.group_id() {
+            return Err(ServerError::InvalidGroupId);
+        }
 
         if commitments.len() == 0 {
             return Err(ServerError::EmptyBatch)
         }
 
-        // commitments to the contract
+        for commitment in &commitments {
+            if commitment == &self.contracts.initial_leaf() {
+                warn!(?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Attempt to insert initial leaf.");
+                return Err(ServerError::InvalidCommitment);
+            }
+            // TODO: check if we are trying to insert a leaf that exists
+        }
+
+        let tx_info = self.contracts
+            .insert_identities(group_id, &commitments)
+            .await?;
 
         return Ok(BatchResponse
         {
-            last_block: 0,
-            tx_hash: TxHash([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]),
+            last_block: tx_info.block_number,
+            tx_hash: TxHash(*tx_info.tx_hash.as_fixed_bytes()),
             commitments: commitments
         })
     }

@@ -1,4 +1,4 @@
-FROM rust:1.61 as build-env
+FROM rust:1.62.1 as build-env
 WORKDIR /src
 
 RUN apt-get update &&\

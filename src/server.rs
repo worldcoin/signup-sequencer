@@ -88,6 +88,8 @@ pub enum Error {
     #[error("not semaphore manager")]
     NotManager,
     #[error(transparent)]
+    Elapsed(#[from] tokio::time::error::Elapsed),
+    #[error(transparent)]
     Other(#[from] EyreError),
 }
 

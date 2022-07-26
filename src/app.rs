@@ -85,7 +85,7 @@ impl App {
     /// Will return `Err` if the internal Ethereum handler errors or if the
     /// `options.storage_file` is not accessible.
     #[allow(clippy::missing_panics_doc)] // TODO
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;

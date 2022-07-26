@@ -66,6 +66,8 @@ spec:
           env:
             - name: LOG_FORMAT
               value: json
+            - name: VERBOSE
+              value: 4
             - name: HOST_IP
               valueFrom:
                 fieldRef:

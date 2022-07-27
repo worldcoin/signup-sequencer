@@ -1,6 +1,6 @@
 mod abi;
 
-use self::abi::{MemberAddedFilter, Semaphore};
+use self::abi::{MemberAddedFilter, SemaphoreContract as Semaphore};
 use crate::ethereum::{Ethereum, EventError, ProviderStack};
 use clap::Parser;
 use core::future;
@@ -164,6 +164,7 @@ impl Contracts {
     }
 
     #[instrument(level = "debug", skip_all)]
+    #[allow(dead_code)]
     pub async fn is_manager(&self) -> EyreResult<bool> {
         info!(address = ?self.ethereum.address(), "My address");
         let manager = self.semaphore.manager().call().await?;

@@ -332,7 +332,7 @@ async fn spawn_app(options: Options) -> EyreResult<(JoinHandle<()>, SocketAddr)>
     let app = spawn({
         async move {
             info!("App thread starting");
-            server::bind_from_listener(app, listener)
+            server::bind_from_listener(app, Duration::from_secs(30), listener)
                 .await
                 .expect("Failed to bind address");
             info!("App thread stopping");

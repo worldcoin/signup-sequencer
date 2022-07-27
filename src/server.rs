@@ -16,16 +16,22 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     sync::Arc,
+    time::Duration,
 };
 use thiserror::Error;
+use tokio::time::timeout;
 use tracing::{error, info, instrument, trace};
 use url::{Host, Url};
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 pub struct Options {
     /// API Server url
-    #[clap(long, env = "SERVER", default_value = "http://127.0.0.1:8080/")]
+    #[clap(long, env, default_value = "http://127.0.0.1:8080/")]
     pub server: Url,
+
+    /// Request handling timeout (seconds)
+    #[clap(long, env, default_value = "300")]
+    pub serve_timeout: u64,
 }
 
 static REQUESTS: Lazy<Counter> =
@@ -87,6 +93,8 @@ pub enum Error {
     Http(#[from] hyper::http::Error),
     #[error("not semaphore manager")]
     NotManager,
+    #[error(transparent)]
+    Elapsed(#[from] tokio::time::error::Elapsed),
     #[error(transparent)]
     Other(#[from] EyreError),
 }
@@ -215,7 +223,8 @@ pub async fn main(app: Arc<App>, options: Options) -> EyreResult<()> {
 
     let listener = TcpListener::bind(&addr)?;
 
-    bind_from_listener(app, listener).await?;
+    let serve_timeout = Duration::from_secs(options.serve_timeout);
+    bind_from_listener(app, serve_timeout, listener).await?;
 
     Ok(())
 }
@@ -224,16 +233,29 @@ pub async fn main(app: Arc<App>, options: Options) -> EyreResult<()> {
 ///
 /// Will return `Err` if the provided `listener` address cannot be accessed or
 /// if the server fails to bind to the given address.
-pub async fn bind_from_listener(app: Arc<App>, listener: TcpListener) -> EyreResult<()> {
+pub async fn bind_from_listener(
+    app: Arc<App>,
+    serve_timeout: Duration,
+    listener: TcpListener,
+) -> EyreResult<()> {
     let local_addr = listener.local_addr()?;
     let make_svc = make_service_fn(move |_| {
         // Clone here as `make_service_fn` is called for every connection
         let app = app.clone();
-        async {
+        let serve_timeout = serve_timeout;
+        async move {
             Ok::<_, hyper::Error>(service_fn(move |req| {
                 // Clone here as `service_fn` is called for every request
                 let app = app.clone();
-                route(req, app)
+                let serve_timeout = serve_timeout;
+                async move {
+                    timeout(serve_timeout, route(req, app))
+                        .await
+                        .unwrap_or_else(|err| {
+                            error!(%err, "Error handling request");
+                            Ok(Error::Elapsed(err).to_response())
+                        })
+                }
             }))
         }
     });

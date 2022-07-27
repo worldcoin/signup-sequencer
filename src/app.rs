@@ -20,14 +20,19 @@ use std::{
     io::{BufReader, BufWriter},
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
+    time::Duration,
 };
 use tokio::{
     select,
     sync::{RwLock, RwLockReadGuard},
+    time::timeout,
 };
 use tracing::{debug, error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
+
+/// Maximum time to wait for the RW lock.
+const LOCK_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -85,7 +90,7 @@ impl App {
     /// Will return `Err` if the internal Ethereum handler errors or if the
     /// `options.storage_file` is not accessible.
     #[allow(clippy::missing_panics_doc)] // TODO
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
@@ -138,7 +143,7 @@ impl App {
 
         // Get a lock on the tree for the duration of this operation.
         // OPT: Sequence operations and allow concurrent inserts / transactions.
-        let mut tree = self.merkle_tree.write().await;
+        let mut tree = timeout(LOCK_TIMEOUT, self.merkle_tree.write()).await?;
 
         if let Some(existing) = tree.leaves().iter().position(|&x| x == *commitment) {
             warn!(?existing, ?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Commitment already exists in tree.");
@@ -197,7 +202,7 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        let merkle_tree = self.merkle_tree.read().await;
+        let merkle_tree = timeout(LOCK_TIMEOUT, self.merkle_tree.read()).await?;
         let identity_index = match merkle_tree.leaves().iter().position(|&x| x == *commitment) {
             Some(i) => i,
             None => return Err(ServerError::IdentityCommitmentNotFound),
@@ -275,7 +280,7 @@ impl App {
 
     #[instrument(level = "debug", skip_all)]
     async fn check_leaves(&self) -> EyreResult<()> {
-        let merkle_tree = self.merkle_tree.read().await;
+        let merkle_tree = timeout(LOCK_TIMEOUT, self.merkle_tree.read()).await?;
         let next_leaf = self.next_leaf.load(Ordering::Acquire);
         let initial_leaf = self.contracts.initial_leaf();
         for (index, &leaf) in merkle_tree.leaves().iter().enumerate() {
@@ -309,7 +314,7 @@ impl App {
 
     #[instrument(level = "info", skip_all)]
     async fn process_events(&mut self) -> EyreResult<()> {
-        let mut merkle_tree = self.merkle_tree.write().await;
+        let mut merkle_tree = timeout(LOCK_TIMEOUT, self.merkle_tree.write()).await?;
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
             .contracts
@@ -395,7 +400,7 @@ impl App {
 
     #[instrument(level = "debug", skip_all)]
     async fn check_health(&self) -> EyreResult<()> {
-        let merkle_tree = self.merkle_tree.read().await;
+        let merkle_tree = timeout(LOCK_TIMEOUT, self.merkle_tree.read()).await?;
         let initial_leaf = self.contracts.initial_leaf();
         // TODO: A re-org undoing events would cause this to fail.
         if self.next_leaf.load(Ordering::Acquire) > 0 {

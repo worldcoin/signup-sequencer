@@ -5,5 +5,5 @@ use cli_batteries::{run, version};
 use signup_sequencer::main as app;
 
 fn main() {
-    run(version!(), app);
+    run(version!(semaphore, ethers), app);
 }

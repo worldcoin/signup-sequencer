@@ -65,6 +65,7 @@ pub mod test {
     }
 
     #[test]
+    #[allow(clippy::disallowed_methods)] // False positive from macro
     #[traced_test]
     fn test_with_log_output() {
         error!("logged on the error level");
@@ -72,6 +73,7 @@ pub mod test {
     }
 
     #[tokio::test]
+    #[allow(clippy::disallowed_methods)] // False positive from macro
     #[traced_test]
     #[allow(clippy::semicolon_if_nothing_returned)] // False positive
     async fn async_test_with_log() {

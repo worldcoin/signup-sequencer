@@ -41,7 +41,7 @@ use reqwest::Client as ReqwestClient;
 use std::{error::Error, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::time::timeout;
-use tracing::{error, info, info_span, instrument,  warn, Instrument, debug_span};
+use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
 use url::Url;
 
 const PENDING: Option<BlockId> = Some(BlockId::Number(BlockNumber::Pending));

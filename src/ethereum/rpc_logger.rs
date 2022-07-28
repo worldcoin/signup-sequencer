@@ -4,7 +4,7 @@ use ethers::providers::JsonRpcClient;
 use once_cell::sync::Lazy;
 use serde::{de::DeserializeOwned, Serialize};
 use std::fmt::Debug;
-use tracing::{instrument};
+use tracing::instrument;
 
 static REQUESTS: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!(

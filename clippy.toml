@@ -1,4 +1,15 @@
+# See <https://rust-lang.github.io/rust-clippy/master/#await_holding_invalid_type>
+# TODO: These lints don't seem to trigger, even on the example from documentation.
 await-holding-invalid-types = [
-  "tracing::trace::Entered",
-  "tracing::trace::EnteredSpan",
+    # See <https://docs.rs/tracing/latest/tracing/span/struct.Span.html#in-asynchronous-code>
+    "tracing::trace::Entered",
+    "tracing::trace::EnteredSpan",
+]
+
+# Workaround: Ban the constructor methods instead of `await-holding-invalid-types`.
+# This can produce false positives in non-async code, but we can selectively disable
+# the lint there.
+disallowed-methods = [
+   "tracing::span::Span::enter",
+   "tracing::span::Span::entered",
 ]

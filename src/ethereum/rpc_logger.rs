@@ -4,7 +4,7 @@ use ethers::providers::JsonRpcClient;
 use once_cell::sync::Lazy;
 use serde::{de::DeserializeOwned, Serialize};
 use std::fmt::Debug;
-use tracing::{span, Instrument, Level};
+use tracing::instrument;
 
 static REQUESTS: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!(
@@ -41,16 +41,15 @@ where
 {
     type Error = Inner::Error;
 
+    #[instrument(name = "eth_rpc", level = "debug", skip(self))]
     async fn request<T, R>(&self, method: &str, params: T) -> Result<R, Self::Error>
     where
         T: Debug + Serialize + Send + Sync,
         R: DeserializeOwned,
     {
-        let span = span!(Level::DEBUG, "eth_rpc", method);
-        let _guard = span.enter();
         REQUESTS.with_label_values(&[method]).inc();
         let timer = LATENCY.start_timer();
-        let result = self.inner.request(method, params).in_current_span().await;
+        let result = self.inner.request(method, params).await;
         timer.observe_duration();
         result
     }

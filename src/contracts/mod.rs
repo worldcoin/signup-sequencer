@@ -131,7 +131,8 @@ impl Contracts {
         self.initial_leaf
     }
 
-    #[instrument(level = "debug", skip_all)]
+    #[allow(clippy::disallowed_methods)] // False positive from macro expansion.
+    #[instrument(level = "debug", skip(self))]
     pub fn fetch_events(
         &self,
         starting_block: u64,

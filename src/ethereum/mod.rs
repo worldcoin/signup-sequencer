@@ -41,7 +41,7 @@ use reqwest::Client as ReqwestClient;
 use std::{error::Error, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::time::timeout;
-use tracing::{error, info, instrument, span, warn, Instrument, Level};
+use tracing::{error, info, info_span, instrument,  warn, Instrument, debug_span};
 use url::Url;
 
 const PENDING: Option<BlockId> = Some(BlockId::Number(BlockNumber::Pending));
@@ -380,11 +380,9 @@ impl Ethereum {
         };
 
         // Fill in transaction
-        let span = span!(Level::DEBUG, "Fill in transaction");
-        let span_guard = span.enter();
         self.provider
             .fill_transaction(&mut tx, None)
-            .in_current_span()
+            .instrument(debug_span!("Fill in transaction"))
             .await
             .map_err(|error| {
                 error!(?error, "Failed to fill transaction");
@@ -393,7 +391,6 @@ impl Ethereum {
         let nonce = tx.nonce().unwrap().as_u64();
         let gas_limit = tx.gas().unwrap().as_u128() as f64;
         let gas_price = tx.gas_price().unwrap().as_u128() as f64;
-        drop(span_guard);
 
         // Log transaction
         info!(?tx, ?nonce, ?gas_limit, ?gas_price, "Sending transaction.");
@@ -406,12 +403,11 @@ impl Ethereum {
         TX_COUNT.with_label_values(&[&bytes4]).inc();
 
         // Send TX to mempool
-        let span = span!(Level::INFO, "Send TX to mempool");
-        let span_guard = span.enter();
         let pending = timeout(
             self.send_timeout,
             self.provider.send_transaction(tx.clone(), None),
         )
+        .instrument(info_span!("Send TX to mempool"))
         .await
         .map_err(|elapsed| {
             error!(?elapsed, "Send transaction timed out");
@@ -421,16 +417,13 @@ impl Ethereum {
             error!(?nonce, ?error, "Failed to send transaction");
             TxError::Send(Box::new(error))
         })?;
-
         let tx_hash: H256 = *pending;
         info!(?nonce, ?tx_hash, "Transaction in mempool");
-        drop(span_guard);
 
         // Wait for TX to be mined
-        let span = span!(Level::INFO, "Wait for TX to be mined");
-        let span_guard = span.enter();
         let timer = TX_LATENCY.start_timer();
         let receipt = timeout(self.mine_timeout, pending)
+            .instrument(info_span!("Wait for TX to be mined"))
             .await
             .map_err(|elapsed| {
                 error!(?elapsed, "Waiting for transaction confirmation timed out");
@@ -447,7 +440,6 @@ impl Ethereum {
             })?;
         timer.observe_duration();
         info!(?nonce, ?tx_hash, ?receipt, "Transaction mined");
-        drop(span_guard);
 
         // Check receipt for gas used
         if let Some(gas_price) = receipt.effective_gas_price {

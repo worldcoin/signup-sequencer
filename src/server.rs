@@ -1,7 +1,7 @@
 use crate::app::{App, Hash};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use clap::Parser;
-use cli_batteries::await_shutdown;
+use cli_batteries::{await_shutdown, trace_from_headers};
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
 use hyper::{
@@ -152,8 +152,10 @@ where
     Ok(response)
 }
 
-#[instrument(skip_all)]
+#[instrument(level="info", skip(app), fields(http.uri=%request.uri(), http.method=%request.method()))]
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
+    trace_from_headers(request.headers());
+
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
     REQUESTS.inc();

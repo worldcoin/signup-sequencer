@@ -79,4 +79,5 @@ strip = true
 opt-level = 3
 
 [patch.crates-io]
-# cli-batteries = { git = "https://github.com/recmo/cli-batteries", branch = "main" }
+cli-batteries = { git = "https://github.com/recmo/cli-batteries", branch = "span-log" }
+# cli-batteries = { path = "../../WV/cli-batteries" }

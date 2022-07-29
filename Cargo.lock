@@ -764,8 +764,7 @@ dependencies = [
 [[package]]
 name = "cli-batteries"
 version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c58d2fe3245cd7139efa41a2dc9deb6894173182ed7a2b81aaabcc542d9eb4d"
+source = "git+https://github.com/recmo/cli-batteries?branch=span-log#360f024b2da9fa9a75a53117688ed8aa7be952c1"
 dependencies = [
  "ansi_term",
  "chrono",
@@ -776,14 +775,18 @@ dependencies = [
  "heck 0.4.0",
  "hex",
  "hex-literal",
+ "http",
  "hyper",
  "itertools",
  "mimalloc",
  "once_cell",
  "opentelemetry",
+ "opentelemetry-http",
  "opentelemetry-otlp",
  "opentelemetry-semantic-conventions",
  "prometheus",
+ "serde",
+ "serde_json",
  "thiserror",
  "time 0.3.11",
  "tokio",
@@ -793,6 +796,7 @@ dependencies = [
  "tracing-futures",
  "tracing-log",
  "tracing-opentelemetry",
+ "tracing-serde",
  "tracing-subscriber 0.3.15",
  "url",
  "users",
@@ -1637,7 +1641,7 @@ dependencies = [
 [[package]]
 name = "ethers-core"
 version = "0.17.0"
-source = "git+https://github.com/gakonst/ethers-rs#1ef7735e3d5bd338b393dac37665f75b30ac7085"
+source = "git+https://github.com/gakonst/ethers-rs#1f69ec767927e994e3607c2f8fe0a2c020d17220"
 dependencies = [
  "arrayvec",
  "bytes",
@@ -2922,6 +2926,18 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
+]
+
+[[package]]
+name = "opentelemetry-http"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "449048140ee61e28f57abe6e9975eedc1f3a29855c7407bd6c12b18578863379"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "http",
+ "opentelemetry",
 ]
 
 [[package]]

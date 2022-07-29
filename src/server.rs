@@ -152,7 +152,7 @@ where
     Ok(response)
 }
 
-#[instrument(level="info", skip(app), fields(http.uri=%request.uri(), http.method=%request.method()))]
+#[instrument(level="info", name="api_request", skip(app), fields(http.uri=%request.uri(), http.method=%request.method()))]
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
     trace_from_headers(request.headers());
 

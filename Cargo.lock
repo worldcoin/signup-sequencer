@@ -722,9 +722,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.2.15"
+version = "3.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44bbe24bbd31a185bc2c4f7c2abe80bea13a20d57ee4e55be70ac512bdc76417"
+checksum = "a3dbbb6653e7c55cc8595ad3e1f7be8f32aba4eb7ff7f0fd1163d4f3d137c0a9"
 dependencies = [
  "atty",
  "bitflags",
@@ -769,7 +769,7 @@ checksum = "0c58d2fe3245cd7139efa41a2dc9deb6894173182ed7a2b81aaabcc542d9eb4d"
 dependencies = [
  "ansi_term",
  "chrono",
- "clap 3.2.15",
+ "clap 3.2.16",
  "color-eyre 0.6.2",
  "eyre",
  "futures",
@@ -4221,7 +4221,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "clap 3.2.15",
+ "clap 3.2.16",
  "cli-batteries",
  "criterion",
  "ethers",
@@ -4375,7 +4375,7 @@ checksum = "a55e00b6f95abd889ce398bd7eab2a9c62cd27281cf1bfba70847340557434cf"
 dependencies = [
  "anyhow",
  "cfg-if",
- "clap 3.2.15",
+ "clap 3.2.16",
  "console 0.14.1",
  "dialoguer",
  "fs2",

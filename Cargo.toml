@@ -27,7 +27,7 @@ path = "criterion.rs"
 required-features = [ "bench", "proptest" ]
 
 [dependencies]
-async-trait = "0.1.53"
+async-trait = "0.1.57"
 cli-batteries = { version = "0.3.2", features = [ "signals", "prometheus", "metered-allocator", "otlp" ] }
 # ethers = { git = "https://github.com/gakonst/ethers-rs.git", branch = "master", rev = "4d99165", features = [ "ws", "ipc", ]  }
 ethers = { git = "https://github.com/recmo/ethers-rs.git", rev = "e6ce346", features = [ "ws", "ipc", "openssl", "abigen" ]  }

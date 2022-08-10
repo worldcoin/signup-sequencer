@@ -774,8 +774,9 @@ dependencies = [
 
 [[package]]
 name = "cli-batteries"
-version = "0.3.2"
-source = "git+https://github.com/recmo/cli-batteries?branch=span-log#f6b059cd9616d369ac00c99c24d965e57a71dc89"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "912df25ef5f8ac1cc683bcbf4e6a67d38f6eed34a2fb2d3c4b7480852dffee13"
 dependencies = [
  "ansi_term",
  "chrono",
@@ -1652,7 +1653,7 @@ dependencies = [
 [[package]]
 name = "ethers-core"
 version = "0.17.0"
-source = "git+https://github.com/gakonst/ethers-rs#2f0dbad1fd8b79fcc2000646e61ef2e43b5f8b79"
+source = "git+https://github.com/gakonst/ethers-rs#9d80d69503e40fc6888eb88e8a2acc1ccb3d1a6e"
 dependencies = [
  "arrayvec",
  "bytes",
@@ -2321,9 +2322,9 @@ dependencies = [
 
 [[package]]
 name = "iana-time-zone"
-version = "0.1.41"
+version = "0.1.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1779539f58004e5dba1c1f093d44325ebeb244bfc04b791acdc0aaeca9c04570"
+checksum = "9512e544c25736b82aebbd2bf739a47c8a1c935dfcc3a6adcde10e35cd3cd468"
 dependencies = [
  "android_system_properties",
  "core-foundation",
@@ -2538,9 +2539,9 @@ checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
 
 [[package]]
 name = "libc"
-version = "0.2.127"
+version = "0.2.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "505e71a4706fa491e9b1b55f51b95d4037d0821ee40131190475f692b35b009b"
+checksum = "64de3cc433455c14174d42e554d4027ee631c4d046d43e3ecc6efc4636cdc7a7"
 
 [[package]]
 name = "libloading"

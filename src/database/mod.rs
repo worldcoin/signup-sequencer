@@ -20,15 +20,11 @@ pub struct Options {
     /// Example: `postgres://user:password@localhost:5432/database`
     /// Sqlite file: ``
     /// In memory DB: `sqlite::memory:`
-    #[clap(
-        long,
-        env,
-        default_value = "postgres://postgres:password@localhost/test"
-    )]
+    #[clap(long, env, default_value = "sqlite::memory:")]
     pub database: Url,
 
     /// Allow creation or migration of the database schema.
-    #[clap(long)]
+    #[clap(long, default_value = "true")]
     pub database_migrate: bool,
 
     /// Maximum number of connections in the database connection pool
@@ -84,6 +80,7 @@ impl Database {
             info!(url = %&options.database, "Running migrations");
             MIGRATOR.run(&pool).await?;
         }
+
         // Validate database schema version
         #[allow(deprecated)] // HACK: No good alternative to `version()`?
         if let Some((version, dirty)) = pool.acquire().await?.version().await? {

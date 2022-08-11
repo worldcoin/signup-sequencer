@@ -60,11 +60,14 @@ pub struct Options {
     pub database: database::Options,
 
     /// Block number to start syncing from
+    #[clap(long, env, default_value = "0")]
     pub starting_block: u64,
 }
 
 pub struct App {
+    #[allow(dead_code)]
     database:    Database,
+    #[allow(dead_code)]
     ethereum:    Ethereum,
     contracts:   Contracts,
     next_leaf:   AtomicUsize,

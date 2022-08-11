@@ -260,7 +260,7 @@ pub async fn bind_from_listener(
                         .unwrap_or_else(|err| {
                             error!(?err, timeout = ?serve_timeout, "Timeout while handling request");
                             panic!("Sequencer may be stalled, terminating.");
-                            #[allow(dead_code)]
+                            #[allow(unreachable_code)]
                             Ok(Error::Elapsed(err).to_response())
                         })
                 }

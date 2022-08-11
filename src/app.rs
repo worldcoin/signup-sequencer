@@ -156,7 +156,7 @@ impl App {
                 e
             })?;
 
-        // Update and write merkle tree
+        // Update  merkle tree
         tree.set(identity_index, *commitment);
 
         // Downgrade write lock to read lock
@@ -233,7 +233,7 @@ impl App {
     /// Stores the Merkle tree to the storage file.
     #[instrument(level = "debug", skip_all)]
     async fn check_leaves(&self) -> EyreResult<()> {
-        let merkle_tree = self.merkle_tree.read().await;
+        let merkle_tree = timeout(LOCK_TIMEOUT, self.merkle_tree.read()).await?;
         let next_leaf = self.next_leaf.load(Ordering::Acquire);
         let initial_leaf = self.contracts.initial_leaf();
         for (index, &leaf) in merkle_tree.leaves().iter().enumerate() {

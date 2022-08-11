@@ -235,6 +235,10 @@ pub async fn main(app: Arc<App>, options: Options) -> EyreResult<()> {
 ///
 /// Will return `Err` if the provided `listener` address cannot be accessed or
 /// if the server fails to bind to the given address.
+///
+/// # Panics
+///
+/// Panics if the request handler exceeds the provided `serve_timeout`.
 pub async fn bind_from_listener(
     app: Arc<App>,
     serve_timeout: Duration,
@@ -254,7 +258,9 @@ pub async fn bind_from_listener(
                     timeout(serve_timeout, route(req, app))
                         .await
                         .unwrap_or_else(|err| {
-                            error!(%err, "Error handling request");
+                            error!(?err, timeout = ?serve_timeout, "Timeout while handling request");
+                            panic!("Sequencer may be stalled, terminating.");
+                            #[allow(unreachable_code)]
                             Ok(Error::Elapsed(err).to_response())
                         })
                 }
@@ -303,6 +309,7 @@ mod test {
         // TODO deserialize proof and compare results
     }
 }
+
 #[cfg(feature = "bench")]
 #[allow(clippy::wildcard_imports, unused_imports)]
 pub mod bench {

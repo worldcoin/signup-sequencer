@@ -1,6 +1,6 @@
 mod abi;
 
-use self::abi::{MemberAddedFilter, Semaphore};
+use self::abi::{MemberAddedFilter, SemaphoreContract as Semaphore};
 use crate::ethereum::{Ethereum, EventError, ProviderStack};
 use clap::Parser;
 use core::future;
@@ -131,7 +131,8 @@ impl Contracts {
         self.initial_leaf
     }
 
-    #[instrument(level = "debug", skip_all)]
+    #[allow(clippy::disallowed_methods)] // False positive from macro expansion.
+    #[instrument(level = "debug", skip(self))]
     pub fn fetch_events(
         &self,
         starting_block: u64,
@@ -164,6 +165,7 @@ impl Contracts {
     }
 
     #[instrument(level = "debug", skip_all)]
+    #[allow(dead_code)]
     pub async fn is_manager(&self) -> EyreResult<bool> {
         info!(address = ?self.ethereum.address(), "My address");
         let manager = self.semaphore.manager().call().await?;

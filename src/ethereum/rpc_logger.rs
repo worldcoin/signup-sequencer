@@ -41,7 +41,7 @@ where
 {
     type Error = Inner::Error;
 
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(name = "eth_rpc", level = "debug", skip(self))]
     async fn request<T, R>(&self, method: &str, params: T) -> Result<R, Self::Error>
     where
         T: Debug + Serialize + Send + Sync,

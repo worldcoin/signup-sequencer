@@ -30,9 +30,9 @@ required-features = [ "bench", "proptest" ]
 
 [dependencies]
 async-trait = "0.1.53"
-cli-batteries = { version = "0.2", features = [ "prometheus", "metered-allocator", "otlp" ] }
+cli-batteries = { version = "0.3.3", features = [ "signals", "prometheus", "metered-allocator", "otlp" ] }
 # ethers = { git = "https://github.com/gakonst/ethers-rs.git", branch = "master", rev = "4d99165", features = [ "ws", "ipc", ]  }
-ethers = { git = "https://github.com/recmo/ethers-rs.git", rev = "93e8e52", features = [ "ws", "ipc", "openssl" ]  }
+ethers = { git = "https://github.com/recmo/ethers-rs.git", rev = "e6ce346", features = [ "ws", "ipc", "openssl", "abigen" ]  }
 eyre = "0.6"
 futures = "0.3"
 hyper = { version = "^0.14.17", features = [ "server", "tcp", "http1", "http2" ] }
@@ -57,7 +57,7 @@ proptest = { version = "1.0", optional = true }
 criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
 
 [dev-dependencies]
-cli-batteries = { version = "0.2", features = [ "mock-shutdown" ] }
+cli-batteries = { version = "0.3.1", features = [ "mock-shutdown" ] }
 proptest = { version = "1.0" }
 tempfile = "3.0"
 tracing-test = "0.2"
@@ -66,7 +66,7 @@ hex = "0.4.3"
 hex-literal = "0.3"
 
 [build-dependencies]
-cli-batteries = "0.2"
+cli-batteries = "0.3.1"
 
 [profile.release]
 codegen-units = 1

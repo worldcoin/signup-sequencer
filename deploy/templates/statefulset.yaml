@@ -65,7 +65,7 @@ spec:
               protocol: TCP
           env:
             - name: LOG_FORMAT
-              value: json
+              value: otlp
             - name: VERBOSE
               value: "3"
             - name: HOST_IP

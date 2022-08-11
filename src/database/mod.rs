@@ -8,7 +8,7 @@ use sqlx::{
     pool::PoolOptions,
     Any, Executor, Pool, Row,
 };
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 use url::Url;
 
 // Statically link in migration files
@@ -130,7 +130,8 @@ impl Database {
         Ok(Self { pool })
     }
 
-    pub async fn read(&self, index: usize) -> Result<Hash> {
+    #[allow(unused)]
+    pub async fn read(&self, _index: usize) -> Result<Hash> {
         self.pool
             .execute(sqlx::query(
                 r#"CREATE TABLE IF NOT EXISTS hashes (

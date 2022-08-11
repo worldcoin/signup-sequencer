@@ -59,7 +59,6 @@ criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
 [dev-dependencies]
 cli-batteries = { version = "0.3.1", features = [ "mock-shutdown" ] }
 proptest = { version = "1.0" }
-tempfile = "3.0"
 tracing-test = "0.2"
 tracing-subscriber = "0.3.11"
 hex = "0.4.3"

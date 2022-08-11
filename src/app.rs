@@ -17,18 +17,10 @@ use semaphore::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{remove_file, File},
-    io::{BufReader, BufWriter},
-    path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
     time::Duration,
 };
-use tokio::{
-    select,
-    sync::{RwLock, RwLockReadGuard},
-    time::timeout,
-    try_join,
-};
+use tokio::{select, sync::RwLock, time::timeout, try_join};
 use tracing::{debug, error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -72,11 +64,12 @@ pub struct Options {
 }
 
 pub struct App {
-    database:   Database,
-    ethereum:   Ethereum,
-    contracts:  Contracts,
-    next_leaf:  AtomicUsize,
-    last_block: u64,
+    database:    Database,
+    ethereum:    Ethereum,
+    contracts:   Contracts,
+    next_leaf:   AtomicUsize,
+    last_block:  u64,
+    merkle_tree: RwLock<PoseidonTree>,
 }
 
 impl App {
@@ -108,6 +101,7 @@ impl App {
             contracts,
             next_leaf: AtomicUsize::new(0),
             last_block: options.starting_block,
+            merkle_tree: RwLock::new(merkle_tree),
         };
 
         // Sync with chain on start up
@@ -116,10 +110,6 @@ impl App {
         // TODO: Store file after processing events.
         app.check_health().await?;
         Ok(app)
-    }
-
-    async fn sync(&self) -> EyreResult<()> {
-        Ok(())
     }
 
     /// Inserts a new commitment into the Merkle tree. This will also update the
@@ -170,7 +160,7 @@ impl App {
         tree.set(identity_index, *commitment);
 
         // Downgrade write lock to read lock
-        todo!(); // let tree = tree.downgrade();
+        let tree = tree.downgrade();
 
         // Check tree root
         if let Err(error) = self.contracts.assert_valid_root(tree.root()).await {
@@ -183,7 +173,7 @@ impl App {
         }
 
         // Immediately write the tree to storage, before anyone else can write.
-        // TODO: Store tree
+        // TODO: Store tree in database
 
         Ok(IndexResponse { identity_index })
     }

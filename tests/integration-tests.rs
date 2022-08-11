@@ -26,7 +26,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tempfile::NamedTempFile;
 use tokio::{spawn, task::JoinHandle};
 use tracing::{info, instrument};
 use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
@@ -52,9 +51,6 @@ async fn insert_identity_and_proofs() {
 
     let mut options = Options::from_iter_safe(&[""]).expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
-
-    let temp_commitments_file = NamedTempFile::new().expect("Failed to create named temp file");
-    options.app.storage_file = temp_commitments_file.path().to_path_buf();
 
     let (chain, private_key, semaphore_address) = spawn_mock_chain()
         .await
@@ -161,13 +157,6 @@ async fn insert_identity_and_proofs() {
 
     // Test loading state from tree, onchain tree has leafs
 
-    // Create new empty temp file
-    temp_commitments_file
-        .close()
-        .expect("Failed to close temp file");
-    let temp_commitments_file = NamedTempFile::new().expect("Failed to create named temp file");
-    options.app.storage_file = temp_commitments_file.path().to_path_buf();
-
     info!("Starting app");
     let (app, local_addr) = spawn_app(options.clone())
         .await
@@ -198,11 +187,6 @@ async fn insert_identity_and_proofs() {
     shutdown();
     app.await.unwrap();
     reset_shutdown();
-
-    // Delete temp file
-    temp_commitments_file
-        .close()
-        .expect("Failed to close temp file");
 }
 
 #[instrument(skip_all)]

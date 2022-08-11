@@ -1,6 +1,7 @@
 use crate::app::Hash;
 use clap::Parser;
 use eyre::{eyre, Context, Result};
+use ethers::types::TxHash;
 use ruint::{aliases::U256, uint};
 use sqlx::{
     any::AnyKind,
@@ -168,5 +169,34 @@ impl Database {
             Some(idx) => Ok(idx as usize),
             None => Err(eyre!("Could not add identity commitment to pending pool"))
         }
+    }
+
+    pub async fn batch_commitments(
+        &self,
+        tx_hash: TxHash,
+        block_number: u64,
+        commitments: Vec<&Hash>
+    ) -> Result<bool> {
+
+       let c_row: Vec<&U256> = commitments.iter().map(|&c| uint!(c)).collect();
+       let params = format!("?{}", ", ?".repeat(c_row.len()-1));
+       let query_str = format!("UPDATE pending_commitments SET tx_hash = $1, block = $2 WHERE commitments IN ( { } );", params);
+
+       let mut query = sqlx::query(&query_str)
+           .bind(tx_hash.to_low_u64_ne() as i64)
+           .bind(block_number as i64);
+
+       // update all the rows that contain commitments with tx hash and block number
+       for c in c_row {
+           query = query.bind(c);
+       }
+
+       let row = self.pool.execute(query).await?;
+       let idx = row.last_insert_id();
+
+       match idx {
+            Some(_idx) => Ok(true),
+            None => Err(eyre!("Could not create batch of transactions"))
+       }
     }
 }

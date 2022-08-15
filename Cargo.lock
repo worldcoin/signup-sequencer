@@ -733,9 +733,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.2.16"
+version = "3.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3dbbb6653e7c55cc8595ad3e1f7be8f32aba4eb7ff7f0fd1163d4f3d137c0a9"
+checksum = "29e724a68d9319343bb3328c9cc2dfde263f4b3142ee1059a9980580171c954b"
 dependencies = [
  "atty",
  "bitflags",
@@ -752,9 +752,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "3.2.15"
+version = "3.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ba52acd3b0a5c33aeada5cdaa3267cdc7c594a98731d4268cdc1532f4264cb4"
+checksum = "13547f7012c01ab4a0e8f8967730ada8f9fdf419e8b6c792788f39cf4e46eefa"
 dependencies = [
  "heck 0.4.0",
  "proc-macro-error",
@@ -780,7 +780,7 @@ checksum = "912df25ef5f8ac1cc683bcbf4e6a67d38f6eed34a2fb2d3c4b7480852dffee13"
 dependencies = [
  "ansi_term",
  "chrono",
- "clap 3.2.16",
+ "clap 3.2.17",
  "color-eyre 0.6.2",
  "eyre",
  "futures",
@@ -4264,7 +4264,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "clap 3.2.16",
+ "clap 3.2.17",
  "cli-batteries",
  "criterion",
  "ethers",
@@ -4418,7 +4418,7 @@ checksum = "eb821e69d2c2131d7b4c776865afd16515baccaf9ce478e5c7d89e2b22584566"
 dependencies = [
  "anyhow",
  "cfg-if",
- "clap 3.2.16",
+ "clap 3.2.17",
  "console 0.14.1",
  "dialoguer",
  "fs2",

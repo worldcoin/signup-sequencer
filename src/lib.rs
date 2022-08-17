@@ -3,6 +3,7 @@
 
 pub mod app;
 mod contracts;
+mod database;
 mod ethereum;
 pub mod server;
 mod utils;
@@ -95,6 +96,7 @@ pub mod test {
 }
 
 #[cfg(feature = "bench")]
+#[doc(hidden)]
 pub mod bench {
     use criterion::{black_box, BatchSize, Criterion};
     use proptest::{

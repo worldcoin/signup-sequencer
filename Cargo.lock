@@ -111,7 +111,7 @@ dependencies = [
  "cfg-if",
  "color-eyre 0.5.11",
  "criterion",
- "ethers-core 0.17.0",
+ "ethers-core 0.17.0 (git+https://github.com/gakonst/ethers-rs)",
  "fnv",
  "hex",
  "num",
@@ -1541,12 +1541,12 @@ dependencies = [
 
 [[package]]
 name = "ethers"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "git+https://github.com/recmo/ethers-rs.git?rev=287a10a#287a10a593b2ada636cd8873e8afef20b2f8d37e"
 dependencies = [
  "ethers-addressbook",
  "ethers-contract",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (git+https://github.com/recmo/ethers-rs.git?rev=287a10a)",
  "ethers-etherscan",
  "ethers-middleware",
  "ethers-providers",
@@ -1556,10 +1556,10 @@ dependencies = [
 
 [[package]]
 name = "ethers-addressbook"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "git+https://github.com/recmo/ethers-rs.git?rev=287a10a#287a10a593b2ada636cd8873e8afef20b2f8d37e"
 dependencies = [
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (git+https://github.com/recmo/ethers-rs.git?rev=287a10a)",
  "once_cell",
  "serde",
  "serde_json",
@@ -1567,12 +1567,12 @@ dependencies = [
 
 [[package]]
 name = "ethers-contract"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "git+https://github.com/recmo/ethers-rs.git?rev=287a10a#287a10a593b2ada636cd8873e8afef20b2f8d37e"
 dependencies = [
  "ethers-contract-abigen",
  "ethers-contract-derive",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (git+https://github.com/recmo/ethers-rs.git?rev=287a10a)",
  "ethers-providers",
  "futures-util",
  "hex",
@@ -1585,18 +1585,19 @@ dependencies = [
 
 [[package]]
 name = "ethers-contract-abigen"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "git+https://github.com/recmo/ethers-rs.git?rev=287a10a#287a10a593b2ada636cd8873e8afef20b2f8d37e"
 dependencies = [
  "Inflector",
  "cfg-if",
  "dunce",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (git+https://github.com/recmo/ethers-rs.git?rev=287a10a)",
  "eyre",
  "getrandom",
  "hex",
  "proc-macro2",
  "quote",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
@@ -1607,11 +1608,11 @@ dependencies = [
 
 [[package]]
 name = "ethers-contract-derive"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "git+https://github.com/recmo/ethers-rs.git?rev=287a10a#287a10a593b2ada636cd8873e8afef20b2f8d37e"
 dependencies = [
  "ethers-contract-abigen",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (git+https://github.com/recmo/ethers-rs.git?rev=287a10a)",
  "hex",
  "proc-macro2",
  "quote",
@@ -1621,8 +1622,8 @@ dependencies = [
 
 [[package]]
 name = "ethers-core"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "git+https://github.com/recmo/ethers-rs.git?rev=287a10a#287a10a593b2ada636cd8873e8afef20b2f8d37e"
 dependencies = [
  "arrayvec",
  "bytes",
@@ -1678,10 +1679,10 @@ dependencies = [
 
 [[package]]
 name = "ethers-etherscan"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "git+https://github.com/recmo/ethers-rs.git?rev=287a10a#287a10a593b2ada636cd8873e8afef20b2f8d37e"
 dependencies = [
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (git+https://github.com/recmo/ethers-rs.git?rev=287a10a)",
  "getrandom",
  "reqwest",
  "semver 1.0.13",
@@ -1694,13 +1695,13 @@ dependencies = [
 
 [[package]]
 name = "ethers-middleware"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "git+https://github.com/recmo/ethers-rs.git?rev=287a10a#287a10a593b2ada636cd8873e8afef20b2f8d37e"
 dependencies = [
  "async-trait",
  "auto_impl 0.5.0",
  "ethers-contract",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (git+https://github.com/recmo/ethers-rs.git?rev=287a10a)",
  "ethers-etherscan",
  "ethers-providers",
  "ethers-signers",
@@ -1719,14 +1720,14 @@ dependencies = [
 
 [[package]]
 name = "ethers-providers"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "git+https://github.com/recmo/ethers-rs.git?rev=287a10a#287a10a593b2ada636cd8873e8afef20b2f8d37e"
 dependencies = [
  "async-trait",
  "auto_impl 1.0.1",
  "base64 0.13.0",
  "bytes",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (git+https://github.com/recmo/ethers-rs.git?rev=287a10a)",
  "futures-channel",
  "futures-core",
  "futures-timer",
@@ -1756,15 +1757,15 @@ dependencies = [
 
 [[package]]
 name = "ethers-signers"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "git+https://github.com/recmo/ethers-rs.git?rev=287a10a#287a10a593b2ada636cd8873e8afef20b2f8d37e"
 dependencies = [
  "async-trait",
  "coins-bip32",
  "coins-bip39",
  "elliptic-curve",
  "eth-keystore",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (git+https://github.com/recmo/ethers-rs.git?rev=287a10a)",
  "hex",
  "rand",
  "sha2 0.10.2",
@@ -1773,13 +1774,13 @@ dependencies = [
 
 [[package]]
 name = "ethers-solc"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "git+https://github.com/recmo/ethers-rs.git?rev=287a10a#287a10a593b2ada636cd8873e8afef20b2f8d37e"
 dependencies = [
  "cfg-if",
  "colored",
  "dunce",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (git+https://github.com/recmo/ethers-rs.git?rev=287a10a)",
  "getrandom",
  "glob",
  "hex",
@@ -4041,7 +4042,7 @@ dependencies = [
  "ark-std",
  "color-eyre 0.6.2",
  "enumset",
- "ethers-core 0.17.0",
+ "ethers-core 0.17.0 (git+https://github.com/gakonst/ethers-rs)",
  "hex",
  "hex-literal",
  "num-bigint",
@@ -4324,9 +4325,9 @@ dependencies = [
 
 [[package]]
 name = "solang-parser"
-version = "0.1.16"
+version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1f68b8280e3f354d5646218319bcee4febe42833cef5ebf653cfc49d0a94409"
+checksum = "7fd659de36c2a8ce8cba4627e2304121acbf57d00589779a5ec3ab24569dc684"
 dependencies = [
  "itertools",
  "lalrpop",

@@ -30,7 +30,7 @@ required-features = [ "bench", "proptest" ]
 async-trait = "0.1.53"
 cli-batteries = { version = "0.3.3", features = [ "signals", "prometheus", "metered-allocator", "otlp" ] }
 # ethers = { git = "https://github.com/gakonst/ethers-rs.git", branch = "master", rev = "4d99165", features = [ "ws", "ipc", ]  }
-ethers = { git = "https://github.com/recmo/ethers-rs.git", rev = "e6ce346", features = [ "ws", "ipc", "openssl", "abigen" ]  }
+ethers = { git = "https://github.com/recmo/ethers-rs.git", rev = "287a10a", features = [ "ws", "ipc", "openssl", "abigen" ]  }
 eyre = "0.6"
 futures = "0.3"
 hyper = { version = "^0.14.17", features = [ "server", "tcp", "http1", "http2" ] }

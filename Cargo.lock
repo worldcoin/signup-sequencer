@@ -111,7 +111,7 @@ dependencies = [
  "cfg-if",
  "color-eyre 0.5.11",
  "criterion",
- "ethers-core 0.17.0",
+ "ethers-core 0.17.0 (git+https://github.com/gakonst/ethers-rs)",
  "fnv",
  "hex",
  "num",
@@ -347,18 +347,6 @@ dependencies = [
  "hermit-abi",
  "libc",
  "winapi",
-]
-
-[[package]]
-name = "auto_impl"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7862e21c893d65a1650125d157eaeec691439379a1cee17ee49031b79236ada4"
-dependencies = [
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -1541,12 +1529,13 @@ dependencies = [
 
 [[package]]
 name = "ethers"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16142eeb3155cfa5aec6be3f828a28513a28bd995534f945fa70e7d608f16c10"
 dependencies = [
  "ethers-addressbook",
  "ethers-contract",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ethers-etherscan",
  "ethers-middleware",
  "ethers-providers",
@@ -1556,10 +1545,11 @@ dependencies = [
 
 [[package]]
 name = "ethers-addressbook"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e23f8992ecf45ea9dd2983696aabc566c108723585f07f5dc8c9efb24e52d3db"
 dependencies = [
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "once_cell",
  "serde",
  "serde_json",
@@ -1567,12 +1557,13 @@ dependencies = [
 
 [[package]]
 name = "ethers-contract"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e0010fffc97c5abcf75a30fd75676b1ed917b2b82beb8270391333618e2847d"
 dependencies = [
  "ethers-contract-abigen",
  "ethers-contract-derive",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ethers-providers",
  "futures-util",
  "hex",
@@ -1585,13 +1576,14 @@ dependencies = [
 
 [[package]]
 name = "ethers-contract-abigen"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bda76ce804d524f693a898dc5857d08f4db443f3da64d0c36237fa05c0ecef30"
 dependencies = [
  "Inflector",
  "cfg-if",
  "dunce",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "eyre",
  "getrandom",
  "hex",
@@ -1607,11 +1599,12 @@ dependencies = [
 
 [[package]]
 name = "ethers-contract-derive"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41170ccb5950f559cba5a052158a28ec2d224af3a7d5b266b3278b929538ef55"
 dependencies = [
  "ethers-contract-abigen",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex",
  "proc-macro2",
  "quote",
@@ -1621,8 +1614,9 @@ dependencies = [
 
 [[package]]
 name = "ethers-core"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ebdd63c828f58aa067f40f9adcbea5e114fb1f90144b3a1e2858e0c9b1ff4e8"
 dependencies = [
  "arrayvec",
  "bytes",
@@ -1678,10 +1672,11 @@ dependencies = [
 
 [[package]]
 name = "ethers-etherscan"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b279a3d00bd219caa2f9a34451b4accbfa9a1eaafc26dcda9d572591528435f0"
 dependencies = [
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "getrandom",
  "reqwest",
  "semver 1.0.13",
@@ -1694,13 +1689,13 @@ dependencies = [
 
 [[package]]
 name = "ethers-middleware"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1e7e8632d28175352b9454bbcb604643b6ca1de4d36dc99b3f86860d75c132b"
 dependencies = [
  "async-trait",
- "auto_impl 0.5.0",
  "ethers-contract",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ethers-etherscan",
  "ethers-providers",
  "ethers-signers",
@@ -1719,14 +1714,15 @@ dependencies = [
 
 [[package]]
 name = "ethers-providers"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e46482e4d1e79b20c338fd9db9e166184eb387f0a4e7c05c5b5c0aa2e8c8900c"
 dependencies = [
  "async-trait",
- "auto_impl 1.0.1",
+ "auto_impl",
  "base64 0.13.0",
  "bytes",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-channel",
  "futures-core",
  "futures-timer",
@@ -1756,15 +1752,16 @@ dependencies = [
 
 [[package]]
 name = "ethers-signers"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73a72ecad124e8ccd18d6a43624208cab0199e59621b1f0fa6b776b2e0529107"
 dependencies = [
  "async-trait",
  "coins-bip32",
  "coins-bip39",
  "elliptic-curve",
  "eth-keystore",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex",
  "rand",
  "sha2 0.10.2",
@@ -1773,13 +1770,14 @@ dependencies = [
 
 [[package]]
 name = "ethers-solc"
-version = "0.13.0"
-source = "git+https://github.com/recmo/ethers-rs.git?rev=e6ce346#e6ce346353abb5998015707f08225d3d46394bac"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebe5db405d0e584aa8dae154ffebb90f2305cae588fd11d9f6b857ebe3a79294"
 dependencies = [
  "cfg-if",
  "colored",
  "dunce",
- "ethers-core 0.13.0",
+ "ethers-core 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "getrandom",
  "glob",
  "hex",
@@ -1840,7 +1838,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "089263294bb1c38ac73649a6ad563dd9a5142c8dc0482be15b8b9acb22a1611e"
 dependencies = [
  "arrayvec",
- "auto_impl 1.0.1",
+ "auto_impl",
  "bytes",
  "ethereum-types",
  "fastrlp-derive",
@@ -4041,7 +4039,7 @@ dependencies = [
  "ark-std",
  "color-eyre 0.6.2",
  "enumset",
- "ethers-core 0.17.0",
+ "ethers-core 0.17.0 (git+https://github.com/gakonst/ethers-rs)",
  "hex",
  "hex-literal",
  "num-bigint",

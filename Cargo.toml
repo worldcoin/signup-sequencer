@@ -16,7 +16,8 @@ readme = "Readme.md"
 license-file = "mit-license.md"
 
 [features]
-default = [ "postgres" ]
+default = [ ]
+unstable_db = [ "sqlx", "postgres" ]
 bench = [ "criterion", "proptest" ]
 postgres = [ "sqlx/postgres" ]
 sqlite = [ "sqlx/sqlite" ]
@@ -47,7 +48,7 @@ tokio = { version = "1.17", features = [ "signal", "macros", "rt", "sync", "time
 tracing = "0.1"
 tracing-futures = "0.2"
 url = "2.2"
-sqlx = { version = "0.5", features = [ "runtime-tokio-native-tls", "any" ] }
+sqlx = { version = "0.5", features = [ "runtime-tokio-native-tls", "any" ], optional = true }
 chrono = "0.4.19"
 reqwest = "0.11.10"
 ruint = { version = "1.3", features = ["primitive-types", "sqlx"] }

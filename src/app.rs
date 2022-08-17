@@ -28,7 +28,8 @@ use crate::database::{self, Database};
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
 /// Maximum time to wait for the RW lock.
-const LOCK_TIMEOUT: Duration = Duration::from_secs(30);
+/// TODO: configure through env var.
+const LOCK_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

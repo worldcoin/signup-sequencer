@@ -6,6 +6,7 @@ mod contracts;
 mod database;
 mod ethereum;
 pub mod server;
+mod timed_rw_lock;
 mod utils;
 
 use crate::{app::App, utils::spawn_or_abort};

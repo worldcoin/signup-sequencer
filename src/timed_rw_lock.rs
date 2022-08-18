@@ -8,6 +8,8 @@ use tokio::{
     time::timeout,
 };
 
+// FEATURE: Add tracing spans to wait and the guard.
+
 /// A read-write lock with timeout.
 ///
 /// Wraps Tokio's [`RwLock`].

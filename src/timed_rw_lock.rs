@@ -12,7 +12,7 @@ use tokio::{
 ///
 /// Wraps Tokio's [`RwLock`].
 #[derive(Debug)]
-pub struct TimedRwLock<T> {
+pub struct TimedRwLock<T: Send + Sync> {
     duration: Duration,
     inner:    RwLock<T>,
 }
@@ -41,16 +41,17 @@ impl Display for Operation {
     }
 }
 
-impl<T> TimedRwLock<T> {
+impl<T: Send + Sync> TimedRwLock<T> {
     pub fn new(duration: Duration, value: T) -> Self {
         Self::from_lock(duration, RwLock::new(value))
     }
 
-    pub fn from_lock(duration: Duration, inner: RwLock<T>) -> Self {
+    pub const fn from_lock(duration: Duration, inner: RwLock<T>) -> Self {
         Self { duration, inner }
     }
 
-    pub fn timeout(&self) -> Duration {
+    #[allow(dead_code)]
+    pub const fn timeout(&self) -> Duration {
         self.duration
     }
 

@@ -147,6 +147,7 @@ where
     let response = Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, CONTENT_JSON)
+        // No need to include cache-control since POST is not cached by default.
         .body(Body::from(json))
         .map_err(Error::Http)?;
     Ok(response)
@@ -312,6 +313,7 @@ mod test {
 
 #[cfg(feature = "bench")]
 #[allow(clippy::wildcard_imports, unused_imports)]
+#[doc(hidden)]
 pub mod bench {
     use super::*;
     use crate::bench::runtime;

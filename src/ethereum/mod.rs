@@ -17,12 +17,14 @@ use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::{
         gas_oracle::{
-            Cache, EthGasStation, Etherchain, GasNow, GasOracle, GasOracleMiddleware, Median,
-            Polygon, ProviderOracle,
+            Cache, EthGasStation, Etherchain, GasOracle, GasOracleMiddleware, Median, Polygon,
         },
         SignerMiddleware,
     },
-    prelude::ProviderError,
+    prelude::{
+        gas_oracle::{GasNow, ProviderOracle},
+        ProviderError,
+    },
     providers::{LogQueryError, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
     types::{

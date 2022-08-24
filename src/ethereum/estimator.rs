@@ -68,7 +68,7 @@ impl<Inner: Middleware> Middleware for Estimator<Inner> {
         block: Option<BlockId>,
     ) -> Result<(), Self::Error> {
         if tx.gas().is_none() {
-            tx.set_gas(self.estimate_gas(tx).await?);
+            tx.set_gas(self.estimate_gas(tx, block).await?);
         }
         self.inner()
             .fill_transaction(tx, block)
@@ -76,8 +76,16 @@ impl<Inner: Middleware> Middleware for Estimator<Inner> {
             .map_err(FromErr::from)
     }
 
-    async fn estimate_gas(&self, tx: &TypedTransaction) -> Result<U256, Self::Error> {
-        let gas = self.inner.estimate_gas(tx).await.map_err(FromErr::from)?;
+    async fn estimate_gas(
+        &self,
+        tx: &TypedTransaction,
+        block: Option<BlockId>,
+    ) -> Result<U256, Self::Error> {
+        let gas = self
+            .inner
+            .estimate_gas(tx, block)
+            .await
+            .map_err(FromErr::from)?;
         Ok(self.rescale(gas))
     }
 
@@ -91,7 +99,7 @@ impl<Inner: Middleware> Middleware for Estimator<Inner> {
     ) -> Result<PendingTransaction<'_, Self::Provider>, Self::Error> {
         let mut tx = tx.into();
         if tx.gas().is_none() {
-            tx.set_gas(self.estimate_gas(&tx).await?);
+            tx.set_gas(self.estimate_gas(&tx, block).await?);
         }
         self.inner
             .send_transaction(tx, block)

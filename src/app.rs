@@ -2,6 +2,7 @@ use crate::{
     contracts::{self, Contracts},
     ethereum::{self, Ethereum},
     server::Error as ServerError,
+    timed_rw_lock::TimedRwLock,
 };
 use clap::Parser;
 use cli_batteries::await_shutdown;
@@ -19,17 +20,13 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
     time::Duration,
 };
-use tokio::{select, sync::RwLock, time::timeout, try_join};
+use tokio::{select, try_join};
 use tracing::{debug, error, info, instrument, warn};
 
 #[cfg(feature = "unstable_db")]
 use crate::database::{self, Database};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
-
-/// Maximum time to wait for the RW lock.
-/// TODO: configure through env var.
-const LOCK_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,6 +63,10 @@ pub struct Options {
     /// Block number to start syncing from
     #[clap(long, env, default_value = "0")]
     pub starting_block: u64,
+
+    /// Timeout for the tree lock (seconds).
+    #[clap(long, env, default_value = "120")]
+    pub lock_timeout: u64,
 }
 
 pub struct App {
@@ -82,7 +83,7 @@ pub struct App {
     contracts:   Contracts,
     next_leaf:   AtomicUsize,
     last_block:  u64,
-    merkle_tree: RwLock<PoseidonTree>,
+    merkle_tree: TimedRwLock<PoseidonTree>,
 }
 
 impl App {
@@ -119,7 +120,7 @@ impl App {
             contracts,
             next_leaf: AtomicUsize::new(0),
             last_block: options.starting_block,
-            merkle_tree: RwLock::new(merkle_tree),
+            merkle_tree: TimedRwLock::new(Duration::from_secs(options.lock_timeout), merkle_tree),
         };
 
         // Sync with chain on start up
@@ -153,14 +154,12 @@ impl App {
 
         // Get a lock on the tree for the duration of this operation.
         // OPT: Sequence operations and allow concurrent inserts / transactions.
-        let mut tree = timeout(LOCK_TIMEOUT, self.merkle_tree.write())
-            .await
-            .map_err(|e| {
-                error!(?e, timeout = ?LOCK_TIMEOUT, "Failed to obtain tree lock in insert_identity.");
-                panic!("Sequencer potentially deadlocked, terminating.");
-                #[allow(unreachable_code)]
-                e
-            })?;
+        let mut tree = self.merkle_tree.write().await.map_err(|e| {
+            error!(?e, "Failed to obtain tree lock in insert_identity.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+            #[allow(unreachable_code)]
+            e
+        })?;
 
         if let Some(existing) = tree.leaves().iter().position(|&x| x == *commitment) {
             warn!(?existing, ?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Commitment already exists in tree.");
@@ -219,14 +218,12 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        let merkle_tree = timeout(LOCK_TIMEOUT, self.merkle_tree.read())
-            .await
-            .map_err(|e| {
-                error!(?e, timeout = ?LOCK_TIMEOUT, "Failed to obtain tree lock in inclusion_proof.");
-                panic!("Sequencer potentially deadlocked, terminating.");
-                #[allow(unreachable_code)]
-                e
-            })?;
+        let merkle_tree = self.merkle_tree.read().await.map_err(|e| {
+            error!(?e, "Failed to obtain tree lock in inclusion_proof.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+            #[allow(unreachable_code)]
+            e
+        })?;
         let identity_index = match merkle_tree.leaves().iter().position(|&x| x == *commitment) {
             Some(i) => i,
             None => return Err(ServerError::IdentityCommitmentNotFound),
@@ -265,14 +262,12 @@ impl App {
     /// Stores the Merkle tree to the storage file.
     #[instrument(level = "debug", skip_all)]
     async fn check_leaves(&self) -> EyreResult<()> {
-        let merkle_tree = timeout(LOCK_TIMEOUT, self.merkle_tree.read())
-            .await
-            .map_err(|e| {
-                error!(?e, timeout = ?LOCK_TIMEOUT, "Failed to obtain tree lock in check_leaves.");
-                panic!("Sequencer potentially deadlocked, terminating.");
-                #[allow(unreachable_code)]
-                e
-            })?;
+        let merkle_tree = self.merkle_tree.read().await.map_err(|e| {
+            error!(?e, "Failed to obtain tree lock in check_leaves.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+            #[allow(unreachable_code)]
+            e
+        })?;
         let next_leaf = self.next_leaf.load(Ordering::Acquire);
         let initial_leaf = self.contracts.initial_leaf();
         for (index, &leaf) in merkle_tree.leaves().iter().enumerate() {
@@ -306,14 +301,12 @@ impl App {
 
     #[instrument(level = "info", skip_all)]
     async fn process_events(&mut self) -> EyreResult<()> {
-        let mut merkle_tree = timeout(LOCK_TIMEOUT, self.merkle_tree.write())
-            .await
-            .map_err(|e| {
-                error!(?e, timeout = ?LOCK_TIMEOUT, "Failed to obtain tree lock in process_events.");
-                panic!("Sequencer potentially deadlocked, terminating.");
-                #[allow(unreachable_code)]
-                e
-            })?;
+        let mut merkle_tree = self.merkle_tree.write().await.map_err(|e| {
+            error!(?e, "Failed to obtain tree lock in process_events.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+            #[allow(unreachable_code)]
+            e
+        })?;
 
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
@@ -400,14 +393,12 @@ impl App {
 
     #[instrument(level = "debug", skip_all)]
     async fn check_health(&self) -> EyreResult<()> {
-        let merkle_tree = timeout(LOCK_TIMEOUT, self.merkle_tree.read())
-            .await
-            .map_err(|e| {
-                error!(?e, timeout = ?LOCK_TIMEOUT, "Failed to obtain tree lock in check_health.");
-                panic!("Sequencer potentially deadlocked, terminating.");
-                #[allow(unreachable_code)]
-                e
-            })?;
+        let merkle_tree = self.merkle_tree.read().await.map_err(|e| {
+            error!(?e, "Failed to obtain tree lock in check_health.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+            #[allow(unreachable_code)]
+            e
+        })?;
         let initial_leaf = self.contracts.initial_leaf();
         // TODO: A re-org undoing events would cause this to fail.
         if self.next_leaf.load(Ordering::Acquire) > 0 {

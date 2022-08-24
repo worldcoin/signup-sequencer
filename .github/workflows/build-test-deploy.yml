@@ -388,6 +388,7 @@ jobs:
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
           --set environment=prod
+          --set env.LOG_FILTER="ethers_providers::provider=debug"
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_POLYGON_MAINNET_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}"

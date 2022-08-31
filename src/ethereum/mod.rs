@@ -279,7 +279,9 @@ impl Ethereum {
 
             // Add minimum gas fees.
             let min_max_fee = u256_from_f64_saturating(options.min_max_fee * 1e9);
-            let min_priority_fee = u256_from_f64_saturating(options.min_priority_fee * options.priority_fee_muliplier * 1e9);
+            let min_priority_fee = u256_from_f64_saturating(
+                options.min_priority_fee * options.priority_fee_muliplier * 1e9,
+            );
             let oracle = MinGasFees::new(median, min_max_fee, min_priority_fee);
 
             // Add a logging, caching and abstract the type.

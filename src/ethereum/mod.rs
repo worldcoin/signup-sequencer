@@ -114,6 +114,10 @@ pub struct Options {
     #[clap(long, env, default_value = "31.0")]
     pub min_priority_fee: f64,
 
+    /// Multiplier on `priority_fee_per_gas`.
+    #[clap(long, env, default_value = "1.0")]
+    pub priority_fee_muliplier: f64,
+
     /// Timeout for sending transactions to mempool (seconds).
     #[clap(long, env, default_value = "30")]
     pub send_timeout: u64,
@@ -274,7 +278,7 @@ impl Ethereum {
 
             // Add minimum gas fees.
             let min_max_fee = u256_from_f64_saturating(options.min_max_fee * 1e9);
-            let min_priority_fee = u256_from_f64_saturating(options.min_priority_fee * 1e9);
+            let min_priority_fee = u256_from_f64_saturating(options.min_priority_fee * options.priority_fee_muliplier * 1e9);
             let oracle = MinGasFees::new(median, min_max_fee, min_priority_fee);
 
             // Add a logging, caching and abstract the type.

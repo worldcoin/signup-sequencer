@@ -22,8 +22,7 @@ use ethers::{
         },
         SignerMiddleware,
     },
-    prelude::ProviderError,
-    providers::{LogQueryError, Middleware, Provider},
+    providers::{LogQueryError, Middleware, Provider, ProviderError},
     signers::{LocalWallet, Signer, Wallet},
     types::{
         transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,

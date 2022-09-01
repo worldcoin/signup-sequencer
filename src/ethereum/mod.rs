@@ -182,7 +182,6 @@ pub struct Ethereum {
 impl Ethereum {
     #[instrument(name = "Ethereum::new", level = "debug", skip_all)]
     pub async fn new(options: Options) -> EyreResult<Self> {
-        error!(options.priority_fee_multiplier_percentage);
         // Connect to the Ethereum provider
         // TODO: Allow multiple providers with failover / broadcast.
         // TODO: Requests don't seem to process in parallel. Check if this is

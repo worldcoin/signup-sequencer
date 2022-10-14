@@ -7,6 +7,7 @@ use ethers::{
         Bytes, ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
         SignerMiddleware,
     },
+    providers::Middleware,
     types::{H256, U256},
     utils::{Anvil, AnvilInstance},
 };
@@ -350,7 +351,9 @@ async fn spawn_mock_chain() -> EyreResult<(AnvilInstance, H256, Address)> {
         .expect("Failed to initialize chain endpoint")
         .interval(Duration::from_millis(500u64));
 
-    let wallet: LocalWallet = chain.keys()[0].clone().into();
+    let chain_id = provider.get_chainid().await?.as_u64();
+
+    let wallet = LocalWallet::from(chain.keys()[0].clone()).with_chain_id(chain_id);
 
     // connect the wallet to the provider
     let client = SignerMiddleware::new(provider, wallet.clone());

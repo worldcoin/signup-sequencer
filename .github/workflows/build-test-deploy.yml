@@ -395,6 +395,5 @@ jobs:
           --set env.WIPE_STORAGE=true
           --set env.MAX_LOG_BLOCKS=25000
           --set env.STARTING_BLOCK=27829300
-          --set env.MAX_LOG_BLOCKS=50000
           --set env.PRIORITY_FEE_MULTIPLIER_PERCENTAGE=200
 

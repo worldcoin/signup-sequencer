@@ -393,7 +393,7 @@ jobs:
           --set env.SIGNING_KEY="${{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}"
           --set env.WIPE_STORAGE=true
-          --set env.MAX_LOG_BLOCKS=25000
+          --set env.MAX_LOG_BLOCKS=10000
           --set env.STARTING_BLOCK=27829300
           --set env.PRIORITY_FEE_MULTIPLIER_PERCENTAGE=200
 

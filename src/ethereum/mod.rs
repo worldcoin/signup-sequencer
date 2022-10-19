@@ -106,7 +106,7 @@ pub struct Options {
 
     /// Minimum `max_fee_per_gas` to use in GWei. The default is for Polygon
     /// mainnet.
-    #[clap(long, env, default_value = "750.0")]
+    #[clap(long, env, default_value = "1250.0")]
     pub min_max_fee: f64,
 
     /// Minimum `priority_fee_per_gas` to use in GWei. The default is for

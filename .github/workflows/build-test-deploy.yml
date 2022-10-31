@@ -4,7 +4,7 @@ on:
   push
 
 env:
-  RUST_VERSION: "1.63"
+  RUST_VERSION: "1.64"
   NIGHTLY_VERSION: nightly-2022-08-10
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
@@ -152,7 +152,7 @@ jobs:
               done
             )
       - name: Submit to codecov.io
-        uses: codecov/codecov-action@v3.1.0
+        uses: codecov/codecov-action@v3.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
           flags: test

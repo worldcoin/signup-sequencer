@@ -24,6 +24,7 @@ use tracing::{error, info, instrument, trace};
 use url::{Host, Url};
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
+#[group(skip)]
 pub struct Options {
     /// API Server url
     #[clap(long, env, default_value = "http://127.0.0.1:8080/")]

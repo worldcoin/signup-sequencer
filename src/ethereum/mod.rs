@@ -86,6 +86,7 @@ static TX_WEI_USED: Lazy<Counter> = Lazy::new(|| {
 // TODO: Log and metrics for signer / nonces.
 
 #[derive(Clone, Debug, PartialEq, Parser)]
+#[group(skip)]
 pub struct Options {
     /// Ethereum API Provider
     #[clap(long, env, default_value = "http://localhost:8545")]

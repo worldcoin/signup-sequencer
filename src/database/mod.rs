@@ -69,7 +69,7 @@ impl Database {
             _ => "'unknown'",
         };
         let version = pool
-            .fetch_one(format!("SELECT {sql};", sql = sql).as_str())
+            .fetch_one(format!("SELECT {sql};").as_str())
             .await
             .wrap_err("error getting database version")?
             .get::<String, _>(0);

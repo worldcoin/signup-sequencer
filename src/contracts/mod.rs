@@ -158,8 +158,8 @@ impl Contracts {
                 (
                     index,
                     // TODO: Validate values < modulus
-                    Field::from(event.identity_commitment),
-                    Field::from(event.root),
+                    event.identity_commitment.into(),
+                    event.root.into(),
                 )
             })
     }

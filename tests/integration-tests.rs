@@ -50,7 +50,7 @@ async fn insert_identity_and_proofs() {
         .init();
     info!("Starting integration test");
 
-    let mut options = Options::from_iter_safe(&[""]).expect("Failed to create options");
+    let mut options = Options::try_parse_from([""]).expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
     let (chain, private_key, semaphore_address) = spawn_mock_chain()
@@ -311,7 +311,7 @@ async fn spawn_app(options: Options) -> EyreResult<(JoinHandle<()>, SocketAddr)>
     };
     let port = options.server.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
-    let listener = TcpListener::bind(&addr).expect("Failed to bind random port");
+    let listener = TcpListener::bind(addr).expect("Failed to bind random port");
     let local_addr = listener.local_addr()?;
 
     let app = spawn({

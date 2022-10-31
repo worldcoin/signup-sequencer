@@ -86,6 +86,7 @@ static TX_WEI_USED: Lazy<Counter> = Lazy::new(|| {
 // TODO: Log and metrics for signer / nonces.
 
 #[derive(Clone, Debug, PartialEq, Parser)]
+#[group(skip)]
 pub struct Options {
     /// Ethereum API Provider
     #[clap(long, env, default_value = "http://localhost:8545")]
@@ -407,7 +408,7 @@ impl Ethereum {
             buffer.copy_from_slice(&data.as_ref()[..4]); // TODO: Don't panic.
             u32::from_be_bytes(buffer)
         });
-        let bytes4 = format!("{:8x}", bytes4);
+        let bytes4 = format!("{bytes4:8x}");
         TX_COUNT.with_label_values(&[&bytes4]).inc();
 
         // Send TX to mempool

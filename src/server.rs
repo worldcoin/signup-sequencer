@@ -24,6 +24,7 @@ use tracing::{error, info, instrument, trace};
 use url::{Host, Url};
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
+#[group(skip)]
 pub struct Options {
     /// API Server url
     #[clap(long, env, default_value = "http://127.0.0.1:8080/")]
@@ -226,7 +227,7 @@ pub async fn main(app: Arc<App>, options: Options) -> EyreResult<()> {
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
-    let listener = TcpListener::bind(&addr)?;
+    let listener = TcpListener::bind(addr)?;
 
     let serve_timeout = Duration::from_secs(options.serve_timeout);
     bind_from_listener(app, serve_timeout, listener).await?;
@@ -293,7 +294,7 @@ mod test {
     // #[tokio::test]
     #[allow(dead_code)]
     async fn test_inclusion_proof() {
-        let options = crate::app::Options::from_iter_safe(&[""]).unwrap();
+        let options = crate::app::Options::try_parse_from([""]).unwrap();
         let app = Arc::new(App::new(options).await.unwrap());
         let body = Body::from(
             json!({

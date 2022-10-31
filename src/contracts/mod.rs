@@ -16,6 +16,7 @@ use tracing::{error, info, instrument};
 pub type MemberAddedEvent = MemberAddedFilter;
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
+#[group(skip)]
 pub struct Options {
     /// Semaphore contract address.
     #[clap(long, env, default_value = "174ee9b5fBb5Eb68B6C61032946486dD9c2Dc4b6")]
@@ -158,8 +159,8 @@ impl Contracts {
                 (
                     index,
                     // TODO: Validate values < modulus
-                    Field::from(event.identity_commitment),
-                    Field::from(event.root),
+                    event.identity_commitment.into(),
+                    event.root.into(),
                 )
             })
     }

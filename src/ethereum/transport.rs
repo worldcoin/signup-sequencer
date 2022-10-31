@@ -54,7 +54,7 @@ impl From<TransportError> for ProviderError {
             TransportError::Ws(error) => Self::from(error),
             TransportError::Ipc(error) => Self::from(error),
             TransportError::InvalidScheme(url) => {
-                Self::CustomError(format!("Unsupported transport: {}", url))
+                Self::CustomError(format!("Unsupported transport: {url}"))
             }
         }
     }

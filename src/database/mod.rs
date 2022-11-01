@@ -1,7 +1,7 @@
 #![cfg(feature = "unstable_db")]
 use crate::app::Hash;
 use clap::Parser;
-use eyre::{eyre, Context, Result};
+use eyre::{eyre, Context, Result, ErrReport};
 use ruint::{aliases::U256, uint};
 use sqlx::{
     any::AnyKind,
@@ -155,5 +155,13 @@ impl Database {
         }
 
         Ok(Hash::default())
+    }
+
+    pub async fn get_block_number(&self) -> Result<u64> {
+        Ok(16)
+    }
+
+    pub async fn load_logs(&self) -> Result<Vec<String>> {
+        Ok(vec![])
     }
 }

@@ -17,7 +17,7 @@ use semaphore::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{atomic::{AtomicUsize, Ordering}, Arc},
     time::Duration,
 };
 use tokio::{select, try_join};
@@ -72,7 +72,7 @@ pub struct Options {
 pub struct App {
     #[cfg(feature = "unstable_db")]
     #[allow(dead_code)]
-    database: Database,
+    database: Arc<Database>,
 
     #[cfg(not(feature = "unstable_db"))]
     #[allow(dead_code)]
@@ -115,7 +115,7 @@ impl App {
         let merkle_tree = PoseidonTree::new(contracts.tree_depth() + 1, contracts.initial_leaf());
 
         let mut app = Self {
-            database,
+            database: Arc::new(database),
             ethereum,
             contracts,
             next_leaf: AtomicUsize::new(0),
@@ -311,7 +311,7 @@ impl App {
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
             .contracts
-            .fetch_events(self.last_block, self.next_leaf.load(Ordering::Acquire))
+            .fetch_events(self.last_block, self.next_leaf.load(Ordering::Acquire), self.database.clone())
             .boxed();
         let shutdown = await_shutdown();
         pin_mut!(shutdown);

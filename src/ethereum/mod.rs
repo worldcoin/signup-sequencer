@@ -5,6 +5,8 @@ mod min_gas_fees;
 mod rpc_logger;
 mod transport;
 
+use crate::{contracts::caching_log_query::{CachingLogQuery, CachingLogQueryError}, database::Database};
+
 use self::{
     estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees,
     rpc_logger::RpcLogger, transport::Transport,
@@ -22,7 +24,7 @@ use ethers::{
         },
         SignerMiddleware,
     },
-    providers::{LogQueryError, Middleware, Provider, ProviderError},
+    providers::{Middleware, Provider, ProviderError},
     signers::{LocalWallet, Signer, Wallet},
     types::{
         transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,
@@ -163,7 +165,7 @@ pub enum TxError {
 #[derive(Debug, Error)]
 pub enum EventError {
     #[error("Error fetching log event: {0}")]
-    Fetching(#[from] LogQueryError<ProviderError>),
+    Fetching(#[from] CachingLogQueryError<ProviderError>),
 
     #[error("Error parsing log event: {0}")]
     Parsing(#[from] AbiError),
@@ -493,18 +495,25 @@ impl Ethereum {
     pub fn fetch_events_raw(
         &self,
         filter: &Filter,
+        database: Arc<Database>,
     ) -> impl Stream<Item = Result<Log, EventError>> + '_ {
-        self.provider
-            .get_logs_paginated(filter, self.max_log_blocks as u64)
+        CachingLogQuery::new(self.provider.inner().inner().inner(), filter)
+            .with_page_size(self.max_log_blocks as u64)
+            .with_database(database)
             .map_err(Into::into)
+
+        // self.provider
+        //     .get_logs_paginated(filter, self.max_log_blocks as u64)
+        //     .map_err(Into::into)
     }
 
     pub fn fetch_events<T: EthEvent>(
         &self,
         filter: &Filter,
+        database: Arc<Database>,
     ) -> impl Stream<Item = Result<T, EventError>> + '_ {
         // TODO: Add `Log` struct for blocknumber and other metadata.
-        self.fetch_events_raw(filter).map(|res| {
+        self.fetch_events_raw(filter, database).map(|res| {
             res.and_then(|log| {
                 T::decode_log(&RawLog {
                     topics: log.topics,

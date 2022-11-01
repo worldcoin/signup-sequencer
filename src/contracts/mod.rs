@@ -1,9 +1,11 @@
 mod abi;
+pub mod caching_log_query;
 
 use self::abi::{MemberAddedFilter, SemaphoreContract as Semaphore};
-use crate::ethereum::{Ethereum, EventError, ProviderStack};
+use crate::{ethereum::{Ethereum, EventError, ProviderStack}, database::Database};
 use clap::Parser;
 use core::future;
+use std::sync::Arc;
 use ethers::{
     providers::Middleware,
     types::{Address, U256},
@@ -132,11 +134,12 @@ impl Contracts {
     }
 
     #[allow(clippy::disallowed_methods)] // False positive from macro expansion.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip(self, database))]
     pub fn fetch_events(
         &self,
         starting_block: u64,
         last_leaf: usize,
+        database: Arc<Database>,
     ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
         info!(
             starting_block,
@@ -148,12 +151,17 @@ impl Contracts {
         let filter = self
             .semaphore
             .member_added_filter()
-            .from_block(starting_block);
+            .from_block(28809880)
+            .to_block(28909880);
         self.ethereum
-            .fetch_events::<MemberAddedEvent>(&filter.filter)
+            .fetch_events::<MemberAddedEvent>(&filter.filter, database)
             .try_filter(|event| future::ready(event.group_id == self.group_id))
             .enumerate()
             .map(|(index, res)| res.map(|event| (index, event)))
+            .map_ok(|(index, member_added)| {
+                println!("commit to db {:?}", member_added);
+                (index, member_added)
+            })
             .map_ok(|(index, event)| {
                 (
                     index,

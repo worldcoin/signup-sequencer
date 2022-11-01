@@ -38,6 +38,7 @@ enum CachingLogQueryState<'a> {
     LoadEthLogs(PinBoxFut<'a, Vec<Log>, ProviderError>),
     LoadLastDbBlock(PinBoxFut<'a, u64, ErrReport>),
     LoadDbLogs(PinBoxFut<'a, Vec<String>, ErrReport>),
+    CacheEthLogs(PinBoxFut<'a, (), ErrReport>),
     ConsumeDb,
     ConsumeEth,
 }
@@ -88,6 +89,33 @@ pub enum CachingLogQueryError<E> {
     LoadLogsError(E),
 }
 
+type Item = Result<Log, CachingLogQueryError<ProviderError>>;
+
+impl<'a, P> CachingLogQuery<'a, P>
+where
+    P: JsonRpcClient,
+{
+    fn fetch_page(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<Item>> {
+        // load new logs if there are still more pages to go through
+        // can safely assume this will always be set in this state
+        let from_block = self.from_block.unwrap();
+        let to_block = from_block + self.page_size;
+
+        // no more pages to load, and everything is consumed
+        // can safely assume this will always be set in this state
+        if from_block > self.last_eth_block.unwrap() {
+            return Poll::Ready(None)
+        }
+        // load next page
+        println!("loading eth blocks {}-{}", from_block, to_block);
+
+        let filter = self.filter.clone().from_block(from_block).to_block(to_block);
+        let provider = self.provider;
+        let fut = Box::pin(async move { provider.get_logs(&filter).await });
+        rewake_with_new_state!(ctx, self, CachingLogQueryState::LoadEthLogs(fut));
+    }
+}
+
 impl<'a, P> Stream for CachingLogQuery<'a, P>
 where
     P: JsonRpcClient,
@@ -113,7 +141,7 @@ where
                 match futures_util::ready!(fut.as_mut().poll(ctx)) {
                     Ok(last_block) => {
                         self.last_db_block = Some(last_block);
-                        println!("last block: {}", last_block);
+                        println!("last db block: {}", last_block);
 
                         if let Some(database) = self.database.clone() {
                             let fut = Box::pin(async move { database.load_logs().await });
@@ -138,61 +166,74 @@ where
                 match futures_util::ready!(fut.as_mut().poll(ctx)) {
                     Ok(last_block) => {
                         self.last_eth_block = Some(last_block);
-                        println!("last block: {}", last_block);
+                        println!("last eth block: {}", last_block);
 
-                        /* LOAD LAST DB BLOCK */
                         if let Some(database) = self.database.clone() {
                             let fut = Box::pin(async move { database.get_block_number().await });
                             rewake_with_new_state!(ctx, self, CachingLogQueryState::LoadLastDbBlock(fut));
                         } else {
                             panic!("db required");
                         }
-                        /* END LOAD LAST DB BLOCK */
-
                     }
                     Err(err) => Poll::Ready(Some(Err(CachingLogQueryError::LoadLastBlockError(err)))),
                 }
             }
-            CachingLogQueryState::LoadEthLogs(fut) => match futures_util::ready!(fut.as_mut().poll(ctx)) {
-                Ok(logs) => {
-                    self.current_logs = VecDeque::from(logs);
-                    rewake_with_new_state!(ctx, self, CachingLogQueryState::ConsumeEth);
+            CachingLogQueryState::LoadEthLogs(fut) => {
+                match futures_util::ready!(fut.as_mut().poll(ctx)) {
+                    Ok(logs) => {
+                        let db_copy = logs.iter().map(|_| "x".to_owned()).collect();
+                        self.current_logs = VecDeque::from(logs);
+                        if let Some(database) = self.database.clone() {
+                            let from = self.from_block.unwrap().as_u64();
+                            let to = from + self.page_size;
+                            let fut = Box::pin(async move { database.save_logs(from, to, db_copy).await });
+                            rewake_with_new_state!(ctx, self, CachingLogQueryState::CacheEthLogs(fut));
+                        } else {
+                            rewake_with_new_state!(ctx, self, CachingLogQueryState::ConsumeEth);
+                        }
+
+                    }
+                    Err(err) => Poll::Ready(Some(Err(CachingLogQueryError::LoadLogsError(err)))),
                 }
-                Err(err) => Poll::Ready(Some(Err(CachingLogQueryError::LoadLogsError(err)))),
             },
+            CachingLogQueryState::CacheEthLogs(fut) => {
+                match futures_util::ready!(fut.as_mut().poll(ctx)) {
+                    Ok(_) => {
+                        rewake_with_new_state!(ctx, self, CachingLogQueryState::ConsumeEth);
+                    }
+                    Err(err) => Poll::Ready(Some(Err(CachingLogQueryError::LoadLastBlockError(ProviderError::CustomError(err.to_string()))))),
+                }
+
+            }
             CachingLogQueryState::ConsumeDb => {
                 let log = self.current_logs.pop_front();
                 if log.is_none() {
-                    /* LOAD ETH LOGS - WHEN DB LOGS FINISHED, MOVE TO LOADING NEW ETH BLOCKS!*/
-
-                    // this is okay because we will only enter this state when the filter is
-                    // paginatable i.e. from block is set
-                    let from_block = self.filter.get_from_block().unwrap();
-                    let to_block = from_block + self.page_size;
-                    self.from_block = Some(to_block + 1);
-
-                    let filter = self.filter.clone().from_block(from_block).to_block(to_block);
-                    let provider = self.provider;
-                    // load first page of logs
-                    let fut = Box::pin(async move { provider.get_logs(&filter).await });
-                    rewake_with_new_state!(ctx, self, CachingLogQueryState::LoadEthLogs(fut));
-
-                /* END LOAD ETH LOGS */
-
+                    self.fetch_page(ctx)
                 } else {
                     Poll::Ready(log.map(Ok))
                 }
-                                    
-
             }
             CachingLogQueryState::ConsumeEth => {
                 let log = self.current_logs.pop_front();
                 if log.is_none() {
+                    // start working on the next page
+                    self.from_block = Some(self.from_block.unwrap() + self.page_size + 1);
                     // consumed all the logs
                     if !self.filter.is_paginatable() {
                         Poll::Ready(None)
                     } else {
-                        // load new logs if there are still more pages to go through
+                        self.fetch_page(ctx)
+                    }
+                } else {
+                    Poll::Ready(log.map(Ok))
+                }
+            }
+        }
+    }
+}
+
+
+/*                         // load new logs if there are still more pages to go through
                         // can safely assume this will always be set in this state
                         let from_block = self.from_block.unwrap();
                         let to_block = from_block + self.page_size;
@@ -203,17 +244,11 @@ where
                             return Poll::Ready(None)
                         }
                         // load next page
+                        println!("loading eth blocks {}-{}", from_block, to_block);
                         self.from_block = Some(to_block + 1);
 
                         let filter = self.filter.clone().from_block(from_block).to_block(to_block);
                         let provider = self.provider;
                         let fut = Box::pin(async move { provider.get_logs(&filter).await });
                         rewake_with_new_state!(ctx, self, CachingLogQueryState::LoadEthLogs(fut));
-                    }
-                } else {
-                    Poll::Ready(log.map(Ok))
-                }
-            }
-        }
-    }
-}
+ */

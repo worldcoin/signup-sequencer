@@ -158,10 +158,18 @@ impl Database {
     }
 
     pub async fn get_block_number(&self) -> Result<u64> {
-        Ok(16)
+        println!("get block number {}", 0);
+        Ok(0)
     }
 
     pub async fn load_logs(&self) -> Result<Vec<String>> {
+        println!("load db logs {}", 0);
+
         Ok(vec![])
+    }
+
+    pub async fn save_logs(&self, from: u64, to: u64, logs: Vec<String>) -> Result<()> {
+        println!("save logs {}-{}: {}", from, to, logs.len());
+        Ok(())
     }
 }

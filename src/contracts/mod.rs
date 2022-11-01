@@ -158,10 +158,6 @@ impl Contracts {
             .try_filter(|event| future::ready(event.group_id == self.group_id))
             .enumerate()
             .map(|(index, res)| res.map(|event| (index, event)))
-            .map_ok(|(index, member_added)| {
-                println!("commit to db {:?}", member_added);
-                (index, member_added)
-            })
             .map_ok(|(index, event)| {
                 (
                     index,

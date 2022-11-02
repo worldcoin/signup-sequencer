@@ -2,6 +2,8 @@ use ethers::providers::{Provider, JsonRpcClient, ProviderError, Middleware};
 use ethers::types::{Filter, U64, Log};
 use eyre::ErrReport;
 use futures::Stream;
+use serde_json::value::RawValue;
+use std::cmp::min;
 use std::future::Future;
 use std::sync::Arc;
 use std::{
@@ -35,9 +37,9 @@ pub struct CachingLogQuery<'a, P> {
 enum CachingLogQueryState<'a> {
     Initial,
     LoadLastEthBlock(PinBoxFut<'a, U64, ProviderError>),
-    LoadEthLogs(PinBoxFut<'a, Vec<Log>, ProviderError>),
-    LoadLastDbBlock(PinBoxFut<'a, u64, ErrReport>),
-    LoadDbLogs(PinBoxFut<'a, Vec<String>, ErrReport>),
+    LoadEthLogs(PinBoxFut<'a, Vec<Box<RawValue>>, ProviderError>),
+    LoadLastDbBlock(PinBoxFut<'a, i64, ErrReport>),
+    LoadDbLogs(PinBoxFut<'a, Vec<Box<RawValue>>, ErrReport>),
     CacheEthLogs(PinBoxFut<'a, (), ErrReport>),
     ConsumeDb,
     ConsumeEth,
@@ -107,11 +109,16 @@ where
             return Poll::Ready(None)
         }
         // load next page
-        println!("loading eth blocks {}-{}", from_block, to_block);
+        //println!("loading eth blocks {}-{}", from_block, to_block);
 
         let filter = self.filter.clone().from_block(from_block).to_block(to_block);
         let provider = self.provider;
-        let fut = Box::pin(async move { provider.get_logs(&filter).await });
+        let fut = Box::pin(async move {
+            let result: Result<Vec<Box<RawValue>>, ProviderError> = provider.request("eth_getLogs", [&filter]).await;
+            //provider.get_logs(&filter).await
+            result
+        });
+
         rewake_with_new_state!(ctx, self, CachingLogQueryState::LoadEthLogs(fut));
     }
 }
@@ -127,10 +134,11 @@ where
             CachingLogQueryState::Initial => {
                 if !self.filter.is_paginatable() {
                     // if not paginatable, load logs and consume
-                    let filter = self.filter.clone();
-                    let provider = self.provider;
-                    let fut = Box::pin(async move { provider.get_logs(&filter).await });
-                    rewake_with_new_state!(ctx, self, CachingLogQueryState::LoadEthLogs(fut));
+                    panic!("paginable filter required");
+                    // let filter = self.filter.clone();
+                    // let provider = self.provider;
+                    // let fut = Box::pin(async move { provider.get_logs(&filter).await });
+                    // rewake_with_new_state!(ctx, self, CachingLogQueryState::LoadEthLogs(fut));
                 } else {
                     // if paginatable, load last block
                     let fut = self.provider.get_block_number();
@@ -139,9 +147,13 @@ where
             }
             CachingLogQueryState::LoadLastDbBlock(fut) => {
                 match futures_util::ready!(fut.as_mut().poll(ctx)) {
-                    Ok(last_block) => {
+                    Ok(last_block ) => {
+                        let last_block = last_block as u64;
                         self.last_db_block = Some(last_block);
                         println!("last db block: {}", last_block);
+                        if last_block > self.from_block.map(|x| x.as_u64()).unwrap_or(0) {
+                            self.from_block = Some(U64([last_block + 1]));
+                        }
 
                         if let Some(database) = self.database.clone() {
                             let fut = Box::pin(async move { database.load_logs().await });
@@ -156,7 +168,8 @@ where
             CachingLogQueryState::LoadDbLogs(fut) => {
                 match futures_util::ready!(fut.as_mut().poll(ctx)) {
                     Ok(logs) => {
-                        self.current_logs = VecDeque::from(vec![]);
+                        let logs: Vec<Log> = logs.iter().map(|x| serde_json::from_str(x.get()).unwrap()).collect();
+                        self.current_logs = VecDeque::from(logs);
                         rewake_with_new_state!(ctx, self, CachingLogQueryState::ConsumeDb);
                     }
                     Err(err) => Poll::Ready(Some(Err(CachingLogQueryError::LoadLogsError(ProviderError::CustomError(err.to_string()))))),
@@ -165,7 +178,11 @@ where
             CachingLogQueryState::LoadLastEthBlock(fut) => {
                 match futures_util::ready!(fut.as_mut().poll(ctx)) {
                     Ok(last_block) => {
-                        self.last_eth_block = Some(last_block);
+                        if let Some(last_filter_block) = self.filter.get_to_block() {
+                            self.last_eth_block = Some(min(last_filter_block, last_block));
+                        } else {
+                            self.last_eth_block = Some(last_block);
+                        }
                         println!("last eth block: {}", last_block);
 
                         if let Some(database) = self.database.clone() {
@@ -181,11 +198,13 @@ where
             CachingLogQueryState::LoadEthLogs(fut) => {
                 match futures_util::ready!(fut.as_mut().poll(ctx)) {
                     Ok(logs) => {
-                        let db_copy = logs.iter().map(|_| "x".to_owned()).collect();
+                        let db_copy = logs.clone();
+                        let logs: Vec<Log> = logs.iter().map(|x| serde_json::from_str(x.get()).unwrap()).collect();
+                        //println!("logs {} {}", db_copy.len(), logs.len());
                         self.current_logs = VecDeque::from(logs);
                         if let Some(database) = self.database.clone() {
-                            let from = self.from_block.unwrap().as_u64();
-                            let to = from + self.page_size;
+                            let from = self.from_block.unwrap().as_u64() as i64;
+                            let to = from + self.page_size as i64;
                             let fut = Box::pin(async move { database.save_logs(from, to, db_copy).await });
                             rewake_with_new_state!(ctx, self, CachingLogQueryState::CacheEthLogs(fut));
                         } else {

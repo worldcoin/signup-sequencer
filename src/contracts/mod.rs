@@ -151,8 +151,7 @@ impl Contracts {
         let filter = self
             .semaphore
             .member_added_filter()
-            .from_block(28809880)
-            .to_block(28909880);
+            .from_block(starting_block);
         self.ethereum
             .fetch_events::<MemberAddedEvent>(&filter.filter, database)
             .try_filter(|event| future::ready(event.group_id == self.group_id))

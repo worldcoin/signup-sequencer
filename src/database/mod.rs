@@ -1,8 +1,10 @@
 #![cfg(feature = "unstable_db")]
 use crate::app::Hash;
 use clap::Parser;
+use ethers::types::Log;
 use eyre::{eyre, Context, Result, ErrReport};
 use ruint::{aliases::U256, uint};
+use serde_json::value::RawValue;
 use sqlx::{
     any::AnyKind,
     migrate::{Migrate, MigrateDatabase, Migrator},
@@ -157,19 +159,64 @@ impl Database {
         Ok(Hash::default())
     }
 
-    pub async fn get_block_number(&self) -> Result<u64> {
-        println!("get block number {}", 0);
-        Ok(0)
+    pub async fn get_block_number(&self) -> Result<i64> {
+        let row = self.pool
+            .fetch_optional(
+                sqlx::query(
+                    r#"SELECT last_block FROM log_fetches ORDER BY last_block DESC LIMIT 1;"#,
+                )
+            )
+            .await?;
+        
+        if let Some(row) = row {
+            Ok(row.try_get(0)?)
+        } else {
+            Ok(0)
+        }
     }
 
-    pub async fn load_logs(&self) -> Result<Vec<String>> {
-        println!("load db logs {}", 0);
-
-        Ok(vec![])
+    pub async fn load_logs(&self) -> Result<Vec<Box<RawValue>>> {
+        let rows = self.pool
+            .fetch_all(
+                sqlx::query(
+                    r#"SELECT raw FROM logs ORDER BY id;"#,
+                )
+            )
+            .await?
+            .iter()
+            .map(|row| {
+                RawValue::from_string(row.get(0)).unwrap()
+            })
+            .collect();
+        
+        Ok(rows)
     }
 
-    pub async fn save_logs(&self, from: u64, to: u64, logs: Vec<String>) -> Result<()> {
-        println!("save logs {}-{}: {}", from, to, logs.len());
+    pub async fn save_logs(&self, from: i64, to: i64, logs: Vec<Box<RawValue>>) -> Result<()> {
+        self.pool
+            .execute(
+                sqlx::query(
+                    r#"INSERT INTO log_fetches (started, completed, first_block, last_block)
+                    VALUES (now(), now(), $1, $2);"#,
+                )
+                .bind(from)
+                .bind(to)
+            )
+            .await?;
+
+        for log in &logs {
+            self.pool
+            .execute(
+                sqlx::query(
+                    r#"INSERT INTO logs (block_index, raw)
+                    VALUES ($1, $2);"#,
+                )
+                .bind(to)
+                .bind(log.get())
+            )
+            .await?;
+        }
+        println!("save logs {}-{}: {:?}", from, to, logs);
         Ok(())
     }
 }

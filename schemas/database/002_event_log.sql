@@ -9,12 +9,7 @@ CREATE TABLE log_fetches
 
 CREATE TABLE logs
 (
+    id                  SERIAL PRIMARY KEY NOT NULL,
     block_index         BIGINT NOT NULL,
-    transaction_index   BIGINT NOT NULL,
-    log_index           BIGINT NOT NULL,
-    fetch_id            INT    NOT NULL REFERENCES log_fetches (id),
-    group_id            BYTEA  NOT NULL,
-    identity_commitment BYTEA  NOT NULL,
-    root                BYTEA  NOT NULL,
-    UNIQUE (block_index, transaction_index, log_index)
+    raw                 TEXT   NOT NULL
 );

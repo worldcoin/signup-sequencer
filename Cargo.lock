@@ -4401,6 +4401,7 @@ dependencies = [
 name = "signup-sequencer"
 version = "0.1.0"
 dependencies = [
+ "async-stream",
  "async-trait",
  "chrono",
  "clap 3.2.17",

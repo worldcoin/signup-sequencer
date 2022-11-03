@@ -17,7 +17,10 @@ use semaphore::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    sync::{atomic::{AtomicUsize, Ordering}, Arc},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 use tokio::{select, try_join};
@@ -311,7 +314,11 @@ impl App {
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
             .contracts
-            .fetch_events(self.last_block, self.next_leaf.load(Ordering::Acquire), self.database.clone())
+            .fetch_events(
+                self.last_block,
+                self.next_leaf.load(Ordering::Acquire),
+                self.database.clone(),
+            )
             .boxed();
         let shutdown = await_shutdown();
         pin_mut!(shutdown);

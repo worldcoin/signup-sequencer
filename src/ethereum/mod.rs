@@ -5,7 +5,10 @@ mod min_gas_fees;
 mod rpc_logger;
 mod transport;
 
-use crate::{contracts::caching_log_query::{CachingLogQuery, CachingLogQueryError}, database::Database};
+use crate::{
+    contracts::caching_log_query::{CachingLogQuery, CachingLogQueryError},
+    database::Database,
+};
 
 use self::{
     estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees,
@@ -497,10 +500,16 @@ impl Ethereum {
         filter: &Filter,
         database: Arc<Database>,
     ) -> impl Stream<Item = Result<Log, EventError>> + '_ {
-        CachingLogQuery::new(self.provider.inner().inner().inner(), filter)
+        CachingLogQuery::new(self.provider.clone(), filter)
             .with_page_size(self.max_log_blocks as u64)
             .with_database(database)
+            .into_stream()
             .map_err(Into::into)
+
+        // CachingLogQuery::new(self.provider.provider(), filter)
+        //     .with_page_size(self.max_log_blocks as u64)
+        //     .with_database(database)
+        //     .map_err(Into::into)
 
         // self.provider
         //     .get_logs_paginated(filter, self.max_log_blocks as u64)

@@ -1,8 +1,7 @@
 #![cfg(feature = "unstable_db")]
 use crate::app::Hash;
 use clap::Parser;
-use ethers::types::Log;
-use eyre::{eyre, Context, Result, ErrReport};
+use eyre::{eyre, Context, ErrReport};
 use ruint::{aliases::U256, uint};
 use serde_json::value::RawValue;
 use sqlx::{
@@ -11,6 +10,7 @@ use sqlx::{
     pool::PoolOptions,
     Any, Executor, Pool, Row,
 };
+use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;
 
@@ -41,7 +41,7 @@ pub struct Database {
 
 impl Database {
     #[instrument(skip_all)]
-    pub async fn new(options: Options) -> Result<Self> {
+    pub async fn new(options: Options) -> Result<Self, ErrReport> {
         info!(url = %&options.database, "Connecting to database");
 
         // Create database if requested and does not exist
@@ -131,7 +131,7 @@ impl Database {
     }
 
     #[allow(unused)]
-    pub async fn read(&self, _index: usize) -> Result<Hash> {
+    pub async fn read(&self, _index: usize) -> Result<Hash, DatabaseError> {
         self.pool
             .execute(sqlx::query(
                 r#"CREATE TABLE IF NOT EXISTS hashes (
@@ -159,15 +159,14 @@ impl Database {
         Ok(Hash::default())
     }
 
-    pub async fn get_block_number(&self) -> Result<i64> {
-        let row = self.pool
-            .fetch_optional(
-                sqlx::query(
-                    r#"SELECT last_block FROM log_fetches ORDER BY last_block DESC LIMIT 1;"#,
-                )
-            )
+    pub async fn get_block_number(&self) -> Result<i64, DatabaseError> {
+        let row = self
+            .pool
+            .fetch_optional(sqlx::query(
+                r#"SELECT last_block FROM log_fetches ORDER BY last_block DESC LIMIT 1;"#,
+            ))
             .await?;
-        
+
         if let Some(row) = row {
             Ok(row.try_get(0)?)
         } else {
@@ -175,24 +174,24 @@ impl Database {
         }
     }
 
-    pub async fn load_logs(&self) -> Result<Vec<Box<RawValue>>> {
-        let rows = self.pool
-            .fetch_all(
-                sqlx::query(
-                    r#"SELECT raw FROM logs ORDER BY id;"#,
-                )
-            )
+    pub async fn load_logs(&self) -> Result<Vec<Box<RawValue>>, DatabaseError> {
+        let rows = self
+            .pool
+            .fetch_all(sqlx::query(r#"SELECT raw FROM logs ORDER BY id;"#))
             .await?
             .iter()
-            .map(|row| {
-                RawValue::from_string(row.get(0)).unwrap()
-            })
+            .map(|row| RawValue::from_string(row.get(0)).unwrap())
             .collect();
-        
+
         Ok(rows)
     }
 
-    pub async fn save_logs(&self, from: i64, to: i64, logs: Vec<Box<RawValue>>) -> Result<()> {
+    pub async fn save_logs(
+        &self,
+        from: i64,
+        to: i64,
+        logs: &[Box<RawValue>],
+    ) -> Result<(), DatabaseError> {
         self.pool
             .execute(
                 sqlx::query(
@@ -200,23 +199,30 @@ impl Database {
                     VALUES (now(), now(), $1, $2);"#,
                 )
                 .bind(from)
-                .bind(to)
+                .bind(to),
             )
             .await?;
 
-        for log in &logs {
+        for log in logs {
             self.pool
-            .execute(
-                sqlx::query(
-                    r#"INSERT INTO logs (block_index, raw)
+                .execute(
+                    sqlx::query(
+                        r#"INSERT INTO logs (block_index, raw)
                     VALUES ($1, $2);"#,
+                    )
+                    .bind(to)
+                    .bind(log.get()),
                 )
-                .bind(to)
-                .bind(log.get())
-            )
-            .await?;
+                .await
+                .map_err(DatabaseError::InternalError)?;
         }
         println!("save logs {}-{}: {:?}", from, to, logs);
         Ok(())
     }
+}
+
+#[derive(Debug, Error)]
+pub enum DatabaseError {
+    #[error("database error")]
+    InternalError(#[from] sqlx::Error),
 }

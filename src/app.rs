@@ -52,6 +52,7 @@ pub struct InclusionProofResponse {
 }
 
 #[derive(Clone, Debug, PartialEq, Parser)]
+#[group(skip)]
 pub struct Options {
     #[clap(flatten)]
     pub ethereum: ethereum::Options,

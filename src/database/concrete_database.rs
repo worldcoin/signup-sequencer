@@ -162,7 +162,7 @@ impl Database {
         let row = self
             .pool
             .fetch_optional(sqlx::query(
-                r#"SELECT last_block FROM log_fetches ORDER BY last_block DESC LIMIT 1;"#,
+                r#"SELECT block_index FROM logs ORDER BY block_index DESC LIMIT 1;"#,
             ))
             .await?;
 
@@ -187,21 +187,10 @@ impl Database {
 
     pub async fn save_logs(
         &self,
-        from: i64,
+        _from: i64,
         to: i64,
         logs: &[Box<RawValue>],
     ) -> Result<(), DatabaseError> {
-        self.pool
-            .execute(
-                sqlx::query(
-                    r#"INSERT INTO log_fetches (started, completed, first_block, last_block)
-                    VALUES (now(), now(), $1, $2);"#,
-                )
-                .bind(from)
-                .bind(to),
-            )
-            .await?;
-
         for log in logs {
             self.pool
                 .execute(

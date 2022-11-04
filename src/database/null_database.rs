@@ -1,4 +1,5 @@
 use clap::Parser;
+use ethers::types::{U256, U64};
 use eyre::ErrReport;
 use serde_json::value::RawValue;
 use thiserror::Error;
@@ -26,11 +27,12 @@ impl Database {
         panic!("you need to enable unstable_db feature to cache events")
     }
 
-    pub async fn save_logs(
+    pub async fn save_log(
         &self,
-        _from: i64,
-        _to: i64,
-        _logs: &[Box<RawValue>],
+        _block_index: U64,
+        _transaction_index: U64,
+        _log_index: U256,
+        _log: Box<RawValue>,
     ) -> Result<(), DatabaseError> {
         panic!("you need to enable unstable_db feature to cache events")
     }

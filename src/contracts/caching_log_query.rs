@@ -32,6 +32,12 @@ pub enum Error<ProviderError> {
     Database(#[from] DatabaseError),
     #[error(transparent)]
     Parse(serde_json::Error),
+    #[error("empty block index")]
+    EmptyBlockIndex,
+    #[error("empty transaction index")]
+    EmptyTransactionIndex,
+    #[error("empty log index")]
+    EmptyLogIndex,
 }
 
 impl CachingLogQuery {
@@ -81,16 +87,24 @@ impl CachingLogQuery {
                     .from_block(from_block)
                     .to_block(page_end);
 
-
                 let data: Result<Vec<Box<RawValue>>, ProviderError> = provider
                     .request("eth_getLogs", [&page_filter])
                     .await;
                 let result = data.map_err(Error::LoadLogs)?;
-                if let Some(database) = &self.database {
-                    database.save_logs(from_block.as_u64() as i64, page_end.as_u64() as i64, &result).await.map_err(Error::Database)?;
-                }
+
                 for log in result {
-                    yield serde_json::from_str(log.get()).map_err(Error::Parse)?;
+                    let parsed_log: Log = serde_json::from_str(log.get()).map_err(Error::Parse)?;
+
+                    if let Some(database) = &self.database {
+                        database.save_log(
+                            parsed_log.block_number.ok_or(Error::<ProviderError>::EmptyBlockIndex)?.as_u64(),
+                            parsed_log.transaction_index.ok_or(Error::<ProviderError>::EmptyTransactionIndex)?.as_u64(),
+                            parsed_log.log_index.ok_or(Error::<ProviderError>::EmptyLogIndex)?.into(),
+                            log
+                        ).await.map_err(Error::Database)?;
+                    }
+
+                    yield parsed_log;
                 }
 
                 from_block = page_end + 1;

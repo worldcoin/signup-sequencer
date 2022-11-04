@@ -1,7 +1,10 @@
 use crate::app::Hash;
 use clap::Parser;
 use eyre::{eyre, Context, ErrReport};
-use ruint::{aliases::U256, uint};
+use ruint::{
+    aliases::{U256, U64},
+    uint,
+};
 use serde_json::value::RawValue;
 use sqlx::{
     any::AnyKind,
@@ -158,7 +161,7 @@ impl Database {
         Ok(Hash::default())
     }
 
-    pub async fn get_block_number(&self) -> Result<i64, DatabaseError> {
+    pub async fn get_block_number(&self) -> Result<u64, DatabaseError> {
         let row = self
             .pool
             .fetch_optional(sqlx::query(
@@ -167,7 +170,8 @@ impl Database {
             .await?;
 
         if let Some(row) = row {
-            Ok(row.try_get(0)?)
+            let block_number: U64 = row.try_get(0)?;
+            Ok(block_number.into_limbs()[0])
         } else {
             Ok(0)
         }
@@ -176,7 +180,9 @@ impl Database {
     pub async fn load_logs(&self) -> Result<Vec<Box<RawValue>>, DatabaseError> {
         let rows = self
             .pool
-            .fetch_all(sqlx::query(r#"SELECT raw FROM logs ORDER BY id;"#))
+            .fetch_all(sqlx::query(
+                r#"SELECT raw FROM logs ORDER BY block_index, transaction_index, log_index;"#,
+            ))
             .await?
             .iter()
             .map(|row| RawValue::from_string(row.get(0)).unwrap())
@@ -185,25 +191,26 @@ impl Database {
         Ok(rows)
     }
 
-    pub async fn save_logs(
+    pub async fn save_log(
         &self,
-        _from: i64,
-        to: i64,
-        logs: &[Box<RawValue>],
+        block_index: u64,
+        transaction_index: u64,
+        log_index: U256,
+        log: Box<RawValue>,
     ) -> Result<(), DatabaseError> {
-        for log in logs {
-            self.pool
-                .execute(
-                    sqlx::query(
-                        r#"INSERT INTO logs (block_index, raw)
-                    VALUES ($1, $2);"#,
-                    )
-                    .bind(to)
-                    .bind(log.get()),
+        self.pool
+            .execute(
+                sqlx::query(
+                    r#"INSERT INTO logs (block_index, transaction_index, log_index, raw)
+                    VALUES ($1, $2, $3, $4);"#,
                 )
-                .await
-                .map_err(DatabaseError::InternalError)?;
-        }
+                .bind(U64::from(block_index))
+                .bind(U64::from(transaction_index))
+                .bind(log_index)
+                .bind(log.get()),
+            )
+            .await
+            .map_err(DatabaseError::InternalError)?;
 
         Ok(())
     }

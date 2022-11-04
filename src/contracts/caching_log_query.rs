@@ -1,6 +1,6 @@
-use std::{
-    cmp::{max, min},
-    sync::Arc,
+use crate::{
+    database::{Database, DatabaseError},
+    ethereum::ProviderStack,
 };
 use async_stream::try_stream;
 use ethers::{
@@ -9,27 +9,29 @@ use ethers::{
 };
 use futures::Stream;
 use serde_json::value::RawValue;
+use std::{
+    cmp::{max, min},
+    sync::Arc,
+};
 use thiserror::Error;
-use crate::ethereum::ProviderStack;
-use crate::database::{Database, DatabaseError};
 
 pub struct CachingLogQuery {
     provider:  Arc<ProviderStack>,
     filter:    Filter,
     page_size: u64,
-    database: Option<Arc<Database>>,
+    database:  Option<Arc<Database>>,
 }
 
 #[derive(Error, Debug)]
-pub enum CachingLogQueryError<ProviderError> {
+pub enum Error<ProviderError> {
     #[error(transparent)]
-    LoadLastBlockError(ProviderError),
+    LoadLastBlock(ProviderError),
     #[error(transparent)]
-    LoadLogsError(ProviderError),
+    LoadLogs(ProviderError),
     #[error(transparent)]
-    DatabaseError(#[from] DatabaseError),
+    Database(#[from] DatabaseError),
     #[error(transparent)]
-    ParseError(serde_json::Error),
+    Parse(serde_json::Error),
 }
 
 impl CachingLogQuery {
@@ -43,28 +45,27 @@ impl CachingLogQuery {
     }
 
     /// set page size for pagination
-    pub fn with_page_size(mut self, page_size: u64) -> Self {
+    pub const fn with_page_size(mut self, page_size: u64) -> Self {
         self.page_size = page_size;
         self
     }
 
+    #[allow(clippy::missing_const_for_fn)]
     pub fn with_database(mut self, database: Option<Arc<Database>>) -> Self {
         self.database = database;
         self
     }
 
-    pub fn into_stream(
-        self,
-    ) -> impl Stream<Item = Result<Log, CachingLogQueryError<ProviderError>>> {
+    pub fn into_stream(self) -> impl Stream<Item = Result<Log, Error<ProviderError>>> {
         try_stream! {
             let provider = self.provider.provider();
-            let last_eth_block = provider.get_block_number().await.map_err(CachingLogQueryError::LoadLastBlockError)?;
+            let last_eth_block = provider.get_block_number().await.map_err(Error::LoadLastBlock)?;
             let last_db_block: u64;
             if let Some(database) = &self.database {
                 last_db_block = database.get_block_number().await? as u64;
                 let db_logs: Vec<Box<RawValue>> = database.load_logs().await?;
                 for log in db_logs {
-                    yield serde_json::from_str(log.get()).map_err(CachingLogQueryError::ParseError)?;
+                    yield serde_json::from_str(log.get()).map_err(Error::Parse)?;
                 }
             } else {
                 last_db_block = 0;
@@ -84,12 +85,12 @@ impl CachingLogQuery {
                 let data: Result<Vec<Box<RawValue>>, ProviderError> = provider
                     .request("eth_getLogs", [&page_filter])
                     .await;
-                let result = data.map_err(CachingLogQueryError::LoadLogsError)?;
+                let result = data.map_err(Error::LoadLogs)?;
                 if let Some(database) = &self.database {
-                    database.save_logs(from_block.as_u64() as i64, page_end.as_u64() as i64, &result).await.map_err(CachingLogQueryError::DatabaseError)?;
+                    database.save_logs(from_block.as_u64() as i64, page_end.as_u64() as i64, &result).await.map_err(Error::Database)?;
                 }
                 for log in result {
-                    yield serde_json::from_str(log.get()).map_err(CachingLogQueryError::ParseError)?;
+                    yield serde_json::from_str(log.get()).map_err(Error::Parse)?;
                 }
 
                 from_block = page_end + 1;

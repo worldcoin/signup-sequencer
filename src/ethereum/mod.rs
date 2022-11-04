@@ -5,10 +5,13 @@ mod min_gas_fees;
 mod rpc_logger;
 mod transport;
 
-use crate::contracts::caching_log_query::{CachingLogQuery, CachingLogQueryError};
 use self::{
     estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees,
     rpc_logger::RpcLogger, transport::Transport,
+};
+use crate::{
+    contracts::caching_log_query::{CachingLogQuery, Error as CachingLogQueryError},
+    database::Database,
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use clap::Parser;
@@ -43,7 +46,6 @@ use thiserror::Error;
 use tokio::time::timeout;
 use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
 use url::Url;
-use crate::database::Database;
 
 const PENDING: Option<BlockId> = Some(BlockId::Number(BlockNumber::Pending));
 

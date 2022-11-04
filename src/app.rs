@@ -1,5 +1,6 @@
 use crate::{
     contracts::{self, Contracts},
+    database::{self, Database},
     ethereum::{self, Ethereum},
     server::Error as ServerError,
     timed_rw_lock::TimedRwLock,
@@ -25,7 +26,6 @@ use std::{
 };
 use tokio::{select, try_join};
 use tracing::{debug, error, info, instrument, warn};
-use crate::database::{self, Database};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
@@ -71,7 +71,7 @@ pub struct Options {
 }
 
 pub struct App {
-    database: Option<Arc<Database>>,
+    database:    Option<Arc<Database>>,
     #[allow(dead_code)]
     ethereum:    Ethereum,
     contracts:   Contracts,

@@ -5,13 +5,12 @@ use thiserror::Error;
 use tracing::instrument;
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
-pub struct Options {
-}
+pub struct Options {}
 
 #[derive(Error, Debug)]
 pub enum DatabaseError {}
 
-pub struct Database { }
+pub struct Database {}
 
 impl Database {
     #[instrument(skip_all)]
@@ -22,9 +21,11 @@ impl Database {
     pub async fn get_block_number(&self) -> Result<i64, DatabaseError> {
         panic!("you need to enable unstable_db feature to cache events")
     }
+
     pub async fn load_logs(&self) -> Result<Vec<Box<RawValue>>, DatabaseError> {
         panic!("you need to enable unstable_db feature to cache events")
     }
+
     pub async fn save_logs(
         &self,
         _from: i64,

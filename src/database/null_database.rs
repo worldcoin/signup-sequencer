@@ -1,6 +1,6 @@
 use clap::Parser;
-use ethers::types::{U256, U64};
 use eyre::ErrReport;
+use ruint::aliases::U256;
 use serde_json::value::RawValue;
 use thiserror::Error;
 use tracing::instrument;
@@ -19,7 +19,7 @@ impl Database {
         Ok(Self {})
     }
 
-    pub async fn get_block_number(&self) -> Result<i64, DatabaseError> {
+    pub async fn get_block_number(&self) -> Result<u64, DatabaseError> {
         panic!("you need to enable unstable_db feature to cache events")
     }
 
@@ -29,8 +29,8 @@ impl Database {
 
     pub async fn save_log(
         &self,
-        _block_index: U64,
-        _transaction_index: U64,
+        _block_index: u64,
+        _transaction_index: u64,
         _log_index: U256,
         _log: Box<RawValue>,
     ) -> Result<(), DatabaseError> {

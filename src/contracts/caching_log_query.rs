@@ -2,7 +2,6 @@ use std::{
     cmp::{max, min},
     sync::Arc,
 };
-
 use async_stream::try_stream;
 use ethers::{
     providers::{Middleware, ProviderError},
@@ -11,17 +10,14 @@ use ethers::{
 use futures::Stream;
 use serde_json::value::RawValue;
 use thiserror::Error;
-
-use crate::{
-    database::{Database, DatabaseError},
-    ethereum::ProviderStack,
-};
+use crate::ethereum::ProviderStack;
+use crate::database::{Database, DatabaseError};
 
 pub struct CachingLogQuery {
     provider:  Arc<ProviderStack>,
     filter:    Filter,
     page_size: u64,
-    database:  Option<Arc<Database>>,
+    database: Option<Arc<Database>>,
 }
 
 #[derive(Error, Debug)]
@@ -52,8 +48,8 @@ impl CachingLogQuery {
         self
     }
 
-    pub fn with_database(mut self, database: Arc<Database>) -> Self {
-        self.database = Some(database);
+    pub fn with_database(mut self, database: Option<Arc<Database>>) -> Self {
+        self.database = database;
         self
     }
 

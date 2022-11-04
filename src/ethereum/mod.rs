@@ -5,11 +5,7 @@ mod min_gas_fees;
 mod rpc_logger;
 mod transport;
 
-use crate::{
-    contracts::caching_log_query::{CachingLogQuery, CachingLogQueryError},
-    database::Database,
-};
-
+use crate::contracts::caching_log_query::{CachingLogQuery, CachingLogQueryError};
 use self::{
     estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees,
     rpc_logger::RpcLogger, transport::Transport,
@@ -47,6 +43,7 @@ use thiserror::Error;
 use tokio::time::timeout;
 use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
 use url::Url;
+use crate::database::Database;
 
 const PENDING: Option<BlockId> = Some(BlockId::Number(BlockNumber::Pending));
 
@@ -499,7 +496,7 @@ impl Ethereum {
     pub fn fetch_events_raw(
         &self,
         filter: &Filter,
-        database: Arc<Database>,
+        database: Option<Arc<Database>>,
     ) -> impl Stream<Item = Result<Log, EventError>> + '_ {
         CachingLogQuery::new(self.provider.clone(), filter)
             .with_page_size(self.max_log_blocks as u64)
@@ -520,7 +517,7 @@ impl Ethereum {
     pub fn fetch_events<T: EthEvent>(
         &self,
         filter: &Filter,
-        database: Arc<Database>,
+        database: Option<Arc<Database>>,
     ) -> impl Stream<Item = Result<T, EventError>> + '_ {
         // TODO: Add `Log` struct for blocknumber and other metadata.
         self.fetch_events_raw(filter, database).map(|res| {

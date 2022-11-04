@@ -25,8 +25,6 @@ use std::{
 };
 use tokio::{select, try_join};
 use tracing::{debug, error, info, instrument, warn};
-
-#[cfg(feature = "unstable_db")]
 use crate::database::{self, Database};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -60,7 +58,6 @@ pub struct Options {
     #[clap(flatten)]
     pub contracts: contracts::Options,
 
-    #[cfg(feature = "unstable_db")]
     #[clap(flatten)]
     pub database: database::Options,
 
@@ -74,14 +71,7 @@ pub struct Options {
 }
 
 pub struct App {
-    #[cfg(feature = "unstable_db")]
-    #[allow(dead_code)]
-    database: Arc<Database>,
-
-    #[cfg(not(feature = "unstable_db"))]
-    #[allow(dead_code)]
-    database: (),
-
+    database: Option<Arc<Database>>,
     #[allow(dead_code)]
     ethereum:    Ethereum,
     contracts:   Contracts,
@@ -100,11 +90,7 @@ impl App {
     pub async fn new(options: Options) -> EyreResult<Self> {
         // Connect to Ethereum and Database
         let (database, (ethereum, contracts)) = {
-            #[cfg(feature = "unstable_db")]
             let db = Database::new(options.database);
-
-            #[cfg(not(feature = "unstable_db"))]
-            let db = std::future::ready(EyreResult::Ok(()));
 
             let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
                 let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
@@ -119,7 +105,12 @@ impl App {
         let merkle_tree = PoseidonTree::new(contracts.tree_depth() + 1, contracts.initial_leaf());
 
         let mut app = Self {
-            database: Arc::new(database),
+            #[cfg(feature = "unstable_db")]
+            database: Some(Arc::new(database)),
+
+            #[cfg(not(feature = "unstable_db"))]
+            database: None,
+
             ethereum,
             contracts,
             next_leaf: AtomicUsize::new(0),

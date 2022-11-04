@@ -2,10 +2,7 @@ mod abi;
 pub mod caching_log_query;
 
 use self::abi::{MemberAddedFilter, SemaphoreContract as Semaphore};
-use crate::{
-    database::Database,
-    ethereum::{Ethereum, EventError, ProviderStack},
-};
+use crate::ethereum::{Ethereum, EventError, ProviderStack};
 use clap::Parser;
 use core::future;
 use ethers::{
@@ -13,10 +10,11 @@ use ethers::{
     types::{Address, U256},
 };
 use eyre::{eyre, Result as EyreResult};
-use futures::{Stream, StreamExt, TryStreamExt};
+use futures::{Stream, TryStreamExt, StreamExt};
 use semaphore::Field;
 use std::sync::Arc;
 use tracing::{error, info, instrument};
+use crate::database::Database;
 
 pub type MemberAddedEvent = MemberAddedFilter;
 
@@ -143,7 +141,7 @@ impl Contracts {
         &self,
         starting_block: u64,
         last_leaf: usize,
-        database: Arc<Database>,
+        database: Option<Arc<Database>>,
     ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
         info!(
             starting_block,

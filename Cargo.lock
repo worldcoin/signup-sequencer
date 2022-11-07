@@ -1080,6 +1080,12 @@ checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
 name = "convert_case"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
+
+[[package]]
+name = "convert_case"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
@@ -1509,8 +1515,10 @@ version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fb810d30a7c1953f91334de7244731fc3f3c10d7fe163338a35b9f640960321"
 dependencies = [
+ "convert_case 0.4.0",
  "proc-macro2",
  "quote",
+ "rustc_version 0.4.0",
  "syn",
 ]
 
@@ -1904,7 +1912,7 @@ dependencies = [
  "bytes",
  "cargo_metadata",
  "chrono",
- "convert_case",
+ "convert_case 0.6.0",
  "elliptic-curve",
  "ethabi",
  "generic-array 0.14.6",
@@ -4201,11 +4209,12 @@ dependencies = [
 
 [[package]]
 name = "ruint"
-version = "1.6.0"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74b92a24f662eff8808c3ae2959bdc9bc53b5a086d3a2ff7fead2eac347b3dce"
+checksum = "0ad3a104dc8c3867f653b0fec89c65e00b0ceb752718ad282177a7e0f33257ac"
 dependencies = [
  "ark-ff",
+ "derive_more",
  "num-bigint",
  "primitive-types",
  "ruint-macro",
@@ -4217,9 +4226,9 @@ dependencies = [
 
 [[package]]
 name = "ruint-macro"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c827ed98ab2233b4647e6e783d6238f4646a16680fe527a599b3d56f6ea73e2d"
+checksum = "62cc5760263ea229d367e7dff3c0cbf09e4797a125bd87059a6c095804f3b2d1"
 
 [[package]]
 name = "rust_decimal"

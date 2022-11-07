@@ -7,7 +7,7 @@ pub enum Event {
 }
 
 pub struct EventBus {
-    sender: Sender<Event>,
+    sender: Sender<Vec<Event>>,
 }
 
 impl EventBus {
@@ -17,11 +17,18 @@ impl EventBus {
     }
 
     pub async fn publish(&self, event: Event) -> Result<(), SendError<Event>> {
-        self.sender.send(event)?;
+        self.sender
+            .send(vec![event])
+            .map_err(|error| SendError(error.0[0].clone()))?;
         Ok(())
     }
 
-    pub fn subscribe(&self) -> Receiver<Event> {
+    pub async fn publish_batch(&self, events: Vec<Event>) -> Result<(), SendError<Vec<Event>>> {
+        self.sender.send(events)?;
+        Ok(())
+    }
+
+    pub fn subscribe(&self) -> Receiver<Vec<Event>> {
         self.sender.subscribe()
     }
 }

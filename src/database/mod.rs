@@ -131,12 +131,27 @@ impl Database {
     pub async fn insert_pending_identity(&self, group_id: usize, identity: &Hash) -> Result<()> {
         self.pool
             .execute(
-                sqlx::query("INSERT INTO pending_identities (group_id, commitment) VALUES ($1, $2);")
-                    .bind(group_id as i64)
-                    .bind(identity),
+                sqlx::query(
+                    "INSERT INTO pending_identities (group_id, commitment) VALUES ($1, $2);",
+                )
+                .bind(group_id as i64)
+                .bind(identity),
             )
             .await?;
         Ok(())
+    }
+
+    pub async fn get_pending_identities(&self) -> Result<Vec<(usize, Hash)>> {
+        let rows = self
+            .pool
+            .fetch_all(sqlx::query(
+                "SELECT group_id, commitment FROM pending_identities;",
+            ))
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| (usize::try_from(row.get::<i64, _>(0)).unwrap(), row.get(1)))
+            .collect())
     }
 
     #[allow(unused)]

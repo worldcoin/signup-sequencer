@@ -214,6 +214,14 @@ impl Database {
 
         Ok(())
     }
+
+    pub async fn wipe_cache(&self) -> Result<(), DatabaseError> {
+        self.pool
+            .execute(sqlx::query("DELETE FROM logs;"))
+            .await
+            .map_err(DatabaseError::InternalError)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Error)]

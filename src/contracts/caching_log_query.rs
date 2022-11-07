@@ -16,11 +16,11 @@ use std::{
 use thiserror::Error;
 
 pub struct CachingLogQuery {
-    provider:  Arc<ProviderStack>,
-    filter:    Filter,
-    page_size: u64,
+    provider:           Arc<ProviderStack>,
+    filter:             Filter,
+    page_size:          u64,
     cache_blocks_delay: u64,
-    database:  Option<Arc<Database>>,
+    database:           Option<Arc<Database>>,
 }
 
 #[derive(Error, Debug)]
@@ -128,7 +128,7 @@ impl CachingLogQuery {
     fn should_cache(&self, log: &Log, last_block: LastBlock) -> bool {
         match log.block_number {
             Some(block) => block <= last_block.eth - self.cache_blocks_delay,
-            None => false
+            None => false,
         }
     }
 

@@ -88,6 +88,20 @@ impl App {
     #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> EyreResult<Self> {
+        if let Ok(app) = Self::bootstrap(options.clone()).await {
+            Ok(app)
+        } else {
+            error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
+
+            // Remove cached events from database and try again
+            let db = Database::new(options.database.clone()).await?;
+            db.wipe_cache().await?;
+
+            Self::bootstrap(options).await
+        }
+    }
+
+    async fn bootstrap(options: Options) -> EyreResult<Self> {
         // Connect to Ethereum and Database
         let (database, (ethereum, contracts)) = {
             let db = Database::new(options.database);
@@ -298,8 +312,6 @@ impl App {
     async fn process_events(&mut self) -> EyreResult<()> {
         let mut merkle_tree = self.merkle_tree.write().await.map_err(|e| {
             error!(?e, "Failed to obtain tree lock in process_events.");
-            panic!("Sequencer potentially deadlocked, terminating.");
-            #[allow(unreachable_code)]
             e
         })?;
 
@@ -327,7 +339,7 @@ impl App {
             // Check leaf index is valid
             if index >= merkle_tree.num_leaves() {
                 error!(?index, ?leaf, num_leaves = ?merkle_tree.num_leaves(), "Received event out of range");
-                panic!("Received event out of range");
+                return Err(eyre!("Received event out of range"));
             }
 
             // Check if leaf value is valid
@@ -384,7 +396,7 @@ impl App {
             // Check root
             if root != merkle_tree.root() {
                 error!(computed_root = ?merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
-                panic!("Root mismatch between event and computed tree.");
+                return Err(eyre!("Root mismatch between event and computed tree."));
             }
         }
         Ok(())

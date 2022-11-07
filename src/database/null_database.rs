@@ -36,4 +36,8 @@ impl Database {
     ) -> Result<(), DatabaseError> {
         panic!("you need to enable unstable_db feature to cache events")
     }
+
+    pub async fn wipe_cache(&self) -> Result<(), DatabaseError> {
+        Ok(())
+    }
 }

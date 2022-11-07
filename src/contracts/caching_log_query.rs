@@ -19,6 +19,7 @@ pub struct CachingLogQuery {
     provider:  Arc<ProviderStack>,
     filter:    Filter,
     page_size: u64,
+    cache_blocks_delay: u64,
     database:  Option<Arc<Database>>,
 }
 
@@ -46,6 +47,7 @@ impl CachingLogQuery {
             provider,
             filter: filter.clone(),
             page_size: 10000,
+            cache_blocks_delay: 0,
             database: None,
         }
     }
@@ -53,6 +55,11 @@ impl CachingLogQuery {
     /// set page size for pagination
     pub const fn with_page_size(mut self, page_size: u64) -> Self {
         self.page_size = page_size;
+        self
+    }
+
+    pub const fn with_blocks_delay(mut self, cache_blocks_delay: u64) -> Self {
+        self.cache_blocks_delay = cache_blocks_delay;
         self
     }
 
@@ -76,7 +83,9 @@ impl CachingLogQuery {
                 let new_events = self.fetch_page(page.filter).await?;
                 for raw_log in new_events {
                     let log: Log = serde_json::from_str(raw_log.get()).map_err(Error::Parse)?;
-                    self.cache_log(raw_log, &log).await?;
+                    if self.should_cache(&log, last_block) {
+                        self.cache_log(raw_log, &log).await?;
+                    }
                     yield log;
                 }
             }
@@ -114,6 +123,13 @@ impl CachingLogQuery {
             .request("eth_getLogs", [&filter])
             .await;
         data.map_err(Error::LoadLogs)
+    }
+
+    fn should_cache(&self, log: &Log, last_block: LastBlock) -> bool {
+        match log.block_number {
+            Some(block) => block <= last_block.eth - self.cache_blocks_delay,
+            None => false
+        }
     }
 
     async fn cache_log(

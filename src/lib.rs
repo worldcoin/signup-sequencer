@@ -5,6 +5,7 @@ pub mod app;
 mod contracts;
 mod database;
 mod ethereum;
+mod event_bus;
 pub mod server;
 mod timed_rw_lock;
 mod utils;
@@ -32,7 +33,7 @@ pub struct Options {
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 pub async fn main(options: Options) -> EyreResult<()> {
     // Create App struct
-    let app = Arc::new(App::new(options.app).await?);
+    let app = App::new(options.app).await?;
 
     // Start server
     let server = spawn_or_abort({

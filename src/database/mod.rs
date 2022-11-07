@@ -128,6 +128,17 @@ impl Database {
         Ok(Self { pool })
     }
 
+    pub async fn insert_pending_identity(&self, group_id: usize, identity: &Hash) -> Result<()> {
+        self.pool
+            .execute(
+                sqlx::query("INSERT INTO pending_identities (group_id, commitment) VALUES ($1, $2);")
+                    .bind(group_id as i64)
+                    .bind(identity),
+            )
+            .await?;
+        Ok(())
+    }
+
     #[allow(unused)]
     pub async fn read(&self, _index: usize) -> Result<Hash> {
         self.pool

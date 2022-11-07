@@ -181,7 +181,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
             json_middleware(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
                 async move {
-                    app.insert_identity(request.group_id, &request.identity_commitment)
+                    app.insert_identity(request.group_id, request.identity_commitment)
                         .await
                 }
             })

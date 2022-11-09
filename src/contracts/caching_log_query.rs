@@ -127,7 +127,7 @@ impl CachingLogQuery {
 
     fn should_cache(&self, log: &Log, last_block: LastBlock) -> bool {
         match log.block_number {
-            Some(block) => block <= last_block.eth - self.cache_blocks_delay,
+            Some(block) => block + self.cache_blocks_delay <= last_block.eth,
             None => false,
         }
     }

@@ -54,6 +54,10 @@ tracing = "0.1"
 tracing-futures = "0.2"
 url = "2.2"
 
+# `ethers-rs` requires an older version of primitive-types.
+# But `ruint` supports the latest version. So we need to override it.
+# `cargo update --package primitive-types@0.12.1 --precise 0.11.1`
+
 [dev-dependencies]
 cli-batteries = { version = "0.4.0", features = [ "mock-shutdown" ] }
 hex = "0.4.3"

@@ -5,7 +5,6 @@ use ruint::{
     aliases::{U256, U64},
     uint,
 };
-use serde_json::value::RawValue;
 use sqlx::{
     any::AnyKind,
     migrate::{Migrate, MigrateDatabase, Migrator},
@@ -177,7 +176,7 @@ impl Database {
         }
     }
 
-    pub async fn load_logs(&self) -> Result<Vec<Box<RawValue>>, Error> {
+    pub async fn load_logs(&self) -> Result<Vec<String>, Error> {
         let rows = self
             .pool
             .fetch_all(sqlx::query(
@@ -185,7 +184,7 @@ impl Database {
             ))
             .await?
             .iter()
-            .map(|row| RawValue::from_string(row.get(0)).unwrap())
+            .map(|row| row.get(0))
             .collect();
 
         Ok(rows)
@@ -196,7 +195,7 @@ impl Database {
         block_index: u64,
         transaction_index: u64,
         log_index: U256,
-        log: Box<RawValue>,
+        log: String,
     ) -> Result<(), Error> {
         self.pool
             .execute(
@@ -207,7 +206,7 @@ impl Database {
                 .bind(U64::from(block_index))
                 .bind(U64::from(transaction_index))
                 .bind(log_index)
-                .bind(log.get()),
+                .bind(log),
             )
             .await
             .map_err(Error::InternalError)?;

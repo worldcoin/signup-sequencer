@@ -4,15 +4,11 @@ use crate::{
 };
 use async_stream::try_stream;
 use ethers::{
-    providers::{Middleware, ProviderError},
+    providers::{LogQueryError, Middleware, ProviderError},
     types::{Filter, Log, U64},
 };
-use futures::Stream;
-use serde_json::value::RawValue;
-use std::{
-    cmp::{max, min},
-    sync::Arc,
-};
+use futures::{Stream, StreamExt};
+use std::{cmp::max, sync::Arc};
 use thiserror::Error;
 
 pub struct CachingLogQuery {
@@ -25,14 +21,16 @@ pub struct CachingLogQuery {
 
 #[derive(Error, Debug)]
 pub enum Error<ProviderError> {
-    #[error(transparent)]
-    LoadLastBlock(ProviderError),
-    #[error(transparent)]
-    LoadLogs(ProviderError),
+    #[error("couldn't load last block number: {0}")]
+    LoadLastBlock(#[source] ProviderError),
+    #[error("error loading logs")]
+    LoadLogs(#[from] LogQueryError<ProviderError>),
     #[error(transparent)]
     Database(#[from] DatabaseError),
-    #[error(transparent)]
-    Parse(serde_json::Error),
+    #[error("couldn't parse log json: {0}")]
+    Parse(#[source] serde_json::Error),
+    #[error("couldn't serialize log to json: {0}")]
+    Serialize(#[source] serde_json::Error),
     #[error("empty block index")]
     EmptyBlockIndex,
     #[error("empty transaction index")]
@@ -75,18 +73,22 @@ impl CachingLogQuery {
 
             let cached_events = self.load_db_logs().await?;
             for log in cached_events {
-                yield serde_json::from_str(log.get()).map_err(Error::Parse)?;
+                yield serde_json::from_str(&log).map_err(Error::Parse)?;
             }
 
-            let paginator = Paginator::new(last_block, self.filter.clone(), self.page_size);
-            for page in paginator {
-                let new_events = self.fetch_page(page.filter).await?;
-                for raw_log in new_events {
-                    let log: Log = serde_json::from_str(raw_log.get()).map_err(Error::Parse)?;
-                    if self.is_confirmed(&log, last_block) {
-                        self.cache_log(raw_log, &log).await?;
-                        yield log;
-                    }
+            let filter = self.filter.clone().from_block(max(
+                last_block.db + 1,
+                self.filter.get_from_block().unwrap_or_default(),
+            ));
+            let mut stream = self.provider
+                .get_logs_paginated(&filter, self.page_size as u64);
+
+            while let Some(log) = stream.next().await {
+                let log = log.map_err(Error::LoadLogs)?;
+                if self.is_confirmed(&log, last_block) {
+                    let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;
+                    self.cache_log(raw_log, &log).await?;
+                    yield log;
                 }
             }
         }
@@ -109,20 +111,11 @@ impl CachingLogQuery {
         })
     }
 
-    async fn load_db_logs(&self) -> Result<Vec<Box<RawValue>>, Error<ProviderError>> {
+    async fn load_db_logs(&self) -> Result<Vec<String>, Error<ProviderError>> {
         match &self.database {
             Some(database) => database.load_logs().await.map_err(Error::Database),
             None => Ok(vec![]),
         }
-    }
-
-    async fn fetch_page(&self, filter: Filter) -> Result<Vec<Box<RawValue>>, Error<ProviderError>> {
-        let data: Result<Vec<Box<RawValue>>, ProviderError> = self
-            .provider
-            .provider()
-            .request("eth_getLogs", [&filter])
-            .await;
-        data.map_err(Error::LoadLogs)
     }
 
     fn is_confirmed(&self, log: &Log, last_block: LastBlock) -> bool {
@@ -131,11 +124,7 @@ impl CachingLogQuery {
         })
     }
 
-    async fn cache_log(
-        &self,
-        raw_log: Box<RawValue>,
-        log: &Log,
-    ) -> Result<(), Error<ProviderError>> {
+    async fn cache_log(&self, raw_log: String, log: &Log) -> Result<(), Error<ProviderError>> {
         if let Some(database) = &self.database {
             database
                 .save_log(
@@ -162,52 +151,4 @@ impl CachingLogQuery {
 struct LastBlock {
     eth: U64,
     db:  U64,
-}
-
-struct Page {
-    filter: Filter,
-}
-
-struct Paginator {
-    current_block: U64,
-    last_block:    U64,
-    filter:        Filter,
-    page_size:     u64,
-}
-
-impl Paginator {
-    fn new(last_block: LastBlock, filter: Filter, page_size: u64) -> Self {
-        Self {
-            current_block: max(
-                last_block.db + 1,
-                filter.get_from_block().unwrap_or_default(),
-            ),
-            last_block: filter.get_to_block().unwrap_or(last_block.eth),
-            filter,
-            page_size,
-        }
-    }
-}
-
-impl Iterator for Paginator {
-    type Item = Page;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current_block > self.last_block {
-            return None;
-        }
-
-        let from_block = self.current_block;
-        let to_block = min(self.last_block, self.current_block + self.page_size);
-        let filter = self
-            .filter
-            .clone()
-            .from_block(from_block)
-            .to_block(to_block);
-        let result = Page { filter };
-
-        self.current_block = self.current_block + self.page_size + 1;
-
-        Some(result)
-    }
 }

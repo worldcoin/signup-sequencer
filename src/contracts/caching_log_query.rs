@@ -83,7 +83,7 @@ impl CachingLogQuery {
                 let new_events = self.fetch_page(page.filter).await?;
                 for raw_log in new_events {
                     let log: Log = serde_json::from_str(raw_log.get()).map_err(Error::Parse)?;
-                    if self.should_cache(&log, last_block) {
+                    if self.is_confirmed(&log, last_block) {
                         self.cache_log(raw_log, &log).await?;
                     }
                     yield log;
@@ -99,7 +99,7 @@ impl CachingLogQuery {
             .await
             .map_err(Error::LoadLastBlock)?;
         let last_db_block: u64 = match &self.database {
-            Some(database) => database.get_block_number().await? as u64,
+            Some(database) => database.get_block_number().await?,
             None => 0,
         };
 
@@ -125,11 +125,10 @@ impl CachingLogQuery {
         data.map_err(Error::LoadLogs)
     }
 
-    fn should_cache(&self, log: &Log, last_block: LastBlock) -> bool {
-        match log.block_number {
-            Some(block) => block + self.cache_blocks_delay <= last_block.eth,
-            None => false,
-        }
+    fn is_confirmed(&self, log: &Log, last_block: LastBlock) -> bool {
+        log.block_number.map_or(false, |block| {
+            block + self.cache_blocks_delay <= last_block.eth
+        })
     }
 
     async fn cache_log(

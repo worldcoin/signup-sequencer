@@ -1,6 +1,7 @@
 #![cfg(feature = "unstable_db")]
 use crate::app::Hash;
 use clap::Parser;
+use ethers::types::Res;
 use eyre::{eyre, Context, Result};
 use ruint::{aliases::U256, uint};
 use sqlx::{
@@ -141,11 +142,49 @@ impl Database {
         Ok(())
     }
 
+    pub async fn mark_identity_inserted(
+        &self,
+        group_id: usize,
+        commitment: &Hash,
+        block_number: usize,
+        tree_idx: usize,
+    ) -> Result<()> {
+        self.pool
+            .execute(
+                sqlx::query(
+                    r#"UPDATE pending_identities
+                           SET mined_in_block = $1, assigned_leaf_idx = $2
+                           WHERE group_id = $3 AND commitment = $4;"#,
+                )
+                .bind(block_number as i64)
+                .bind(tree_idx as i64)
+                .bind(group_id as i64)
+                .bind(commitment),
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn remove_pending_identity(&self, group_id: usize, identity: &Hash) -> Result<()> {
+        self.pool
+            .execute(
+                sqlx::query(
+                    "DELETE FROM pending_identities WHERE group_id = $1 AND commitment = $2;",
+                )
+                .bind(group_id as i64)
+                .bind(identity),
+            )
+            .await?;
+        Ok(())
+    }
+
     pub async fn get_pending_identities(&self) -> Result<Vec<(usize, Hash)>> {
         let rows = self
             .pool
             .fetch_all(sqlx::query(
-                "SELECT group_id, commitment FROM pending_identities;",
+                r#"SELECT group_id, commitment
+                       FROM pending_identities
+                       WHERE mined_in_block IS NULL;"#,
             ))
             .await?;
         Ok(rows

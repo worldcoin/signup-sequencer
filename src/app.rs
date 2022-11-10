@@ -537,7 +537,8 @@ impl App {
         let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
 
         // Send Semaphore transaction
-        self.contracts
+        let receipt = self
+            .contracts
             .insert_identity(&commitment)
             .await
             .map_err(|e| {
@@ -546,6 +547,21 @@ impl App {
                 #[allow(unreachable_code)]
                 e
             })?;
+
+        match receipt.block_number {
+            Some(num) => {
+                info!(
+                    "Identity inserted in block {} at index {}.",
+                    num, identity_index
+                );
+                self.database
+                    .mark_identity_inserted(group_id, &commitment, num.as_usize(), identity_index)
+                    .await?;
+            }
+            None => {
+                panic!("this should not happen?");
+            }
+        }
 
         // Update  merkle tree
         tree.set(identity_index, commitment);

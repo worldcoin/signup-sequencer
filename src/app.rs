@@ -142,13 +142,12 @@ impl App {
         Ok(app)
     }
 
-    /// Inserts a new commitment into the Merkle tree. This will also update the
-    /// contract's commitment tree.
+    /// Queues an insert into the merkle tree.
     ///
     /// # Errors
     ///
-    /// Will return `Err` if the Eth handler cannot insert the identity to the
-    /// contract, or if writing to the storage file fails.
+    /// Will return `Err` if identity is already queued, or in the tree, or the
+    /// queue malfunctions.
     #[instrument(level = "debug", skip_all)]
     pub async fn insert_identity(
         &self,
@@ -158,12 +157,31 @@ impl App {
         if U256::from(group_id) != self.contracts.group_id() {
             return Err(ServerError::InvalidGroupId);
         }
+
+        let tree = self.merkle_tree.read().await?;
+
         if commitment == self.contracts.initial_leaf() {
             warn!(?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
         }
 
-        // TODO Check for duplicates
+        // Note the ordering of duplicate checks: since we never want to lose data,
+        // pending identities are removed from the DB _after_ they are inserted into the
+        // tree. Therefore this order of checks guarantees we will not insert a
+        // duplicate.
+        if self
+            .database
+            .pending_identity_exists(group_id, &commitment)
+            .await?
+        {
+            warn!(?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Pending identity already exists.");
+            return Err(ServerError::DuplicateCommitment);
+        }
+
+        if let Some(existing) = tree.leaves().iter().position(|&x| x == commitment) {
+            warn!(?existing, ?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Commitment already exists in tree.");
+            return Err(ServerError::DuplicateCommitment);
+        };
 
         self.database
             .insert_pending_identity(group_id, &commitment)
@@ -178,58 +196,6 @@ impl App {
             .unwrap();
 
         Ok(())
-
-        // // Get a lock on the tree for the duration of this operation.
-        // // OPT: Sequence operations and allow concurrent inserts /
-        // transactions. let mut tree =
-        // self.merkle_tree.write().await.map_err(|e| {     error!(?e,
-        // "Failed to obtain tree lock in insert_identity.");
-        //     panic!("Sequencer potentially deadlocked, terminating.");
-        //     #[allow(unreachable_code)]
-        //     e
-        // })?;
-        //
-        // if let Some(existing) = tree.leaves().iter().position(|&x| x ==
-        // *commitment) {     warn!(?existing, ?commitment, next =
-        // %self.next_leaf.load(Ordering::Acquire), "Commitment already exists
-        // in tree.");     return Err(ServerError::DuplicateCommitment);
-        // };
-        //
-        // // Fetch next leaf index
-        // let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
-        //
-        // // Send Semaphore transaction
-        // self.contracts
-        //     .insert_identity(commitment)
-        //     .await
-        //     .map_err(|e| {
-        //         error!(?e, "Failed to insert identity to contract.");
-        //         panic!("Failed to submit transaction, state synchronization
-        // lost.");         #[allow(unreachable_code)]
-        //         e
-        //     })?;
-        //
-        // // Update  merkle tree
-        // tree.set(identity_index, *commitment);
-        //
-        // // Downgrade write lock to read lock
-        // let tree = tree.downgrade();
-        //
-        // // Check tree root
-        // if let Err(error) =
-        // self.contracts.assert_valid_root(tree.root()).await {
-        //     error!(
-        //         computed_root = ?tree.root(),
-        //         ?error,
-        //         "Root mismatch between tree and contract."
-        //     );
-        //     panic!("Root mismatch between tree and contract.");
-        // }
-        //
-        // // Immediately write the tree to storage, before anyone else can
-        // write. // TODO: Store tree in database
-        //
-        // Ok(IndexResponse { identity_index })
     }
 
     /// # Errors
@@ -506,7 +472,7 @@ impl App {
     async fn process_pending_identities(app: Arc<Self>) {
         let pending_events = app
             .database
-            .get_pending_identities()
+            .get_unprocessed_pending_identities()
             .await
             .unwrap()
             .into_iter()
@@ -519,6 +485,9 @@ impl App {
     }
 
     async fn commit_identity(&self, group_id: usize, commitment: Hash) -> Result<(), ServerError> {
+        // TODO keeping this lock for too long, we should be able to read while this
+        // works.
+
         // Get a lock on the tree for the duration of this operation.
         // OPT: Sequence operations and allow concurrent inserts /
         let mut tree = self.merkle_tree.write().await.map_err(|e| {
@@ -527,11 +496,6 @@ impl App {
             #[allow(unreachable_code)]
             e
         })?;
-
-        if let Some(existing) = tree.leaves().iter().position(|&x| x == commitment) {
-            warn!(?existing, ?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Commitment already exists in tree.");
-            return Err(ServerError::DuplicateCommitment);
-        };
 
         // Fetch next leaf index
         let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
@@ -548,6 +512,9 @@ impl App {
                 e
             })?;
 
+        // Update  merkle tree
+        tree.set(identity_index, commitment);
+
         match receipt.block_number {
             Some(num) => {
                 info!(
@@ -562,9 +529,6 @@ impl App {
                 panic!("this should not happen?");
             }
         }
-
-        // Update  merkle tree
-        tree.set(identity_index, commitment);
 
         // Downgrade write lock to read lock
         let tree = tree.downgrade();

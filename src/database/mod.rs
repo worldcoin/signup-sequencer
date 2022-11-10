@@ -178,7 +178,7 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_pending_identities(&self) -> Result<Vec<(usize, Hash)>> {
+    pub async fn get_unprocessed_pending_identities(&self) -> Result<Vec<(usize, Hash)>> {
         let rows = self
             .pool
             .fetch_all(sqlx::query(
@@ -191,6 +191,23 @@ impl Database {
             .into_iter()
             .map(|row| (usize::try_from(row.get::<i64, _>(0)).unwrap(), row.get(1)))
             .collect())
+    }
+
+    pub async fn pending_identity_exists(&self, group_id: usize, identity: &Hash) -> Result<bool> {
+        let row = self
+            .pool
+            .fetch_one(
+                sqlx::query(
+                    r#"SELECT 1
+                           FROM pending_identities
+                           WHERE group_id = $1 AND commitment = $2
+                           LIMIT 1;"#,
+                )
+                .bind(group_id as i64)
+                .bind(identity),
+            )
+            .await?;
+        Ok(row.get::<Option<i32>, _>(0).is_some())
     }
 
     #[allow(unused)]

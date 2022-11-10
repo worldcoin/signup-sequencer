@@ -133,7 +133,8 @@ impl Database {
         self.pool
             .execute(
                 sqlx::query(
-                    "INSERT INTO pending_identities (group_id, commitment) VALUES ($1, $2);",
+                    r#"INSERT INTO pending_identities (group_id, commitment)
+                           VALUES ($1, $2);"#,
                 )
                 .bind(group_id as i64)
                 .bind(identity),

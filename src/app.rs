@@ -2,7 +2,7 @@ use crate::{
     contracts::{self, Contracts},
     ethereum::{self, Ethereum},
     server::Error as ServerError,
-    timed_rw_lock::TimedRwLock,
+    timed_rw_lock::TimedReadProgressLock,
 };
 use clap::Parser;
 use cli_batteries::await_shutdown;
@@ -48,9 +48,9 @@ pub struct IndexResponse {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InclusionProofResponse {
-    pub root:  Field,
-    pub proof: Proof,
+pub enum InclusionProofResponse {
+    Proof { root: Field, proof: Proof },
+    Pending,
 }
 
 #[derive(Clone, Debug, PartialEq, Parser)]
@@ -89,7 +89,7 @@ pub struct App {
     contracts:   Contracts,
     next_leaf:   AtomicUsize,
     last_block:  u64,
-    merkle_tree: TimedRwLock<PoseidonTree>,
+    merkle_tree: TimedReadProgressLock<PoseidonTree>,
     event_bus:   EventBus,
 }
 
@@ -127,7 +127,10 @@ impl App {
             contracts,
             next_leaf: AtomicUsize::new(0),
             last_block: options.starting_block,
-            merkle_tree: TimedRwLock::new(Duration::from_secs(options.lock_timeout), merkle_tree),
+            merkle_tree: TimedReadProgressLock::new(
+                Duration::from_secs(options.lock_timeout),
+                merkle_tree,
+            ),
             event_bus: EventBus::new(10),
         };
 
@@ -210,6 +213,7 @@ impl App {
         if U256::from(group_id) != self.contracts.group_id() {
             return Err(ServerError::InvalidGroupId);
         }
+
         if commitment == &self.contracts.initial_leaf() {
             return Err(ServerError::InvalidCommitment);
         }
@@ -220,39 +224,44 @@ impl App {
             #[allow(unreachable_code)]
             e
         })?;
-        let identity_index = match merkle_tree.leaves().iter().position(|&x| x == *commitment) {
-            Some(i) => i,
-            None => return Err(ServerError::IdentityCommitmentNotFound),
-        };
 
-        let proof = merkle_tree
-            .proof(identity_index)
-            .ok_or(ServerError::IndexOutOfBounds)?;
-        let root = merkle_tree.root();
+        if let Some(identity_index) = merkle_tree.leaves().iter().position(|&x| x == *commitment) {
+            let proof = merkle_tree
+                .proof(identity_index)
+                .ok_or(ServerError::IndexOutOfBounds)?;
+            let root = merkle_tree.root();
 
-        // Locally check the proof
-        // TODO: Check the leaf index / path
-        if !merkle_tree.verify(*commitment, &proof) {
-            error!(
-                ?commitment,
-                ?identity_index,
-                ?root,
-                "Proof does not verify locally."
-            );
-            panic!("Proof does not verify locally.");
+            // Locally check the proof
+            // TODO: Check the leaf index / path
+            if !merkle_tree.verify(*commitment, &proof) {
+                error!(
+                    ?commitment,
+                    ?identity_index,
+                    ?root,
+                    "Proof does not verify locally."
+                );
+                panic!("Proof does not verify locally.");
+            }
+
+            // Verify the root on chain
+            if let Err(error) = self.contracts.assert_valid_root(root).await {
+                error!(
+                    computed_root = ?root,
+                    ?error,
+                    "Root mismatch between tree and contract."
+                );
+                return Err(ServerError::RootMismatch);
+            }
+            Ok(InclusionProofResponse::Proof { root, proof })
+        } else if self
+            .database
+            .pending_identity_exists(group_id, commitment)
+            .await?
+        {
+            Ok(InclusionProofResponse::Pending)
+        } else {
+            Err(ServerError::IdentityCommitmentNotFound)
         }
-
-        // Verify the root on chain
-        if let Err(error) = self.contracts.assert_valid_root(root).await {
-            error!(
-                computed_root = ?root,
-                ?error,
-                "Root mismatch between tree and contract."
-            );
-            return Err(ServerError::RootMismatch);
-        }
-
-        Ok(InclusionProofResponse { root, proof })
     }
 
     /// Stores the Merkle tree to the storage file.
@@ -490,7 +499,7 @@ impl App {
 
         // Get a lock on the tree for the duration of this operation.
         // OPT: Sequence operations and allow concurrent inserts /
-        let mut tree = self.merkle_tree.write().await.map_err(|e| {
+        let mut tree = self.merkle_tree.progress().await.map_err(|e| {
             error!(?e, "Failed to obtain tree lock in insert_identity.");
             panic!("Sequencer potentially deadlocked, terminating.");
             #[allow(unreachable_code)]

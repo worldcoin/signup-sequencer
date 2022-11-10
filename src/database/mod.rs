@@ -165,19 +165,6 @@ impl Database {
         Ok(())
     }
 
-    pub async fn remove_pending_identity(&self, group_id: usize, identity: &Hash) -> Result<()> {
-        self.pool
-            .execute(
-                sqlx::query(
-                    "DELETE FROM pending_identities WHERE group_id = $1 AND commitment = $2;",
-                )
-                .bind(group_id as i64)
-                .bind(identity),
-            )
-            .await?;
-        Ok(())
-    }
-
     pub async fn get_unprocessed_pending_identities(&self) -> Result<Vec<(usize, Hash)>> {
         let rows = self
             .pool
@@ -196,7 +183,7 @@ impl Database {
     pub async fn pending_identity_exists(&self, group_id: usize, identity: &Hash) -> Result<bool> {
         let row = self
             .pool
-            .fetch_one(
+            .fetch_optional(
                 sqlx::query(
                     r#"SELECT 1
                            FROM pending_identities
@@ -207,7 +194,7 @@ impl Database {
                 .bind(identity),
             )
             .await?;
-        Ok(row.get::<Option<i32>, _>(0).is_some())
+        Ok(row.is_some())
     }
 
     #[allow(unused)]

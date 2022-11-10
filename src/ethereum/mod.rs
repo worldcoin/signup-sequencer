@@ -512,15 +512,6 @@ impl Ethereum {
             .with_blocks_delay(self.cache_blocks_delay as u64)
             .into_stream()
             .map_err(Into::into)
-
-        // CachingLogQuery::new(self.provider.provider(), filter)
-        //     .with_page_size(self.max_log_blocks as u64)
-        //     .with_database(database)
-        //     .map_err(Into::into)
-
-        // self.provider
-        //     .get_logs_paginated(filter, self.max_log_blocks as u64)
-        //     .map_err(Into::into)
     }
 
     pub fn fetch_events<T: EthEvent>(

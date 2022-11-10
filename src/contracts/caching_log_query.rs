@@ -1,5 +1,5 @@
 use crate::{
-    database::{Database, DatabaseError},
+    database::{Database, Error as DatabaseError},
     ethereum::ProviderStack,
 };
 use async_stream::try_stream;
@@ -64,8 +64,8 @@ impl CachingLogQuery {
     }
 
     #[allow(clippy::missing_const_for_fn)]
-    pub fn with_database(mut self, database: Option<Arc<Database>>) -> Self {
-        self.database = database;
+    pub fn with_database(mut self, database: Arc<Database>) -> Self {
+        self.database = Some(database);
         self
     }
 
@@ -85,8 +85,8 @@ impl CachingLogQuery {
                     let log: Log = serde_json::from_str(raw_log.get()).map_err(Error::Parse)?;
                     if self.is_confirmed(&log, last_block) {
                         self.cache_log(raw_log, &log).await?;
+                        yield log;
                     }
-                    yield log;
                 }
             }
         }

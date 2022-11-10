@@ -143,7 +143,7 @@ impl Contracts {
         &self,
         starting_block: u64,
         last_leaf: usize,
-        database: Option<Arc<Database>>,
+        database: Arc<Database>,
     ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
         info!(
             starting_block,

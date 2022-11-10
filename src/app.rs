@@ -71,7 +71,7 @@ pub struct Options {
 }
 
 pub struct App {
-    database:    Option<Arc<Database>>,
+    database:    Arc<Database>,
     #[allow(dead_code)]
     ethereum:    Ethereum,
     contracts:   Contracts,
@@ -119,12 +119,7 @@ impl App {
         let merkle_tree = PoseidonTree::new(contracts.tree_depth() + 1, contracts.initial_leaf());
 
         let mut app = Self {
-            #[cfg(feature = "unstable_db")]
-            database: Some(Arc::new(database)),
-
-            #[cfg(not(feature = "unstable_db"))]
-            database: None,
-
+            database: Arc::new(database),
             ethereum,
             contracts,
             next_leaf: AtomicUsize::new(0),

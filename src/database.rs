@@ -133,7 +133,7 @@ impl Database {
     }
 
     #[allow(unused)]
-    pub async fn read(&self, _index: usize) -> Result<Hash, DatabaseError> {
+    pub async fn read(&self, _index: usize) -> Result<Hash, Error> {
         self.pool
             .execute(sqlx::query(
                 r#"CREATE TABLE IF NOT EXISTS hashes (
@@ -161,7 +161,7 @@ impl Database {
         Ok(Hash::default())
     }
 
-    pub async fn get_block_number(&self) -> Result<u64, DatabaseError> {
+    pub async fn get_block_number(&self) -> Result<u64, Error> {
         let row = self
             .pool
             .fetch_optional(sqlx::query(
@@ -177,7 +177,7 @@ impl Database {
         }
     }
 
-    pub async fn load_logs(&self) -> Result<Vec<Box<RawValue>>, DatabaseError> {
+    pub async fn load_logs(&self) -> Result<Vec<Box<RawValue>>, Error> {
         let rows = self
             .pool
             .fetch_all(sqlx::query(
@@ -197,7 +197,7 @@ impl Database {
         transaction_index: u64,
         log_index: U256,
         log: Box<RawValue>,
-    ) -> Result<(), DatabaseError> {
+    ) -> Result<(), Error> {
         self.pool
             .execute(
                 sqlx::query(
@@ -210,22 +210,22 @@ impl Database {
                 .bind(log.get()),
             )
             .await
-            .map_err(DatabaseError::InternalError)?;
+            .map_err(Error::InternalError)?;
 
         Ok(())
     }
 
-    pub async fn wipe_cache(&self) -> Result<(), DatabaseError> {
+    pub async fn wipe_cache(&self) -> Result<(), Error> {
         self.pool
             .execute(sqlx::query("DELETE FROM logs;"))
             .await
-            .map_err(DatabaseError::InternalError)?;
+            .map_err(Error::InternalError)?;
         Ok(())
     }
 }
 
 #[derive(Debug, Error)]
-pub enum DatabaseError {
+pub enum Error {
     #[error("database error")]
     InternalError(#[from] sqlx::Error),
 }

@@ -504,7 +504,7 @@ impl Ethereum {
     pub fn fetch_events_raw(
         &self,
         filter: &Filter,
-        database: Option<Arc<Database>>,
+        database: Arc<Database>,
     ) -> impl Stream<Item = Result<Log, EventError>> + '_ {
         CachingLogQuery::new(self.provider.clone(), filter)
             .with_page_size(self.max_log_blocks as u64)
@@ -517,7 +517,7 @@ impl Ethereum {
     pub fn fetch_events<T: EthEvent>(
         &self,
         filter: &Filter,
-        database: Option<Arc<Database>>,
+        database: Arc<Database>,
     ) -> impl Stream<Item = Result<T, EventError>> + '_ {
         // TODO: Add `Log` struct for blocknumber and other metadata.
         self.fetch_events_raw(filter, database).map(|res| {

@@ -14,7 +14,6 @@ use crate::{app::App, utils::spawn_or_abort};
 use clap::Parser;
 use cli_batteries::await_shutdown;
 use eyre::Result as EyreResult;
-use std::sync::Arc;
 use tracing::info;
 
 #[derive(Clone, Debug, PartialEq, Parser)]

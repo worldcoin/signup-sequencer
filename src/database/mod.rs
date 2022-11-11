@@ -1,7 +1,6 @@
 #![cfg(feature = "unstable_db")]
 use crate::app::Hash;
 use clap::Parser;
-use ethers::types::Res;
 use eyre::{eyre, Context, Result};
 use ruint::{aliases::U256, uint};
 use sqlx::{

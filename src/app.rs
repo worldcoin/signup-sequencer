@@ -140,8 +140,8 @@ impl App {
         // TODO: Store file after processing events.
         app.check_health().await?;
         let app = Arc::new(app);
-        Self::spawn_identity_committer(app.clone());
-        Self::process_pending_identities(app.clone()).await;
+        app.clone().spawn_identity_committer();
+        app.clone().process_pending_identities().await;
         Ok(app)
     }
 
@@ -478,8 +478,8 @@ impl App {
     }
 
     #[instrument(level = "debug", skip_all)]
-    async fn process_pending_identities(app: Arc<Self>) {
-        let pending_events = app
+    async fn process_pending_identities(self: Arc<Self>) {
+        let pending_events = self
             .database
             .get_unprocessed_pending_identities()
             .await
@@ -490,20 +490,14 @@ impl App {
                 commitment,
             })
             .collect();
-        app.event_bus.publish_batch(pending_events).await.unwrap();
+        self.event_bus.publish_batch(pending_events).await.unwrap();
     }
 
     async fn commit_identity(&self, group_id: usize, commitment: Hash) -> Result<(), ServerError> {
-        // TODO keeping this lock for too long, we should be able to read while this
-        // works.
-
-        // Get a lock on the tree for the duration of this operation.
-        // OPT: Sequence operations and allow concurrent inserts /
-        let mut tree = self.merkle_tree.progress().await.map_err(|e| {
-            error!(?e, "Failed to obtain tree lock in insert_identity.");
+        // Get a progress lock on the tree for the duration of this operation.
+        let tree = self.merkle_tree.progress().await.map_err(|e| {
+            error!(?e, "Failed to obtain tree lock in commit_identity.");
             panic!("Sequencer potentially deadlocked, terminating.");
-            #[allow(unreachable_code)]
-            e
         })?;
 
         // Fetch next leaf index
@@ -521,8 +515,18 @@ impl App {
                 e
             })?;
 
+        let mut tree = tree.upgrade_to_write().await.map_err(|e| {
+            error!(?e, "Failed to obtain tree lock in insert_identity.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+            #[allow(unreachable_code)]
+            e
+        })?;
+
         // Update  merkle tree
         tree.set(identity_index, commitment);
+
+        // Downgrade write lock to progress lock
+        let tree = tree.downgrade_to_progress();
 
         match receipt.block_number {
             Some(num) => {
@@ -538,9 +542,6 @@ impl App {
                 panic!("this should not happen?");
             }
         }
-
-        // Downgrade write lock to read lock
-        let tree = tree.downgrade();
 
         // Check tree root
         if let Err(error) = self.contracts.assert_valid_root(tree.root()).await {
@@ -559,9 +560,9 @@ impl App {
     }
 
     #[instrument(level = "debug", skip_all)]
-    fn spawn_identity_committer(app: Arc<Self>) {
+    fn spawn_identity_committer(self: Arc<Self>) {
         tokio::spawn(async move {
-            let mut listener = app.event_bus.subscribe();
+            let mut listener = self.event_bus.subscribe();
             let mut transaction_in_progress = false;
             let (tx, mut rx) = tokio::sync::mpsc::channel(1);
             let mut work_queue: VecDeque<(usize, Hash)> = VecDeque::new();
@@ -570,7 +571,7 @@ impl App {
                     let identity = work_queue.pop_front().unwrap();
                     transaction_in_progress = true;
                     let tx = tx.clone();
-                    let app = app.clone();
+                    let app = self.clone();
                     tokio::spawn(async move {
                         info!("Committing identity {:?}", identity);
                         app.commit_identity(identity.0, identity.1).await.unwrap();
@@ -585,10 +586,9 @@ impl App {
                     },
                     Ok(msg) = listener.recv() => {
                         msg.into_iter().for_each(|msg| {
-                            if let Event::PendingIdentityInserted { group_id, commitment } = msg {
-                                info!("Identity committer received event group_id: {}, identity: {}.", group_id, commitment);
-                                work_queue.push_back((group_id, commitment));
-                            }
+                            let Event::PendingIdentityInserted { group_id, commitment } = msg;
+                            info!("Identity committer received event group_id: {}, identity: {}.", group_id, commitment);
+                            work_queue.push_back((group_id, commitment));
                         });
                     },
                     else => {}

@@ -6,7 +6,9 @@ use std::{
 };
 use thiserror::Error;
 use tokio::{
-    sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    sync::{
+        Mutex, MutexGuard, OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock, RwLockReadGuard,
+    },
     time::timeout,
 };
 
@@ -69,7 +71,7 @@ impl<T: Send + Sync> TimedReadProgressLock<T> {
     pub async fn progress(&self) -> Result<ProgressGuard<'_, T>, Error> {
         timeout(self.duration, async {
             let mutex_guard = self.progress_mutex.lock().await;
-            let resource_read_guard = self.rw_lock.read().await;
+            let resource_read_guard = self.rw_lock.clone().read_owned().await;
             ProgressGuard {
                 duration: self.duration,
                 mutex_guard,
@@ -87,9 +89,11 @@ impl<T: Send + Sync> TimedReadProgressLock<T> {
     pub async fn write(&self) -> Result<WriteGuard<'_, T>, Error> {
         timeout(self.duration, async {
             let mutex_guard = self.progress_mutex.lock().await;
-            let write_guard = self.rw_lock.write().await;
+            let write_guard = self.rw_lock.clone().write_owned().await;
             WriteGuard {
+                duration: self.duration,
                 mutex_guard,
+                resource_lock: self.rw_lock.clone(),
                 write_guard,
             }
         })
@@ -101,30 +105,29 @@ impl<T: Send + Sync> TimedReadProgressLock<T> {
     }
 }
 
-struct ProgressGuard<'a, T> {
+pub struct ProgressGuard<'a, T> {
     duration:            Duration,
     mutex_guard:         MutexGuard<'a, ()>,
-    resource_read_guard: RwLockReadGuard<'a, T>,
+    resource_read_guard: OwnedRwLockReadGuard<T>,
     resource_lock:       Arc<RwLock<T>>,
 }
 
 impl<'a, T> ProgressGuard<'a, T> {
-    pub async fn enter_critical(self) -> Result<WriteGuard<'a, T>, Error> {
+    pub async fn upgrade_to_write(self) -> Result<WriteGuard<'a, T>, Error> {
         drop(self.resource_read_guard);
-        let duration = self.duration;
-        let mutex_guard = self.mutex_guard;
-        let resource_lock = self.resource_lock.clone();
         timeout(self.duration, async move {
-            let write_guard = resource_lock.write().await;
+            let write_guard = self.resource_lock.clone().write_owned().await;
             WriteGuard {
-                mutex_guard,
+                duration: self.duration,
+                mutex_guard: self.mutex_guard,
+                resource_lock: self.resource_lock,
                 write_guard,
             }
         })
         .await
         .map_err(|_| Error {
             operation: Operation::Write,
-            duration,
+            duration:  self.duration,
         })
     }
 }
@@ -137,9 +140,23 @@ impl<'a, T> Deref for ProgressGuard<'a, T> {
     }
 }
 
-struct WriteGuard<'a, T> {
-    mutex_guard: MutexGuard<'a, ()>,
-    write_guard: RwLockWriteGuard<'a, T>,
+pub struct WriteGuard<'a, T> {
+    duration:      Duration,
+    mutex_guard:   MutexGuard<'a, ()>,
+    resource_lock: Arc<RwLock<T>>,
+    write_guard:   OwnedRwLockWriteGuard<T>,
+}
+
+impl<'a, T> WriteGuard<'a, T> {
+    pub fn downgrade_to_progress(self) -> ProgressGuard<'a, T> {
+        let resource_read_guard = self.write_guard.downgrade();
+        ProgressGuard {
+            duration: self.duration,
+            mutex_guard: self.mutex_guard,
+            resource_read_guard,
+            resource_lock: self.resource_lock,
+        }
+    }
 }
 
 impl<'a, T> Deref for WriteGuard<'a, T> {

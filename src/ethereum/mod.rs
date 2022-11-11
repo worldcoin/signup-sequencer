@@ -366,7 +366,10 @@ impl Ethereum {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn send_transaction(&self, tx: TypedTransaction) -> Result<TransactionReceipt, TxError> {
+    pub async fn send_transaction(
+        &self,
+        tx: TypedTransaction,
+    ) -> Result<TransactionReceipt, TxError> {
         self.send_transaction_unlogged(tx).await.map_err(|e| {
             error!(?e, "Transaction failed");
             e

@@ -196,7 +196,9 @@ impl App {
                 commitment,
             })
             .await
-            .unwrap();
+            .expect(
+                "No one is listening on the event bus, committer is most likely dead, terminating.",
+            );
 
         Ok(())
     }
@@ -490,7 +492,10 @@ impl App {
                 commitment,
             })
             .collect();
-        self.event_bus.publish_batch(pending_events).await.unwrap();
+        self.event_bus
+            .publish_batch(pending_events)
+            .await
+            .expect("No one listening on the event bus, committer most likely dead.");
     }
 
     async fn commit_identity(&self, group_id: usize, commitment: Hash) -> Result<(), ServerError> {
@@ -570,14 +575,27 @@ impl App {
             let mut work_queue: VecDeque<(usize, Hash)> = VecDeque::new();
             loop {
                 if !transaction_in_progress && !work_queue.is_empty() {
-                    let identity = work_queue.pop_front().unwrap();
+                    let identity = work_queue
+                        .pop_front()
+                        .expect("Impossible, queue is checked non-empty");
                     transaction_in_progress = true;
                     let tx = tx.clone();
                     let app = self.clone();
                     tokio::spawn(async move {
                         info!("Committing identity {:?}", identity);
-                        app.commit_identity(identity.0, identity.1).await.unwrap();
-                        tx.send(()).await.unwrap();
+                        match app.commit_identity(identity.0, identity.1).await {
+                            Ok(_) => {
+                                info!("Identity committed.");
+                                tx.send(()).await.expect(
+                                    "Failed to send completion signal, identity committer is \
+                                     likely dead, terminating.",
+                                );
+                            }
+                            Err(e) => {
+                                error!(?e, "Failed to commit identity.");
+                                panic!("Failed to commit identity.");
+                            }
+                        }
                     });
                 }
 

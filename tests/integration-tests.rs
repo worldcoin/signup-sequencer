@@ -86,7 +86,7 @@ async fn insert_identity_and_proofs() {
         true,
     )
     .await;
-    test_insert_identity(&uri, &client, TEST_LEAFS[0], 0).await;
+    test_insert_identity(&uri, &client, TEST_LEAFS[0]).await;
     test_inclusion_proof(
         &uri,
         &client,
@@ -96,7 +96,7 @@ async fn insert_identity_and_proofs() {
         false,
     )
     .await;
-    test_insert_identity(&uri, &client, TEST_LEAFS[1], 1).await;
+    test_insert_identity(&uri, &client, TEST_LEAFS[1]).await;
     test_inclusion_proof(
         &uri,
         &client,
@@ -253,7 +253,6 @@ async fn test_insert_identity(
     uri: &str,
     client: &Client<HttpConnector>,
     identity_commitment: &str,
-    identity_index: usize,
 ) {
     let body = construct_insert_identity_body(identity_commitment);
     let req = Request::builder()

@@ -91,10 +91,7 @@ impl App {
         if let Ok(app) = Self::bootstrap(options.clone()).await {
             Ok(app)
         } else {
-            error!(
-                "Error when rebuilding tree from cache. Retrying with db
-        cache busted."
-            );
+            error!("Error when rebuilding tree from cache. Retrying with db cache confirmation_blocks_delay.");
 
             // Remove cached events from database and try again
             let db = Database::new(options.database.clone()).await?;

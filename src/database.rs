@@ -1,10 +1,7 @@
 use crate::app::Hash;
 use clap::Parser;
 use eyre::{eyre, Context, ErrReport};
-use ruint::{
-    aliases::{U256, U64},
-    uint,
-};
+use ruint::{aliases::U256, uint};
 use sqlx::{
     any::AnyKind,
     migrate::{Migrate, MigrateDatabase, Migrator},
@@ -169,8 +166,8 @@ impl Database {
             .await?;
 
         if let Some(row) = row {
-            let block_number: U64 = row.try_get(0)?;
-            Ok(block_number.into_limbs()[0])
+            let block_number: i64 = row.try_get(0)?;
+            Ok(u64::try_from(block_number).unwrap_or(0))
         } else {
             Ok(0)
         }
@@ -192,9 +189,9 @@ impl Database {
 
     pub async fn save_log(
         &self,
-        block_index: u64,
-        transaction_index: u64,
-        log_index: U256,
+        block_index: i64,
+        transaction_index: i32,
+        log_index: i32,
         log: String,
     ) -> Result<(), Error> {
         self.pool
@@ -203,8 +200,8 @@ impl Database {
                     r#"INSERT INTO logs (block_index, transaction_index, log_index, raw)
                     VALUES ($1, $2, $3, $4);"#,
                 )
-                .bind(U64::from(block_index))
-                .bind(U64::from(transaction_index))
+                .bind(block_index)
+                .bind(transaction_index)
                 .bind(log_index)
                 .bind(log),
             )

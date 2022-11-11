@@ -37,6 +37,12 @@ pub enum Error<ProviderError> {
     EmptyTransactionIndex,
     #[error("empty log index")]
     EmptyLogIndex,
+    #[error("block index out of range: {0}")]
+    BlockIndexOutOfRange(String),
+    #[error("transaction index out of range: {0}")]
+    TransactionIndexOutOfRange(String),
+    #[error("log index out of range: {0}")]
+    LogIndexOutOfRange(String),
 }
 
 impl CachingLogQuery {
@@ -130,13 +136,20 @@ impl CachingLogQuery {
                 .save_log(
                     log.block_number
                         .ok_or(Error::<ProviderError>::EmptyBlockIndex)?
-                        .as_u64(),
+                        .try_into()
+                        .map_err(|e: &str| {
+                            Error::<ProviderError>::BlockIndexOutOfRange(e.into())
+                        })?,
                     log.transaction_index
                         .ok_or(Error::<ProviderError>::EmptyTransactionIndex)?
-                        .as_u64(),
+                        .try_into()
+                        .map_err(|e: &str| {
+                            Error::<ProviderError>::TransactionIndexOutOfRange(e.into())
+                        })?,
                     log.log_index
                         .ok_or(Error::<ProviderError>::EmptyLogIndex)?
-                        .into(),
+                        .try_into()
+                        .map_err(|e: &str| Error::<ProviderError>::LogIndexOutOfRange(e.into()))?,
                     raw_log,
                 )
                 .await

@@ -1,7 +1,7 @@
 use crate::{
     contracts::{self, Contracts},
     database::{self, Database},
-    ethereum::{self, Ethereum},
+    ethereum::{self, Ethereum, EventError},
     server::Error as ServerError,
     timed_rw_lock::TimedRwLock,
 };
@@ -9,7 +9,7 @@ use clap::Parser;
 use cli_batteries::await_shutdown;
 use core::cmp::max;
 use ethers::types::U256;
-use eyre::{eyre, Result as EyreResult};
+use eyre::Result as EyreResult;
 use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
 use semaphore::{
     merkle_tree::Hasher,
@@ -24,6 +24,7 @@ use std::{
     },
     time::Duration,
 };
+use thiserror::Error;
 use tokio::{select, try_join};
 use tracing::{debug, error, info, instrument, warn};
 
@@ -88,23 +89,6 @@ impl App {
     #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> EyreResult<Self> {
-        if let Ok(app) = Self::bootstrap(options.clone()).await {
-            Ok(app)
-        } else {
-            error!(
-                "Error when rebuilding tree from cache. Retrying with db
-        cache busted."
-            );
-
-            // Remove cached events from database and try again
-            let db = Database::new(options.database.clone()).await?;
-            db.wipe_cache().await?;
-
-            Self::bootstrap(options).await
-        }
-    }
-
-    async fn bootstrap(options: Options) -> EyreResult<Self> {
         // Connect to Ethereum and Database
         let (database, (ethereum, contracts)) = {
             let db = Database::new(options.database);
@@ -131,10 +115,29 @@ impl App {
         };
 
         // Sync with chain on start up
-        app.check_leaves().await?;
-        app.process_events().await?;
-        // TODO: Store file after processing events.
-        app.check_health().await?;
+        app.check_leaves().await;
+
+        match app.process_events().await {
+            Err(Error::RootMismatch) => {
+                error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
+
+                // Create a new empty MerkleTree and wipe out cache db
+                let merkle_tree =
+                    PoseidonTree::new(app.contracts.tree_depth() + 1, app.contracts.initial_leaf());
+                app.merkle_tree =
+                    TimedRwLock::new(Duration::from_secs(options.lock_timeout), merkle_tree);
+                app.next_leaf = AtomicUsize::new(0);
+                app.database.wipe_cache().await?;
+
+                // Retry
+                app.process_events().await?;
+            }
+            Err(e) => return Err(e.into()),
+            Ok(_) => {}
+        }
+
+        app.check_health().await;
+
         Ok(app)
     }
 
@@ -268,13 +271,11 @@ impl App {
 
     /// Stores the Merkle tree to the storage file.
     #[instrument(level = "debug", skip_all)]
-    async fn check_leaves(&self) -> EyreResult<()> {
-        let merkle_tree = self.merkle_tree.read().await.map_err(|e| {
+    async fn check_leaves(&self) {
+        let merkle_tree = self.merkle_tree.read().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in check_leaves.");
             panic!("Sequencer potentially deadlocked, terminating.");
-            #[allow(unreachable_code)]
-            e
-        })?;
+        });
         let next_leaf = self.next_leaf.load(Ordering::Acquire);
         let initial_leaf = self.contracts.initial_leaf();
         for (index, &leaf) in merkle_tree.leaves().iter().enumerate() {
@@ -303,15 +304,14 @@ impl App {
                 }
             }
         }
-        Ok(())
     }
 
     #[instrument(level = "info", skip_all)]
-    async fn process_events(&mut self) -> EyreResult<()> {
-        let mut merkle_tree = self.merkle_tree.write().await.map_err(|e| {
+    async fn process_events(&mut self) -> Result<(), Error> {
+        let mut merkle_tree = self.merkle_tree.write().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in process_events.");
-            e
-        })?;
+            panic!("Sequencer potentially deadlocked, terminating.");
+        });
 
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
@@ -326,18 +326,18 @@ impl App {
         pin_mut!(shutdown);
         loop {
             let (index, leaf, root) = select! {
-                v = events.try_next() => match v? {
+                v = events.try_next() => match v.map_err(Error::EventError)? {
                     Some(a) => a,
                     None => break,
                 },
-                _ = &mut shutdown => return Err(eyre!("Interrupted")),
+                _ = &mut shutdown => return Err(Error::Interrupted),
             };
             debug!(?index, ?leaf, ?root, "Received event");
 
             // Check leaf index is valid
             if index >= merkle_tree.num_leaves() {
                 error!(?index, ?leaf, num_leaves = ?merkle_tree.num_leaves(), "Received event out of range");
-                return Err(eyre!("Received event out of range"));
+                return Err(Error::EventOutOfRange);
             }
 
             // Check if leaf value is valid
@@ -394,20 +394,18 @@ impl App {
             // Check root
             if root != merkle_tree.root() {
                 error!(computed_root = ?merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
-                return Err(eyre!("Root mismatch between event and computed tree."));
+                return Err(Error::RootMismatch);
             }
         }
         Ok(())
     }
 
     #[instrument(level = "debug", skip_all)]
-    async fn check_health(&self) -> EyreResult<()> {
-        let merkle_tree = self.merkle_tree.read().await.map_err(|e| {
+    async fn check_health(&self) {
+        let merkle_tree = self.merkle_tree.read().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in check_health.");
             panic!("Sequencer potentially deadlocked, terminating.");
-            #[allow(unreachable_code)]
-            e
-        })?;
+        });
         let initial_leaf = self.contracts.initial_leaf();
         // TODO: A re-org undoing events would cause this to fail.
         if self.next_leaf.load(Ordering::Acquire) > 0 {
@@ -478,6 +476,17 @@ impl App {
                 );
             }
         }
-        Ok(())
     }
+}
+
+#[derive(Debug, Error)]
+enum Error {
+    #[error("Interrupted")]
+    Interrupted,
+    #[error("Root mismatch between event and computed tree.")]
+    RootMismatch,
+    #[error("Received event out of range")]
+    EventOutOfRange,
+    #[error("Event error: {0}")]
+    EventError(#[source] EventError),
 }

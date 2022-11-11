@@ -58,10 +58,7 @@ impl Database {
 
         // Log DB version to test connection.
         let sql = match pool.any_kind() {
-            #[cfg(feature = "sqlite")]
             AnyKind::Sqlite => "sqlite_version() || ' ' || sqlite_source_id()",
-
-            #[cfg(feature = "postgres")]
             AnyKind::Postgres => "version()",
 
             // Depending on compilation flags there may be more patterns.

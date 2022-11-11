@@ -269,7 +269,6 @@ impl App {
         Ok(InclusionProofResponse { root, proof })
     }
 
-    /// Stores the Merkle tree to the storage file.
     #[instrument(level = "debug", skip_all)]
     async fn check_leaves(&self) {
         let merkle_tree = self.merkle_tree.read().await.unwrap_or_else(|e| {

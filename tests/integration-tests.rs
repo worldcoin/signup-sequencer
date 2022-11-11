@@ -24,7 +24,6 @@ use std::{
     fs::File,
     io::BufReader,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    sync::Arc,
     time::Duration,
 };
 use tokio::{spawn, task::JoinHandle};
@@ -69,7 +68,6 @@ async fn insert_identity_and_proofs() {
     let uri = "http://".to_owned() + &local_addr.to_string();
     let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
     let client = Client::new();
-
     test_inclusion_proof(
         &uri,
         &client,
@@ -199,35 +197,47 @@ async fn test_inclusion_proof(
     leaf: &Hash,
     expect_failure: bool,
 ) {
-    let body = construct_inclusion_proof_body(TEST_LEAFS[leaf_index]);
-    info!(?uri, "Contacting");
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri.to_owned() + "/inclusionProof")
-        .header("Content-Type", "application/json")
-        .body(body)
-        .expect("Failed to create inclusion proof hyper::Body");
+    let mut success_response = None;
+    for i in 1..21 {
+        let body = construct_inclusion_proof_body(TEST_LEAFS[leaf_index]);
+        info!(?uri, "Contacting");
+        let req = Request::builder()
+            .method("POST")
+            .uri(uri.to_owned() + "/inclusionProof")
+            .header("Content-Type", "application/json")
+            .body(body)
+            .expect("Failed to create inclusion proof hyper::Body");
+        let mut response = client
+            .request(req)
+            .await
+            .expect("Failed to execute request.");
+        if expect_failure {
+            assert!(!response.status().is_success());
+            return;
+        } else {
+            assert!(response.status().is_success());
+        }
 
-    let mut response = client
-        .request(req)
-        .await
-        .expect("Failed to execute request.");
-    if expect_failure {
-        assert!(!response.status().is_success());
-        return;
-    } else {
-        assert!(response.status().is_success());
+        let bytes = hyper::body::to_bytes(response.body_mut())
+            .await
+            .expect("Failed to convert response body to bytes");
+        let result = String::from_utf8(bytes.into_iter().collect())
+            .expect("Could not parse response bytes to utf-8");
+
+        if result == "\"pending\"" {
+            info!("Got pending, waiting 1 second, iteration {}", i);
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        } else {
+            success_response = Some(result);
+            break;
+        }
     }
 
-    let bytes = hyper::body::to_bytes(response.body_mut())
-        .await
-        .expect("Failed to convert response body to bytes");
-    let result = String::from_utf8(bytes.into_iter().collect())
-        .expect("Could not parse response bytes to utf-8");
+    let result = success_response.expect("Failed to get success response");
 
     ref_tree.set(leaf_index, *leaf);
     let proof = ref_tree.proof(leaf_index).expect("Ref tree malfunctioning");
-    let inclusion_proof = InclusionProofResponse {
+    let inclusion_proof = InclusionProofResponse::Proof {
         root: ref_tree.root(),
         proof,
     };
@@ -266,10 +276,7 @@ async fn test_insert_identity(
         panic!("Failed to insert identity: {}", result);
     }
 
-    let expected = InsertIdentityResponse { identity_index };
-    let expected = serde_json::to_string_pretty(&expected).expect("Index serialization failed");
-
-    assert_eq!(result, expected);
+    assert_eq!(result, "null");
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -301,7 +308,7 @@ fn construct_insert_identity_body(identity_commitment: &str) -> Body {
 
 #[instrument(skip_all)]
 async fn spawn_app(options: Options) -> EyreResult<(JoinHandle<()>, SocketAddr)> {
-    let app = Arc::new(App::new(options.app).await.expect("Failed to create App"));
+    let app = App::new(options.app).await.expect("Failed to create App");
 
     let ip: IpAddr = match options.server.server.host() {
         Some(Host::Ipv4(ip)) => ip.into(),

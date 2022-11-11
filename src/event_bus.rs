@@ -16,14 +16,14 @@ impl EventBus {
         Self { sender }
     }
 
-    pub async fn publish(&self, event: Event) -> Result<(), SendError<Event>> {
+    pub fn publish(&self, event: Event) -> Result<(), SendError<Event>> {
         self.sender
             .send(vec![event])
             .map_err(|error| SendError(error.0[0].clone()))?;
         Ok(())
     }
 
-    pub async fn publish_batch(&self, events: Vec<Event>) -> Result<(), SendError<Vec<Event>>> {
+    pub fn publish_batch(&self, events: Vec<Event>) -> Result<(), SendError<Vec<Event>>> {
         self.sender.send(events)?;
         Ok(())
     }

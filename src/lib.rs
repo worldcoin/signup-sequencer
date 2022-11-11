@@ -7,7 +7,7 @@ mod database;
 mod ethereum;
 mod event_bus;
 pub mod server;
-mod timed_rw_lock;
+mod timed_read_progress_lock;
 mod utils;
 
 use crate::{app::App, utils::spawn_or_abort};

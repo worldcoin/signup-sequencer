@@ -14,9 +14,18 @@ use tokio::{
 
 // FEATURE: Add tracing spans to wait and the guard.
 
-/// A read-write lock with timeout.
+/// A 3-stage lock, with the following stages:
+/// 1. Read – can be held by multiple users at the same time.
+/// 2. Progress – can be held by a single user, but does not disallow reads.
+/// 3. Write – can be held by a single user, that must have acquired the
+/// progress lock before, precludes any read locks.
 ///
-/// Wraps Tokio's [`RwLock`].
+/// Can be used to specify a critical modification section, where certain
+/// computations should be exclusive, even if the structure can still be read
+/// (possibly getting stale results), narrowing the read-excluding section.
+///
+/// This lock also has a timeout on all acquisition operations, which can be
+/// used to prevent deadlocks.
 #[derive(Debug)]
 pub struct TimedReadProgressLock<T: Send + Sync> {
     duration:       Duration,
@@ -24,7 +33,7 @@ pub struct TimedReadProgressLock<T: Send + Sync> {
     progress_mutex: Mutex<()>,
 }
 
-/// Error for [`TimedRwLock`].
+/// Error for [`TimedReadProgressLock`].
 #[derive(Debug, Error)]
 #[error("Timeout while waiting for lock. Duration: {duration:?}, Operation: {operation}")]
 pub struct Error {
@@ -136,7 +145,7 @@ impl<'a, T> Deref for ProgressGuard<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &*self.resource_read_guard
+        &self.resource_read_guard
     }
 }
 
@@ -163,12 +172,12 @@ impl<'a, T> Deref for WriteGuard<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &*self.write_guard
+        &self.write_guard
     }
 }
 
 impl<'a, T> DerefMut for WriteGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.write_guard
+        &mut self.write_guard
     }
 }

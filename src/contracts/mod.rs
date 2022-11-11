@@ -177,7 +177,7 @@ impl Contracts {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn insert_identity(&self, commitment: &Field) -> EyreResult<TransactionReceipt> {
+    pub async fn insert_identity(&self, commitment: Field) -> EyreResult<TransactionReceipt> {
         info!(%commitment, "Inserting identity in contract");
 
         // Send create tx

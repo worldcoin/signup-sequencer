@@ -2,7 +2,7 @@ use crate::{
     contracts::{self, Contracts},
     ethereum::{self, Ethereum},
     server::Error as ServerError,
-    timed_rw_lock::TimedReadProgressLock,
+    timed_read_progress_lock::TimedReadProgressLock,
 };
 use clap::Parser;
 use cli_batteries::await_shutdown;
@@ -184,7 +184,6 @@ impl App {
                 group_id,
                 commitment,
             })
-            .await
             .expect(
                 "No one is listening on the event bus, committer is most likely dead, terminating.",
             );
@@ -483,10 +482,10 @@ impl App {
             .collect();
         self.event_bus
             .publish_batch(pending_events)
-            .await
             .expect("No one listening on the event bus, committer most likely dead.");
     }
 
+    #[instrument(level = "info", skip_all)]
     async fn commit_identity(&self, group_id: usize, commitment: Hash) -> Result<(), ServerError> {
         // Get a progress lock on the tree for the duration of this operation.
         let tree = self.merkle_tree.progress().await.map_err(|e| {
@@ -502,7 +501,7 @@ impl App {
         // Send Semaphore transaction
         let receipt = self
             .contracts
-            .insert_identity(&commitment)
+            .insert_identity(commitment)
             .await
             .map_err(|e| {
                 error!(?e, "Failed to insert identity to contract.");
@@ -593,12 +592,12 @@ impl App {
                         info!("Identity committer job finished.");
                         transaction_in_progress = false;
                     },
-                    Ok(msg) = listener.recv() => {
-                        msg.into_iter().for_each(|msg| {
+                    Ok(msgs) = listener.recv() => {
+                        for msg in msgs {
                             let Event::PendingIdentityInserted { group_id, commitment } = msg;
                             info!("Identity committer received event group_id: {}, identity: {}.", group_id, commitment);
                             work_queue.push_back((group_id, commitment));
-                        });
+                        }
                     },
                     else => {}
                 }

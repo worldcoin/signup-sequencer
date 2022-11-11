@@ -498,6 +498,8 @@ impl App {
         let tree = self.merkle_tree.progress().await.map_err(|e| {
             error!(?e, "Failed to obtain tree lock in commit_identity.");
             panic!("Sequencer potentially deadlocked, terminating.");
+            #[allow(unreachable_code)]
+            e
         })?;
 
         // Fetch next leaf index

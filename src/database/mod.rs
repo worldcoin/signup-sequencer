@@ -1,4 +1,3 @@
-#![cfg(feature = "unstable_db")]
 use crate::app::Hash;
 use clap::Parser;
 use eyre::{eyre, Context, Result};

@@ -27,9 +27,10 @@ use std::{
 use tokio::{select, try_join};
 use tracing::{debug, error, info, instrument, warn};
 
-#[cfg(feature = "unstable_db")]
-use crate::database::{self, Database};
-use crate::event_bus::{Event, EventBus};
+use crate::{
+    database::{self, Database},
+    event_bus::{Event, EventBus},
+};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
@@ -62,7 +63,6 @@ pub struct Options {
     #[clap(flatten)]
     pub contracts: contracts::Options,
 
-    #[cfg(feature = "unstable_db")]
     #[clap(flatten)]
     pub database: database::Options,
 
@@ -76,14 +76,7 @@ pub struct Options {
 }
 
 pub struct App {
-    #[cfg(feature = "unstable_db")]
-    #[allow(dead_code)]
-    database: Database,
-
-    #[cfg(not(feature = "unstable_db"))]
-    #[allow(dead_code)]
-    database: (),
-
+    database:    Database,
     #[allow(dead_code)]
     ethereum:    Ethereum,
     contracts:   Contracts,
@@ -103,11 +96,7 @@ impl App {
     pub async fn new(options: Options) -> EyreResult<Arc<Self>> {
         // Connect to Ethereum and Database
         let (database, (ethereum, contracts)) = {
-            #[cfg(feature = "unstable_db")]
             let db = Database::new(options.database);
-
-            #[cfg(not(feature = "unstable_db"))]
-            let db = std::future::ready(EyreResult::Ok(()));
 
             let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
                 let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;

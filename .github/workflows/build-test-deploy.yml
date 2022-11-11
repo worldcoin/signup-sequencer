@@ -181,7 +181,7 @@ jobs:
       matrix:
         platform: [amd64, arm64]
     env:
-      FEATURES: mimalloc
+      FEATURES: mimalloc,postgres
     steps:
       - name: Checkout
         uses: actions/checkout@v3

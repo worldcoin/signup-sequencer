@@ -61,7 +61,6 @@ async fn insert_identity_and_proofs() {
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.contracts.semaphore_address = semaphore_address;
     options.app.ethereum.signing_key = private_key;
-    options.app.ethereum.confirmation_blocks_delay = 0;
 
     let (app, local_addr) = spawn_app(options.clone())
         .await

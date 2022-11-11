@@ -67,7 +67,6 @@ impl CachingLogQuery {
         self
     }
 
-    #[allow(clippy::missing_const_for_fn)]
     pub fn with_database(mut self, database: Arc<Database>) -> Self {
         self.database = Some(database);
         self
@@ -94,8 +93,8 @@ impl CachingLogQuery {
                 if self.is_confirmed(&log, last_block) {
                     let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;
                     self.cache_log(raw_log, &log).await?;
-                    yield log;
                 }
+                yield log;
             }
         }
     }

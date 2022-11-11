@@ -563,8 +563,8 @@ impl App {
 
     #[instrument(level = "debug", skip_all)]
     fn spawn_identity_committer(self: Arc<Self>) {
+        let mut listener = self.event_bus.subscribe();
         tokio::spawn(async move {
-            let mut listener = self.event_bus.subscribe();
             let mut transaction_in_progress = false;
             let (tx, mut rx) = tokio::sync::mpsc::channel(1);
             let mut work_queue: VecDeque<(usize, Hash)> = VecDeque::new();

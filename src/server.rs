@@ -1,4 +1,7 @@
-use crate::app::{App, Hash};
+use crate::{
+    app::{App, Hash},
+    database,
+};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use clap::Parser;
 use cli_batteries::{await_shutdown, trace_from_headers};
@@ -22,7 +25,6 @@ use thiserror::Error;
 use tokio::time::timeout;
 use tracing::{error, info, instrument, trace};
 use url::{Host, Url};
-use crate::database;
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 #[group(skip)]

@@ -4690,6 +4690,7 @@ dependencies = [
 name = "signup-sequencer"
 version = "0.1.0"
 dependencies = [
+ "async-stream",
  "async-trait",
  "chrono",
  "clap 4.0.22",
@@ -4698,6 +4699,7 @@ dependencies = [
  "ethers",
  "eyre",
  "futures",
+ "futures-util",
  "hex",
  "hex-literal",
  "hyper",

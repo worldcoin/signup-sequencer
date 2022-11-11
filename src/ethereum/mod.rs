@@ -9,6 +9,10 @@ use self::{
     estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees,
     rpc_logger::RpcLogger, transport::Transport,
 };
+use crate::{
+    contracts::caching_log_query::{CachingLogQuery, Error as CachingLogQueryError},
+    database::Database,
+};
 use chrono::{Duration as ChronoDuration, Utc};
 use clap::Parser;
 use ethers::{
@@ -22,7 +26,7 @@ use ethers::{
         },
         SignerMiddleware,
     },
-    providers::{LogQueryError, Middleware, Provider, ProviderError},
+    providers::{Middleware, Provider, ProviderError},
     signers::{LocalWallet, Signer, Wallet},
     types::{
         transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,
@@ -105,6 +109,10 @@ pub struct Options {
     #[clap(long, env, default_value = "1000")]
     pub max_log_blocks: usize,
 
+    /// Minimum number of blocks before events are considered confirmed.
+    #[clap(long, env, default_value = "10")]
+    pub confirmation_blocks_delay: usize,
+
     /// Minimum `max_fee_per_gas` to use in GWei. The default is for Polygon
     /// mainnet.
     #[clap(long, env, default_value = "1250.0")]
@@ -164,7 +172,7 @@ pub enum TxError {
 #[derive(Debug, Error)]
 pub enum EventError {
     #[error("Error fetching log event: {0}")]
-    Fetching(#[from] LogQueryError<ProviderError>),
+    Fetching(#[from] CachingLogQueryError<ProviderError>),
 
     #[error("Error parsing log event: {0}")]
     Parsing(#[from] AbiError),
@@ -172,12 +180,13 @@ pub enum EventError {
 
 #[derive(Clone, Debug)]
 pub struct Ethereum {
-    provider:       Arc<ProviderStack>,
-    address:        H160,
-    legacy:         bool,
-    max_log_blocks: usize,
-    send_timeout:   Duration,
-    mine_timeout:   Duration,
+    provider:                  Arc<ProviderStack>,
+    address:                   H160,
+    legacy:                    bool,
+    max_log_blocks:            usize,
+    confirmation_blocks_delay: usize,
+    send_timeout:              Duration,
+    mine_timeout:              Duration,
 }
 
 impl Ethereum {
@@ -350,6 +359,7 @@ impl Ethereum {
             address,
             legacy: !eip1559,
             max_log_blocks: options.max_log_blocks,
+            confirmation_blocks_delay: options.confirmation_blocks_delay,
             send_timeout: Duration::from_secs(options.send_timeout),
             mine_timeout: Duration::from_secs(options.mine_timeout),
         })
@@ -500,18 +510,23 @@ impl Ethereum {
     pub fn fetch_events_raw(
         &self,
         filter: &Filter,
+        database: Arc<Database>,
     ) -> impl Stream<Item = Result<Log, EventError>> + '_ {
-        self.provider
-            .get_logs_paginated(filter, self.max_log_blocks as u64)
+        CachingLogQuery::new(self.provider.clone(), filter)
+            .with_page_size(self.max_log_blocks as u64)
+            .with_database(database)
+            .with_blocks_delay(self.confirmation_blocks_delay as u64)
+            .into_stream()
             .map_err(Into::into)
     }
 
     pub fn fetch_events<T: EthEvent>(
         &self,
         filter: &Filter,
+        database: Arc<Database>,
     ) -> impl Stream<Item = Result<T, EventError>> + '_ {
         // TODO: Add `Log` struct for blocknumber and other metadata.
-        self.fetch_events_raw(filter).map(|res| {
+        self.fetch_events_raw(filter, database).map(|res| {
             res.and_then(|log| {
                 T::decode_log(&RawLog {
                     topics: log.topics,

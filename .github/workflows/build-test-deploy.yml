@@ -4,8 +4,8 @@ on:
   push
 
 env:
-  RUST_VERSION: "1.64"
-  NIGHTLY_VERSION: nightly-2022-08-10
+  RUST_VERSION: "1.65"
+  NIGHTLY_VERSION: nightly-2022-11-04
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
@@ -181,7 +181,7 @@ jobs:
       matrix:
         platform: [amd64, arm64]
     env:
-      FEATURES: mimalloc,postgres
+      FEATURES: mimalloc
     steps:
       - name: Checkout
         uses: actions/checkout@v3

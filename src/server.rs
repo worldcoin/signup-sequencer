@@ -22,6 +22,7 @@ use thiserror::Error;
 use tokio::time::timeout;
 use tracing::{error, info, instrument, trace};
 use url::{Host, Url};
+use crate::database;
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 #[group(skip)]
@@ -88,6 +89,8 @@ pub enum Error {
     RootMismatch,
     #[error("invalid JSON request: {0}")]
     InvalidSerialization(#[from] serde_json::Error),
+    #[error(transparent)]
+    Database(#[from] database::Error),
     #[error(transparent)]
     Hyper(#[from] hyper::Error),
     #[error(transparent)]

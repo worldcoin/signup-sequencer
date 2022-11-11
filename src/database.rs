@@ -1,7 +1,6 @@
-#![cfg(feature = "unstable_db")]
 use crate::app::Hash;
 use clap::Parser;
-use eyre::{eyre, Context, Result};
+use eyre::{eyre, Context, ErrReport};
 use ruint::{aliases::U256, uint};
 use sqlx::{
     any::AnyKind,
@@ -9,6 +8,7 @@ use sqlx::{
     pool::PoolOptions,
     Any, Executor, Pool, Row,
 };
+use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;
 
@@ -39,7 +39,7 @@ pub struct Database {
 
 impl Database {
     #[instrument(skip_all)]
-    pub async fn new(options: Options) -> Result<Self> {
+    pub async fn new(options: Options) -> Result<Self, ErrReport> {
         info!(url = %&options.database, "Connecting to database");
 
         // Create database if requested and does not exist
@@ -58,10 +58,7 @@ impl Database {
 
         // Log DB version to test connection.
         let sql = match pool.any_kind() {
-            #[cfg(feature = "sqlite")]
             AnyKind::Sqlite => "sqlite_version() || ' ' || sqlite_source_id()",
-
-            #[cfg(feature = "postgres")]
             AnyKind::Postgres => "version()",
 
             // Depending on compilation flags there may be more patterns.
@@ -129,7 +126,7 @@ impl Database {
     }
 
     #[allow(unused)]
-    pub async fn read(&self, _index: usize) -> Result<Hash> {
+    pub async fn read(&self, _index: usize) -> Result<Hash, Error> {
         self.pool
             .execute(sqlx::query(
                 r#"CREATE TABLE IF NOT EXISTS hashes (
@@ -156,4 +153,72 @@ impl Database {
 
         Ok(Hash::default())
     }
+
+    pub async fn get_block_number(&self) -> Result<u64, Error> {
+        let row = self
+            .pool
+            .fetch_optional(sqlx::query(
+                r#"SELECT block_index FROM logs ORDER BY block_index DESC LIMIT 1;"#,
+            ))
+            .await?;
+
+        if let Some(row) = row {
+            let block_number: i64 = row.try_get(0)?;
+            Ok(u64::try_from(block_number).unwrap_or(0))
+        } else {
+            Ok(0)
+        }
+    }
+
+    pub async fn load_logs(&self) -> Result<Vec<String>, Error> {
+        let rows = self
+            .pool
+            .fetch_all(sqlx::query(
+                r#"SELECT raw FROM logs ORDER BY block_index, transaction_index, log_index;"#,
+            ))
+            .await?
+            .iter()
+            .map(|row| row.get(0))
+            .collect();
+
+        Ok(rows)
+    }
+
+    pub async fn save_log(
+        &self,
+        block_index: i64,
+        transaction_index: i32,
+        log_index: i32,
+        log: String,
+    ) -> Result<(), Error> {
+        self.pool
+            .execute(
+                sqlx::query(
+                    r#"INSERT INTO logs (block_index, transaction_index, log_index, raw)
+                    VALUES ($1, $2, $3, $4);"#,
+                )
+                .bind(block_index)
+                .bind(transaction_index)
+                .bind(log_index)
+                .bind(log),
+            )
+            .await
+            .map_err(Error::InternalError)?;
+
+        Ok(())
+    }
+
+    pub async fn wipe_cache(&self) -> Result<(), Error> {
+        self.pool
+            .execute(sqlx::query("DELETE FROM logs;"))
+            .await
+            .map_err(Error::InternalError)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("database error")]
+    InternalError(#[from] sqlx::Error),
 }

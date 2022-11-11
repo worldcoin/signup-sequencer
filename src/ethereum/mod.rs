@@ -109,9 +109,9 @@ pub struct Options {
     #[clap(long, env, default_value = "1000")]
     pub max_log_blocks: usize,
 
-    /// Minimum number of blocks before events are commited to db cache.
+    /// Minimum number of blocks before events are considered confirmed.
     #[clap(long, env, default_value = "10")]
-    pub cache_blocks_delay: usize,
+    pub confirmation_blocks_delay: usize,
 
     /// Minimum `max_fee_per_gas` to use in GWei. The default is for Polygon
     /// mainnet.
@@ -180,13 +180,13 @@ pub enum EventError {
 
 #[derive(Clone, Debug)]
 pub struct Ethereum {
-    provider:           Arc<ProviderStack>,
-    address:            H160,
-    legacy:             bool,
-    max_log_blocks:     usize,
-    cache_blocks_delay: usize,
-    send_timeout:       Duration,
-    mine_timeout:       Duration,
+    provider:                  Arc<ProviderStack>,
+    address:                   H160,
+    legacy:                    bool,
+    max_log_blocks:            usize,
+    confirmation_blocks_delay: usize,
+    send_timeout:              Duration,
+    mine_timeout:              Duration,
 }
 
 impl Ethereum {
@@ -359,7 +359,7 @@ impl Ethereum {
             address,
             legacy: !eip1559,
             max_log_blocks: options.max_log_blocks,
-            cache_blocks_delay: options.cache_blocks_delay,
+            confirmation_blocks_delay: options.confirmation_blocks_delay,
             send_timeout: Duration::from_secs(options.send_timeout),
             mine_timeout: Duration::from_secs(options.mine_timeout),
         })
@@ -509,7 +509,7 @@ impl Ethereum {
         CachingLogQuery::new(self.provider.clone(), filter)
             .with_page_size(self.max_log_blocks as u64)
             .with_database(database)
-            .with_blocks_delay(self.cache_blocks_delay as u64)
+            .with_blocks_delay(self.confirmation_blocks_delay as u64)
             .into_stream()
             .map_err(Into::into)
     }

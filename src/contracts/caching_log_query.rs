@@ -12,11 +12,11 @@ use std::{cmp::max, sync::Arc};
 use thiserror::Error;
 
 pub struct CachingLogQuery {
-    provider:           Arc<ProviderStack>,
-    filter:             Filter,
-    page_size:          u64,
-    cache_blocks_delay: u64,
-    database:           Option<Arc<Database>>,
+    provider:                  Arc<ProviderStack>,
+    filter:                    Filter,
+    page_size:                 u64,
+    confirmation_blocks_delay: u64,
+    database:                  Option<Arc<Database>>,
 }
 
 #[derive(Error, Debug)]
@@ -45,7 +45,7 @@ impl CachingLogQuery {
             provider,
             filter: filter.clone(),
             page_size: 10000,
-            cache_blocks_delay: 0,
+            confirmation_blocks_delay: 0,
             database: None,
         }
     }
@@ -56,8 +56,8 @@ impl CachingLogQuery {
         self
     }
 
-    pub const fn with_blocks_delay(mut self, cache_blocks_delay: u64) -> Self {
-        self.cache_blocks_delay = cache_blocks_delay;
+    pub const fn with_blocks_delay(mut self, confirmation_blocks_delay: u64) -> Self {
+        self.confirmation_blocks_delay = confirmation_blocks_delay;
         self
     }
 
@@ -120,7 +120,7 @@ impl CachingLogQuery {
 
     fn is_confirmed(&self, log: &Log, last_block: LastBlock) -> bool {
         log.block_number.map_or(false, |block| {
-            block + self.cache_blocks_delay <= last_block.eth
+            block + self.confirmation_blocks_delay <= last_block.eth
         })
     }
 

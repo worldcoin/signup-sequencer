@@ -3,7 +3,7 @@ use crate::{
     database::{self, Database},
     ethereum::{self, Ethereum, EventError},
     server::Error as ServerError,
-    timed_rw_lock::TimedRwLock,
+    timed_rw_lock::TimedRwLock, utils::spawn_or_abort,
 };
 use clap::Parser;
 use cli_batteries::await_shutdown;
@@ -88,7 +88,7 @@ impl App {
     /// `options.storage_file` is not accessible.
     #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
-    pub async fn new(options: Options) -> EyreResult<Self> {
+    pub async fn new(options: Options) -> EyreResult<Arc<Self>> {
         // Connect to Ethereum and Database
         let (database, (ethereum, contracts)) = {
             let db = Database::new(options.database);
@@ -105,32 +105,45 @@ impl App {
         // Poseidon tree depth is one more than the contract's tree depth
         let merkle_tree = PoseidonTree::new(contracts.tree_depth() + 1, contracts.initial_leaf());
 
-        let mut app = Self {
+        let app = Arc::new(Self {
             database: Arc::new(database),
             ethereum,
             contracts,
             next_leaf: AtomicUsize::new(0),
             last_block: options.starting_block,
             merkle_tree: TimedRwLock::new(Duration::from_secs(options.lock_timeout), merkle_tree),
-        };
+        });
 
         // Sync with chain on start up
         app.check_leaves().await;
 
-        match app.process_events().await {
+        // TODO(gswirski)
+        // 0. Load current max ETH block
+        // 1. Load database events
+        // 2. Set up ETH loop to continue reading events
+        // 3. If root validator fails, restart with db wiped out (this should happen max once, right?)
+        // 4. Once ETH loop catches up to max ETH block, mark app as ready to serve requests
+        // 5. Continue reading ETH loop and appending to db cache
+
+        // TODO()
+        spawn_or_abort(Self::subscribe_events());
+
+        match app.clone().process_events().await {
             Err(Error::RootMismatch) => {
                 error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
 
                 // Create a new empty MerkleTree and wipe out cache db
                 let merkle_tree =
                     PoseidonTree::new(app.contracts.tree_depth() + 1, app.contracts.initial_leaf());
-                app.merkle_tree =
-                    TimedRwLock::new(Duration::from_secs(options.lock_timeout), merkle_tree);
-                app.next_leaf = AtomicUsize::new(0);
+                {
+                    let mut current_tree = app.merkle_tree.write().await?;
+                    *current_tree = merkle_tree;
+                }
+                app.next_leaf.store(0, Ordering::Relaxed);
                 app.database.wipe_cache().await?;
 
                 // Retry
-                app.process_events().await?;
+                app.clone().process_events().await?;
             }
             Err(e) => return Err(e.into()),
             Ok(_) => {}
@@ -139,6 +152,10 @@ impl App {
         app.check_health().await;
 
         Ok(app)
+    }
+
+    async fn subscribe_events() -> EyreResult<()> {
+        Ok(())
     }
 
     /// Inserts a new commitment into the Merkle tree. This will also update the
@@ -306,7 +323,7 @@ impl App {
     }
 
     #[instrument(level = "info", skip_all)]
-    async fn process_events(&mut self) -> Result<(), Error> {
+    async fn process_events(self: Arc<Self>) -> Result<(), Error> {
         let mut merkle_tree = self.merkle_tree.write().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in process_events.");
             panic!("Sequencer potentially deadlocked, terminating.");

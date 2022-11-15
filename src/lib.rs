@@ -13,7 +13,6 @@ use crate::{app::App, utils::spawn_or_abort};
 use clap::Parser;
 use cli_batteries::await_shutdown;
 use eyre::Result as EyreResult;
-use std::sync::Arc;
 use tracing::info;
 
 #[derive(Clone, Debug, PartialEq, Parser)]
@@ -32,7 +31,7 @@ pub struct Options {
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 pub async fn main(options: Options) -> EyreResult<()> {
     // Create App struct
-    let app = Arc::new(App::new(options.app).await?);
+    let app = App::new(options.app).await?;
 
     // Start server
     let server = spawn_or_abort({

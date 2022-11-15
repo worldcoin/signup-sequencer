@@ -301,7 +301,7 @@ fn construct_insert_identity_body(identity_commitment: &str) -> Body {
 
 #[instrument(skip_all)]
 async fn spawn_app(options: Options) -> EyreResult<(JoinHandle<()>, SocketAddr)> {
-    let app = Arc::new(App::new(options.app).await.expect("Failed to create App"));
+    let app = App::new(options.app).await.expect("Failed to create App");
 
     let ip: IpAddr = match options.server.server.host() {
         Some(Host::Ipv4(ip)) => ip.into(),

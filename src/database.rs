@@ -1,11 +1,7 @@
 use crate::app::Hash;
 use clap::Parser;
 use eyre::{eyre, Context, ErrReport};
-use ruint::{
-    aliases::{U256, U64},
-    uint,
-};
-use serde_json::value::RawValue;
+use ruint::{aliases::U256, uint};
 use sqlx::{
     any::AnyKind,
     migrate::{Migrate, MigrateDatabase, Migrator},
@@ -62,10 +58,7 @@ impl Database {
 
         // Log DB version to test connection.
         let sql = match pool.any_kind() {
-            #[cfg(feature = "sqlite")]
             AnyKind::Sqlite => "sqlite_version() || ' ' || sqlite_source_id()",
-
-            #[cfg(feature = "postgres")]
             AnyKind::Postgres => "version()",
 
             // Depending on compilation flags there may be more patterns.
@@ -133,7 +126,7 @@ impl Database {
     }
 
     #[allow(unused)]
-    pub async fn read(&self, _index: usize) -> Result<Hash, DatabaseError> {
+    pub async fn read(&self, _index: usize) -> Result<Hash, Error> {
         self.pool
             .execute(sqlx::query(
                 r#"CREATE TABLE IF NOT EXISTS hashes (
@@ -161,7 +154,7 @@ impl Database {
         Ok(Hash::default())
     }
 
-    pub async fn get_block_number(&self) -> Result<u64, DatabaseError> {
+    pub async fn get_block_number(&self) -> Result<u64, Error> {
         let row = self
             .pool
             .fetch_optional(sqlx::query(
@@ -170,14 +163,14 @@ impl Database {
             .await?;
 
         if let Some(row) = row {
-            let block_number: U64 = row.try_get(0)?;
-            Ok(block_number.into_limbs()[0])
+            let block_number: i64 = row.try_get(0)?;
+            Ok(u64::try_from(block_number).unwrap_or(0))
         } else {
             Ok(0)
         }
     }
 
-    pub async fn load_logs(&self) -> Result<Vec<Box<RawValue>>, DatabaseError> {
+    pub async fn load_logs(&self) -> Result<Vec<String>, Error> {
         let rows = self
             .pool
             .fetch_all(sqlx::query(
@@ -185,7 +178,7 @@ impl Database {
             ))
             .await?
             .iter()
-            .map(|row| RawValue::from_string(row.get(0)).unwrap())
+            .map(|row| row.get(0))
             .collect();
 
         Ok(rows)
@@ -193,39 +186,39 @@ impl Database {
 
     pub async fn save_log(
         &self,
-        block_index: u64,
-        transaction_index: u64,
-        log_index: U256,
-        log: Box<RawValue>,
-    ) -> Result<(), DatabaseError> {
+        block_index: i64,
+        transaction_index: i32,
+        log_index: i32,
+        log: String,
+    ) -> Result<(), Error> {
         self.pool
             .execute(
                 sqlx::query(
                     r#"INSERT INTO logs (block_index, transaction_index, log_index, raw)
                     VALUES ($1, $2, $3, $4);"#,
                 )
-                .bind(U64::from(block_index))
-                .bind(U64::from(transaction_index))
+                .bind(block_index)
+                .bind(transaction_index)
                 .bind(log_index)
-                .bind(log.get()),
+                .bind(log),
             )
             .await
-            .map_err(DatabaseError::InternalError)?;
+            .map_err(Error::InternalError)?;
 
         Ok(())
     }
 
-    pub async fn wipe_cache(&self) -> Result<(), DatabaseError> {
+    pub async fn wipe_cache(&self) -> Result<(), Error> {
         self.pool
             .execute(sqlx::query("DELETE FROM logs;"))
             .await
-            .map_err(DatabaseError::InternalError)?;
+            .map_err(Error::InternalError)?;
         Ok(())
     }
 }
 
 #[derive(Debug, Error)]
-pub enum DatabaseError {
+pub enum Error {
     #[error("database error")]
     InternalError(#[from] sqlx::Error),
 }

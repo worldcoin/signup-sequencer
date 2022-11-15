@@ -10,7 +10,7 @@ use cli_batteries::await_shutdown;
 use core::cmp::max;
 use ethers::types::U256;
 use eyre::Result as EyreResult;
-use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt, channel::oneshot};
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
@@ -25,7 +25,7 @@ use std::{
     time::Duration,
 };
 use thiserror::Error;
-use tokio::{select, try_join};
+use tokio::{select, try_join, sync::mpsc};
 use tracing::{debug, error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -125,10 +125,18 @@ impl App {
         // 4. Once ETH loop catches up to max ETH block, mark app as ready to serve requests
         // 5. Continue reading ETH loop and appending to db cache
 
-        // TODO()
-        spawn_or_abort(Self::subscribe_events());
+        let (server_ready_tx, mut sender_ready_rx) = mpsc::channel::<bool>(1);
+        spawn_or_abort(app.clone().subscribe_events(server_ready_tx));
+        sender_ready_rx.recv().await;
 
-        match app.clone().process_events().await {
+        app.check_health().await;
+
+        Ok(app)
+    }
+
+    async fn subscribe_events(self: Arc<App>, ready_channel: mpsc::Sender<bool>) -> EyreResult<()> {
+        let app = self;
+        match app.clone().process_events(ready_channel.clone()).await {
             Err(Error::RootMismatch) => {
                 error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
 
@@ -143,18 +151,12 @@ impl App {
                 app.database.wipe_cache().await?;
 
                 // Retry
-                app.clone().process_events().await?;
+                app.clone().process_events(ready_channel).await?;
             }
             Err(e) => return Err(e.into()),
             Ok(_) => {}
         }
 
-        app.check_health().await;
-
-        Ok(app)
-    }
-
-    async fn subscribe_events() -> EyreResult<()> {
         Ok(())
     }
 
@@ -323,11 +325,13 @@ impl App {
     }
 
     #[instrument(level = "info", skip_all)]
-    async fn process_events(self: Arc<Self>) -> Result<(), Error> {
+    async fn process_events(self: Arc<Self>, ready_channel: mpsc::Sender<bool>) -> Result<(), Error> {
         let mut merkle_tree = self.merkle_tree.write().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in process_events.");
             panic!("Sequencer potentially deadlocked, terminating.");
         });
+
+        let ready_block = self.ethereum.fetch_last_block().await.map_err(Error::EventError)?;
 
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
@@ -340,6 +344,8 @@ impl App {
             .boxed();
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
+
+        let x = ready_channel.send(true);
         loop {
             let (index, leaf, root) = select! {
                 v = events.try_next() => match v.map_err(Error::EventError)? {

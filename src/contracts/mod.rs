@@ -156,17 +156,6 @@ impl Contracts {
             .member_added_filter()
             .from_block(starting_block);
 
-        let ethereum = self.ethereum.clone();
-        let inner_filter = filter.filter.clone();
-        // TODO: Register to the event stream and track it going forward.
-        tokio::spawn(async move {
-            let mut subscription = ethereum.subscribe_logs(&inner_filter).await.unwrap().boxed();
-            loop {
-                let log = subscription.next().await;
-                println!("received async log {:?}", log);
-            }
-        });
-
         self.ethereum
             .fetch_events::<MemberAddedEvent>(&filter.filter, database)
             .try_filter(|event| future::ready(event.group_id == self.group_id))

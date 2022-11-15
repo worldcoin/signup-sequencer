@@ -501,6 +501,15 @@ impl Ethereum {
         Ok(())
     }
 
+    pub async fn fetch_last_block(&self) -> Result<U64, EventError> {
+        self.provider
+            .get_block_number()
+            .await
+            .map_err(|e| {
+                EventError::Fetching(CachingLogQueryError::LoadLastBlock(ProviderError::JsonRpcClientError(Box::new(e))))
+            })
+    }
+
     pub fn fetch_events_raw(
         &self,
         filter: &Filter,

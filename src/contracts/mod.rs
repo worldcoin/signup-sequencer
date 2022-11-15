@@ -137,6 +137,15 @@ impl Contracts {
         self.initial_leaf
     }
 
+    pub fn poll_events(
+        &self,
+        starting_block: u64,
+        last_leaf: usize,
+        database: Arc<Database>,
+    ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
+        todo!();
+    }
+
     #[allow(clippy::disallowed_methods)] // False positive from macro expansion.
     #[instrument(level = "debug", skip(self, database))]
     pub fn fetch_events(

@@ -22,7 +22,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    time::Duration,
+    time::Duration, ops::{DerefMut, Deref},
 };
 use thiserror::Error;
 use tokio::{select, try_join, sync::mpsc};
@@ -81,6 +81,49 @@ pub struct App {
     merkle_tree: TimedRwLock<PoseidonTree>,
 }
 
+struct ConcatStreams<T> {
+    streams: [T; 2],
+    selected: usize,
+}
+
+impl<T> ConcatStreams<T> {
+    fn new(streams: [T; 2]) -> Self {
+        ConcatStreams {
+            streams,
+            selected: 0
+        }
+    }
+
+    fn is_end(&self) -> bool {
+        self.selected > 0
+    }
+
+    fn select_next(&mut self) {
+        self.selected += 1;
+    }
+}
+
+impl<T> Deref for ConcatStreams<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        if self.selected > 0 {
+            &self.streams[1]
+        } else {
+            &self.streams[0]
+        }
+    }
+}
+
+impl<T> DerefMut for ConcatStreams<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        if self.selected > 0 {
+            &mut self.streams[1]
+        } else {
+            &mut self.streams[0]
+        }
+    }
+}
 impl App {
     /// # Errors
     ///
@@ -338,19 +381,41 @@ impl App {
             .contracts
             .fetch_events(
                 self.last_block,
+                // TODO: pass ending_block since we have it already
                 self.next_leaf.load(Ordering::Acquire),
                 self.database.clone(),
             )
             .boxed();
+        
+        let mut subscription = self
+            .contracts
+            .fetch_events(
+                ready_block.as_u64(),
+                // TODO: pass ending_block since we have it already
+                self.next_leaf.load(Ordering::Acquire),
+                self.database.clone(),
+            )
+            .boxed();
+
+        let mut events_enum = ConcatStreams::new([events, subscription]);
+
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
 
         let x = ready_channel.send(true);
         loop {
             let (index, leaf, root) = select! {
-                v = events.try_next() => match v.map_err(Error::EventError)? {
+                v = events_enum.try_next() => match v.map_err(Error::EventError)? {
                     Some(a) => a,
-                    None => break,
+                    None => {
+                        if events_enum.is_end() {
+                            break;
+                        } else {
+                            events_enum.select_next();
+                            ready_channel.send(true).await;
+                            continue;
+                        }
+                    },
                 },
                 _ = &mut shutdown => return Err(Error::Interrupted),
             };

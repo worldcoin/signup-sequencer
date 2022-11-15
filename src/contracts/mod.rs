@@ -140,10 +140,33 @@ impl Contracts {
     pub fn poll_events(
         &self,
         starting_block: u64,
-        last_leaf: usize,
         database: Arc<Database>,
     ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
-        todo!();
+        info!(
+            starting_block,
+            "Polling MemberAdded events"
+        );
+
+        let filter = self
+            .semaphore
+            .member_added_filter()
+            .from_block(starting_block);
+
+        self.ethereum
+            .poll_events::<MemberAddedEvent>(filter.filter.clone(), database)
+            .try_filter(|event| future::ready(event.group_id == self.group_id))
+            .try_filter(|_| future::ready(false)) // filter out all events for now 
+            .enumerate()
+            .map(|(index, res)| res.map(|event| (index, event)))
+            .map_ok(|(index, event)| {
+                (
+                    index,
+                    // TODO: Validate values < modulus
+                    event.identity_commitment.into(),
+                    event.root.into(),
+                )
+            })
+
     }
 
     #[allow(clippy::disallowed_methods)] // False positive from macro expansion.
@@ -151,19 +174,21 @@ impl Contracts {
     pub fn fetch_events(
         &self,
         starting_block: u64,
+        end_block: u64,
         last_leaf: usize,
         database: Arc<Database>,
     ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
         info!(
             starting_block,
-            last_leaf, "Reading MemberAdded events from chains"
+            last_leaf, "Reading initial MemberAdded events from db cache and chains"
         );
 
         // Start MemberAdded log event stream
         let filter = self
             .semaphore
             .member_added_filter()
-            .from_block(starting_block);
+            .from_block(starting_block)
+            .to_block(end_block);
 
         self.ethereum
             .fetch_events::<MemberAddedEvent>(&filter.filter, database)

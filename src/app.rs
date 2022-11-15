@@ -200,6 +200,8 @@ impl App {
             Ok(_) => {}
         }
 
+        info!("Subscribe events finishing");
+
         Ok(())
     }
 
@@ -369,30 +371,24 @@ impl App {
 
     #[instrument(level = "info", skip_all)]
     async fn process_events(self: Arc<Self>, ready_channel: mpsc::Sender<bool>) -> Result<(), Error> {
-        let mut merkle_tree = self.merkle_tree.write().await.unwrap_or_else(|e| {
-            error!(?e, "Failed to obtain tree lock in process_events.");
-            panic!("Sequencer potentially deadlocked, terminating.");
-        });
-
+        // TODO(gswirski): take into account confirmation del
         let ready_block = self.ethereum.fetch_last_block().await.map_err(Error::EventError)?;
 
         let initial_leaf = self.contracts.initial_leaf();
-        let mut events = self
+        let events = self
             .contracts
             .fetch_events(
                 self.last_block,
-                // TODO: pass ending_block since we have it already
+                ready_block.as_u64(),
                 self.next_leaf.load(Ordering::Acquire),
                 self.database.clone(),
             )
             .boxed();
         
-        let mut subscription = self
+        let subscription = self
             .contracts
-            .fetch_events(
-                ready_block.as_u64(),
-                // TODO: pass ending_block since we have it already
-                self.next_leaf.load(Ordering::Acquire),
+            .poll_events(
+                ready_block.as_u64() + 1,
                 self.database.clone(),
             )
             .boxed();
@@ -402,7 +398,6 @@ impl App {
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
 
-        let x = ready_channel.send(true);
         loop {
             let (index, leaf, root) = select! {
                 v = events_enum.try_next() => match v.map_err(Error::EventError)? {
@@ -419,8 +414,12 @@ impl App {
                 },
                 _ = &mut shutdown => return Err(Error::Interrupted),
             };
-            debug!(?index, ?leaf, ?root, "Received event");
 
+            let mut merkle_tree = self.merkle_tree.write().await.unwrap_or_else(|e| {
+                error!(?e, "Failed to obtain tree lock in process_events.");
+                panic!("Sequencer potentially deadlocked, terminating.");
+            });
+    
             // Check leaf index is valid
             if index >= merkle_tree.num_leaves() {
                 error!(?index, ?leaf, num_leaves = ?merkle_tree.num_leaves(), "Received event out of range");
@@ -483,6 +482,8 @@ impl App {
                 error!(computed_root = ?merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
                 return Err(Error::RootMismatch);
             }
+
+            info!(?index, ?leaf, ?root, "Received event I");
         }
         Ok(())
     }

@@ -13,6 +13,7 @@ use crate::{
     contracts::caching_log_query::{CachingLogQuery, Error as CachingLogQueryError},
     database::Database,
 };
+use async_stream::try_stream;
 use chrono::{Duration as ChronoDuration, Utc};
 use clap::Parser;
 use ethers::{
@@ -43,7 +44,7 @@ use prometheus::{
 use reqwest::Client as ReqwestClient;
 use std::{error::Error, sync::Arc, time::Duration};
 use thiserror::Error;
-use tokio::time::timeout;
+use tokio::time::{timeout, sleep};
 use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
 use url::Url;
 
@@ -539,16 +540,49 @@ impl Ethereum {
             })
         })
     }
+    
 
-    #[allow(dead_code)]
-    pub async fn subscribe_logs(
+    pub fn poll_events<T: EthEvent>(
         &self,
-        filter: &Filter
-    ) -> Result<SubscriptionStream<'_, RpcLogger<Transport>, Log>, ProviderError> {
-        let provider = self
-            .provider
-            .provider();
-        provider.subscribe_logs(filter).await
+        filter: Filter,
+        _database: Arc<Database>,
+    ) -> impl Stream<Item = Result<T, EventError>> + '_
+    where T: std::fmt::Debug + 'static
+    {
+        try_stream! {
+            let mut start_block = filter.get_from_block().unwrap();
 
+            loop {
+                sleep(Duration::from_secs(10)).await;
+
+                let last_block = self.provider.provider().get_block_number().await.map_err(CachingLogQueryError::LoadLastBlock)?;
+
+                info!(?start_block, ?last_block, "Poll events filter");
+
+                let filter = filter.clone()
+                    .from_block(start_block)
+                    .to_block(last_block);
+
+                let mut stream = self.provider
+                    .get_logs_paginated(&filter, self.max_log_blocks as u64);
+    
+                while let Some(log) = stream.next().await {
+                    let log = log.map_err(CachingLogQueryError::LoadLogs)?;
+                    let eth_event = T::decode_log(&RawLog {
+                        topics: log.topics,
+                        data:   log.data.to_vec(),
+                    })?;
+    
+                    // if self.is_confirmed(&log, last_block) {
+                    //     let raw_log = serde_json::to_string(&log).map_err(CachingLogQueryError::Serialize)?;
+                    //     self.cache_log(raw_log, &log).await?;
+                    // }
+                    yield eth_event;
+                }
+
+                start_block = last_block + 1;
+    
+            }
+        }
     }
 }

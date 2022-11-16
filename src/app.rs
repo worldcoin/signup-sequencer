@@ -10,7 +10,7 @@ use cli_batteries::await_shutdown;
 use core::cmp::max;
 use ethers::types::U256;
 use eyre::Result as EyreResult;
-use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt, channel::oneshot};
+use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
@@ -22,11 +22,11 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    time::Duration, ops::{DerefMut, Deref},
+    time::Duration,
 };
 use thiserror::Error;
 use tokio::{select, try_join, sync::mpsc};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
@@ -81,49 +81,11 @@ pub struct App {
     merkle_tree: TimedRwLock<PoseidonTree>,
 }
 
-struct ConcatStreams<T> {
-    streams: [T; 2],
-    selected: usize,
+enum ItemType {
+    Event((usize, Field, Field)),
+    ServerReady,
 }
 
-impl<T> ConcatStreams<T> {
-    fn new(streams: [T; 2]) -> Self {
-        ConcatStreams {
-            streams,
-            selected: 0
-        }
-    }
-
-    fn is_end(&self) -> bool {
-        self.selected > 0
-    }
-
-    fn select_next(&mut self) {
-        self.selected += 1;
-    }
-}
-
-impl<T> Deref for ConcatStreams<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        if self.selected > 0 {
-            &self.streams[1]
-        } else {
-            &self.streams[0]
-        }
-    }
-}
-
-impl<T> DerefMut for ConcatStreams<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        if self.selected > 0 {
-            &mut self.streams[1]
-        } else {
-            &mut self.streams[0]
-        }
-    }
-}
 impl App {
     /// # Errors
     ///
@@ -375,7 +337,7 @@ impl App {
         let ready_block = self.ethereum.fetch_last_block().await.map_err(Error::EventError)?;
 
         let initial_leaf = self.contracts.initial_leaf();
-        let events = self
+        let history = self
             .contracts
             .fetch_events(
                 self.last_block,
@@ -383,34 +345,33 @@ impl App {
                 self.next_leaf.load(Ordering::Acquire),
                 self.database.clone(),
             )
-            .boxed();
+            .map_ok(ItemType::Event);
         
+        let marker = futures::stream::iter(vec![Ok(ItemType::ServerReady)]);
+
         let subscription = self
             .contracts
             .poll_events(
                 ready_block.as_u64() + 1,
                 self.database.clone(),
             )
-            .boxed();
+            .map_ok(ItemType::Event);
+        
 
-        let mut events_enum = ConcatStreams::new([events, subscription]);
+        let mut chain_stream = history.chain(marker).chain(subscription).boxed();
 
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
 
         loop {
             let (index, leaf, root) = select! {
-                v = events_enum.try_next() => match v.map_err(Error::EventError)? {
-                    Some(a) => a,
-                    None => {
-                        if events_enum.is_end() {
-                            break;
-                        } else {
-                            events_enum.select_next();
-                            ready_channel.send(true).await;
-                            continue;
-                        }
-                    },
+                v = chain_stream.try_next() => match v.map_err(Error::EventError)? {
+                    Some(ItemType::Event(a)) => a,
+                    Some(ItemType::ServerReady) => {
+                        ready_channel.send(true).await.map_err(|_| Error::InternalError)?;
+                        continue;
+                    }
+                    None => break,
                 },
                 _ = &mut shutdown => return Err(Error::Interrupted),
             };
@@ -577,4 +538,6 @@ enum Error {
     EventOutOfRange,
     #[error("Event error: {0}")]
     EventError(#[source] EventError),
+    #[error("Internal error")]
+    InternalError,
 }

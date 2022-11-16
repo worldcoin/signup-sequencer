@@ -27,7 +27,7 @@ use ethers::{
         },
         SignerMiddleware,
     },
-    providers::{Middleware, Provider, ProviderError, SubscriptionStream},
+    providers::{Middleware, Provider, ProviderError},
     signers::{LocalWallet, Signer, Wallet},
     types::{
         transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,

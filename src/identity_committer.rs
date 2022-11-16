@@ -158,7 +158,7 @@ impl IdentityCommitter {
     }
 
     pub async fn notify_queued(&self) {
-        // Escalate all errors to panics. In the future could perform some cleanup /
+        // Escalate all errors to panics. In the future could perform some
         // restart procedure here.
         self.instance
             .read()

@@ -300,7 +300,7 @@ mod test {
     #[allow(dead_code)]
     async fn test_inclusion_proof() {
         let options = crate::app::Options::try_parse_from([""]).unwrap();
-        let app = App::new(options).await.unwrap();
+        let app = Arc::new(App::new(options).await.unwrap());
         let body = Body::from(
             json!({
                 "identityIndex": 0,
@@ -313,7 +313,7 @@ mod test {
             .header("Content-Type", "application/json")
             .body(body)
             .unwrap();
-        let res = route(request, Arc::new(app)).await.unwrap();
+        let res = route(request, app).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
         // TODO deserialize proof and compare results
     }

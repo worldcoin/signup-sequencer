@@ -33,12 +33,12 @@ pub struct Options {
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 pub async fn main(options: Options) -> EyreResult<()> {
     // Create App struct
-    let app = App::new(options.app).await?;
+    let app = Arc::new(App::new(options.app).await?);
 
     // Start server
     let server = spawn_or_abort({
         async move {
-            server::main(Arc::new(app), options.server).await?;
+            server::main(app, options.server).await?;
             EyreResult::Ok(())
         }
     });

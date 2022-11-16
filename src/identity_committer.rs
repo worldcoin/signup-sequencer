@@ -100,7 +100,7 @@ impl IdentityCommitter {
     ) -> eyre::Result<()> {
         // Get a progress lock on the tree for the duration of this operation. Holding a
         // progress lock ensures no other thread calls tries to insert an identity into
-        // the contract.
+        // the contract, as that is an order dependent operation.
         let tree = tree_state.merkle_tree.progress().await.map_err(|e| {
             error!(?e, "Failed to obtain tree lock in commit_identity.");
             e
@@ -123,7 +123,8 @@ impl IdentityCommitter {
         // Update  merkle tree
         tree.set(identity_index, commitment);
 
-        // Downgrade write lock to progress lock
+        // Downgrade write lock to progress lock – tree is now up to date, but still
+        // need to update the database.
         let tree = tree.downgrade_to_progress();
 
         let block = receipt

@@ -166,21 +166,6 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_unprocessed_pending_identities(&self) -> Result<Vec<(usize, Hash)>, Error> {
-        let rows = self
-            .pool
-            .fetch_all(sqlx::query(
-                r#"SELECT group_id, commitment
-                       FROM pending_identities
-                       WHERE mined_in_block IS NULL;"#,
-            ))
-            .await?;
-        Ok(rows
-            .into_iter()
-            .map(|row| (usize::try_from(row.get::<i64, _>(0)).unwrap(), row.get(1)))
-            .collect())
-    }
-
     pub async fn pending_identity_exists(
         &self,
         group_id: usize,
@@ -200,6 +185,20 @@ impl Database {
             )
             .await?;
         Ok(row.is_some())
+    }
+
+    pub async fn get_oldest_unprocessed_identity(&self) -> Result<Option<(usize, Hash)>, Error> {
+        let row = self
+            .pool
+            .fetch_optional(sqlx::query(
+                r#"SELECT group_id, commitment
+                           FROM pending_identities
+                           WHERE mined_in_block IS NULL
+                           ORDER BY created_at ASC
+                           LIMIT 1;"#,
+            ))
+            .await?;
+        Ok(row.map(|row| (usize::try_from(row.get::<i64, _>(0)).unwrap(), row.get(1))))
     }
 
     #[allow(unused)]

@@ -313,7 +313,7 @@ mod test {
             .header("Content-Type", "application/json")
             .body(body)
             .unwrap();
-        let res = route(request, app).await.unwrap();
+        let res = route(request, Arc::new(app)).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
         // TODO deserialize proof and compare results
     }

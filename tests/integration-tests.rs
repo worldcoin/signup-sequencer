@@ -24,6 +24,7 @@ use std::{
     fs::File,
     io::BufReader,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
+    sync::Arc,
     time::Duration,
 };
 use tokio::{spawn, task::JoinHandle};
@@ -323,7 +324,7 @@ async fn spawn_app(options: Options) -> EyreResult<(JoinHandle<()>, SocketAddr)>
     let app = spawn({
         async move {
             info!("App thread starting");
-            server::bind_from_listener(app, Duration::from_secs(30), listener)
+            server::bind_from_listener(Arc::new(app), Duration::from_secs(30), listener)
                 .await
                 .expect("Failed to bind address");
             info!("App thread stopping");

@@ -5,7 +5,7 @@ pub mod app;
 mod contracts;
 mod database;
 mod ethereum;
-mod event_bus;
+mod identity_committer;
 pub mod server;
 mod timed_read_progress_lock;
 mod utils;
@@ -14,6 +14,7 @@ use crate::{app::App, utils::spawn_or_abort};
 use clap::Parser;
 use cli_batteries::await_shutdown;
 use eyre::Result as EyreResult;
+use std::sync::Arc;
 use tracing::info;
 
 #[derive(Clone, Debug, PartialEq, Parser)]
@@ -37,7 +38,7 @@ pub async fn main(options: Options) -> EyreResult<()> {
     // Start server
     let server = spawn_or_abort({
         async move {
-            server::main(app, options.server).await?;
+            server::main(Arc::new(app), options.server).await?;
             EyreResult::Ok(())
         }
     });

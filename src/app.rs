@@ -334,7 +334,7 @@ impl App {
         self: Arc<Self>,
         ready_channel: mpsc::Sender<bool>,
     ) -> Result<(), Error> {
-        // TODO(gswirski): take into account confirmation del
+        // TODO(gswirski): take into account confirmation delay
         let ready_block = self
             .ethereum
             .fetch_last_block()

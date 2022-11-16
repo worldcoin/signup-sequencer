@@ -88,7 +88,7 @@ impl CachingLogQuery {
                 self.filter.get_from_block().unwrap_or_default(),
             ));
             let mut stream = self.provider
-                .get_logs_paginated(&filter, self.page_size as u64);
+                .get_logs_paginated(&filter, self.page_size);
 
             while let Some(log) = stream.next().await {
                 let log = log.map_err(Error::LoadLogs)?;
@@ -117,7 +117,7 @@ impl CachingLogQuery {
                     .to_block(last_block);
 
                 let mut stream = self.provider
-                    .get_logs_paginated(&filter, self.page_size as u64);
+                    .get_logs_paginated(&filter, self.page_size);
 
                 while let Some(log) = stream.next().await {
                     let log = log.map_err(Error::LoadLogs)?;

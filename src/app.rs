@@ -78,6 +78,7 @@ pub struct TreeState {
 }
 
 impl TreeState {
+    #[must_use]
     pub fn new(tree_depth: usize, initial_leaf: Field, lock_timeout: Duration) -> Self {
         Self {
             next_leaf:   AtomicUsize::new(0),

@@ -8,8 +8,10 @@ use ethers::{
     types::{Filter, Log, U64},
 };
 use futures::{Stream, StreamExt};
-use std::{cmp::max, sync::Arc};
+use std::{cmp::max, sync::Arc, time::Duration};
 use thiserror::Error;
+use tokio::time::sleep;
+use tracing::info;
 
 pub struct CachingLogQuery {
     provider:                  Arc<ProviderStack>,
@@ -72,7 +74,7 @@ impl CachingLogQuery {
         self
     }
 
-    pub fn into_stream(self) -> impl Stream<Item = Result<Log, Error<ProviderError>>> {
+    pub fn into_finite_stream(self) -> impl Stream<Item = Result<Log, Error<ProviderError>>> {
         try_stream! {
             let last_block = self.get_block_number().await?;
 
@@ -90,11 +92,45 @@ impl CachingLogQuery {
 
             while let Some(log) = stream.next().await {
                 let log = log.map_err(Error::LoadLogs)?;
-                if self.is_confirmed(&log, last_block) {
+                if self.is_confirmed(&log, last_block.eth) {
                     let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;
                     self.cache_log(raw_log, &log).await?;
                 }
                 yield log;
+            }
+        }
+    }
+
+    pub fn into_infinite_stream(self) -> impl Stream<Item = Result<Log, Error<ProviderError>>> {
+        try_stream! {
+            let mut start_block = self.filter.get_from_block().unwrap();
+
+            loop {
+                sleep(Duration::from_secs(10)).await;
+
+                let last_block = self.provider.provider().get_block_number().await.map_err(Error::LoadLastBlock)?;
+
+                info!(?start_block, ?last_block, "Poll events filter");
+
+                let filter = self.filter.clone()
+                    .from_block(start_block)
+                    .to_block(last_block);
+
+                let mut stream = self.provider
+                    .get_logs_paginated(&filter, self.page_size as u64);
+
+                while let Some(log) = stream.next().await {
+                    let log = log.map_err(Error::LoadLogs)?;
+
+                    if self.is_confirmed(&log, last_block) {
+                        let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;
+                        self.cache_log(raw_log, &log).await?;
+                    }
+                    yield log;
+                }
+
+                start_block = last_block + 1;
+
             }
         }
     }
@@ -123,9 +159,9 @@ impl CachingLogQuery {
         }
     }
 
-    fn is_confirmed(&self, log: &Log, last_block: LastBlock) -> bool {
+    fn is_confirmed(&self, log: &Log, last_block: U64) -> bool {
         log.block_number.map_or(false, |block| {
-            block + self.confirmation_blocks_delay <= last_block.eth
+            block + self.confirmation_blocks_delay <= last_block
         })
     }
 

@@ -140,7 +140,7 @@ impl Contracts {
     pub fn poll_events(
         &self,
         starting_block: u64,
-        database: &Database,
+        database: Arc<Database>,
     ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
         info!(starting_block, "Polling MemberAdded events");
 
@@ -150,9 +150,10 @@ impl Contracts {
             .from_block(starting_block);
 
         self.ethereum
-            .poll_events::<MemberAddedEvent>(filter.filter, database)
+            .poll_events::<MemberAddedEvent>(&filter.filter, database)
             .try_filter(|event| future::ready(event.group_id == self.group_id))
-            .try_filter(|_| future::ready(false)) // filter out all events for now
+            // TODO(gswirski): filter out all events until https://github.com/worldcoin/signup-sequencer/pull/264 is merged
+            .try_filter(|_| future::ready(false))
             .enumerate()
             .map(|(index, res)| res.map(|event| (index, event)))
             .map_ok(|(index, event)| {

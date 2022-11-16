@@ -123,15 +123,8 @@ impl App {
         // Sync with chain on start up
         app.check_leaves().await;
 
-        // TODO(gswirski)
-        // 0. Load current max ETH block
-        // 1. Load database events
-        // 2. Set up ETH loop to continue reading events
-        // 3. If root validator fails, restart with db wiped out (this should happen max
-        // once, right?) 4. Once ETH loop catches up to max ETH block, mark app
-        // as ready to serve requests 5. Continue reading ETH loop and appending
-        // to db cache
-
+        // Once server catches up to the most recent confirmed block, start accepting
+        // requests
         let (server_ready_tx, mut sender_ready_rx) = mpsc::channel::<bool>(1);
         spawn_or_abort(app.clone().subscribe_events(server_ready_tx));
         sender_ready_rx.recv().await;
@@ -363,7 +356,7 @@ impl App {
 
         let subscription = self
             .contracts
-            .poll_events(ready_block.as_u64() + 1, &self.database)
+            .poll_events(ready_block.as_u64() + 1, self.database.clone())
             .map_ok(ItemType::Event);
 
         let mut chain_stream = history.chain(marker).chain(subscription).boxed();

@@ -140,12 +140,9 @@ impl Contracts {
     pub fn poll_events(
         &self,
         starting_block: u64,
-        database: Arc<Database>,
+        database: &Database,
     ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
-        info!(
-            starting_block,
-            "Polling MemberAdded events"
-        );
+        info!(starting_block, "Polling MemberAdded events");
 
         let filter = self
             .semaphore
@@ -153,9 +150,9 @@ impl Contracts {
             .from_block(starting_block);
 
         self.ethereum
-            .poll_events::<MemberAddedEvent>(filter.filter.clone(), database)
+            .poll_events::<MemberAddedEvent>(filter.filter, database)
             .try_filter(|event| future::ready(event.group_id == self.group_id))
-            .try_filter(|_| future::ready(false)) // filter out all events for now 
+            .try_filter(|_| future::ready(false)) // filter out all events for now
             .enumerate()
             .map(|(index, res)| res.map(|event| (index, event)))
             .map_ok(|(index, event)| {
@@ -166,7 +163,6 @@ impl Contracts {
                     event.root.into(),
                 )
             })
-
     }
 
     #[allow(clippy::disallowed_methods)] // False positive from macro expansion.

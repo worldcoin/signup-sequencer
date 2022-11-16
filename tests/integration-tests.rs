@@ -24,7 +24,6 @@ use std::{
     fs::File,
     io::BufReader,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    sync::Arc,
     time::Duration,
 };
 use tokio::{spawn, task::JoinHandle};

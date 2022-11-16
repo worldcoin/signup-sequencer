@@ -3,7 +3,8 @@ use crate::{
     database::{self, Database},
     ethereum::{self, Ethereum, EventError},
     server::Error as ServerError,
-    timed_rw_lock::TimedRwLock, utils::spawn_or_abort,
+    timed_rw_lock::TimedRwLock,
+    utils::spawn_or_abort,
 };
 use clap::Parser;
 use cli_batteries::await_shutdown;
@@ -25,7 +26,7 @@ use std::{
     time::Duration,
 };
 use thiserror::Error;
-use tokio::{select, try_join, sync::mpsc};
+use tokio::{select, sync::mpsc, try_join};
 use tracing::{error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -126,9 +127,10 @@ impl App {
         // 0. Load current max ETH block
         // 1. Load database events
         // 2. Set up ETH loop to continue reading events
-        // 3. If root validator fails, restart with db wiped out (this should happen max once, right?)
-        // 4. Once ETH loop catches up to max ETH block, mark app as ready to serve requests
-        // 5. Continue reading ETH loop and appending to db cache
+        // 3. If root validator fails, restart with db wiped out (this should happen max
+        // once, right?) 4. Once ETH loop catches up to max ETH block, mark app
+        // as ready to serve requests 5. Continue reading ETH loop and appending
+        // to db cache
 
         let (server_ready_tx, mut sender_ready_rx) = mpsc::channel::<bool>(1);
         spawn_or_abort(app.clone().subscribe_events(server_ready_tx));
@@ -139,7 +141,10 @@ impl App {
         Ok(app)
     }
 
-    async fn subscribe_events(self: Arc<App>, ready_channel: mpsc::Sender<bool>) -> EyreResult<()> {
+    async fn subscribe_events(
+        self: Arc<Self>,
+        ready_channel: mpsc::Sender<bool>,
+    ) -> EyreResult<()> {
         let app = self;
         match app.clone().process_events(ready_channel.clone()).await {
             Err(Error::RootMismatch) => {
@@ -332,9 +337,16 @@ impl App {
     }
 
     #[instrument(level = "info", skip_all)]
-    async fn process_events(self: Arc<Self>, ready_channel: mpsc::Sender<bool>) -> Result<(), Error> {
+    async fn process_events(
+        self: Arc<Self>,
+        ready_channel: mpsc::Sender<bool>,
+    ) -> Result<(), Error> {
         // TODO(gswirski): take into account confirmation del
-        let ready_block = self.ethereum.fetch_last_block().await.map_err(Error::EventError)?;
+        let ready_block = self
+            .ethereum
+            .fetch_last_block()
+            .await
+            .map_err(Error::EventError)?;
 
         let initial_leaf = self.contracts.initial_leaf();
         let history = self
@@ -346,17 +358,13 @@ impl App {
                 self.database.clone(),
             )
             .map_ok(ItemType::Event);
-        
+
         let marker = futures::stream::iter(vec![Ok(ItemType::ServerReady)]);
 
         let subscription = self
             .contracts
-            .poll_events(
-                ready_block.as_u64() + 1,
-                self.database.clone(),
-            )
+            .poll_events(ready_block.as_u64() + 1, &self.database)
             .map_ok(ItemType::Event);
-        
 
         let mut chain_stream = history.chain(marker).chain(subscription).boxed();
 
@@ -380,7 +388,7 @@ impl App {
                 error!(?e, "Failed to obtain tree lock in process_events.");
                 panic!("Sequencer potentially deadlocked, terminating.");
             });
-    
+
             // Check leaf index is valid
             if index >= merkle_tree.num_leaves() {
                 error!(?index, ?leaf, num_leaves = ?merkle_tree.num_leaves(), "Received event out of range");
@@ -443,8 +451,6 @@ impl App {
                 error!(computed_root = ?merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
                 return Err(Error::RootMismatch);
             }
-
-            info!(?index, ?leaf, ?root, "Received event I");
         }
         Ok(())
     }

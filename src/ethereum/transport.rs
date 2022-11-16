@@ -1,8 +1,6 @@
 use async_trait::async_trait;
-use ethers::{providers::{Http, Ipc, JsonRpcClient, ProviderError, Ws, PubsubClient}, types::U256};
-use futures::channel::mpsc;
+use ethers::providers::{Http, Ipc, JsonRpcClient, ProviderError, Ws};
 use serde::{de::DeserializeOwned, Serialize};
-use serde_json::value::RawValue;
 use std::fmt::Debug;
 use thiserror::Error;
 use url::Url;
@@ -84,30 +82,6 @@ impl JsonRpcClient for Transport {
                 .request(method, params)
                 .await
                 .map_err(TransportError::Ipc),
-        }
-    }
-}
-
-impl PubsubClient for Transport {
-    type NotificationStream = mpsc::UnboundedReceiver<Box<RawValue>>;
-
-    fn subscribe<T: Into<U256>>(&self, id: T) -> Result<Self::NotificationStream, TransportError> {
-        match self {
-            Self::Http(_) => {
-                panic!("http provider doesn't support pubsub");
-            },
-            Self::Ws(inner) => inner.subscribe(id).map_err(TransportError::Ws),
-            Self::Ipc(inner) => inner.subscribe(id).map_err(TransportError::Ipc),
-        }
-    }
-
-    fn unsubscribe<T: Into<U256>>(&self, id: T) -> Result<(), TransportError> {
-        match self {
-            Self::Http(_) => {
-                panic!("http provider doesn't support pubsub");
-            },
-            Self::Ws(inner) => inner.unsubscribe(id).map_err(TransportError::Ws),
-            Self::Ipc(inner) => inner.unsubscribe(id).map_err(TransportError::Ipc),
         }
     }
 }

@@ -1,6 +1,6 @@
 use ::prometheus::{register_histogram, register_int_counter_vec, Histogram, IntCounterVec};
 use async_trait::async_trait;
-use ethers::providers::{JsonRpcClient, PubsubClient};
+use ethers::providers::JsonRpcClient;
 use once_cell::sync::Lazy;
 use serde::{de::DeserializeOwned, Serialize};
 use std::fmt::Debug;
@@ -52,21 +52,5 @@ where
         let result = self.inner.request(method, params).await;
         timer.observe_duration();
         result
-    }
-}
-
-impl<Inner> PubsubClient for RpcLogger<Inner>
-where
-    Inner: PubsubClient + 'static,
-    <Inner as JsonRpcClient>::Error: Sync + Send + 'static,
-{
-    type NotificationStream = Inner::NotificationStream;
-
-    fn subscribe<T: Into<ethers::types::U256>>(&self, id: T) -> Result<Self::NotificationStream, Self::Error> {
-        self.inner.subscribe(id)
-    }
-
-    fn unsubscribe<T: Into<ethers::types::U256>>(&self, id: T) -> Result<(), Self::Error> {
-        self.inner.unsubscribe(id)
     }
 }

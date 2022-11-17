@@ -103,12 +103,12 @@ impl CachingLogQuery {
 
     pub fn into_infinite_stream(self) -> impl Stream<Item = Result<Log, Error<ProviderError>>> {
         try_stream! {
-            let mut start_block = self.filter.get_from_block().unwrap();
+            let mut start_block = self.filter.get_from_block().unwrap() - self.confirmation_blocks_delay;
 
             loop {
                 sleep(Duration::from_secs(10)).await;
 
-                let last_block = self.provider.provider().get_block_number().await.map_err(Error::LoadLastBlock)?;
+                let last_block = self.provider.provider().get_block_number().await.map_err(Error::LoadLastBlock)?  - self.confirmation_blocks_delay;
 
                 info!(?start_block, ?last_block, "Poll events filter");
 
@@ -122,10 +122,12 @@ impl CachingLogQuery {
                 while let Some(log) = stream.next().await {
                     let log = log.map_err(Error::LoadLogs)?;
 
+                    // get_logs_paginated does not respect `to_block`. we might fetch unconfirmed events
                     if self.is_confirmed(&log, last_block) {
                         let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;
                         self.cache_log(raw_log, &log).await?;
                     }
+                    
                     yield log;
                 }
 

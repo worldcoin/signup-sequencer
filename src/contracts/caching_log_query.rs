@@ -3,6 +3,7 @@ use crate::{
     ethereum::ProviderStack,
 };
 use async_stream::try_stream;
+use core::fmt::Debug;
 use ethers::{
     providers::{LogQueryError, Middleware, ProviderError},
     types::{Filter, Log, U64},
@@ -16,7 +17,9 @@ use tracing::{error, info};
 pub struct CachingLogQuery {
     provider:                  Arc<ProviderStack>,
     filter:                    Filter,
-    page_size:                 u64,
+    start_page_size:           u64,
+    min_page_size:             u64,
+    max_backoff_time:          Duration,
     confirmation_blocks_delay: u64,
     database:                  Option<Arc<Database>>,
 }
@@ -52,15 +55,27 @@ impl CachingLogQuery {
         Self {
             provider,
             filter: filter.clone(),
-            page_size: 10000,
+            start_page_size: 10000,
+            min_page_size: 1000,
+            max_backoff_time: Duration::from_secs(32),
             confirmation_blocks_delay: 0,
             database: None,
         }
     }
 
     /// set page size for pagination
-    pub const fn with_page_size(mut self, page_size: u64) -> Self {
-        self.page_size = page_size;
+    pub const fn with_start_page_size(mut self, page_size: u64) -> Self {
+        self.start_page_size = page_size;
+        self
+    }
+
+    pub const fn with_min_page_size(mut self, page_size: u64) -> Self {
+        self.min_page_size = page_size;
+        self
+    }
+
+    pub const fn with_max_backoff_time(mut self, time: Duration) -> Self {
+        self.max_backoff_time = time;
         self
     }
 
@@ -85,7 +100,7 @@ impl CachingLogQuery {
                 yield serde_json::from_str(&log).map_err(Error::Parse)?;
             }
 
-            let mut retry_stats = RetryStats::new(self.page_size);
+            let mut retry_stats = RetryStatus::new(self.start_page_size, self.min_page_size, self.max_backoff_time);
 
             'restart: loop {
                 let filter = self.filter.clone().from_block(max(
@@ -104,9 +119,9 @@ impl CachingLogQuery {
 
                 while let Some(log) = stream.next().await {
                     let log = match self.handle_retriable_err(log, &mut retry_stats).await {
-                        RetryStatus::Ok(log) => log,
-                        RetryStatus::Restart => continue 'restart,
-                        RetryStatus::Err(e) => {
+                        RetriableResult::Ok(log) => log,
+                        RetriableResult::Restart => continue 'restart,
+                        RetriableResult::Err(e) => {
                             // This seems to be the only way to return errors in the try_stream! macro
                             Err(e)?;
                             break 'restart;
@@ -130,27 +145,17 @@ impl CachingLogQuery {
         }
     }
 
-    async fn handle_retriable_err(&self, log: Result<Log, LogQueryError<ProviderError>>, stats: &mut RetryStats) -> RetryStatus<Log, Error<ProviderError>> {
+    async fn handle_retriable_err(
+        &self,
+        log: Result<Log, LogQueryError<ProviderError>>,
+        stats: &mut RetryStatus,
+    ) -> RetriableResult<Log, Error<ProviderError>> {
         match log {
             Err(e) if e.to_string().contains("Query timeout exceeded") => {
-                if stats.page_size >= 2000 {
-                    error!(error = ?e, "Retriable error, decreasing page size");
-                    stats.page_size /= 2;
-                    RetryStatus::Restart
-                } else if stats.backoff_time <= Duration::from_secs(32) {
-                    error!(error = ?e, "Retriable error, backoff");
-                    sleep(stats.backoff_time).await;
-                    stats.backoff_time *= 2;
-                    RetryStatus::Restart
-                } else {
-                    error!(error = ?e, "Retriable error, max number of attempts reached");
-                    RetryStatus::Err(Error::LoadLogs(e))
-                }
+                stats.attempt_restart(Error::LoadLogs(e)).await
             }
-            Err(e) => {
-                RetryStatus::Err(Error::LoadLogs(e))
-            }
-            Ok(log) => RetryStatus::Ok(log)
+            Err(e) => RetriableResult::Err(Error::LoadLogs(e)),
+            Ok(log) => RetriableResult::Ok(log),
         }
     }
 
@@ -220,23 +225,50 @@ struct LastBlock {
     db:  U64,
 }
 
-struct RetryStats {
-    last_block: U64,
-    page_size: u64,
-    backoff_time: Duration
+struct RetryStatus {
+    last_block:       U64,
+    page_size:        u64,
+    min_page_size:    u64,
+    backoff_time:     Duration,
+    max_backoff_time: Duration,
 }
 
-impl RetryStats {
-    fn new(page_size: u64) -> Self {
-        Self { last_block: Default::default(), page_size, backoff_time: Duration::from_secs(1) }
+impl RetryStatus {
+    fn new(page_size: u64, min_page_size: u64, max_backoff_time: Duration) -> Self {
+        Self {
+            last_block: U64::default(),
+            page_size,
+            min_page_size,
+            backoff_time: Duration::from_secs(1),
+            max_backoff_time,
+        }
     }
 
     fn update_last_block(&mut self, last_block: Option<U64>) {
         self.last_block = last_block.unwrap_or(self.last_block);
     }
+
+    async fn attempt_restart<T, E>(&mut self, error: E) -> RetriableResult<T, E>
+    where
+        E: Debug + Sync + Send,
+    {
+        if self.page_size >= self.min_page_size {
+            error!(?error, "Retriable error, decreasing page size");
+            self.page_size /= 2;
+            RetriableResult::Restart
+        } else if self.backoff_time <= self.max_backoff_time {
+            error!(?error, "Retriable error, backoff");
+            sleep(self.backoff_time).await;
+            self.backoff_time *= 2;
+            RetriableResult::Restart
+        } else {
+            error!(?error, "Retriable error, max number of attempts reached");
+            RetriableResult::Err(error)
+        }
+    }
 }
 
-enum RetryStatus<T, E> {
+enum RetriableResult<T, E> {
     Ok(T),
     Restart,
     Err(E),

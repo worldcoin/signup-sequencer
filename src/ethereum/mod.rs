@@ -41,7 +41,7 @@ use prometheus::{
     register_int_counter_vec, Counter, Gauge, Histogram, IntCounterVec,
 };
 use reqwest::Client as ReqwestClient;
-use std::{error::Error, sync::Arc, time::Duration};
+use std::{error::Error, num::ParseIntError, str::FromStr, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::time::timeout;
 use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
@@ -87,8 +87,11 @@ static TX_WEI_USED: Lazy<Counter> = Lazy::new(|| {
     register_counter!("eth_tx_wei_used", "Cumulative wei used for transactions.").unwrap()
 });
 
-// TODO: Log and metrics for signer / nonces.
+fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
+    Ok(Duration::from_secs(u64::from_str(value)?))
+}
 
+// TODO: Log and metrics for signer / nonces.
 #[derive(Clone, Debug, PartialEq, Parser)]
 #[group(skip)]
 pub struct Options {
@@ -106,8 +109,16 @@ pub struct Options {
     pub signing_key: H256,
 
     /// Maximum number of blocks to pull events from in one request.
-    #[clap(long, env, default_value = "1000")]
+    #[clap(long, env, default_value = "100000")]
     pub max_log_blocks: usize,
+
+    /// Minimum number of blocks to pull events from in one request.
+    #[clap(long, env, default_value = "1000")]
+    pub min_log_blocks: usize,
+
+    /// Maximum amount of wait time before request is retried, in seconds.
+    #[clap(long, env, value_parser=duration_from_str, default_value="32")]
+    pub max_backoff_time: Duration,
 
     /// Minimum number of blocks before events are considered confirmed.
     #[clap(long, env, default_value = "10")]
@@ -184,6 +195,8 @@ pub struct Ethereum {
     address:                   H160,
     legacy:                    bool,
     max_log_blocks:            usize,
+    min_log_blocks:            usize,
+    max_backoff_time:          Duration,
     confirmation_blocks_delay: usize,
     send_timeout:              Duration,
     mine_timeout:              Duration,
@@ -359,6 +372,8 @@ impl Ethereum {
             address,
             legacy: !eip1559,
             max_log_blocks: options.max_log_blocks,
+            min_log_blocks: options.min_log_blocks,
+            max_backoff_time: options.max_backoff_time,
             confirmation_blocks_delay: options.confirmation_blocks_delay,
             send_timeout: Duration::from_secs(options.send_timeout),
             mine_timeout: Duration::from_secs(options.mine_timeout),
@@ -507,7 +522,9 @@ impl Ethereum {
         database: Arc<Database>,
     ) -> impl Stream<Item = Result<Log, EventError>> + '_ {
         CachingLogQuery::new(self.provider.clone(), filter)
-            .with_page_size(self.max_log_blocks as u64)
+            .with_start_page_size(self.max_log_blocks as u64)
+            .with_min_page_size(self.min_log_blocks as u64)
+            .with_max_backoff_time(self.max_backoff_time)
             .with_database(database)
             .with_blocks_delay(self.confirmation_blocks_delay as u64)
             .into_stream()

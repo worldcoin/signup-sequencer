@@ -8,8 +8,10 @@ use ethers::{
     types::{Filter, Log, U64},
 };
 use futures::{Stream, StreamExt};
-use std::{cmp::max, sync::Arc};
+use std::{cmp::max, sync::Arc, time::Duration};
 use thiserror::Error;
+use tokio::time::sleep;
+use tracing::{error, info};
 
 pub struct CachingLogQuery {
     provider:                  Arc<ProviderStack>,
@@ -76,25 +78,72 @@ impl CachingLogQuery {
         try_stream! {
             let last_block = self.get_block_number().await?;
 
+            info!("Reading MemberAdded events from cache");
+
             let cached_events = self.load_db_logs().await?;
             for log in cached_events {
                 yield serde_json::from_str(&log).map_err(Error::Parse)?;
             }
 
-            let filter = self.filter.clone().from_block(max(
-                last_block.db + 1,
-                self.filter.get_from_block().unwrap_or_default(),
-            ));
-            let mut stream = self.provider
-                .get_logs_paginated(&filter, self.page_size as u64);
+            let mut last_successful_block = U64::default();
+            let mut current_page_size = self.page_size;
+            let mut backoff_time = Duration::from_secs(1);
 
-            while let Some(log) = stream.next().await {
-                let log = log.map_err(Error::LoadLogs)?;
-                if self.is_confirmed(&log, last_block) {
-                    let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;
-                    self.cache_log(raw_log, &log).await?;
+            'restart: loop {
+                let filter = self.filter.clone().from_block(max(
+                    max(last_successful_block + 1, last_block.db + 1),
+                    self.filter.get_from_block().unwrap_or_default(),
+                ));
+
+                info!(
+                    page_size = current_page_size,
+                    from_block = filter.get_from_block().unwrap_or_default().as_u64(),
+                    "Reading MemberAdded events from chains"
+                );
+
+                let mut stream = self.provider
+                    .get_logs_paginated(&filter, current_page_size);
+
+                while let Some(log) = stream.next().await {
+                    let log = match log {
+                        Err(e) if e.to_string().contains("Query timeout exceeded") => {
+                            if current_page_size >= 2000 {
+                                error!(error = ?e, "Retriable error, decreasing page size");
+                                current_page_size /= 2;
+                                continue 'restart;
+                            } else if backoff_time <= Duration::from_secs(32) {
+                                error!(error = ?e, "Retriable error, backoff");
+                                sleep(backoff_time).await;
+                                backoff_time *= 2;
+                                continue 'restart;
+                            } else {
+                                error!(error = ?e, "Retriable error, max number of attempts reached");
+                                // This seems to be the only way to return errors in the try_stream! macro
+                                Err(Error::LoadLogs(e))?;
+                                break 'restart;
+                            }
+                        }
+                        Err(e) => {
+                            // This seems to be the only way to return errors in the try_stream! macro
+                            Err(Error::LoadLogs(e))?;
+                            break 'restart;
+                        }
+                        Ok(log) => log
+                    };
+
+                    // If we need to decrease page size later, don't process same blocks twice
+                    last_successful_block = log.block_number.unwrap_or(last_successful_block);
+
+                    if self.is_confirmed(&log, last_block) {
+                        let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;
+                        self.cache_log(raw_log, &log).await?;
+                    }
+
+                    yield log;
                 }
-                yield log;
+
+                // We've iterated over all events, we can kill the restart loop
+                break;
             }
         }
     }

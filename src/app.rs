@@ -2,14 +2,13 @@ use crate::{
     chain_subscriber::{ChainSubscriber, Error as SubscriberError},
     contracts::{self, Contracts},
     database::{self, Database},
-    ethereum::{self, Ethereum, EventError},
+    ethereum::{self, Ethereum},
     identity_committer::IdentityCommitter,
     server::{Error as ServerError, ToResponseCode},
     timed_read_progress_lock::TimedReadProgressLock,
 };
 use clap::Parser;
-use cli_batteries::await_shutdown;
-use core::cmp::max;
+
 use ethers::types::U256;
 use eyre::Result as EyreResult;
 use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
@@ -19,11 +18,17 @@ use semaphore::{
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
     Field,
 };
-use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
-use std::{sync::Arc, time::Duration};
-use thiserror::Error;
-use tokio::{select, try_join};
-use tracing::{debug, error, info, instrument, warn};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
+use tokio::try_join;
+use tracing::{error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 

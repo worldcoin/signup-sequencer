@@ -3,10 +3,7 @@ use cli_batteries::await_shutdown;
 use futures::{pin_mut, StreamExt, TryStreamExt};
 use std::{
     cmp::max,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::{atomic::Ordering, Arc},
     time::Duration,
 };
 use thiserror::Error;
@@ -47,9 +44,9 @@ impl ChainSubscriber {
             return;
         }
 
-        let database = self.database.clone();
-        let tree_state = self.tree_state.clone();
-        let contracts = self.contracts.clone();
+        let _database = self.database.clone();
+        let _tree_state = self.tree_state.clone();
+        let _contracts = self.contracts.clone();
         let handle = tokio::spawn(async move {
             loop {
                 sleep(Duration::from_secs(60)).await;

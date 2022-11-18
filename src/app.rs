@@ -28,7 +28,7 @@ use std::{
 };
 
 use tokio::try_join;
-use tracing::{error, info, instrument, warn};
+use tracing::{error, instrument, warn, info};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
@@ -120,9 +120,9 @@ pub struct App {
     ethereum:           Ethereum,
     contracts:          Arc<Contracts>,
     identity_committer: IdentityCommitter,
+    #[allow(dead_code)]
     chain_subscriber:   ChainSubscriber,
     tree_state:         SharedTreeState,
-    last_block:         u64,
 }
 
 impl App {
@@ -156,8 +156,12 @@ impl App {
 
         let identity_committer =
             IdentityCommitter::new(database.clone(), contracts.clone(), tree_state.clone());
-        let chain_subscriber =
-            ChainSubscriber::new(database.clone(), contracts.clone(), tree_state.clone());
+        let mut chain_subscriber = ChainSubscriber::new(
+            options.starting_block,
+            database.clone(),
+            contracts.clone(),
+            tree_state.clone(),
+        );
 
         match chain_subscriber.process_events().await {
             Err(SubscriberError::RootMismatch) => {
@@ -171,31 +175,34 @@ impl App {
                 database.wipe_cache().await?;
 
                 // Retry
+                chain_subscriber = ChainSubscriber::new(
+                    options.starting_block,
+                    database.clone(),
+                    contracts.clone(),
+                    tree_state.clone(),
+                );
                 chain_subscriber.process_events().await?;
             }
             Err(e) => return Err(e.into()),
             Ok(_) => {}
         }
 
-        let app = Self {
+        // Sync with chain on start up
+        // TODO: check leaves used to run before historical events. what's up with that?
+        chain_subscriber.check_leaves().await;
+        chain_subscriber.check_health().await;
+        chain_subscriber.start().await;
+
+        identity_committer.start().await;
+
+        Ok(Self {
             database,
             ethereum,
             contracts,
             identity_committer,
             chain_subscriber,
             tree_state,
-            last_block: options.starting_block,
-        };
-
-        // Sync with chain on start up
-        // TODO: check leaves used to run before historical events. what's up with that?
-        app.check_leaves().await;
-        app.check_health().await;
-
-        app.chain_subscriber.start().await;
-        app.identity_committer.start().await;
-
-        Ok(app)
+        })
     }
 
     /// Queues an insert into the merkle tree.
@@ -319,125 +326,6 @@ impl App {
             Ok(InclusionProofResponse::Pending)
         } else {
             Err(ServerError::IdentityCommitmentNotFound)
-        }
-    }
-
-    #[instrument(level = "debug", skip_all)]
-    async fn check_leaves(&self) {
-        let tree = self.tree_state.read().await.unwrap_or_else(|e| {
-            error!(?e, "Failed to obtain tree lock in check_leaves.");
-            panic!("Sequencer potentially deadlocked, terminating.");
-        });
-        let next_leaf = tree.next_leaf;
-        let initial_leaf = self.contracts.initial_leaf();
-        for (index, &leaf) in tree.merkle_tree.leaves().iter().enumerate() {
-            if index < next_leaf && leaf == initial_leaf {
-                error!(
-                    ?index,
-                    ?leaf,
-                    ?next_leaf,
-                    "Leaf in non-empty spot set to initial leaf value."
-                );
-            }
-            if index >= next_leaf && leaf != initial_leaf {
-                error!(
-                    ?index,
-                    ?leaf,
-                    ?next_leaf,
-                    "Leaf in empty spot not set to initial leaf value."
-                );
-            }
-            if leaf != initial_leaf {
-                if let Some(previous) = tree.merkle_tree.leaves()[..index]
-                    .iter()
-                    .position(|&l| l == leaf)
-                {
-                    error!(?index, ?leaf, ?previous, "Leaf not unique.");
-                }
-            }
-        }
-    }
-
-    #[instrument(level = "debug", skip_all)]
-    async fn check_health(&self) {
-        let tree = self.tree_state.read().await.unwrap_or_else(|e| {
-            error!(?e, "Failed to obtain tree lock in check_health.");
-            panic!("Sequencer potentially deadlocked, terminating.");
-        });
-        let initial_leaf = self.contracts.initial_leaf();
-        // TODO: A re-org undoing events would cause this to fail.
-        if tree.next_leaf > 0 {
-            if let Err(error) = self
-                .contracts
-                .assert_valid_root(tree.merkle_tree.root())
-                .await
-            {
-                error!(root = ?tree.merkle_tree.root(), %error, "Root not valid on-chain.");
-            } else {
-                info!(root = ?tree.merkle_tree.root(), "Root matches on-chain root.");
-            }
-        } else {
-            // TODO: This should still be checkable.
-            info!(root = ?tree.merkle_tree.root(), "Empty tree, not checking root.");
-        }
-
-        // Check tree health
-        let next_leaf = tree
-            .merkle_tree
-            .leaves()
-            .iter()
-            .rposition(|&l| l != initial_leaf)
-            .map_or(0, |i| i + 1);
-        let used_leaves = &tree.merkle_tree.leaves()[..next_leaf];
-        let skipped = used_leaves.iter().filter(|&&l| l == initial_leaf).count();
-        let mut dedup = used_leaves
-            .iter()
-            .filter(|&&l| l != initial_leaf)
-            .collect::<Vec<_>>();
-        dedup.sort();
-        dedup.dedup();
-        let unique = dedup.len();
-        let duplicates = used_leaves.len() - skipped - unique;
-        let total = tree.merkle_tree.num_leaves();
-        let available = total - next_leaf;
-        #[allow(clippy::cast_precision_loss)]
-        let fill = (next_leaf as f64) / (total as f64);
-        if skipped == 0 && duplicates == 0 {
-            info!(
-                healthy = %unique,
-                %available,
-                %total,
-                %fill,
-                "Merkle tree is healthy, no duplicates or skipped leaves."
-            );
-        } else {
-            error!(
-                healthy = %unique,
-                %duplicates,
-                %skipped,
-                used = %next_leaf,
-                %available,
-                %total,
-                %fill,
-                "Merkle tree has duplicate or skipped leaves."
-            );
-        }
-        if next_leaf > available * 3 {
-            if next_leaf > available * 19 {
-                error!(
-                    used = %next_leaf,
-                    available = %available,
-                    total = %total,
-                    "Merkle tree is over 95% full."
-                );
-            } else {
-                warn!(
-                    used = %next_leaf,
-                    available = %available,
-                    total = %total,
-                    "Merkle tree is over 75% full."
-                );
-            }
         }
     }
 

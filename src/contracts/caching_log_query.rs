@@ -9,7 +9,7 @@ use ethers::{
     types::{Filter, Log, U64},
 };
 use futures::{Stream, StreamExt};
-use std::{cmp::max, sync::Arc, time::Duration};
+use std::{cmp::max, num::TryFromIntError, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::time::sleep;
 use tracing::{error, info};
@@ -93,9 +93,15 @@ impl CachingLogQuery {
         try_stream! {
             let last_block = self.get_block_number().await?;
 
-            info!("Reading MemberAdded events from cache");
+            let cached_events = self.load_db_logs(
+                self.filter.get_from_block().unwrap().as_u64(),
+                self.filter.get_to_block().map(|num| num.as_u64())
+            ).await?;
 
-            let cached_events = self.load_db_logs().await?;
+            if cached_events.len() > 0 {
+                info!("Reading MemberAdded events from cache");
+            }
+
             for log in cached_events {
                 yield serde_json::from_str(&log).map_err(Error::Parse)?;
             }
@@ -176,9 +182,23 @@ impl CachingLogQuery {
         })
     }
 
-    async fn load_db_logs(&self) -> Result<Vec<String>, Error<ProviderError>> {
+    async fn load_db_logs(
+        &self,
+        from_block: u64,
+        to_block: Option<u64>,
+    ) -> Result<Vec<String>, Error<ProviderError>> {
+        let from: i64 = from_block.try_into().map_err(|e: TryFromIntError| {
+            Error::<ProviderError>::BlockIndexOutOfRange(e.to_string())
+        })?;
+        let to: Option<i64> = match to_block {
+            Some(num) => Some(
+                i64::try_from(num)
+                    .map_err(|e| Error::<ProviderError>::BlockIndexOutOfRange(e.to_string()))?,
+            ),
+            None => None,
+        };
         match &self.database {
-            Some(database) => database.load_logs().await.map_err(Error::Database),
+            Some(database) => database.load_logs(from, to).await.map_err(Error::Database),
             None => Ok(vec![]),
         }
     }

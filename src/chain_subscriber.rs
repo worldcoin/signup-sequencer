@@ -1,4 +1,4 @@
-use crate::{app::{TreeState, SharedTreeState}, contracts::Contracts, database::Database, ethereum::EventError};
+use crate::{app::SharedTreeState, contracts::Contracts, database::Database, ethereum::EventError};
 use cli_batteries::await_shutdown;
 use futures::{pin_mut, StreamExt, TryStreamExt};
 use std::{
@@ -8,7 +8,7 @@ use std::{
 };
 use thiserror::Error;
 use tokio::{select, sync::RwLock, task::JoinHandle, time::sleep};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 struct RunningInstance {
     #[allow(dead_code)]
@@ -16,20 +16,23 @@ struct RunningInstance {
 }
 
 pub struct ChainSubscriber {
-    instance:   RwLock<Option<RunningInstance>>,
-    database:   Arc<Database>,
-    contracts:  Arc<Contracts>,
-    tree_state: SharedTreeState,
+    instance:       RwLock<Option<RunningInstance>>,
+    starting_block: u64,
+    database:       Arc<Database>,
+    contracts:      Arc<Contracts>,
+    tree_state:     SharedTreeState,
 }
 
 impl ChainSubscriber {
     pub fn new(
+        starting_block: u64,
         database: Arc<Database>,
         contracts: Arc<Contracts>,
         tree_state: SharedTreeState,
     ) -> Self {
         Self {
             instance: RwLock::new(None),
+            starting_block,
             database,
             contracts,
             tree_state,
@@ -44,31 +47,68 @@ impl ChainSubscriber {
             return;
         }
 
-        let _database = self.database.clone();
-        let _tree_state = self.tree_state.clone();
-        let _contracts = self.contracts.clone();
+        let mut starting_block = self.starting_block;
+        let database = self.database.clone();
+        let tree_state = self.tree_state.clone();
+        let contracts = self.contracts.clone();
         let handle = tokio::spawn(async move {
             loop {
                 sleep(Duration::from_secs(60)).await;
+                let processed_block = Self::process_events_internal(
+                    starting_block,
+                    tree_state.clone(),
+                    contracts.clone(),
+                    database.clone(),
+                )
+                .await;
+                match processed_block {
+                    Ok(block_number) => starting_block = block_number + 1,
+                    Err(error) => {
+                        error!(?error, "Couldn't process events update");
+                    }
+                }
             }
         });
         *instance = Some(RunningInstance { handle });
     }
 
     #[instrument(level = "info", skip_all)]
-    pub async fn process_events(&self) -> Result<(), Error> {
-        let mut tree = self.tree_state.write().await.unwrap_or_else(|e| {
-            error!(?e, "Failed to obtain tree lock in check_health.");
+    pub async fn process_events(&mut self) -> Result<(), Error> {
+        let processed_block = Self::process_events_internal(
+            self.starting_block,
+            self.tree_state.clone(),
+            self.contracts.clone(),
+            self.database.clone(),
+        )
+        .await?;
+        self.starting_block = processed_block + 1;
+        Ok(())
+    }
+
+    async fn process_events_internal(
+        starting_block: u64,
+        tree_state: SharedTreeState,
+        contracts: Arc<Contracts>,
+        database: Arc<Database>,
+    ) -> Result<u64, Error> {
+        let mut tree = tree_state.write().await.unwrap_or_else(|e| {
+            error!(?e, "Failed to obtain tree lock in process_events.");
             panic!("Sequencer potentially deadlocked, terminating.");
         });
 
-        let initial_leaf = self.contracts.initial_leaf();
-        let mut events = self
-            .contracts
+        let initial_leaf = contracts.initial_leaf();
+
+        let end_block = contracts
+            .confirmed_block_number()
+            .await
+            .map_err(Error::EventError)?;
+
+        let mut events = contracts
             .fetch_events(
-                0,
+                starting_block,
+                Some(end_block),
                 tree.next_leaf,
-                self.database.clone(),
+                database.clone(),
             )
             .boxed();
         let shutdown = await_shutdown();
@@ -143,7 +183,122 @@ impl ChainSubscriber {
                 return Err(Error::RootMismatch);
             }
         }
-        Ok(())
+
+        Ok(end_block)
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    pub async fn check_leaves(&self) {
+        let tree = self.tree_state.read().await.unwrap_or_else(|e| {
+            error!(?e, "Failed to obtain tree lock in check_leaves.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+        });
+        let next_leaf = tree.next_leaf;
+        let initial_leaf = self.contracts.initial_leaf();
+        for (index, &leaf) in tree.merkle_tree.leaves().iter().enumerate() {
+            if index < next_leaf && leaf == initial_leaf {
+                error!(
+                    ?index,
+                    ?leaf,
+                    ?next_leaf,
+                    "Leaf in non-empty spot set to initial leaf value."
+                );
+            }
+            if index >= next_leaf && leaf != initial_leaf {
+                error!(
+                    ?index,
+                    ?leaf,
+                    ?next_leaf,
+                    "Leaf in empty spot not set to initial leaf value."
+                );
+            }
+            if leaf != initial_leaf {
+                if let Some(previous) = tree.merkle_tree.leaves()[..index]
+                    .iter()
+                    .position(|&l| l == leaf)
+                {
+                    error!(?index, ?leaf, ?previous, "Leaf not unique.");
+                }
+            }
+        }
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    pub async fn check_health(&self) {
+        let tree = self.tree_state.read().await.unwrap_or_else(|e| {
+            error!(?e, "Failed to obtain tree lock in check_leaves.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+        });
+        let initial_leaf = self.contracts.initial_leaf();
+        // TODO: A re-org undoing events would cause this to fail.
+        if tree.next_leaf > 0 {
+            if let Err(error) = self.contracts.assert_valid_root(tree.merkle_tree.root()).await {
+                error!(root = ?tree.merkle_tree.root(), %error, "Root not valid on-chain.");
+            } else {
+                info!(root = ?tree.merkle_tree.root(), "Root matches on-chain root.");
+            }
+        } else {
+            // TODO: This should still be checkable.
+            info!(root = ?tree.merkle_tree.root(), "Empty tree, not checking root.");
+        }
+
+        // Check tree health
+        let next_leaf = tree.merkle_tree
+            .leaves()
+            .iter()
+            .rposition(|&l| l != initial_leaf)
+            .map_or(0, |i| i + 1);
+        let used_leaves = &tree.merkle_tree.leaves()[..next_leaf];
+        let skipped = used_leaves.iter().filter(|&&l| l == initial_leaf).count();
+        let mut dedup = used_leaves
+            .iter()
+            .filter(|&&l| l != initial_leaf)
+            .collect::<Vec<_>>();
+        dedup.sort();
+        dedup.dedup();
+        let unique = dedup.len();
+        let duplicates = used_leaves.len() - skipped - unique;
+        let total = tree.merkle_tree.num_leaves();
+        let available = total - next_leaf;
+        #[allow(clippy::cast_precision_loss)]
+        let fill = (next_leaf as f64) / (total as f64);
+        if skipped == 0 && duplicates == 0 {
+            info!(
+                healthy = %unique,
+                %available,
+                %total,
+                %fill,
+                "Merkle tree is healthy, no duplicates or skipped leaves."
+            );
+        } else {
+            error!(
+                healthy = %unique,
+                %duplicates,
+                %skipped,
+                used = %next_leaf,
+                %available,
+                %total,
+                %fill,
+                "Merkle tree has duplicate or skipped leaves."
+            );
+        }
+        if next_leaf > available * 3 {
+            if next_leaf > available * 19 {
+                error!(
+                    used = %next_leaf,
+                    available = %available,
+                    total = %total,
+                    "Merkle tree is over 95% full."
+                );
+            } else {
+                warn!(
+                    used = %next_leaf,
+                    available = %available,
+                    total = %total,
+                    "Merkle tree is over 75% full."
+                );
+            }
+        }
     }
 }
 

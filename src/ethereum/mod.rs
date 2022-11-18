@@ -522,6 +522,14 @@ impl Ethereum {
         Ok(receipt)
     }
 
+    pub async fn confirmed_block_number(&self) -> Result<U64, EventError> {
+        self.provider
+            .provider()
+            .get_block_number()
+            .await
+            .map_err(|e| EventError::Fetching(CachingLogQueryError::LoadLastBlock(e)))
+    }
+
     pub fn fetch_events_raw(
         &self,
         filter: &Filter,

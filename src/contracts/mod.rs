@@ -139,11 +139,19 @@ impl Contracts {
         self.initial_leaf
     }
 
+    pub async fn confirmed_block_number(&self) -> Result<u64, EventError> {
+        self.ethereum
+            .confirmed_block_number()
+            .await
+            .map(|num| num.as_u64())
+    }
+
     #[allow(clippy::disallowed_methods)] // False positive from macro expansion.
     #[instrument(level = "debug", skip(self, database))]
     pub fn fetch_events(
         &self,
         starting_block: u64,
+        end_block: Option<u64>,
         last_leaf: usize,
         database: Arc<Database>,
     ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
@@ -151,10 +159,14 @@ impl Contracts {
         // TODO: Register to the event stream and track it going forward.
 
         // Start MemberAdded log event stream
-        let filter = self
+        let mut filter = self
             .semaphore
             .member_added_filter()
             .from_block(starting_block);
+
+        if let Some(end_block) = end_block {
+            filter = filter.to_block(end_block);
+        }
         self.ethereum
             .fetch_events::<MemberAddedEvent>(&filter.filter, database)
             .try_filter(|event| future::ready(event.group_id == self.group_id))

@@ -234,12 +234,20 @@ impl Database {
         }
     }
 
-    pub async fn load_logs(&self) -> Result<Vec<String>, Error> {
+    pub async fn load_logs(
+        &self,
+        from_block: i64,
+        to_block: Option<i64>,
+    ) -> Result<Vec<String>, Error> {
         let rows = self
             .pool
-            .fetch_all(sqlx::query(
-                r#"SELECT raw FROM logs ORDER BY block_index, transaction_index, log_index;"#,
-            ))
+            .fetch_all(
+                sqlx::query(
+                r#"SELECT raw FROM logs WHERE block_index >= $1 AND block_index <= $2 ORDER BY block_index, transaction_index, log_index;"#,
+                )
+                .bind(from_block)
+                .bind(to_block.unwrap_or(i64::MAX))
+            )
             .await?
             .iter()
             .map(|row| row.get(0))

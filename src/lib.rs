@@ -6,6 +6,7 @@ mod contracts;
 mod database;
 mod ethereum;
 mod identity_committer;
+mod chain_subscriber;
 pub mod server;
 mod timed_read_progress_lock;
 mod utils;

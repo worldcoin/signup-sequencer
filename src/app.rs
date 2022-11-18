@@ -5,6 +5,7 @@ use crate::{
     identity_committer::IdentityCommitter,
     server::{Error as ServerError, ToResponseCode},
     timed_read_progress_lock::TimedReadProgressLock,
+    chain_subscriber::ChainSubscriber,
 };
 use clap::Parser;
 use cli_batteries::await_shutdown;
@@ -114,6 +115,7 @@ pub struct App {
     ethereum:           Ethereum,
     contracts:          Arc<Contracts>,
     identity_committer: IdentityCommitter,
+    chain_subscriber:   ChainSubscriber,
     tree_state:         SharedTreeState,
     last_block:         u64,
 }
@@ -149,12 +151,15 @@ impl App {
 
         let identity_committer =
             IdentityCommitter::new(database.clone(), contracts.clone(), tree_state.clone());
+        let chain_subscriber =
+            ChainSubscriber::new(database.clone(), contracts.clone(), tree_state.clone());
 
         let mut app = Self {
             database,
             ethereum,
             contracts,
             identity_committer,
+            chain_subscriber,
             tree_state,
             last_block: options.starting_block,
         };
@@ -181,6 +186,7 @@ impl App {
         }
 
         app.check_health().await;
+        app.chain_subscriber.start().await;
         app.identity_committer.start().await;
         Ok(app)
     }

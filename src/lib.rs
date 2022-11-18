@@ -2,11 +2,11 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
 pub mod app;
+mod chain_subscriber;
 mod contracts;
 mod database;
 mod ethereum;
 mod identity_committer;
-mod chain_subscriber;
 pub mod server;
 mod timed_read_progress_lock;
 mod utils;

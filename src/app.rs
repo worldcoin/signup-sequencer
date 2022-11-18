@@ -1,11 +1,11 @@
 use crate::{
+    chain_subscriber::{ChainSubscriber, Error as SubscriberError},
     contracts::{self, Contracts},
     database::{self, Database},
     ethereum::{self, Ethereum, EventError},
     identity_committer::IdentityCommitter,
     server::{Error as ServerError, ToResponseCode},
     timed_read_progress_lock::TimedReadProgressLock,
-    chain_subscriber::ChainSubscriber,
 };
 use clap::Parser;
 use cli_batteries::await_shutdown;
@@ -144,7 +144,7 @@ impl App {
         let database = Arc::new(database);
 
         // Poseidon tree depth is one more than the contract's tree depth
-        let tree_state = Arc::new(TimedReadProgressLock::new(
+        let mut tree_state = Arc::new(TimedReadProgressLock::new(
             Duration::from_secs(options.lock_timeout),
             TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
         ));
@@ -154,7 +154,25 @@ impl App {
         let chain_subscriber =
             ChainSubscriber::new(database.clone(), contracts.clone(), tree_state.clone());
 
-        let mut app = Self {
+        match chain_subscriber.process_events().await {
+            Err(SubscriberError::RootMismatch) => {
+                error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
+
+                // Create a new empty MerkleTree and wipe out cache db
+                tree_state = Arc::new(TimedReadProgressLock::new(
+                    Duration::from_secs(options.lock_timeout),
+                    TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
+                ));
+                database.wipe_cache().await?;
+
+                // Retry
+                chain_subscriber.process_events().await?;
+            }
+            Err(e) => return Err(e.into()),
+            Ok(_) => {}
+        }
+
+        let app = Self {
             database,
             ethereum,
             contracts,
@@ -165,29 +183,13 @@ impl App {
         };
 
         // Sync with chain on start up
+        // TODO: check leaves used to run before historical events. what's up with that?
         app.check_leaves().await;
-
-        match app.process_events().await {
-            Err(Error::RootMismatch) => {
-                error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
-
-                // Create a new empty MerkleTree and wipe out cache db
-                app.tree_state = Arc::new(TimedReadProgressLock::new(
-                    Duration::from_secs(options.lock_timeout),
-                    TreeState::new(app.contracts.tree_depth() + 1, app.contracts.initial_leaf()),
-                ));
-                app.database.wipe_cache().await?;
-
-                // Retry
-                app.process_events().await?;
-            }
-            Err(e) => return Err(e.into()),
-            Ok(_) => {}
-        }
-
         app.check_health().await;
+
         app.chain_subscriber.start().await;
         app.identity_committer.start().await;
+
         Ok(app)
     }
 
@@ -351,93 +353,6 @@ impl App {
         }
     }
 
-    #[instrument(level = "info", skip_all)]
-    async fn process_events(&mut self) -> Result<(), Error> {
-        let mut tree = self.tree_state.write().await.unwrap_or_else(|e| {
-            error!(?e, "Failed to obtain tree lock in process_events.");
-            panic!("Sequencer potentially deadlocked, terminating.");
-        });
-
-        let initial_leaf = self.contracts.initial_leaf();
-        let mut events = self
-            .contracts
-            .fetch_events(self.last_block, tree.next_leaf, self.database.clone())
-            .boxed();
-        let shutdown = await_shutdown();
-        pin_mut!(shutdown);
-        loop {
-            let (index, leaf, root) = select! {
-                v = events.try_next() => match v.map_err(Error::EventError)? {
-                    Some(a) => a,
-                    None => break,
-                },
-                _ = &mut shutdown => return Err(Error::Interrupted),
-            };
-            debug!(?index, ?leaf, ?root, "Received event");
-
-            // Check leaf index is valid
-            if index >= tree.merkle_tree.num_leaves() {
-                error!(?index, ?leaf, num_leaves = ?tree.merkle_tree.num_leaves(), "Received event out of range");
-                return Err(Error::EventOutOfRange);
-            }
-
-            // Check if leaf value is valid
-            if leaf == initial_leaf {
-                error!(?index, ?leaf, "Inserting empty leaf");
-                continue;
-            }
-
-            // Check leaf value with existing value
-            let existing = tree.merkle_tree.leaves()[index];
-            if existing != initial_leaf {
-                if existing == leaf {
-                    error!(?index, ?leaf, "Received event for already existing leaf.");
-                    continue;
-                }
-                error!(
-                    ?index,
-                    ?leaf,
-                    ?existing,
-                    "Received event for already set leaf."
-                );
-            }
-
-            // Check insertion counter
-            if index != tree.next_leaf {
-                error!(
-                    ?index,
-                    ?tree.next_leaf,
-                    ?leaf,
-                    "Event leaf index does not match expected leaf index."
-                );
-            }
-
-            // Check duplicates
-            if let Some(previous) = tree.merkle_tree.leaves()[..index]
-                .iter()
-                .position(|&l| l == leaf)
-            {
-                error!(
-                    ?index,
-                    ?leaf,
-                    ?previous,
-                    "Received event for already inserted leaf."
-                );
-            }
-
-            // Insert
-            tree.merkle_tree.set(index, leaf);
-            tree.next_leaf = max(tree.next_leaf, index + 1);
-
-            // Check root
-            if root != tree.merkle_tree.root() {
-                error!(computed_root = ?tree.merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
-                return Err(Error::RootMismatch);
-            }
-        }
-        Ok(())
-    }
-
     #[instrument(level = "debug", skip_all)]
     async fn check_health(&self) {
         let tree = self.tree_state.read().await.unwrap_or_else(|e| {
@@ -529,16 +444,4 @@ impl App {
         info!("Shutting down identity committer.");
         self.identity_committer.shutdown().await
     }
-}
-
-#[derive(Debug, Error)]
-enum Error {
-    #[error("Interrupted")]
-    Interrupted,
-    #[error("Root mismatch between event and computed tree.")]
-    RootMismatch,
-    #[error("Received event out of range")]
-    EventOutOfRange,
-    #[error("Event error: {0}")]
-    EventError(#[source] EventError),
 }

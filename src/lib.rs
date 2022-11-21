@@ -34,11 +34,11 @@ pub struct Options {
 pub async fn main(options: Options) -> EyreResult<()> {
     // Create App struct
     let app = Arc::new(App::new(options.app).await?);
-
+    let app_for_server = app.clone();
     // Start server
     let server = spawn_or_abort({
         async move {
-            server::main(app, options.server).await?;
+            server::main(app_for_server, options.server).await?;
             EyreResult::Ok(())
         }
     });
@@ -50,6 +50,10 @@ pub async fn main(options: Options) -> EyreResult<()> {
     // Wait for server
     info!("Stopping server");
     server.await?;
+
+    info!("Stopping the app");
+    app.shutdown().await?;
+
     Ok(())
 }
 

@@ -6,19 +6,17 @@ use crate::{
 use eyre::eyre;
 use std::sync::{atomic::Ordering, Arc};
 use tokio::{
+    select,
     sync::{mpsc, mpsc::error::TrySendError, RwLock},
     task::JoinHandle,
 };
 use tracing::{debug, error, info, instrument};
 
-/// A type that cannot be constructed. Should be replaced with `!` when it gets
-/// stabilized.
-pub enum Never {}
-
 struct RunningInstance {
     #[allow(dead_code)]
-    handle:         JoinHandle<eyre::Result<Never>>,
-    wake_up_sender: mpsc::Sender<()>,
+    handle:          JoinHandle<eyre::Result<()>>,
+    wake_up_sender:  mpsc::Sender<()>,
+    shutdown_sender: mpsc::Sender<()>,
 }
 
 impl RunningInstance {
@@ -37,6 +35,17 @@ impl RunningInstance {
             }
             Err(TrySendError::Closed(_)) => Err(eyre!("Committer thread terminated unexpectedly.")),
         }
+    }
+
+    async fn shutdown(self) -> eyre::Result<()> {
+        info!("Sending a shutdown signal to the committer.");
+        // Ignoring errors here, since we have two options: either the channel is full,
+        // which is impossible, since this is the only use, and this method takes
+        // ownership, or the channel is closed, which means the committer thread is
+        // already dead.
+        self.shutdown_sender.send(()).await.ok();
+        info!("Awaiting committer shutdown.");
+        self.handle.await?
     }
 }
 
@@ -68,6 +77,7 @@ impl IdentityCommitter {
             info!("Identity committer already running");
             return;
         }
+        let (shutdown_sender, mut shutdown_receiver) = mpsc::channel(1);
         let (wake_up_sender, mut wake_up_receiver) = mpsc::channel(1);
         let database = self.database.clone();
         let tree_state = self.tree_state.clone();
@@ -77,16 +87,29 @@ impl IdentityCommitter {
                 while let Some((group_id, commitment)) =
                     database.get_oldest_unprocessed_identity().await?
                 {
+                    if (shutdown_receiver.try_recv()).is_ok() {
+                        info!("Shutdown signal received, not processing remaining items.");
+                        return Ok(());
+                    }
                     Self::commit_identity(&database, &contracts, &tree_state, group_id, commitment)
                         .await?;
                 }
 
-                wake_up_receiver.recv().await;
+                select! {
+                    _ = wake_up_receiver.recv() => {
+                        debug!("Woke up by a request.");
+                    }
+                    _ = shutdown_receiver.recv() => {
+                        info!("Woke up by shutdown signal, exiting.");
+                        return Ok(());
+                    }
+                }
             }
         });
         *instance = Some(RunningInstance {
             handle,
             wake_up_sender,
+            shutdown_sender,
         });
     }
 
@@ -167,5 +190,15 @@ impl IdentityCommitter {
             .expect("Committer not running, terminating.")
             .wake_up()
             .unwrap();
+    }
+
+    pub async fn shutdown(&self) -> eyre::Result<()> {
+        let mut instance = self.instance.write().await;
+        if let Some(instance) = instance.take() {
+            instance.shutdown().await?;
+        } else {
+            info!("Committer not running.");
+        }
+        Ok(())
     }
 }

@@ -505,7 +505,7 @@ impl App {
         }
     }
 
-    pub async fn shutdown(&self) -> eyre::Result<()>{
+    pub async fn shutdown(&self) -> eyre::Result<()> {
         info!("Shutting down identity committer.");
         self.identity_committer.shutdown().await
     }

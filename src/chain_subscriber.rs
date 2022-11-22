@@ -15,6 +15,14 @@ struct RunningInstance {
     handle: JoinHandle<eyre::Result<()>>,
 }
 
+impl RunningInstance {
+    fn shutdown(self) -> eyre::Result<()> {
+        info!("Sending a shutdown signal to the subscriber.");
+        self.handle.abort();
+        Ok(())
+    }
+}
+
 pub struct ChainSubscriber {
     instance:       RwLock<Option<RunningInstance>>,
     starting_block: u64,
@@ -299,6 +307,16 @@ impl ChainSubscriber {
                 );
             }
         }
+    }
+
+    pub async fn shutdown(&self) -> eyre::Result<()> {
+        let mut instance = self.instance.write().await;
+        if let Some(instance) = instance.take() {
+            instance.shutdown()?;
+        } else {
+            info!("Subscriber not running.");
+        }
+        Ok(())
     }
 }
 

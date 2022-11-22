@@ -334,7 +334,8 @@ impl App {
     /// Will return an Error if any of the components cannot be shut down
     /// gracefully.
     pub async fn shutdown(&self) -> eyre::Result<()> {
-        info!("Shutting down identity committer.");
+        info!("Shutting down identity committer and chain subscriber.");
+        self.chain_subscriber.shutdown().await?;
         self.identity_committer.shutdown().await
     }
 }

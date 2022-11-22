@@ -140,10 +140,10 @@ impl IdentityCommitter {
         // Get a progress lock on the tree for the duration of this operation. Holding a
         // progress lock ensures no other thread calls tries to insert an identity into
         // the contract, as that is an order dependent operation.
-        let tree = tree_state.progress().await.map_err(|e| {
-            error!(?e, "Failed to obtain tree lock in commit_identity.");
-            e
-        })?;
+        // let _tree = tree_state.progress().await.map_err(|e| {
+        //     error!(?e, "Failed to obtain tree lock in commit_identity.");
+        //     e
+        // })?;
 
         // Send Semaphore transaction
         let receipt = contracts.insert_identity(commitment).await.map_err(|e| {

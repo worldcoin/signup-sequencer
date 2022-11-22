@@ -2,9 +2,8 @@ use crate::{app::SharedTreeState, contracts::Contracts, database::{Database, Err
 use cli_batteries::await_shutdown;
 use futures::{pin_mut, StreamExt, TryStreamExt};
 use std::{
-    cmp::max,
     sync::{atomic::Ordering, Arc},
-    time::Duration,
+    time::Duration, cmp::max,
 };
 use thiserror::Error;
 use tokio::{select, sync::RwLock, task::JoinHandle, time::sleep};
@@ -16,10 +15,9 @@ struct RunningInstance {
 }
 
 impl RunningInstance {
-    fn shutdown(self) -> eyre::Result<()> {
+    fn shutdown(self) {
         info!("Sending a shutdown signal to the subscriber.");
         self.handle.abort();
-        Ok(())
     }
 }
 
@@ -373,14 +371,13 @@ impl ChainSubscriber {
         }
     }
 
-    pub async fn shutdown(&self) -> eyre::Result<()> {
+    pub async fn shutdown(&self) {
         let mut instance = self.instance.write().await;
         if let Some(instance) = instance.take() {
-            instance.shutdown()?;
+            instance.shutdown();
         } else {
             info!("Subscriber not running.");
         }
-        Ok(())
     }
 }
 

@@ -336,7 +336,7 @@ impl App {
 
     pub async fn shutdown(&self) -> eyre::Result<()> {
         info!("Shutting down identity committer and chain subscriber.");
-        self.chain_subscriber.shutdown().await?;
+        self.chain_subscriber.shutdown().await;
         self.identity_committer.shutdown().await
     }
 }

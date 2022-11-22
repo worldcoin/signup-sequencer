@@ -1,4 +1,4 @@
-use crate::{app::SharedTreeState, contracts::Contracts, database::Database, ethereum::EventError};
+use crate::{app::SharedTreeState, contracts::Contracts, database::{Database, Error as DatabaseError, IsExpectedResponse}, ethereum::EventError, identity_committer::IdentityCommitter};
 use cli_batteries::await_shutdown;
 use futures::{pin_mut, StreamExt, TryStreamExt};
 use std::{
@@ -24,11 +24,12 @@ impl RunningInstance {
 }
 
 pub struct ChainSubscriber {
-    instance:       RwLock<Option<RunningInstance>>,
-    starting_block: u64,
-    database:       Arc<Database>,
-    contracts:      Arc<Contracts>,
-    tree_state:     SharedTreeState,
+    instance:           RwLock<Option<RunningInstance>>,
+    starting_block:     u64,
+    database:           Arc<Database>,
+    contracts:          Arc<Contracts>,
+    tree_state:         SharedTreeState,
+    identity_committer: Arc<IdentityCommitter>,
 }
 
 impl ChainSubscriber {
@@ -37,6 +38,7 @@ impl ChainSubscriber {
         database: Arc<Database>,
         contracts: Arc<Contracts>,
         tree_state: SharedTreeState,
+        identity_committer: Arc<IdentityCommitter>,
     ) -> Self {
         Self {
             instance: RwLock::new(None),
@@ -44,6 +46,7 @@ impl ChainSubscriber {
             database,
             contracts,
             tree_state,
+            identity_committer,
         }
     }
 
@@ -59,14 +62,16 @@ impl ChainSubscriber {
         let database = self.database.clone();
         let tree_state = self.tree_state.clone();
         let contracts = self.contracts.clone();
+        let identity_committer = self.identity_committer.clone();
         let handle = tokio::spawn(async move {
             loop {
-                sleep(Duration::from_secs(60)).await;
+                sleep(Duration::from_secs(2)).await;
                 let processed_block = Self::process_events_internal(
                     starting_block,
                     tree_state.clone(),
                     contracts.clone(),
                     database.clone(),
+                    identity_committer.clone(),
                 )
                 .await;
                 match processed_block {
@@ -87,6 +92,7 @@ impl ChainSubscriber {
             self.tree_state.clone(),
             self.contracts.clone(),
             self.database.clone(),
+            self.identity_committer.clone(),
         )
         .await?;
         self.starting_block = processed_block + 1;
@@ -98,6 +104,7 @@ impl ChainSubscriber {
         tree_state: SharedTreeState,
         contracts: Arc<Contracts>,
         database: Arc<Database>,
+        identity_committer: Arc<IdentityCommitter>,
     ) -> Result<u64, Error> {
         let mut tree = tree_state.write().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in process_events.");
@@ -111,6 +118,14 @@ impl ChainSubscriber {
             .await
             .map_err(Error::EventError)?;
 
+        if starting_block > end_block {
+            return Ok(end_block);
+        }
+        info!(
+            starting_block,
+            end_block, "processing events in chain subscriber"
+        );
+
         let mut events = contracts
             .fetch_events(
                 starting_block,
@@ -121,6 +136,9 @@ impl ChainSubscriber {
             .boxed();
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
+
+        let mut retrigger_processing = Option::<i64>::None;
+
         loop {
             let (index, leaf, root) = select! {
                 v = events.try_next() => match v.map_err(Error::EventError)? {
@@ -130,6 +148,23 @@ impl ChainSubscriber {
                 _ = &mut shutdown => return Err(Error::Interrupted),
             };
             debug!(?index, ?leaf, ?root, "Received event");
+
+            // Confirm if this is a node expected by the identity committer
+            // If not, we need to re-add identities to the work queue
+            // We only care about the first failure as everything else needs to be
+            // recomputed anyway
+            let is_expected = database
+                .is_expected_identity_confirmation(&leaf)
+                .await
+                .map_err(Error::DatabaseError)?;
+            if retrigger_processing.is_none() {
+                if let IsExpectedResponse::NotExpected {
+                    starting: row_index,
+                } = is_expected
+                {
+                    retrigger_processing = Some(row_index);
+                }
+            }
 
             // Check leaf index is valid
             if index >= tree.merkle_tree.num_leaves() {
@@ -185,11 +220,40 @@ impl ChainSubscriber {
             tree.merkle_tree.set(index, leaf);
             tree.next_leaf = max(tree.next_leaf, index + 1);
 
+            
+            // let index = tree_state.next_leaf.fetch_add(1, Ordering::Relaxed);
+            // tree.merkle_tree.set(index, leaf);
+            // tree.next_leaf = max(tree.next_leaf, index + 1);
+
             // Check root
             if root != tree.merkle_tree.root() {
                 error!(computed_root = ?tree.merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
                 return Err(Error::RootMismatch);
             }
+
+            // Remove from pending identities
+            if let IsExpectedResponse::NotExpected {
+                starting: row_index,
+            } = is_expected
+            {
+                database
+                    .pending_identity_confirmed(row_index, &leaf)
+                    .await
+                    .map_err(Error::DatabaseError)?;
+            }
+        }
+
+        if let Some(first_invalid_row) = retrigger_processing {
+            error!(
+                first_invalid_row,
+                "event sequencing inconsistent between chain and identity committer. re-org \
+                 happened?"
+            );
+            database
+                .retrigger_pending_identities(first_invalid_row)
+                .await
+                .map_err(Error::DatabaseError)?;
+            identity_committer.notify_queued().await;
         }
 
         Ok(end_block)
@@ -330,4 +394,6 @@ pub enum Error {
     EventOutOfRange,
     #[error("Event error: {0}")]
     EventError(#[source] EventError),
+    #[error("Database error: {0}")]
+    DatabaseError(#[source] DatabaseError),
 }

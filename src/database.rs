@@ -145,18 +145,83 @@ impl Database {
         group_id: usize,
         commitment: &Hash,
         block_number: usize,
-        tree_idx: usize,
+        relative_index: i64,
     ) -> Result<(), Error> {
+        // TODO: rename assigned_lead_idx column as it doesn't represent the actual leaf
+        // number
         let query = sqlx::query(
             r#"UPDATE pending_identities
                    SET mined_in_block = $1, assigned_leaf_idx = $2
                    WHERE group_id = $3 AND commitment = $4;"#,
         )
         .bind(block_number as i64)
-        .bind(tree_idx as i64)
+        .bind(relative_index)
         .bind(group_id as i64)
         .bind(commitment);
+
         self.pool.execute(query).await?;
+        Ok(())
+    }
+
+    pub async fn is_expected_identity_confirmation(
+        &self,
+        commitment: &Hash,
+    ) -> Result<IsExpectedResponse, Error> {
+        let result = self
+            .pool
+            .fetch_optional(
+                sqlx::query(
+                    r#"SELECT commitment = $1, assigned_leaf_idx
+                           FROM pending_identities
+                           ORDER BY assigned_leaf_idx
+                           LIMIT 1;"#,
+                )
+                .bind(commitment),
+            )
+            .await?
+            .map(|row| {
+                if row.get::<bool, _>(0) {
+                    IsExpectedResponse::Ok
+                } else {
+                    IsExpectedResponse::NotExpected {
+                        starting: row.get::<i64, _>(1),
+                    }
+                }
+            })
+            .unwrap_or(IsExpectedResponse::Ok);
+
+        Ok(result)
+    }
+
+    pub async fn pending_identity_confirmed(
+        &self,
+        row_index: i64,
+        commitment: &Hash,
+    ) -> Result<(), Error> {
+        self.pool
+            .execute(
+                sqlx::query(
+                    r#"DELETE FROM pending_identities
+                        WHERE assigned_leaf_idx = $1 AND commitment = $2;"#,
+                )
+                .bind(row_index)
+                .bind(commitment),
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn retrigger_pending_identities(&self, starting_from: i64) -> Result<(), Error> {
+        self.pool
+            .execute(
+                sqlx::query(
+                    r#"UPDATE pending_identities
+                        SET mined_in_block = NULL, assigned_leaf_idx = NULL, created_at = CURRENT_TIMESTAMP
+                        WHERE assigned_leaf_idx >= $1;"#,
+                )
+                .bind(starting_from),
+            )
+            .await?;
         Ok(())
     }
 
@@ -293,4 +358,9 @@ impl Database {
 pub enum Error {
     #[error("database error")]
     InternalError(#[from] sqlx::Error),
+}
+
+pub enum IsExpectedResponse {
+    Ok,
+    NotExpected { starting: i64 },
 }

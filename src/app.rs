@@ -28,7 +28,7 @@ use std::{
 };
 
 use tokio::try_join;
-use tracing::{error, instrument, warn, info};
+use tracing::{error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
@@ -119,7 +119,7 @@ pub struct App {
     #[allow(dead_code)]
     ethereum:           Ethereum,
     contracts:          Arc<Contracts>,
-    identity_committer: IdentityCommitter,
+    identity_committer: Arc<IdentityCommitter>,
     #[allow(dead_code)]
     chain_subscriber:   ChainSubscriber,
     tree_state:         SharedTreeState,
@@ -154,13 +154,17 @@ impl App {
             TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
         ));
 
-        let identity_committer =
-            IdentityCommitter::new(database.clone(), contracts.clone(), tree_state.clone());
+        let identity_committer = Arc::new(IdentityCommitter::new(
+            database.clone(),
+            contracts.clone(),
+            tree_state.clone(),
+        ));
         let mut chain_subscriber = ChainSubscriber::new(
             options.starting_block,
             database.clone(),
             contracts.clone(),
             tree_state.clone(),
+            identity_committer.clone(),
         );
 
         match chain_subscriber.process_events().await {
@@ -180,6 +184,7 @@ impl App {
                     database.clone(),
                     contracts.clone(),
                     tree_state.clone(),
+                    identity_committer.clone(),
                 );
                 chain_subscriber.process_events().await?;
             }
@@ -329,10 +334,6 @@ impl App {
         }
     }
 
-    /// # Errors
-    ///
-    /// Will return an Error if any of the components cannot be shut down
-    /// gracefully.
     pub async fn shutdown(&self) -> eyre::Result<()> {
         info!("Shutting down identity committer and chain subscriber.");
         self.chain_subscriber.shutdown().await?;

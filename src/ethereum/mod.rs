@@ -527,9 +527,7 @@ impl Ethereum {
             .provider()
             .get_block_number()
             .await
-            .map(|num| {
-                num.saturating_sub(U64([self.confirmation_blocks_delay as u64]))
-            })
+            .map(|num| num.saturating_sub(U64([self.confirmation_blocks_delay as u64])))
             .map_err(|e| EventError::Fetching(CachingLogQueryError::LoadLastBlock(e)))
     }
 

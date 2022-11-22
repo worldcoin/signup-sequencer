@@ -5,7 +5,7 @@ use crate::{
     timed_read_progress_lock::TimedReadProgressLock,
 };
 use eyre::eyre;
-use std::sync::Arc;
+use std::sync::{Arc, atomic::{AtomicI64, Ordering}};
 use tokio::{
     select,
     sync::{mpsc, mpsc::error::TrySendError, RwLock},
@@ -90,6 +90,7 @@ impl IdentityCommitter {
         let tree_state = self.tree_state.clone();
         let contracts = self.contracts.clone();
         let handle = tokio::spawn(async move {
+            let clock = AtomicI64::new(0);
             loop {
                 while let Some((group_id, commitment)) =
                     database.get_oldest_unprocessed_identity().await?
@@ -98,8 +99,15 @@ impl IdentityCommitter {
                         info!("Shutdown signal received, not processing remaining items.");
                         return Ok(());
                     }
-                    Self::commit_identity(&database, &contracts, &tree_state, group_id, commitment)
-                        .await?;
+                    Self::commit_identity(
+                        &database,
+                        &contracts,
+                        &tree_state,
+                        &clock,
+                        group_id,
+                        commitment,
+                    )
+                    .await?;
                 }
 
                 select! {
@@ -125,6 +133,7 @@ impl IdentityCommitter {
         database: &Database,
         contracts: &Contracts,
         tree_state: &TimedReadProgressLock<TreeState>,
+        index: &AtomicI64,
         group_id: usize,
         commitment: Hash,
     ) -> eyre::Result<()> {
@@ -142,43 +151,45 @@ impl IdentityCommitter {
             e
         })?;
 
-        let mut tree = tree.upgrade_to_write().await.map_err(|e| {
-            error!(?e, "Failed to obtain tree lock in insert_identity.");
-            e
-        })?;
+        // let mut tree = tree.upgrade_to_write().await.map_err(|e| {
+        //     error!(?e, "Failed to obtain tree lock in insert_identity.");
+        //     e
+        // })?;
 
         // Update  merkle tree
-        let identity_index = tree.next_leaf;
-        tree.merkle_tree.set(identity_index, commitment);
-        tree.next_leaf += 1;
+        // let identity_index = tree.next_leaf;
+        // tree.merkle_tree.set(identity_index, commitment);
+        // tree.next_leaf += 1;
 
-        // Downgrade write lock to progress lock – tree is now up to date, but still
-        // need to update the database.
-        let tree = tree.downgrade_to_progress();
+        // // Downgrade write lock to progress lock – tree is now up to date, but still
+        // // need to update the database.
+        // let tree = tree.downgrade_to_progress();
 
         let block = receipt
             .block_number
             .expect("Transaction is mined, block number must be present.");
-        info!(
-            "Identity inserted in block {} at index {}.",
-            block, identity_index
-        );
+        info!("Identity submitted in block {}.", block);
         database
-            .mark_identity_inserted(group_id, &commitment, block.as_usize(), identity_index)
+            .mark_identity_inserted(
+                group_id,
+                &commitment,
+                block.as_usize(),
+                index.fetch_add(1, Ordering::AcqRel),
+            )
             .await?;
 
         // Check tree root
-        contracts
-            .assert_valid_root(tree.merkle_tree.root())
-            .await
-            .map_err(|error| {
-                error!(
-                    computed_root = ?tree.merkle_tree.root(),
-                    ?error,
-                    "Root mismatch between tree and contract."
-                );
-                error
-            })?;
+        // contracts
+        //     .assert_valid_root(tree.merkle_tree.root())
+        //     .await
+        //     .map_err(|error| {
+        //         error!(
+        //             computed_root = ?tree.merkle_tree.root(),
+        //             ?error,
+        //             "Root mismatch between tree and contract."
+        //         );
+        //         error
+        //     })?;
 
         Ok(())
     }

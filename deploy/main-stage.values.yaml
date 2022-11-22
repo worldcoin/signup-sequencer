@@ -1,0 +1,19 @@
+# main-stage helm env values override
+image:
+  tag: {{ github.sha }}
+environment: stage                                                  
+ingress:
+  host: signup.stage-crypto.worldcoin.dev                     
+persistentStorage:
+  volumeID: aws://us-east-1a/vol-0af0c762d4294742a
+wipeDisk: true
+# Env values can be strings (to be prefixed with `value:`) or objects
+env:
+  ETHEREUM_PROVIDER: {{ secrets.ALCHEMY_POLYGON_MAINNET_RPC_ENDPOINT }}
+  SIGNING_KEY: {{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}
+  SEMAPHORE_ADDRESS: {{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}
+  LOG_FILTER: "ethers_providers::provider=debug"
+  WIPE_STORAGE: true
+  MAX_LOG_BLOCKS: 1000000
+  STARTING_BLOCK: 0
+  CREATE_GROUP_DEPTH: 20

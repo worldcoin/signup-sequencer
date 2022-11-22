@@ -1,7 +1,11 @@
 mod abi;
+pub mod caching_log_query;
 
 use self::abi::{MemberAddedFilter, SemaphoreContract as Semaphore};
-use crate::ethereum::{Ethereum, EventError, ProviderStack};
+use crate::{
+    database::Database,
+    ethereum::{Ethereum, EventError, ProviderStack},
+};
 use clap::Parser;
 use core::future;
 use ethers::{
@@ -11,6 +15,7 @@ use ethers::{
 use eyre::{eyre, Result as EyreResult};
 use futures::{Stream, StreamExt, TryStreamExt};
 use semaphore::Field;
+use std::sync::Arc;
 use tracing::{error, info, instrument};
 
 pub type MemberAddedEvent = MemberAddedFilter;
@@ -133,11 +138,12 @@ impl Contracts {
     }
 
     #[allow(clippy::disallowed_methods)] // False positive from macro expansion.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip(self, database))]
     pub fn fetch_events(
         &self,
         starting_block: u64,
         last_leaf: usize,
+        database: Arc<Database>,
     ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
         info!(
             starting_block,
@@ -151,7 +157,7 @@ impl Contracts {
             .member_added_filter()
             .from_block(starting_block);
         self.ethereum
-            .fetch_events::<MemberAddedEvent>(&filter.filter)
+            .fetch_events::<MemberAddedEvent>(&filter.filter, database)
             .try_filter(|event| future::ready(event.group_id == self.group_id))
             .enumerate()
             .map(|(index, res)| res.map(|event| (index, event)))

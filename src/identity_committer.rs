@@ -1,16 +1,17 @@
 use crate::{
-    app::{Hash, TreeState},
+    app::{Hash, SharedTreeState, TreeState},
     contracts::Contracts,
     database::Database,
+    timed_read_progress_lock::TimedReadProgressLock,
 };
 use eyre::eyre;
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::Arc;
 use tokio::{
     select,
     sync::{mpsc, mpsc::error::TrySendError, RwLock},
     task::JoinHandle,
 };
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 struct RunningInstance {
     #[allow(dead_code)]
@@ -43,24 +44,30 @@ impl RunningInstance {
         // which is impossible, since this is the only use, and this method takes
         // ownership, or the channel is closed, which means the committer thread is
         // already dead.
-        self.shutdown_sender.send(()).await.ok();
+        let _ = self.shutdown_sender.send(()).await;
         info!("Awaiting committer shutdown.");
         self.handle.await?
     }
 }
 
+/// A worker that commits identities to the tree.
+///
+/// This uses the database to keep track of identities that need to be
+/// committed. It assumes that there's only one such worker spawned at
+/// a time. Spawning multiple worker threads will result in undefined behavior,
+/// including data duplication.
 pub struct IdentityCommitter {
     instance:   RwLock<Option<RunningInstance>>,
     database:   Arc<Database>,
     contracts:  Arc<Contracts>,
-    tree_state: Arc<TreeState>,
+    tree_state: SharedTreeState,
 }
 
 impl IdentityCommitter {
     pub fn new(
         database: Arc<Database>,
         contracts: Arc<Contracts>,
-        tree_state: Arc<TreeState>,
+        tree_state: SharedTreeState,
     ) -> Self {
         Self {
             instance: RwLock::new(None),
@@ -74,7 +81,7 @@ impl IdentityCommitter {
     pub async fn start(&self) {
         let mut instance = self.instance.write().await;
         if instance.is_some() {
-            info!("Identity committer already running");
+            warn!("Identity committer already running");
             return;
         }
         let (shutdown_sender, mut shutdown_receiver) = mpsc::channel(1);
@@ -117,20 +124,17 @@ impl IdentityCommitter {
     async fn commit_identity(
         database: &Database,
         contracts: &Contracts,
-        tree_state: &TreeState,
+        tree_state: &TimedReadProgressLock<TreeState>,
         group_id: usize,
         commitment: Hash,
     ) -> eyre::Result<()> {
         // Get a progress lock on the tree for the duration of this operation. Holding a
         // progress lock ensures no other thread calls tries to insert an identity into
         // the contract, as that is an order dependent operation.
-        let tree = tree_state.merkle_tree.progress().await.map_err(|e| {
+        let tree = tree_state.progress().await.map_err(|e| {
             error!(?e, "Failed to obtain tree lock in commit_identity.");
             e
         })?;
-
-        // Fetch next leaf index
-        let identity_index = tree_state.next_leaf.fetch_add(1, Ordering::AcqRel);
 
         // Send Semaphore transaction
         let receipt = contracts.insert_identity(commitment).await.map_err(|e| {
@@ -144,7 +148,9 @@ impl IdentityCommitter {
         })?;
 
         // Update  merkle tree
-        tree.set(identity_index, commitment);
+        let identity_index = tree.next_leaf;
+        tree.merkle_tree.set(identity_index, commitment);
+        tree.next_leaf += 1;
 
         // Downgrade write lock to progress lock – tree is now up to date, but still
         // need to update the database.
@@ -163,19 +169,16 @@ impl IdentityCommitter {
 
         // Check tree root
         contracts
-            .assert_valid_root(tree.root())
+            .assert_valid_root(tree.merkle_tree.root())
             .await
             .map_err(|error| {
                 error!(
-                    computed_root = ?tree.root(),
+                    computed_root = ?tree.merkle_tree.root(),
                     ?error,
                     "Root mismatch between tree and contract."
                 );
                 error
             })?;
-
-        // Immediately write the tree to storage, before anyone else can
-        // TODO: Store tree in database
 
         Ok(())
     }

@@ -18,13 +18,7 @@ use semaphore::{
     Field,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{select, try_join};
 use tracing::{debug, error, info, instrument, warn};
@@ -73,19 +67,18 @@ pub struct Options {
 }
 
 pub struct TreeState {
-    pub next_leaf:   AtomicUsize,
-    pub merkle_tree: TimedReadProgressLock<PoseidonTree>,
+    pub next_leaf:   usize,
+    pub merkle_tree: PoseidonTree,
 }
+
+pub type SharedTreeState = Arc<TimedReadProgressLock<TreeState>>;
 
 impl TreeState {
     #[must_use]
-    pub fn new(tree_depth: usize, initial_leaf: Field, lock_timeout: Duration) -> Self {
+    pub fn new(tree_depth: usize, initial_leaf: Field) -> Self {
         Self {
-            next_leaf:   AtomicUsize::new(0),
-            merkle_tree: TimedReadProgressLock::new(
-                lock_timeout,
-                PoseidonTree::new(tree_depth, initial_leaf),
-            ),
+            next_leaf:   0,
+            merkle_tree: PoseidonTree::new(tree_depth, initial_leaf),
         }
     }
 }
@@ -96,7 +89,7 @@ pub struct App {
     ethereum:           Ethereum,
     contracts:          Arc<Contracts>,
     identity_committer: IdentityCommitter,
-    tree_state:         Arc<TreeState>,
+    tree_state:         SharedTreeState,
     last_block:         u64,
 }
 
@@ -124,10 +117,9 @@ impl App {
         let database = Arc::new(database);
 
         // Poseidon tree depth is one more than the contract's tree depth
-        let tree_state = Arc::new(TreeState::new(
-            contracts.tree_depth() + 1,
-            contracts.initial_leaf(),
+        let tree_state = Arc::new(TimedReadProgressLock::new(
             Duration::from_secs(options.lock_timeout),
+            TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
         ));
 
         let identity_committer =
@@ -150,10 +142,9 @@ impl App {
                 error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
 
                 // Create a new empty MerkleTree and wipe out cache db
-                app.tree_state = Arc::new(TreeState::new(
-                    app.contracts.tree_depth() + 1,
-                    app.contracts.initial_leaf(),
+                app.tree_state = Arc::new(TimedReadProgressLock::new(
                     Duration::from_secs(options.lock_timeout),
+                    TreeState::new(app.contracts.tree_depth() + 1, app.contracts.initial_leaf()),
                 ));
                 app.database.wipe_cache().await?;
 
@@ -185,10 +176,10 @@ impl App {
             return Err(ServerError::InvalidGroupId);
         }
 
-        let tree = self.tree_state.merkle_tree.read().await?;
+        let tree = self.tree_state.read().await?;
 
         if commitment == self.contracts.initial_leaf() {
-            warn!(?commitment, next = %self.tree_state.next_leaf.load(Ordering::Acquire), "Attempt to insert initial leaf.");
+            warn!(?commitment, next = %tree.next_leaf, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
         }
 
@@ -201,12 +192,17 @@ impl App {
             .pending_identity_exists(group_id, &commitment)
             .await?
         {
-            warn!(?commitment, next = %self.tree_state.next_leaf.load(Ordering::Acquire), "Pending identity already exists.");
+            warn!(?commitment, next = %tree.next_leaf, "Pending identity already exists.");
             return Err(ServerError::DuplicateCommitment);
         }
 
-        if let Some(existing) = tree.leaves().iter().position(|&x| x == commitment) {
-            warn!(?existing, ?commitment, next = %self.tree_state.next_leaf.load(Ordering::Acquire), "Commitment already exists in tree.");
+        if let Some(existing) = tree
+            .merkle_tree
+            .leaves()
+            .iter()
+            .position(|&x| x == commitment)
+        {
+            warn!(?existing, ?commitment, next = %tree.next_leaf, "Commitment already exists in tree.");
             return Err(ServerError::DuplicateCommitment);
         };
 
@@ -236,22 +232,28 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        let merkle_tree = self.tree_state.merkle_tree.read().await.map_err(|e| {
+        let tree = self.tree_state.read().await.map_err(|e| {
             error!(?e, "Failed to obtain tree lock in inclusion_proof.");
             panic!("Sequencer potentially deadlocked, terminating.");
             #[allow(unreachable_code)]
             e
         })?;
 
-        if let Some(identity_index) = merkle_tree.leaves().iter().position(|&x| x == *commitment) {
-            let proof = merkle_tree
+        if let Some(identity_index) = tree
+            .merkle_tree
+            .leaves()
+            .iter()
+            .position(|&x| x == *commitment)
+        {
+            let proof = tree
+                .merkle_tree
                 .proof(identity_index)
                 .ok_or(ServerError::IndexOutOfBounds)?;
-            let root = merkle_tree.root();
+            let root = tree.merkle_tree.root();
 
             // Locally check the proof
             // TODO: Check the leaf index / path
-            if !merkle_tree.verify(*commitment, &proof) {
+            if !tree.merkle_tree.verify(*commitment, &proof) {
                 error!(
                     ?commitment,
                     ?identity_index,
@@ -284,18 +286,13 @@ impl App {
 
     #[instrument(level = "debug", skip_all)]
     async fn check_leaves(&self) {
-        let merkle_tree = self
-            .tree_state
-            .merkle_tree
-            .read()
-            .await
-            .unwrap_or_else(|e| {
-                error!(?e, "Failed to obtain tree lock in check_leaves.");
-                panic!("Sequencer potentially deadlocked, terminating.");
-            });
-        let next_leaf = self.tree_state.next_leaf.load(Ordering::Acquire);
+        let tree = self.tree_state.read().await.unwrap_or_else(|e| {
+            error!(?e, "Failed to obtain tree lock in check_leaves.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+        });
+        let next_leaf = tree.next_leaf;
         let initial_leaf = self.contracts.initial_leaf();
-        for (index, &leaf) in merkle_tree.leaves().iter().enumerate() {
+        for (index, &leaf) in tree.merkle_tree.leaves().iter().enumerate() {
             if index < next_leaf && leaf == initial_leaf {
                 error!(
                     ?index,
@@ -313,7 +310,7 @@ impl App {
                 );
             }
             if leaf != initial_leaf {
-                if let Some(previous) = merkle_tree.leaves()[..index]
+                if let Some(previous) = tree.merkle_tree.leaves()[..index]
                     .iter()
                     .position(|&l| l == leaf)
                 {
@@ -325,24 +322,15 @@ impl App {
 
     #[instrument(level = "info", skip_all)]
     async fn process_events(&mut self) -> Result<(), Error> {
-        let mut merkle_tree = self
-            .tree_state
-            .merkle_tree
-            .write()
-            .await
-            .unwrap_or_else(|e| {
-                error!(?e, "Failed to obtain tree lock in process_events.");
-                panic!("Sequencer potentially deadlocked, terminating.");
-            });
+        let mut tree = self.tree_state.write().await.unwrap_or_else(|e| {
+            error!(?e, "Failed to obtain tree lock in process_events.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+        });
 
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
             .contracts
-            .fetch_events(
-                self.last_block,
-                self.tree_state.next_leaf.load(Ordering::Acquire),
-                self.database.clone(),
-            )
+            .fetch_events(self.last_block, tree.next_leaf, self.database.clone())
             .boxed();
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
@@ -357,8 +345,8 @@ impl App {
             debug!(?index, ?leaf, ?root, "Received event");
 
             // Check leaf index is valid
-            if index >= merkle_tree.num_leaves() {
-                error!(?index, ?leaf, num_leaves = ?merkle_tree.num_leaves(), "Received event out of range");
+            if index >= tree.merkle_tree.num_leaves() {
+                error!(?index, ?leaf, num_leaves = ?tree.merkle_tree.num_leaves(), "Received event out of range");
                 return Err(Error::EventOutOfRange);
             }
 
@@ -369,7 +357,7 @@ impl App {
             }
 
             // Check leaf value with existing value
-            let existing = merkle_tree.leaves()[index];
+            let existing = tree.merkle_tree.leaves()[index];
             if existing != initial_leaf {
                 if existing == leaf {
                     error!(?index, ?leaf, "Received event for already existing leaf.");
@@ -384,17 +372,17 @@ impl App {
             }
 
             // Check insertion counter
-            if index != self.tree_state.next_leaf.load(Ordering::Acquire) {
+            if index != tree.next_leaf {
                 error!(
                     ?index,
-                    ?self.tree_state.next_leaf,
+                    ?tree.next_leaf,
                     ?leaf,
                     "Event leaf index does not match expected leaf index."
                 );
             }
 
             // Check duplicates
-            if let Some(previous) = merkle_tree.leaves()[..index]
+            if let Some(previous) = tree.merkle_tree.leaves()[..index]
                 .iter()
                 .position(|&l| l == leaf)
             {
@@ -407,15 +395,12 @@ impl App {
             }
 
             // Insert
-            merkle_tree.set(index, leaf);
-            self.tree_state.next_leaf.store(
-                max(self.tree_state.next_leaf.load(Ordering::Acquire), index + 1),
-                Ordering::Release,
-            );
+            tree.merkle_tree.set(index, leaf);
+            tree.next_leaf = max(tree.next_leaf, index + 1);
 
             // Check root
-            if root != merkle_tree.root() {
-                error!(computed_root = ?merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
+            if root != tree.merkle_tree.root() {
+                error!(computed_root = ?tree.merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
                 return Err(Error::RootMismatch);
             }
         }
@@ -424,35 +409,35 @@ impl App {
 
     #[instrument(level = "debug", skip_all)]
     async fn check_health(&self) {
-        let merkle_tree = self
-            .tree_state
-            .merkle_tree
-            .read()
-            .await
-            .unwrap_or_else(|e| {
-                error!(?e, "Failed to obtain tree lock in check_health.");
-                panic!("Sequencer potentially deadlocked, terminating.");
-            });
+        let tree = self.tree_state.read().await.unwrap_or_else(|e| {
+            error!(?e, "Failed to obtain tree lock in check_health.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+        });
         let initial_leaf = self.contracts.initial_leaf();
         // TODO: A re-org undoing events would cause this to fail.
-        if self.tree_state.next_leaf.load(Ordering::Acquire) > 0 {
-            if let Err(error) = self.contracts.assert_valid_root(merkle_tree.root()).await {
-                error!(root = ?merkle_tree.root(), %error, "Root not valid on-chain.");
+        if tree.next_leaf > 0 {
+            if let Err(error) = self
+                .contracts
+                .assert_valid_root(tree.merkle_tree.root())
+                .await
+            {
+                error!(root = ?tree.merkle_tree.root(), %error, "Root not valid on-chain.");
             } else {
-                info!(root = ?merkle_tree.root(), "Root matches on-chain root.");
+                info!(root = ?tree.merkle_tree.root(), "Root matches on-chain root.");
             }
         } else {
             // TODO: This should still be checkable.
-            info!(root = ?merkle_tree.root(), "Empty tree, not checking root.");
+            info!(root = ?tree.merkle_tree.root(), "Empty tree, not checking root.");
         }
 
         // Check tree health
-        let next_leaf = merkle_tree
+        let next_leaf = tree
+            .merkle_tree
             .leaves()
             .iter()
             .rposition(|&l| l != initial_leaf)
             .map_or(0, |i| i + 1);
-        let used_leaves = &merkle_tree.leaves()[..next_leaf];
+        let used_leaves = &tree.merkle_tree.leaves()[..next_leaf];
         let skipped = used_leaves.iter().filter(|&&l| l == initial_leaf).count();
         let mut dedup = used_leaves
             .iter()
@@ -462,7 +447,7 @@ impl App {
         dedup.dedup();
         let unique = dedup.len();
         let duplicates = used_leaves.len() - skipped - unique;
-        let total = merkle_tree.num_leaves();
+        let total = tree.merkle_tree.num_leaves();
         let available = total - next_leaf;
         #[allow(clippy::cast_precision_loss)]
         let fill = (next_leaf as f64) / (total as f64);

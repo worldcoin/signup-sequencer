@@ -130,16 +130,13 @@ impl Database {
         group_id: usize,
         identity: &Hash,
     ) -> Result<(), Error> {
-        self.pool
-            .execute(
-                sqlx::query(
-                    r#"INSERT INTO pending_identities (group_id, commitment)
-                           VALUES ($1, $2);"#,
-                )
-                .bind(group_id as i64)
-                .bind(identity),
-            )
-            .await?;
+        let query = sqlx::query(
+            r#"INSERT INTO pending_identities (group_id, commitment)
+                   VALUES ($1, $2);"#,
+        )
+        .bind(group_id as i64)
+        .bind(identity);
+        self.pool.execute(query).await?;
         Ok(())
     }
 
@@ -150,19 +147,16 @@ impl Database {
         block_number: usize,
         tree_idx: usize,
     ) -> Result<(), Error> {
-        self.pool
-            .execute(
-                sqlx::query(
-                    r#"UPDATE pending_identities
-                           SET mined_in_block = $1, assigned_leaf_idx = $2
-                           WHERE group_id = $3 AND commitment = $4;"#,
-                )
-                .bind(block_number as i64)
-                .bind(tree_idx as i64)
-                .bind(group_id as i64)
-                .bind(commitment),
-            )
-            .await?;
+        let query = sqlx::query(
+            r#"UPDATE pending_identities
+                   SET mined_in_block = $1, assigned_leaf_idx = $2
+                   WHERE group_id = $3 AND commitment = $4;"#,
+        )
+        .bind(block_number as i64)
+        .bind(tree_idx as i64)
+        .bind(group_id as i64)
+        .bind(commitment);
+        self.pool.execute(query).await?;
         Ok(())
     }
 
@@ -171,34 +165,28 @@ impl Database {
         group_id: usize,
         identity: &Hash,
     ) -> Result<bool, Error> {
-        let row = self
-            .pool
-            .fetch_optional(
-                sqlx::query(
-                    r#"SELECT 1
-                           FROM pending_identities
-                           WHERE group_id = $1 AND commitment = $2
-                           LIMIT 1;"#,
-                )
-                .bind(group_id as i64)
-                .bind(identity),
-            )
-            .await?;
+        let query = sqlx::query(
+            r#"SELECT 1
+                   FROM pending_identities
+                   WHERE group_id = $1 AND commitment = $2
+                   LIMIT 1;"#,
+        )
+        .bind(group_id as i64)
+        .bind(identity);
+        let row = self.pool.fetch_optional(query).await?;
         Ok(row.is_some())
     }
 
     pub async fn get_oldest_unprocessed_identity(&self) -> Result<Option<(usize, Hash)>, Error> {
-        let row = self
-            .pool
-            .fetch_optional(sqlx::query(
-                r#"SELECT group_id, commitment
-                           FROM pending_identities
-                           WHERE mined_in_block IS NULL
-                           ORDER BY created_at ASC
-                           LIMIT 1;"#,
-            ))
-            .await?;
-        Ok(row.map(|row| (usize::try_from(row.get::<i64, _>(0)).unwrap(), row.get(1))))
+        let query = sqlx::query(
+            r#"SELECT group_id, commitment
+                   FROM pending_identities
+                   WHERE mined_in_block IS NULL
+                   ORDER BY created_at ASC
+                   LIMIT 1;"#,
+        );
+        let row = self.pool.fetch_optional(query).await?;
+        Ok(row.map(|row| (row.get::<i64, _>(0).try_into().unwrap(), row.get(1))))
     }
 
     #[allow(unused)]

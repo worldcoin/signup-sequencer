@@ -1,12 +1,12 @@
 # prod helm env override
 image:
-  tag: "${{ github.sha }}"
+  tag: ${GITHUB_SHA}
 environment: prod      
 # Env values can be strings (to be prefixed with `value:`) or objects
 env:
-  ETHEREUM_PROVIDER: "${{ secrets.ALCHEMY_POLYGON_MAINNET_RPC_ENDPOINT }}"
-  SIGNING_KEY: "${{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}"
-  SEMAPHORE_ADDRESS: "${{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}"
+  ETHEREUM_PROVIDER: ${ secrets.ALCHEMY_POLYGON_MAINNET_RPC_ENDPOINT }
+  SIGNING_KEY: ${ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }
+  SEMAPHORE_ADDRESS: ${ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }
   LOG_FILTER: "ethers_providers::provider=debug"
   WIPE_STORAGE: true
   MAX_LOG_BLOCKS: 10000

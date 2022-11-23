@@ -319,6 +319,9 @@ jobs:
           --install --timeout 60s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
+          --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
+          --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
           -f deploy/main-stage.values.yaml
 
   deploy-stage-manual:
@@ -347,6 +350,9 @@ jobs:
           --install --timeout 120s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
+          --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
+          --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
           -f deploy/stage-manual.values.yaml
 
   deploy-prod:
@@ -376,5 +382,9 @@ jobs:
           --install --timeout 60s
           --namespace "${{ github.event.repository.name }}"
           --set image.tag="${{ github.sha }}"
+          --set ${{ secrets.ALCHEMY_POLYGON_MAINNET_RPC_ENDPOINT }}
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_POLYGON_MAINNET_RPC_ENDPOINT }}"
+          --set env.SIGNING_KEY="${{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}"
+          --set env.SEMAPHORE_ADDRESS="${{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}"
           -f deploy/prod.values.yaml
           

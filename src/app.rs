@@ -2,8 +2,9 @@ use crate::{
     contracts::{self, Contracts},
     database::{self, Database},
     ethereum::{self, Ethereum, EventError},
+    identity_committer::IdentityCommitter,
     server::Error as ServerError,
-    timed_rw_lock::TimedRwLock,
+    timed_read_progress_lock::TimedReadProgressLock,
 };
 use clap::Parser;
 use cli_batteries::await_shutdown;
@@ -17,13 +18,7 @@ use semaphore::{
     Field,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{select, try_join};
 use tracing::{debug, error, info, instrument, warn};
@@ -45,9 +40,9 @@ pub struct IndexResponse {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InclusionProofResponse {
-    pub root:  Field,
-    pub proof: Proof,
+pub enum InclusionProofResponse {
+    Proof { root: Field, proof: Proof },
+    Pending,
 }
 
 #[derive(Clone, Debug, PartialEq, Parser)]
@@ -71,14 +66,31 @@ pub struct Options {
     pub lock_timeout: u64,
 }
 
+pub struct TreeState {
+    pub next_leaf:   usize,
+    pub merkle_tree: PoseidonTree,
+}
+
+pub type SharedTreeState = Arc<TimedReadProgressLock<TreeState>>;
+
+impl TreeState {
+    #[must_use]
+    pub fn new(tree_depth: usize, initial_leaf: Field) -> Self {
+        Self {
+            next_leaf:   0,
+            merkle_tree: PoseidonTree::new(tree_depth, initial_leaf),
+        }
+    }
+}
+
 pub struct App {
-    database:    Arc<Database>,
+    database:           Arc<Database>,
     #[allow(dead_code)]
-    ethereum:    Ethereum,
-    contracts:   Contracts,
-    next_leaf:   AtomicUsize,
-    last_block:  u64,
-    merkle_tree: TimedRwLock<PoseidonTree>,
+    ethereum:           Ethereum,
+    contracts:          Arc<Contracts>,
+    identity_committer: IdentityCommitter,
+    tree_state:         SharedTreeState,
+    last_block:         u64,
 }
 
 impl App {
@@ -95,23 +107,31 @@ impl App {
 
             let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
                 let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
-                Ok((ethereum, contracts))
+                Ok((ethereum, Arc::new(contracts)))
             });
 
             // Connect to both in parallel
             try_join!(db, eth)?
         };
 
+        let database = Arc::new(database);
+
         // Poseidon tree depth is one more than the contract's tree depth
-        let merkle_tree = PoseidonTree::new(contracts.tree_depth() + 1, contracts.initial_leaf());
+        let tree_state = Arc::new(TimedReadProgressLock::new(
+            Duration::from_secs(options.lock_timeout),
+            TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
+        ));
+
+        let identity_committer =
+            IdentityCommitter::new(database.clone(), contracts.clone(), tree_state.clone());
 
         let mut app = Self {
-            database: Arc::new(database),
+            database,
             ethereum,
             contracts,
-            next_leaf: AtomicUsize::new(0),
+            identity_committer,
+            tree_state,
             last_block: options.starting_block,
-            merkle_tree: TimedRwLock::new(Duration::from_secs(options.lock_timeout), merkle_tree),
         };
 
         // Sync with chain on start up
@@ -122,11 +142,10 @@ impl App {
                 error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
 
                 // Create a new empty MerkleTree and wipe out cache db
-                let merkle_tree =
-                    PoseidonTree::new(app.contracts.tree_depth() + 1, app.contracts.initial_leaf());
-                app.merkle_tree =
-                    TimedRwLock::new(Duration::from_secs(options.lock_timeout), merkle_tree);
-                app.next_leaf = AtomicUsize::new(0);
+                app.tree_state = Arc::new(TimedReadProgressLock::new(
+                    Duration::from_secs(options.lock_timeout),
+                    TreeState::new(app.contracts.tree_depth() + 1, app.contracts.initial_leaf()),
+                ));
                 app.database.wipe_cache().await?;
 
                 // Retry
@@ -137,79 +156,63 @@ impl App {
         }
 
         app.check_health().await;
-
+        app.identity_committer.start().await;
         Ok(app)
     }
 
-    /// Inserts a new commitment into the Merkle tree. This will also update the
-    /// contract's commitment tree.
+    /// Queues an insert into the merkle tree.
     ///
     /// # Errors
     ///
-    /// Will return `Err` if the Eth handler cannot insert the identity to the
-    /// contract, or if writing to the storage file fails.
+    /// Will return `Err` if identity is already queued, or in the tree, or the
+    /// queue malfunctions.
     #[instrument(level = "debug", skip_all)]
     pub async fn insert_identity(
         &self,
         group_id: usize,
-        commitment: &Hash,
-    ) -> Result<IndexResponse, ServerError> {
+        commitment: Hash,
+    ) -> Result<(), ServerError> {
         if U256::from(group_id) != self.contracts.group_id() {
             return Err(ServerError::InvalidGroupId);
         }
-        if commitment == &self.contracts.initial_leaf() {
-            warn!(?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Attempt to insert initial leaf.");
+
+        let tree = self.tree_state.read().await?;
+
+        if commitment == self.contracts.initial_leaf() {
+            warn!(?commitment, next = %tree.next_leaf, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
         }
 
-        // Get a lock on the tree for the duration of this operation.
-        // OPT: Sequence operations and allow concurrent inserts / transactions.
-        let mut tree = self.merkle_tree.write().await.map_err(|e| {
-            error!(?e, "Failed to obtain tree lock in insert_identity.");
-            panic!("Sequencer potentially deadlocked, terminating.");
-            #[allow(unreachable_code)]
-            e
-        })?;
+        // Note the ordering of duplicate checks: since we never want to lose data,
+        // pending identities are removed from the DB _after_ they are inserted into the
+        // tree. Therefore this order of checks guarantees we will not insert a
+        // duplicate.
+        if self
+            .database
+            .pending_identity_exists(group_id, &commitment)
+            .await?
+        {
+            warn!(?commitment, next = %tree.next_leaf, "Pending identity already exists.");
+            return Err(ServerError::DuplicateCommitment);
+        }
 
-        if let Some(existing) = tree.leaves().iter().position(|&x| x == *commitment) {
-            warn!(?existing, ?commitment, next = %self.next_leaf.load(Ordering::Acquire), "Commitment already exists in tree.");
+        if let Some(existing) = tree
+            .merkle_tree
+            .leaves()
+            .iter()
+            .position(|&x| x == commitment)
+        {
+            warn!(?existing, ?commitment, next = %tree.next_leaf, "Commitment already exists in tree.");
             return Err(ServerError::DuplicateCommitment);
         };
 
-        // Fetch next leaf index
-        let identity_index = self.next_leaf.fetch_add(1, Ordering::AcqRel);
+        self.database
+            .insert_pending_identity(group_id, &commitment)
+            .await?;
 
-        // Send Semaphore transaction
-        self.contracts
-            .insert_identity(commitment)
-            .await
-            .map_err(|e| {
-                error!(?e, "Failed to insert identity to contract.");
-                panic!("Failed to submit transaction, state synchronization lost.");
-                #[allow(unreachable_code)]
-                e
-            })?;
+        self.identity_committer.notify_queued().await;
 
-        // Update  merkle tree
-        tree.set(identity_index, *commitment);
-
-        // Downgrade write lock to read lock
-        let tree = tree.downgrade();
-
-        // Check tree root
-        if let Err(error) = self.contracts.assert_valid_root(tree.root()).await {
-            error!(
-                computed_root = ?tree.root(),
-                ?error,
-                "Root mismatch between tree and contract."
-            );
-            panic!("Root mismatch between tree and contract.");
-        }
-
-        // Immediately write the tree to storage, before anyone else can write.
-        // TODO: Store tree in database
-
-        Ok(IndexResponse { identity_index })
+        Ok(())
     }
 
     /// # Errors
@@ -224,60 +227,72 @@ impl App {
         if U256::from(group_id) != self.contracts.group_id() {
             return Err(ServerError::InvalidGroupId);
         }
+
         if commitment == &self.contracts.initial_leaf() {
             return Err(ServerError::InvalidCommitment);
         }
 
-        let merkle_tree = self.merkle_tree.read().await.map_err(|e| {
+        let tree = self.tree_state.read().await.map_err(|e| {
             error!(?e, "Failed to obtain tree lock in inclusion_proof.");
             panic!("Sequencer potentially deadlocked, terminating.");
             #[allow(unreachable_code)]
             e
         })?;
-        let identity_index = match merkle_tree.leaves().iter().position(|&x| x == *commitment) {
-            Some(i) => i,
-            None => return Err(ServerError::IdentityCommitmentNotFound),
-        };
 
-        let proof = merkle_tree
-            .proof(identity_index)
-            .ok_or(ServerError::IndexOutOfBounds)?;
-        let root = merkle_tree.root();
+        if let Some(identity_index) = tree
+            .merkle_tree
+            .leaves()
+            .iter()
+            .position(|&x| x == *commitment)
+        {
+            let proof = tree
+                .merkle_tree
+                .proof(identity_index)
+                .ok_or(ServerError::IndexOutOfBounds)?;
+            let root = tree.merkle_tree.root();
 
-        // Locally check the proof
-        // TODO: Check the leaf index / path
-        if !merkle_tree.verify(*commitment, &proof) {
-            error!(
-                ?commitment,
-                ?identity_index,
-                ?root,
-                "Proof does not verify locally."
-            );
-            panic!("Proof does not verify locally.");
+            // Locally check the proof
+            // TODO: Check the leaf index / path
+            if !tree.merkle_tree.verify(*commitment, &proof) {
+                error!(
+                    ?commitment,
+                    ?identity_index,
+                    ?root,
+                    "Proof does not verify locally."
+                );
+                panic!("Proof does not verify locally.");
+            }
+
+            // Verify the root on chain
+            if let Err(error) = self.contracts.assert_valid_root(root).await {
+                error!(
+                    computed_root = ?root,
+                    ?error,
+                    "Root mismatch between tree and contract."
+                );
+                return Err(ServerError::RootMismatch);
+            }
+            Ok(InclusionProofResponse::Proof { root, proof })
+        } else if self
+            .database
+            .pending_identity_exists(group_id, commitment)
+            .await?
+        {
+            Ok(InclusionProofResponse::Pending)
+        } else {
+            Err(ServerError::IdentityCommitmentNotFound)
         }
-
-        // Verify the root on chain
-        if let Err(error) = self.contracts.assert_valid_root(root).await {
-            error!(
-                computed_root = ?root,
-                ?error,
-                "Root mismatch between tree and contract."
-            );
-            return Err(ServerError::RootMismatch);
-        }
-
-        Ok(InclusionProofResponse { root, proof })
     }
 
     #[instrument(level = "debug", skip_all)]
     async fn check_leaves(&self) {
-        let merkle_tree = self.merkle_tree.read().await.unwrap_or_else(|e| {
+        let tree = self.tree_state.read().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in check_leaves.");
             panic!("Sequencer potentially deadlocked, terminating.");
         });
-        let next_leaf = self.next_leaf.load(Ordering::Acquire);
+        let next_leaf = tree.next_leaf;
         let initial_leaf = self.contracts.initial_leaf();
-        for (index, &leaf) in merkle_tree.leaves().iter().enumerate() {
+        for (index, &leaf) in tree.merkle_tree.leaves().iter().enumerate() {
             if index < next_leaf && leaf == initial_leaf {
                 error!(
                     ?index,
@@ -295,7 +310,7 @@ impl App {
                 );
             }
             if leaf != initial_leaf {
-                if let Some(previous) = merkle_tree.leaves()[..index]
+                if let Some(previous) = tree.merkle_tree.leaves()[..index]
                     .iter()
                     .position(|&l| l == leaf)
                 {
@@ -307,7 +322,7 @@ impl App {
 
     #[instrument(level = "info", skip_all)]
     async fn process_events(&mut self) -> Result<(), Error> {
-        let mut merkle_tree = self.merkle_tree.write().await.unwrap_or_else(|e| {
+        let mut tree = self.tree_state.write().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in process_events.");
             panic!("Sequencer potentially deadlocked, terminating.");
         });
@@ -315,11 +330,7 @@ impl App {
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
             .contracts
-            .fetch_events(
-                self.last_block,
-                self.next_leaf.load(Ordering::Acquire),
-                self.database.clone(),
-            )
+            .fetch_events(self.last_block, tree.next_leaf, self.database.clone())
             .boxed();
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
@@ -334,8 +345,8 @@ impl App {
             debug!(?index, ?leaf, ?root, "Received event");
 
             // Check leaf index is valid
-            if index >= merkle_tree.num_leaves() {
-                error!(?index, ?leaf, num_leaves = ?merkle_tree.num_leaves(), "Received event out of range");
+            if index >= tree.merkle_tree.num_leaves() {
+                error!(?index, ?leaf, num_leaves = ?tree.merkle_tree.num_leaves(), "Received event out of range");
                 return Err(Error::EventOutOfRange);
             }
 
@@ -346,7 +357,7 @@ impl App {
             }
 
             // Check leaf value with existing value
-            let existing = merkle_tree.leaves()[index];
+            let existing = tree.merkle_tree.leaves()[index];
             if existing != initial_leaf {
                 if existing == leaf {
                     error!(?index, ?leaf, "Received event for already existing leaf.");
@@ -361,17 +372,17 @@ impl App {
             }
 
             // Check insertion counter
-            if index != self.next_leaf.load(Ordering::Acquire) {
+            if index != tree.next_leaf {
                 error!(
                     ?index,
-                    ?self.next_leaf,
+                    ?tree.next_leaf,
                     ?leaf,
                     "Event leaf index does not match expected leaf index."
                 );
             }
 
             // Check duplicates
-            if let Some(previous) = merkle_tree.leaves()[..index]
+            if let Some(previous) = tree.merkle_tree.leaves()[..index]
                 .iter()
                 .position(|&l| l == leaf)
             {
@@ -384,15 +395,12 @@ impl App {
             }
 
             // Insert
-            merkle_tree.set(index, leaf);
-            self.next_leaf.store(
-                max(self.next_leaf.load(Ordering::Acquire), index + 1),
-                Ordering::Release,
-            );
+            tree.merkle_tree.set(index, leaf);
+            tree.next_leaf = max(tree.next_leaf, index + 1);
 
             // Check root
-            if root != merkle_tree.root() {
-                error!(computed_root = ?merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
+            if root != tree.merkle_tree.root() {
+                error!(computed_root = ?tree.merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
                 return Err(Error::RootMismatch);
             }
         }
@@ -401,30 +409,35 @@ impl App {
 
     #[instrument(level = "debug", skip_all)]
     async fn check_health(&self) {
-        let merkle_tree = self.merkle_tree.read().await.unwrap_or_else(|e| {
+        let tree = self.tree_state.read().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in check_health.");
             panic!("Sequencer potentially deadlocked, terminating.");
         });
         let initial_leaf = self.contracts.initial_leaf();
         // TODO: A re-org undoing events would cause this to fail.
-        if self.next_leaf.load(Ordering::Acquire) > 0 {
-            if let Err(error) = self.contracts.assert_valid_root(merkle_tree.root()).await {
-                error!(root = ?merkle_tree.root(), %error, "Root not valid on-chain.");
+        if tree.next_leaf > 0 {
+            if let Err(error) = self
+                .contracts
+                .assert_valid_root(tree.merkle_tree.root())
+                .await
+            {
+                error!(root = ?tree.merkle_tree.root(), %error, "Root not valid on-chain.");
             } else {
-                info!(root = ?merkle_tree.root(), "Root matches on-chain root.");
+                info!(root = ?tree.merkle_tree.root(), "Root matches on-chain root.");
             }
         } else {
             // TODO: This should still be checkable.
-            info!(root = ?merkle_tree.root(), "Empty tree, not checking root.");
+            info!(root = ?tree.merkle_tree.root(), "Empty tree, not checking root.");
         }
 
         // Check tree health
-        let next_leaf = merkle_tree
+        let next_leaf = tree
+            .merkle_tree
             .leaves()
             .iter()
             .rposition(|&l| l != initial_leaf)
             .map_or(0, |i| i + 1);
-        let used_leaves = &merkle_tree.leaves()[..next_leaf];
+        let used_leaves = &tree.merkle_tree.leaves()[..next_leaf];
         let skipped = used_leaves.iter().filter(|&&l| l == initial_leaf).count();
         let mut dedup = used_leaves
             .iter()
@@ -434,7 +447,7 @@ impl App {
         dedup.dedup();
         let unique = dedup.len();
         let duplicates = used_leaves.len() - skipped - unique;
-        let total = merkle_tree.num_leaves();
+        let total = tree.merkle_tree.num_leaves();
         let available = total - next_leaf;
         #[allow(clippy::cast_precision_loss)]
         let fill = (next_leaf as f64) / (total as f64);
@@ -475,6 +488,15 @@ impl App {
                 );
             }
         }
+    }
+
+    /// # Errors
+    ///
+    /// Will return an Error if any of the components cannot be shut down
+    /// gracefully.
+    pub async fn shutdown(&self) -> eyre::Result<()> {
+        info!("Shutting down identity committer.");
+        self.identity_committer.shutdown().await
     }
 }
 

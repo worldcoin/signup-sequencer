@@ -1,4 +1,7 @@
-use crate::app::{App, Hash};
+use crate::{
+    app::{App, Hash},
+    database,
+};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use clap::Parser;
 use cli_batteries::{await_shutdown, trace_from_headers};
@@ -89,6 +92,8 @@ pub enum Error {
     #[error("invalid JSON request: {0}")]
     InvalidSerialization(#[from] serde_json::Error),
     #[error(transparent)]
+    Database(#[from] database::Error),
+    #[error(transparent)]
     Hyper(#[from] hyper::Error),
     #[error(transparent)]
     Http(#[from] hyper::http::Error),
@@ -97,7 +102,7 @@ pub enum Error {
     #[error(transparent)]
     Elapsed(#[from] tokio::time::error::Elapsed),
     #[error(transparent)]
-    LockTimeout(#[from] crate::timed_rw_lock::Error),
+    LockTimeout(#[from] crate::timed_read_progress_lock::Error),
     #[error(transparent)]
     Other(#[from] EyreError),
 }
@@ -181,7 +186,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
             json_middleware(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
                 async move {
-                    app.insert_identity(request.group_id, &request.identity_commitment)
+                    app.insert_identity(request.group_id, request.identity_commitment)
                         .await
                 }
             })

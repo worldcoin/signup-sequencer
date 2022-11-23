@@ -10,7 +10,7 @@ use clap::Parser;
 use core::future;
 use ethers::{
     providers::Middleware,
-    types::{Address, U256},
+    types::{Address, TransactionReceipt, U256},
 };
 use eyre::{eyre, Result as EyreResult};
 use futures::{Stream, StreamExt, TryStreamExt};
@@ -88,8 +88,8 @@ impl Contracts {
         info!(?address, ?manager, "Connected to Semaphore contract");
 
         // Make sure the group exists.
-        let tree_depth = semaphore.get_depth(options.group_id).call().await?;
-        if tree_depth == 0 {
+        let existing_tree_depth = semaphore.get_depth(options.group_id).call().await?;
+        let actual_tree_depth = if existing_tree_depth == 0 {
             if let Some(new_depth) = options.create_group_depth {
                 info!(
                     "Group {} not found, creating it with depth {}",
@@ -103,13 +103,15 @@ impl Contracts {
                     )
                     .tx;
                 ethereum.send_transaction(tx).await?;
+                new_depth
             } else {
                 error!(group_id = ?options.group_id, "Group does not exist");
                 return Err(eyre!("Group does not exist"));
             }
         } else {
-            info!(group_id = ?options.group_id, ?tree_depth, "Semaphore group found.");
-        }
+            info!(group_id = ?options.group_id, ?existing_tree_depth, "Semaphore group found.");
+            usize::from(existing_tree_depth)
+        };
 
         // TODO: Some way to check the initial leaf
 
@@ -117,7 +119,7 @@ impl Contracts {
             ethereum,
             semaphore,
             group_id: options.group_id,
-            tree_depth: usize::from(tree_depth),
+            tree_depth: actual_tree_depth,
             initial_leaf: options.initial_leaf,
         })
     }
@@ -181,15 +183,16 @@ impl Contracts {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn insert_identity(&self, commitment: &Field) -> EyreResult<()> {
+    pub async fn insert_identity(&self, commitment: Field) -> EyreResult<TransactionReceipt> {
         info!(%commitment, "Inserting identity in contract");
 
         // Send create tx
         let commitment = U256::from(commitment.to_be_bytes());
-        self.ethereum
+        let receipt = self
+            .ethereum
             .send_transaction(self.semaphore.add_member(self.group_id, commitment).tx)
             .await?;
-        Ok(())
+        Ok(receipt)
     }
 
     // TODO: Ideally we'd have a `get_root` function, but the contract doesn't

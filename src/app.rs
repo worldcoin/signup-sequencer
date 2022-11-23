@@ -490,6 +490,10 @@ impl App {
         }
     }
 
+    /// # Errors
+    ///
+    /// Will return an Error if any of the components cannot be shut down
+    /// gracefully.
     pub async fn shutdown(&self) -> eyre::Result<()> {
         info!("Shutting down identity committer.");
         self.identity_committer.shutdown().await

@@ -195,6 +195,10 @@ impl IdentityCommitter {
             .unwrap();
     }
 
+    /// # Errors
+    ///
+    /// Will return an Error if the committer thread cannot be shut down
+    /// gracefully.
     pub async fn shutdown(&self) -> eyre::Result<()> {
         let mut instance = self.instance.write().await;
         if let Some(instance) = instance.take() {

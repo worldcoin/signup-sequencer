@@ -1,6 +1,4 @@
 # prod helm env override
-image:
-  tag: ${{github.sha}}
 environment: prod      
 # Env values can be strings (to be prefixed with `value:`) or objects
 env:

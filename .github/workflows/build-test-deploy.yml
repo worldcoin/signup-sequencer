@@ -318,6 +318,7 @@ jobs:
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
           --install --timeout 60s
           --namespace "${{ github.event.repository.name }}"
+          --set image.tag="${{ github.sha }}"
           -f deploy/main-stage.values.yaml
 
   deploy-stage-manual:
@@ -345,6 +346,7 @@ jobs:
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
           --install --timeout 120s
           --namespace "${{ github.event.repository.name }}"
+          --set image.tag="${{ github.sha }}"
           -f deploy/stage-manual.values.yaml
 
   deploy-prod:
@@ -373,5 +375,6 @@ jobs:
         run: helm upgrade "${{ github.event.repository.name }}" ./deploy
           --install --timeout 60s
           --namespace "${{ github.event.repository.name }}"
+          --set image.tag="${{ github.sha }}"
           -f deploy/prod.values.yaml
           

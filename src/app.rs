@@ -49,8 +49,8 @@ pub enum InclusionProofResponse {
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
         match self {
-            InclusionProofResponse::Proof { .. } => StatusCode::OK,
-            InclusionProofResponse::Pending => StatusCode::ACCEPTED,
+            Self::Proof { .. } => StatusCode::OK,
+            Self::Pending => StatusCode::ACCEPTED,
         }
     }
 }

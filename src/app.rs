@@ -3,7 +3,7 @@ use crate::{
     database::{self, Database},
     ethereum::{self, Ethereum, EventError},
     identity_committer::IdentityCommitter,
-    server::Error as ServerError,
+    server::{Error as ServerError, ToResponseCode},
     timed_read_progress_lock::TimedReadProgressLock,
 };
 use clap::Parser;
@@ -12,6 +12,7 @@ use core::cmp::max;
 use ethers::types::U256;
 use eyre::Result as EyreResult;
 use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
+use hyper::StatusCode;
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
@@ -43,6 +44,15 @@ pub struct IndexResponse {
 pub enum InclusionProofResponse {
     Proof { root: Field, proof: Proof },
     Pending,
+}
+
+impl ToResponseCode for InclusionProofResponse {
+    fn to_response_code(&self) -> StatusCode {
+        match self {
+            InclusionProofResponse::Proof { .. } => StatusCode::OK,
+            InclusionProofResponse::Pending => StatusCode::ACCEPTED,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Parser)]

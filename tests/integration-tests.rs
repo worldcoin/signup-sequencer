@@ -12,7 +12,7 @@ use ethers::{
     utils::{Anvil, AnvilInstance},
 };
 use eyre::{bail, Result as EyreResult};
-use hyper::{client::HttpConnector, Body, Client, Request};
+use hyper::{client::HttpConnector, Body, Client, Request, StatusCode};
 use semaphore::poseidon_tree::PoseidonTree;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -226,6 +226,7 @@ async fn test_inclusion_proof(
             .expect("Could not parse response bytes to utf-8");
 
         if result == "\"pending\"" {
+            assert_eq!(response.status(), StatusCode::ACCEPTED);
             info!("Got pending, waiting 1 second, iteration {}", i);
             tokio::time::sleep(Duration::from_secs(1)).await;
         } else {

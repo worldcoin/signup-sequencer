@@ -69,6 +69,16 @@ pub struct InclusionProofRequest {
     pub identity_commitment: Hash,
 }
 
+pub trait ToResponseCode {
+    fn to_response_code(&self) -> StatusCode;
+}
+
+impl ToResponseCode for () {
+    fn to_response_code(&self) -> StatusCode {
+        StatusCode::OK
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("invalid http method")]
@@ -139,7 +149,7 @@ where
     T: DeserializeOwned + Send,
     F: FnMut(T) -> S + Send,
     S: Future<Output = Result<U, Error>> + Send,
-    U: Serialize,
+    U: Serialize + ToResponseCode,
 {
     let valid_content_type = request
         .headers()
@@ -153,7 +163,7 @@ where
     let response = next(request).await?;
     let json = serde_json::to_string_pretty(&response)?;
     let response = Response::builder()
-        .status(StatusCode::OK)
+        .status(response.to_response_code())
         .header(header::CONTENT_TYPE, CONTENT_JSON)
         // No need to include cache-control since POST is not cached by default.
         .body(Body::from(json))

@@ -13,11 +13,11 @@ use ethers::{
 };
 use eyre::{bail, Result as EyreResult};
 use hyper::{client::HttpConnector, Body, Client, Request, StatusCode};
-use semaphore::poseidon_tree::PoseidonTree;
+use semaphore::{merkle_tree::Branch, poseidon_tree::PoseidonTree};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use signup_sequencer::{
-    app::{App, Hash, InclusionProofResponse},
+    app::{App, Hash},
     server, Options,
 };
 use std::{
@@ -236,18 +236,21 @@ async fn test_inclusion_proof(
     }
 
     let result = success_response.expect("Failed to get success response");
+    let result_json = serde_json::from_str::<serde_json::Value>(&result)
+        .expect("Failed to parse response as json");
 
     ref_tree.set(leaf_index, *leaf);
     let proof = ref_tree.proof(leaf_index).expect("Ref tree malfunctioning");
-    let inclusion_proof = InclusionProofResponse::Proof {
-        root: ref_tree.root(),
-        proof,
-    };
 
-    let serialized_proof =
-        serde_json::to_string_pretty(&inclusion_proof).expect("Proof serialization failed");
+    let proof_json = json!({
+        "root": ref_tree.root(),
+        "proof": proof.0.iter().map(|branch| match branch {
+            Branch::Left(hash) => json!({"Left": hash}),
+            Branch::Right(hash) => json!({"Right": hash}),
+        }).collect::<Vec<_>>(),
+    });
 
-    assert_eq!(result, serialized_proof);
+    assert_eq!(result_json, proof_json);
 }
 
 #[instrument(skip_all)]

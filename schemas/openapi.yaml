@@ -95,17 +95,14 @@ components:
     InclusionProof:
       type: object
       properties:
+        root: { $ref: '#/components/schemas/FieldElement' }
         proof:
-          type: object
-          properties:
-            root: { $ref: '#/components/schemas/FieldElement' }
-            proof:
-              type: array
-              items:
-                oneOf:
-                  - type: object
-                    properties:
-                      Left: { $ref: '#/components/schemas/FieldElement' }
-                  - type: object
-                    properties:
-                      Right: { $ref: '#/components/schemas/FieldElement' }
+          type: array
+          items:
+            oneOf:
+              - type: object
+                properties:
+                  Left: { $ref: '#/components/schemas/FieldElement' }
+              - type: object
+                properties:
+                  Right: { $ref: '#/components/schemas/FieldElement' }

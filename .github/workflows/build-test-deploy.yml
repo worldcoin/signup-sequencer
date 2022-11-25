@@ -36,9 +36,9 @@ jobs:
           override: true
           components: rustfmt, clippy
       - name: Cache build
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
         with:
-          key: cache-v1
+          key: cache-v2
       - name: Install cargo-sort
         uses: actions-rs/install@v0.1
         with:
@@ -74,9 +74,9 @@ jobs:
           toolchain: ${{ env.NIGHTLY_VERSION }}
           override: true
       - name: Cache build
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
         with:
-          key: cache-v1
+          key: cache-v2
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
@@ -113,9 +113,9 @@ jobs:
           override: true
           components: llvm-tools-preview
       - name: Cache build
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
         with:
-          key: cache-v1
+          key: cache-v2
       - name: Install cargo-binutils
         run: cargo install cargo-binutils
       - name: Install Foundry
@@ -205,9 +205,9 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Cache build
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.platform }}-cache-v1
+          key: ${{ matrix.platform }}-cache-v2
       - name: Build executable
         run: |
           case ${{ matrix.platform }} in

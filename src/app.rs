@@ -3,7 +3,7 @@ use crate::{
     database::{self, Database},
     ethereum::{self, Ethereum, EventError},
     identity_committer::IdentityCommitter,
-    server::Error as ServerError,
+    server::{Error as ServerError, ToResponseCode},
     timed_read_progress_lock::TimedReadProgressLock,
 };
 use clap::Parser;
@@ -12,12 +12,13 @@ use core::cmp::max;
 use ethers::types::U256;
 use eyre::Result as EyreResult;
 use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
+use hyper::StatusCode;
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
     Field,
 };
-use serde::{Deserialize, Serialize};
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use std::{sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{select, try_join};
@@ -38,11 +39,35 @@ pub struct IndexResponse {
     identity_index: usize,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub enum InclusionProofResponse {
     Proof { root: Field, proof: Proof },
     Pending,
+}
+
+impl ToResponseCode for InclusionProofResponse {
+    fn to_response_code(&self) -> StatusCode {
+        match self {
+            Self::Proof { .. } => StatusCode::OK,
+            Self::Pending => StatusCode::ACCEPTED,
+        }
+    }
+}
+
+impl Serialize for InclusionProofResponse {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            InclusionProofResponse::Proof { root, proof } => {
+                let mut state = serializer.serialize_struct("InclusionProof", 2)?;
+                state.serialize_field("root", root)?;
+                state.serialize_field("proof", proof)?;
+                state.end()
+            }
+            InclusionProofResponse::Pending => serializer.serialize_str("pending"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Parser)]

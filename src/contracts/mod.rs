@@ -4,7 +4,7 @@ pub mod caching_log_query;
 use self::abi::{MemberAddedFilter, SemaphoreContract as Semaphore};
 use crate::{
     database::Database,
-    ethereum::{Ethereum, EventError, ProviderStack},
+    ethereum::{Ethereum, EventError, ProviderStack, TxError},
 };
 use clap::Parser;
 use core::future;
@@ -180,7 +180,7 @@ impl Contracts {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn insert_identity(&self, commitment: Field) -> EyreResult<TransactionReceipt> {
+    pub async fn insert_identity(&self, commitment: Field) -> Result<TransactionReceipt, TxError> {
         info!(%commitment, "Inserting identity in contract");
 
         // Send create tx

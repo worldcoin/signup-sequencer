@@ -48,7 +48,7 @@ impl RunningInstance {
     }
 }
 
-/// A worker that commits identities to the tree.
+/// A worker that commits identities to the blockchain.
 ///
 /// This uses the database to keep track of identities that need to be
 /// committed. It assumes that there's only one such worker spawned at
@@ -120,37 +120,16 @@ impl IdentityCommitter {
         group_id: usize,
         commitment: Hash,
     ) -> eyre::Result<()> {
-        // Get a progress lock on the tree for the duration of this operation. Holding a
-        // progress lock ensures no other thread calls tries to insert an identity into
-        // the contract, as that is an order dependent operation.
-        // let _tree = tree_state.progress().await.map_err(|e| {
-        //     error!(?e, "Failed to obtain tree lock in commit_identity.");
-        //     e
-        // })?;
-
         // Send Semaphore transaction
         let receipt = contracts.insert_identity(commitment).await.map_err(|e| {
             error!(?e, "Failed to insert identity to contract.");
             e
         })?;
 
-        // let mut tree = tree.upgrade_to_write().await.map_err(|e| {
-        //     error!(?e, "Failed to obtain tree lock in insert_identity.");
-        //     e
-        // })?;
-
-        // Update  merkle tree
-        // let identity_index = tree.next_leaf;
-        // tree.merkle_tree.set(identity_index, commitment);
-        // tree.next_leaf += 1;
-
-        // // Downgrade write lock to progress lock – tree is now up to date, but still
-        // // need to update the database.
-        // let tree = tree.downgrade_to_progress();
-
         let block = receipt
             .block_number
             .expect("Transaction is mined, block number must be present.");
+
         info!("Identity submitted in block {}.", block);
         database
             .mark_identity_inserted(
@@ -161,18 +140,9 @@ impl IdentityCommitter {
             )
             .await?;
 
-        // Check tree root
-        // contracts
-        //     .assert_valid_root(tree.merkle_tree.root())
-        //     .await
-        //     .map_err(|error| {
-        //         error!(
-        //             computed_root = ?tree.merkle_tree.root(),
-        //             ?error,
-        //             "Root mismatch between tree and contract."
-        //         );
-        //         error
-        //     })?;
+        // ethereum_subscriber module takes over from now. Once identity is found in a
+        // confirmed block, it'll update the merkle tree and remove job from
+        // pending_identities queue.
 
         Ok(())
     }

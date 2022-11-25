@@ -1,8 +1,8 @@
 use crate::{
-    chain_subscriber::{ChainSubscriber, Error as SubscriberError},
     contracts::{self, Contracts},
     database::{self, Database},
     ethereum::{self, Ethereum},
+    ethereum_subscriber::{Error as SubscriberError, EthereumSubscriber},
     identity_committer::IdentityCommitter,
     identity_tree::{Hash, SharedTreeState, TreeState},
     server::{Error as ServerError, ToResponseCode},
@@ -78,7 +78,7 @@ pub struct App {
     contracts:          Arc<Contracts>,
     identity_committer: Arc<IdentityCommitter>,
     #[allow(dead_code)]
-    chain_subscriber:   ChainSubscriber,
+    chain_subscriber:   EthereumSubscriber,
     tree_state:         SharedTreeState,
 }
 
@@ -90,6 +90,8 @@ impl App {
     #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> EyreResult<Self> {
+        let refresh_rate = options.ethereum.refresh_rate;
+
         // Connect to Ethereum and Database
         let (database, (ethereum, contracts)) = {
             let db = Database::new(options.database);
@@ -113,7 +115,7 @@ impl App {
 
         let identity_committer =
             Arc::new(IdentityCommitter::new(database.clone(), contracts.clone()));
-        let mut chain_subscriber = ChainSubscriber::new(
+        let mut chain_subscriber = EthereumSubscriber::new(
             options.starting_block,
             database.clone(),
             contracts.clone(),
@@ -133,7 +135,7 @@ impl App {
                 database.wipe_cache().await?;
 
                 // Retry
-                chain_subscriber = ChainSubscriber::new(
+                chain_subscriber = EthereumSubscriber::new(
                     options.starting_block,
                     database.clone(),
                     contracts.clone(),
@@ -150,7 +152,7 @@ impl App {
         // TODO: check leaves used to run before historical events. what's up with that?
         chain_subscriber.check_leaves().await;
         chain_subscriber.check_health().await;
-        chain_subscriber.start().await;
+        chain_subscriber.start(refresh_rate).await;
 
         identity_committer.start().await;
 

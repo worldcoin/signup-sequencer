@@ -24,7 +24,7 @@ impl RunningInstance {
     }
 }
 
-pub struct ChainSubscriber {
+pub struct EthereumSubscriber {
     instance:           RwLock<Option<RunningInstance>>,
     starting_block:     u64,
     database:           Arc<Database>,
@@ -33,7 +33,7 @@ pub struct ChainSubscriber {
     identity_committer: Arc<IdentityCommitter>,
 }
 
-impl ChainSubscriber {
+impl EthereumSubscriber {
     pub fn new(
         starting_block: u64,
         database: Arc<Database>,
@@ -52,7 +52,7 @@ impl ChainSubscriber {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn start(&self) {
+    pub async fn start(&self, refresh_rate: Duration) {
         let mut instance = self.instance.write().await;
         if instance.is_some() {
             info!("Chain Subscriber already running");
@@ -64,9 +64,11 @@ impl ChainSubscriber {
         let tree_state = self.tree_state.clone();
         let contracts = self.contracts.clone();
         let identity_committer = self.identity_committer.clone();
+
         let handle = tokio::spawn(async move {
             loop {
-                sleep(Duration::from_secs(2)).await;
+                sleep(refresh_rate).await;
+
                 let processed_block = Self::process_events_internal(
                     starting_block,
                     tree_state.clone(),

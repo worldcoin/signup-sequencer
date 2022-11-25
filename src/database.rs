@@ -147,8 +147,6 @@ impl Database {
         block_number: usize,
         relative_index: i64,
     ) -> Result<(), Error> {
-        // TODO: rename assigned_lead_idx column as it doesn't represent the actual leaf
-        // number
         let query = sqlx::query(
             r#"UPDATE pending_identities
                    SET mined_in_block = $1, insertion_idx = $2

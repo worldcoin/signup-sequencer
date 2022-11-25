@@ -134,9 +134,10 @@ impl CachingLogQuery {
                         }
                     };
 
-                    // If we need to decrease page size later, don't process same blocks twice
+                    // If we need to decrease the page size later, don't process older blocks twice
                     retry_status.update_last_block(log.block_number);
 
+                    // get_logs_paginated ignores to_block filter. Check again if the block is confirmed
                     if self.is_confirmed(&log, last_block) {
                         let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;
                         self.cache_log(raw_log, &log).await?;

@@ -2,10 +2,10 @@
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 
 pub mod app;
-mod chain_subscriber;
 mod contracts;
 mod database;
 mod ethereum;
+mod ethereum_subscriber;
 mod identity_committer;
 pub mod identity_tree;
 pub mod server;

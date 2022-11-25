@@ -151,7 +151,7 @@ impl Database {
         // number
         let query = sqlx::query(
             r#"UPDATE pending_identities
-                   SET mined_in_block = $1, assigned_leaf_idx = $2
+                   SET mined_in_block = $1, insertion_idx = $2
                    WHERE group_id = $3 AND commitment = $4;"#,
         )
         .bind(block_number as i64)
@@ -171,9 +171,9 @@ impl Database {
             .pool
             .fetch_optional(
                 sqlx::query(
-                    r#"SELECT commitment = $1, assigned_leaf_idx
+                    r#"SELECT commitment = $1, insertion_idx
                            FROM pending_identities
-                           ORDER BY assigned_leaf_idx
+                           ORDER BY insertion_idx
                            LIMIT 1;"#,
                 )
                 .bind(commitment),
@@ -202,7 +202,7 @@ impl Database {
             .execute(
                 sqlx::query(
                     r#"DELETE FROM pending_identities
-                        WHERE assigned_leaf_idx = $1 AND commitment = $2;"#,
+                        WHERE insertion_idx = $1 AND commitment = $2;"#,
                 )
                 .bind(row_index)
                 .bind(commitment),
@@ -216,8 +216,8 @@ impl Database {
             .execute(
                 sqlx::query(
                     r#"UPDATE pending_identities
-                        SET mined_in_block = NULL, assigned_leaf_idx = NULL, created_at = CURRENT_TIMESTAMP
-                        WHERE assigned_leaf_idx >= $1;"#,
+                        SET mined_in_block = NULL, insertion_idx = NULL, created_at = CURRENT_TIMESTAMP
+                        WHERE insertion_idx >= $1;"#,
                 )
                 .bind(starting_from),
             )

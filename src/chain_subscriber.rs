@@ -302,7 +302,7 @@ impl ChainSubscriber {
             panic!("Sequencer potentially deadlocked, terminating.");
         });
         let initial_leaf = self.contracts.initial_leaf();
-        // TODO: A re-org undoing events would cause this to fail.
+        
         if tree.next_leaf > 0 {
             if let Err(error) = self
                 .contracts

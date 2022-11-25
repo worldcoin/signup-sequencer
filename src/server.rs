@@ -1,4 +1,4 @@
-use crate::{app::App, database, tree::Hash};
+use crate::{app::App, database, identity_tree::Hash};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use clap::Parser;
 use cli_batteries::{await_shutdown, trace_from_headers};

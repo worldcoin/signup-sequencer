@@ -1,4 +1,4 @@
-use crate::tree::Hash;
+use crate::identity_tree::Hash;
 use clap::Parser;
 use eyre::{eyre, Context, ErrReport};
 use ruint::{aliases::U256, uint};

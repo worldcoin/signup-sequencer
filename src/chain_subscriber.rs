@@ -3,7 +3,7 @@ use crate::{
     database::{Database, Error as DatabaseError, IsExpectedResponse},
     ethereum::EventError,
     identity_committer::IdentityCommitter,
-    tree::SharedTreeState,
+    identity_tree::SharedTreeState,
 };
 use cli_batteries::await_shutdown;
 use futures::{pin_mut, StreamExt, TryStreamExt};
@@ -302,7 +302,7 @@ impl ChainSubscriber {
             panic!("Sequencer potentially deadlocked, terminating.");
         });
         let initial_leaf = self.contracts.initial_leaf();
-        
+
         if tree.next_leaf > 0 {
             if let Err(error) = self
                 .contracts
@@ -380,11 +380,14 @@ impl ChainSubscriber {
 
     pub async fn shutdown(&self) {
         let mut instance = self.instance.write().await;
-        if let Some(instance) = instance.take() {
-            instance.shutdown();
-        } else {
-            info!("Subscriber not running.");
-        }
+        instance.take().map_or_else(
+            || {
+                info!("Subscriber not running.");
+            },
+            |instance| {
+                instance.shutdown();
+            },
+        );
     }
 }
 

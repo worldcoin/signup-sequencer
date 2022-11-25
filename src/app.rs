@@ -4,9 +4,9 @@ use crate::{
     database::{self, Database},
     ethereum::{self, Ethereum},
     identity_committer::IdentityCommitter,
+    identity_tree::{Hash, SharedTreeState, TreeState},
     server::{Error as ServerError, ToResponseCode},
     timed_read_progress_lock::TimedReadProgressLock,
-    tree::{Hash, SharedTreeState, TreeState},
 };
 use clap::Parser;
 use ethers::types::U256;
@@ -288,6 +288,10 @@ impl App {
         }
     }
 
+    /// # Errors
+    ///
+    /// Will return an Error if any of the components cannot be shut down
+    /// gracefully.
     pub async fn shutdown(&self) -> eyre::Result<()> {
         info!("Shutting down identity committer and chain subscriber.");
         self.chain_subscriber.shutdown().await;

@@ -2,7 +2,7 @@ use crate::{app::SharedTreeState, contracts::Contracts, database::{Database, Err
 use cli_batteries::await_shutdown;
 use futures::{pin_mut, StreamExt, TryStreamExt};
 use std::{
-    sync::{atomic::Ordering, Arc},
+    sync::Arc,
     time::Duration, cmp::max,
 };
 use thiserror::Error;

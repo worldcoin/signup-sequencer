@@ -1,8 +1,7 @@
 use crate::{
-    app::{Hash, SharedTreeState, TreeState},
+    app::Hash,
     contracts::Contracts,
     database::Database,
-    timed_read_progress_lock::TimedReadProgressLock,
 };
 use eyre::eyre;
 use std::sync::{Arc, atomic::{AtomicI64, Ordering}};
@@ -60,20 +59,17 @@ pub struct IdentityCommitter {
     instance:   RwLock<Option<RunningInstance>>,
     database:   Arc<Database>,
     contracts:  Arc<Contracts>,
-    tree_state: SharedTreeState,
 }
 
 impl IdentityCommitter {
     pub fn new(
         database: Arc<Database>,
         contracts: Arc<Contracts>,
-        tree_state: SharedTreeState,
     ) -> Self {
         Self {
             instance: RwLock::new(None),
             database,
             contracts,
-            tree_state,
         }
     }
 
@@ -87,7 +83,6 @@ impl IdentityCommitter {
         let (shutdown_sender, mut shutdown_receiver) = mpsc::channel(1);
         let (wake_up_sender, mut wake_up_receiver) = mpsc::channel(1);
         let database = self.database.clone();
-        let tree_state = self.tree_state.clone();
         let contracts = self.contracts.clone();
         let handle = tokio::spawn(async move {
             let clock = AtomicI64::new(0);
@@ -102,7 +97,6 @@ impl IdentityCommitter {
                     Self::commit_identity(
                         &database,
                         &contracts,
-                        &tree_state,
                         &clock,
                         group_id,
                         commitment,
@@ -132,7 +126,6 @@ impl IdentityCommitter {
     async fn commit_identity(
         database: &Database,
         contracts: &Contracts,
-        tree_state: &TimedReadProgressLock<TreeState>,
         index: &AtomicI64,
         group_id: usize,
         commitment: Hash,

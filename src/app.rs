@@ -11,7 +11,7 @@ use clap::Parser;
 
 use ethers::types::U256;
 use eyre::Result as EyreResult;
-use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
+use futures::TryFutureExt;
 use hyper::StatusCode;
 use semaphore::{
     merkle_tree::Hasher,
@@ -20,10 +20,7 @@ use semaphore::{
 };
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use std::{
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::Duration,
 };
 
@@ -157,7 +154,6 @@ impl App {
         let identity_committer = Arc::new(IdentityCommitter::new(
             database.clone(),
             contracts.clone(),
-            tree_state.clone(),
         ));
         let mut chain_subscriber = ChainSubscriber::new(
             options.starting_block,

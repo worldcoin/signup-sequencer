@@ -147,10 +147,7 @@ impl Contracts {
         last_leaf: usize,
         database: Arc<Database>,
     ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
-        info!(
-            starting_block,
-            last_leaf, "Reading MemberAdded events from chains"
-        );
+        info!(starting_block, last_leaf, "Reading MemberAdded events");
         // TODO: Register to the event stream and track it going forward.
 
         // Start MemberAdded log event stream

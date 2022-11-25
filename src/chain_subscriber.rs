@@ -1,10 +1,13 @@
-use crate::{app::SharedTreeState, contracts::Contracts, database::{Database, Error as DatabaseError, IsExpectedResponse}, ethereum::EventError, identity_committer::IdentityCommitter};
+use crate::{
+    app::SharedTreeState,
+    contracts::Contracts,
+    database::{Database, Error as DatabaseError, IsExpectedResponse},
+    ethereum::EventError,
+    identity_committer::IdentityCommitter,
+};
 use cli_batteries::await_shutdown;
 use futures::{pin_mut, StreamExt, TryStreamExt};
-use std::{
-    sync::Arc,
-    time::Duration, cmp::max,
-};
+use std::{cmp::max, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{select, sync::RwLock, task::JoinHandle, time::sleep};
 use tracing::{debug, error, info, instrument, warn};
@@ -218,7 +221,6 @@ impl ChainSubscriber {
             tree.merkle_tree.set(index, leaf);
             tree.next_leaf = max(tree.next_leaf, index + 1);
 
-            
             // let index = tree_state.next_leaf.fetch_add(1, Ordering::Relaxed);
             // tree.merkle_tree.set(index, leaf);
             // tree.next_leaf = max(tree.next_leaf, index + 1);
@@ -302,7 +304,11 @@ impl ChainSubscriber {
         let initial_leaf = self.contracts.initial_leaf();
         // TODO: A re-org undoing events would cause this to fail.
         if tree.next_leaf > 0 {
-            if let Err(error) = self.contracts.assert_valid_root(tree.merkle_tree.root()).await {
+            if let Err(error) = self
+                .contracts
+                .assert_valid_root(tree.merkle_tree.root())
+                .await
+            {
                 error!(root = ?tree.merkle_tree.root(), %error, "Root not valid on-chain.");
             } else {
                 info!(root = ?tree.merkle_tree.root(), "Root matches on-chain root.");
@@ -313,7 +319,8 @@ impl ChainSubscriber {
         }
 
         // Check tree health
-        let next_leaf = tree.merkle_tree
+        let next_leaf = tree
+            .merkle_tree
             .leaves()
             .iter()
             .rposition(|&l| l != initial_leaf)

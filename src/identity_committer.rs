@@ -1,10 +1,9 @@
-use crate::{
-    app::Hash,
-    contracts::Contracts,
-    database::Database,
-};
+use crate::{app::Hash, contracts::Contracts, database::Database};
 use eyre::eyre;
-use std::sync::{Arc, atomic::{AtomicI64, Ordering}};
+use std::sync::{
+    atomic::{AtomicI64, Ordering},
+    Arc,
+};
 use tokio::{
     select,
     sync::{mpsc, mpsc::error::TrySendError, RwLock},
@@ -56,16 +55,13 @@ impl RunningInstance {
 /// a time. Spawning multiple worker threads will result in undefined behavior,
 /// including data duplication.
 pub struct IdentityCommitter {
-    instance:   RwLock<Option<RunningInstance>>,
-    database:   Arc<Database>,
-    contracts:  Arc<Contracts>,
+    instance:  RwLock<Option<RunningInstance>>,
+    database:  Arc<Database>,
+    contracts: Arc<Contracts>,
 }
 
 impl IdentityCommitter {
-    pub fn new(
-        database: Arc<Database>,
-        contracts: Arc<Contracts>,
-    ) -> Self {
+    pub fn new(database: Arc<Database>, contracts: Arc<Contracts>) -> Self {
         Self {
             instance: RwLock::new(None),
             database,
@@ -94,14 +90,8 @@ impl IdentityCommitter {
                         info!("Shutdown signal received, not processing remaining items.");
                         return Ok(());
                     }
-                    Self::commit_identity(
-                        &database,
-                        &contracts,
-                        &clock,
-                        group_id,
-                        commitment,
-                    )
-                    .await?;
+                    Self::commit_identity(&database, &contracts, &clock, group_id, commitment)
+                        .await?;
                 }
 
                 select! {

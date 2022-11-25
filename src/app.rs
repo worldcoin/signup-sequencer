@@ -18,30 +18,15 @@ use semaphore::{
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
     Field,
 };
-use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
-use std::{
-    sync::Arc,
-    time::Duration,
-};
+use serde::{ser::SerializeStruct, Serialize, Serializer};
+use std::{sync::Arc, time::Duration};
 
 use tokio::try_join;
 use tracing::{error, info, instrument, warn};
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JsonCommitment {
-    pub last_block:  u64,
-    pub commitments: Vec<Hash>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct IndexResponse {
-    identity_index: usize,
-}
-
+#[allow(clippy::use_self)]
 pub enum InclusionProofResponse {
     Proof { root: Field, proof: Proof },
     Pending,
@@ -151,10 +136,8 @@ impl App {
             TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
         ));
 
-        let identity_committer = Arc::new(IdentityCommitter::new(
-            database.clone(),
-            contracts.clone(),
-        ));
+        let identity_committer =
+            Arc::new(IdentityCommitter::new(database.clone(), contracts.clone()));
         let mut chain_subscriber = ChainSubscriber::new(
             options.starting_block,
             database.clone(),

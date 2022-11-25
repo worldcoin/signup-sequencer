@@ -100,36 +100,36 @@ impl CachingLogQuery {
                 yield serde_json::from_str(&log).map_err(Error::Parse)?;
             }
 
-            let mut retry_stats = RetryStatus::new(self.start_page_size, self.min_page_size, self.max_backoff_time);
+            let mut retry_status = RetryStatus::new(self.start_page_size, self.min_page_size, self.max_backoff_time);
 
             'restart: loop {
                 let filter = self.filter.clone().from_block(max(
-                    max(retry_stats.last_block + 1, last_block.db + 1),
+                    max(retry_status.last_block + 1, last_block.db + 1),
                     self.filter.get_from_block().unwrap_or_default(),
                 ));
 
                 info!(
-                    page_size = retry_stats.page_size,
+                    page_size = retry_status.page_size,
                     from_block = filter.get_from_block().unwrap_or_default().as_u64(),
                     "Reading MemberAdded events from chains"
                 );
 
                 let mut stream = self.provider
-                    .get_logs_paginated(&filter, retry_stats.page_size);
+                    .get_logs_paginated(&filter, retry_status.page_size);
 
                 while let Some(log) = stream.next().await {
-                    let log = match self.handle_retriable_err(log, &mut retry_stats).await {
+                    let log = match self.handle_retriable_err(log, &mut retry_status).await {
                         RetriableResult::Ok(log) => log,
                         RetriableResult::Restart => continue 'restart,
                         RetriableResult::Err(e) => {
-                            // This seems to be the only way to return errors in the try_stream! macro
+                            // Yield an error before finishing the stream
                             Err(e)?;
-                            break 'restart;
+                            return
                         }
                     };
 
                     // If we need to decrease page size later, don't process same blocks twice
-                    retry_stats.update_last_block(log.block_number);
+                    retry_status.update_last_block(log.block_number);
 
                     if self.is_confirmed(&log, last_block) {
                         let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;

@@ -201,10 +201,8 @@ impl App {
             return Err(ServerError::InvalidGroupId);
         }
 
-        let tree = self.tree_state.read().await?;
-
         if commitment == self.contracts.initial_leaf() {
-            warn!(?commitment, next = %tree.next_leaf, "Attempt to insert initial leaf.");
+            warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
         }
 
@@ -217,19 +215,22 @@ impl App {
             .pending_identity_exists(group_id, &commitment)
             .await?
         {
-            warn!(?commitment, next = %tree.next_leaf, "Pending identity already exists.");
+            warn!(?commitment, "Pending identity already exists.");
             return Err(ServerError::DuplicateCommitment);
         }
 
-        if let Some(existing) = tree
-            .merkle_tree
-            .leaves()
-            .iter()
-            .position(|&x| x == commitment)
         {
-            warn!(?existing, ?commitment, next = %tree.next_leaf, "Commitment already exists in tree.");
-            return Err(ServerError::DuplicateCommitment);
-        };
+            let tree = self.tree_state.read().await?;
+            if let Some(existing) = tree
+                .merkle_tree
+                .leaves()
+                .iter()
+                .position(|&x| x == commitment)
+            {
+                warn!(?existing, ?commitment, next = %tree.next_leaf, "Commitment already exists in tree.");
+                return Err(ServerError::DuplicateCommitment);
+            }
+        }
 
         self.database
             .insert_pending_identity(group_id, &commitment)
@@ -257,48 +258,54 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        let tree = self.tree_state.read().await.map_err(|e| {
-            error!(?e, "Failed to obtain tree lock in inclusion_proof.");
-            panic!("Sequencer potentially deadlocked, terminating.");
-            #[allow(unreachable_code)]
-            e
-        })?;
-
-        if let Some(identity_index) = tree
-            .merkle_tree
-            .leaves()
-            .iter()
-            .position(|&x| x == *commitment)
         {
-            let proof = tree
+            let tree = self.tree_state.read().await.map_err(|e| {
+                error!(?e, "Failed to obtain tree lock in inclusion_proof.");
+                panic!("Sequencer potentially deadlocked, terminating.");
+                #[allow(unreachable_code)]
+                e
+            })?;
+
+            if let Some(identity_index) = tree
                 .merkle_tree
-                .proof(identity_index)
-                .ok_or(ServerError::IndexOutOfBounds)?;
-            let root = tree.merkle_tree.root();
+                .leaves()
+                .iter()
+                .position(|&x| x == *commitment)
+            {
+                let proof = tree
+                    .merkle_tree
+                    .proof(identity_index)
+                    .ok_or(ServerError::IndexOutOfBounds)?;
+                let root = tree.merkle_tree.root();
 
-            // Locally check the proof
-            // TODO: Check the leaf index / path
-            if !tree.merkle_tree.verify(*commitment, &proof) {
-                error!(
-                    ?commitment,
-                    ?identity_index,
-                    ?root,
-                    "Proof does not verify locally."
-                );
-                panic!("Proof does not verify locally.");
-            }
+                // Locally check the proof
+                // TODO: Check the leaf index / path
+                if !tree.merkle_tree.verify(*commitment, &proof) {
+                    error!(
+                        ?commitment,
+                        ?identity_index,
+                        ?root,
+                        "Proof does not verify locally."
+                    );
+                    panic!("Proof does not verify locally.");
+                }
 
-            // Verify the root on chain
-            if let Err(error) = self.contracts.assert_valid_root(root).await {
-                error!(
-                    computed_root = ?root,
-                    ?error,
-                    "Root mismatch between tree and contract."
-                );
-                return Err(ServerError::RootMismatch);
+                drop(tree);
+
+                // Verify the root on chain
+                if let Err(error) = self.contracts.assert_valid_root(root).await {
+                    error!(
+                        computed_root = ?root,
+                        ?error,
+                        "Root mismatch between tree and contract."
+                    );
+                    return Err(ServerError::RootMismatch);
+                }
+                return Ok(InclusionProofResponse::Proof { root, proof });
             }
-            Ok(InclusionProofResponse::Proof { root, proof })
-        } else if self
+        }
+
+        if self
             .database
             .pending_identity_exists(group_id, commitment)
             .await?

@@ -137,13 +137,18 @@ impl CachingLogQuery {
                     // If we need to decrease the page size later, don't process older blocks twice
                     retry_status.update_last_block(log.block_number);
 
+                    // TODO: remove .unwrap()
+                    let log_block = log.block_number.unwrap();
+                    let to_filter = self.filter.get_to_block().unwrap();
+                    let last_block = last_block.eth;
+
                     // get_logs_paginated ignores to_block filter. Check again if the block is confirmed
-                    if self.is_confirmed(&log, last_block) {
+                    let is_confirmed = log_block + self.confirmation_blocks_delay <= last_block && log_block <= to_filter;
+                    if is_confirmed {
                         let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;
                         self.cache_log(raw_log, &log).await?;
+                        yield log;
                     }
-
-                    yield log;
                 }
 
                 // We've iterated over all events, we can kill the restart loop
@@ -202,12 +207,6 @@ impl CachingLogQuery {
             Some(database) => database.load_logs(from, to).await.map_err(Error::Database),
             None => Ok(vec![]),
         }
-    }
-
-    fn is_confirmed(&self, log: &Log, last_block: LastBlock) -> bool {
-        log.block_number.map_or(false, |block| {
-            block + self.confirmation_blocks_delay <= last_block.eth
-        })
     }
 
     async fn cache_log(&self, raw_log: String, log: &Log) -> Result<(), Error<ProviderError>> {

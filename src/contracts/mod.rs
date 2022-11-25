@@ -13,7 +13,7 @@ use ethers::{
     types::{Address, TransactionReceipt, U256},
 };
 use eyre::{eyre, Result as EyreResult};
-use futures::{Stream, StreamExt, TryStreamExt};
+use futures::{Stream, TryStreamExt};
 use semaphore::Field;
 use std::sync::Arc;
 use tracing::{error, info, instrument};
@@ -154,7 +154,7 @@ impl Contracts {
         end_block: Option<u64>,
         last_leaf: usize,
         database: Arc<Database>,
-    ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
+    ) -> impl Stream<Item = Result<(Field, Field), EventError>> + '_ {
         info!(starting_block, last_leaf, "Reading MemberAdded events");
 
         // Start MemberAdded log event stream
@@ -169,11 +169,8 @@ impl Contracts {
         self.ethereum
             .fetch_events::<MemberAddedEvent>(&filter.filter, database)
             .try_filter(|event| future::ready(event.group_id == self.group_id))
-            .enumerate()
-            .map(|(index, res)| res.map(|event| (index, event)))
-            .map_ok(|(index, event)| {
+            .map_ok(|event| {
                 (
-                    index,
                     // TODO: Validate values < modulus
                     event.identity_commitment.into(),
                     event.root.into(),

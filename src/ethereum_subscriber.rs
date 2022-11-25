@@ -3,11 +3,12 @@ use crate::{
     database::{Database, Error as DatabaseError, IsExpectedResponse},
     ethereum::EventError,
     identity_committer::IdentityCommitter,
-    identity_tree::SharedTreeState,
+    identity_tree::{SharedTreeState, TreeState},
 };
 use cli_batteries::await_shutdown;
 use futures::{pin_mut, StreamExt, TryStreamExt};
-use std::{cmp::max, sync::Arc, time::Duration};
+use semaphore::Field;
+use std::{sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{select, sync::RwLock, task::JoinHandle, time::sleep};
 use tracing::{debug, error, info, instrument, warn};
@@ -143,14 +144,14 @@ impl EthereumSubscriber {
         let mut retrigger_processing = Option::<i64>::None;
 
         loop {
-            let (index, leaf, root) = select! {
+            let (leaf, root) = select! {
                 v = events.try_next() => match v.map_err(Error::EventError)? {
                     Some(a) => a,
                     None => break,
                 },
                 _ = &mut shutdown => return Err(Error::Interrupted),
             };
-            debug!(?index, ?leaf, ?root, "Received event");
+            debug!(?leaf, ?root, end_block, "Received event");
 
             // Confirm if this is a node expected by the identity committer
             // If not, we need to re-add identities to the work queue
@@ -169,63 +170,12 @@ impl EthereumSubscriber {
                 }
             }
 
-            // Check leaf index is valid
-            if index >= tree.merkle_tree.num_leaves() {
-                error!(?index, ?leaf, num_leaves = ?tree.merkle_tree.num_leaves(), "Received event out of range");
-                return Err(Error::EventOutOfRange);
-            }
-
-            // Check if leaf value is valid
-            if leaf == initial_leaf {
-                error!(?index, ?leaf, "Inserting empty leaf");
-                continue;
-            }
-
-            // Check leaf value with existing value
-            let existing = tree.merkle_tree.leaves()[index];
-            if existing != initial_leaf {
-                if existing == leaf {
-                    error!(?index, ?leaf, "Received event for already existing leaf.");
-                    continue;
-                }
-                error!(
-                    ?index,
-                    ?leaf,
-                    ?existing,
-                    "Received event for already set leaf."
-                );
-            }
-
-            // Check insertion counter
-            if index != tree.next_leaf {
-                error!(
-                    ?index,
-                    ?tree.next_leaf,
-                    ?leaf,
-                    "Event leaf index does not match expected leaf index."
-                );
-            }
-
-            // Check duplicates
-            if let Some(previous) = tree.merkle_tree.leaves()[..index]
-                .iter()
-                .position(|&l| l == leaf)
-            {
-                error!(
-                    ?index,
-                    ?leaf,
-                    ?previous,
-                    "Received event for already inserted leaf."
-                );
-            }
+            Self::log_event_errors(&tree, &initial_leaf, tree.next_leaf, &leaf)?;
 
             // Insert
+            let index = tree.next_leaf;
             tree.merkle_tree.set(index, leaf);
-            tree.next_leaf = max(tree.next_leaf, index + 1);
-
-            // let index = tree_state.next_leaf.fetch_add(1, Ordering::Relaxed);
-            // tree.merkle_tree.set(index, leaf);
-            // tree.next_leaf = max(tree.next_leaf, index + 1);
+            tree.next_leaf += 1;
 
             // Check root
             if root != tree.merkle_tree.root() {
@@ -259,6 +209,66 @@ impl EthereumSubscriber {
         }
 
         Ok(end_block)
+    }
+
+    #[allow(clippy::cognitive_complexity)]
+    fn log_event_errors(
+        tree: &TreeState,
+        initial_leaf: &Field,
+        index: usize,
+        leaf: &Field,
+    ) -> Result<(), Error> {
+        // Check leaf index is valid
+        if index >= tree.merkle_tree.num_leaves() {
+            error!(?index, ?leaf, num_leaves = ?tree.merkle_tree.num_leaves(), "Received event out of range");
+            return Err(Error::EventOutOfRange);
+        }
+
+        // Check if leaf value is valid
+        if leaf == initial_leaf {
+            error!(?index, ?leaf, "Inserting empty leaf");
+            return Ok(());
+        }
+
+        // Check leaf value with existing value
+        let existing = &tree.merkle_tree.leaves()[index];
+        if existing != initial_leaf {
+            if existing == leaf {
+                error!(?index, ?leaf, "Received event for already existing leaf.");
+                return Ok(());
+            }
+            error!(
+                ?index,
+                ?leaf,
+                ?existing,
+                "Received event for already set leaf."
+            );
+        }
+
+        // Check insertion counter
+        if index != tree.next_leaf {
+            error!(
+                ?index,
+                ?tree.next_leaf,
+                ?leaf,
+                "Event leaf index does not match expected leaf index."
+            );
+        }
+
+        // Check duplicates
+        if let Some(previous) = tree.merkle_tree.leaves()[..index]
+            .iter()
+            .position(|l| l == leaf)
+        {
+            error!(
+                ?index,
+                ?leaf,
+                ?previous,
+                "Received event for already inserted leaf."
+            );
+        }
+
+        Ok(())
     }
 
     #[instrument(level = "debug", skip_all)]

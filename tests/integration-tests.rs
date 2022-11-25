@@ -16,10 +16,7 @@ use hyper::{client::HttpConnector, Body, Client, Request, StatusCode};
 use semaphore::{merkle_tree::Branch, poseidon_tree::PoseidonTree};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use signup_sequencer::{
-    app::{App, Hash},
-    server, Options,
-};
+use signup_sequencer::{app::App, server, tree::Hash, Options};
 use std::{
     fs::File,
     io::BufReader,

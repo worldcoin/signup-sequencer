@@ -1,4 +1,4 @@
-use crate::{app::Hash, contracts::Contracts, database::Database};
+use crate::{contracts::Contracts, database::Database, tree::Hash};
 use eyre::eyre;
 use std::sync::{
     atomic::{AtomicI64, Ordering},

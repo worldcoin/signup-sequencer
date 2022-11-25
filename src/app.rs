@@ -6,27 +6,19 @@ use crate::{
     identity_committer::IdentityCommitter,
     server::{Error as ServerError, ToResponseCode},
     timed_read_progress_lock::TimedReadProgressLock,
+    tree::{Hash, SharedTreeState, TreeState},
 };
 use clap::Parser;
-
 use ethers::types::U256;
 use eyre::Result as EyreResult;
 use futures::TryFutureExt;
 use hyper::StatusCode;
-use semaphore::{
-    merkle_tree::Hasher,
-    poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
-    Field,
-};
+use semaphore::{poseidon_tree::Proof, Field};
 use serde::{ser::SerializeStruct, Serialize, Serializer};
 use std::{sync::Arc, time::Duration};
-
 use tokio::try_join;
 use tracing::{error, info, instrument, warn};
 
-pub type Hash = <PoseidonHash as Hasher>::Hash;
-
-#[allow(clippy::use_self)]
 pub enum InclusionProofResponse {
     Proof { root: Field, proof: Proof },
     Pending,
@@ -47,13 +39,13 @@ impl Serialize for InclusionProofResponse {
         S: Serializer,
     {
         match self {
-            InclusionProofResponse::Proof { root, proof } => {
+            Self::Proof { root, proof } => {
                 let mut state = serializer.serialize_struct("InclusionProof", 2)?;
                 state.serialize_field("root", root)?;
                 state.serialize_field("proof", proof)?;
                 state.end()
             }
-            InclusionProofResponse::Pending => serializer.serialize_str("pending"),
+            Self::Pending => serializer.serialize_str("pending"),
         }
     }
 }
@@ -77,23 +69,6 @@ pub struct Options {
     /// Timeout for the tree lock (seconds).
     #[clap(long, env, default_value = "120")]
     pub lock_timeout: u64,
-}
-
-pub struct TreeState {
-    pub next_leaf:   usize,
-    pub merkle_tree: PoseidonTree,
-}
-
-pub type SharedTreeState = Arc<TimedReadProgressLock<TreeState>>;
-
-impl TreeState {
-    #[must_use]
-    pub fn new(tree_depth: usize, initial_leaf: Field) -> Self {
-        Self {
-            next_leaf:   0,
-            merkle_tree: PoseidonTree::new(tree_depth, initial_leaf),
-        }
-    }
 }
 
 pub struct App {

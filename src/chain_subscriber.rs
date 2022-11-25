@@ -1,9 +1,9 @@
 use crate::{
-    app::SharedTreeState,
     contracts::Contracts,
     database::{Database, Error as DatabaseError, IsExpectedResponse},
     ethereum::EventError,
     identity_committer::IdentityCommitter,
+    tree::SharedTreeState,
 };
 use cli_batteries::await_shutdown;
 use futures::{pin_mut, StreamExt, TryStreamExt};

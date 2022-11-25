@@ -9,6 +9,7 @@ mod ethereum;
 mod identity_committer;
 pub mod server;
 mod timed_read_progress_lock;
+pub mod tree;
 mod utils;
 
 use crate::{app::App, utils::spawn_or_abort};

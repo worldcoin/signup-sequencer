@@ -220,13 +220,12 @@ jobs:
             *) false
           esac
           docker run --rm \
-            -u $UID:$GID \
             -v "$(pwd)":/src \
             -v $HOME/.cargo:/usr/local/cargo \
             -v /usr/local/cargo/bin \
             ghcr.io/recmo/rust-static-build:$RUST_VERSION-$ARCH \
             /bin/bash -c "\
-            apt-get update && apt-get install -y protobuf-compiler &&\
+            apt-get update && apt-get install -y protobuf-compiler sudo &&\
             cargo build --locked --release --features \"$FEATURES\""
       - name: Build and push
         uses: docker/build-push-action@v3

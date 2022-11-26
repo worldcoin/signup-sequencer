@@ -1,3 +1,7 @@
+# Test these locally using [act]
+# `act --container-architecture linux/amd64 -v -j build_and_push`
+# [act]: https://github.com/nektos/act
+
 name: Build, Test & Deploy
 
 on:
@@ -221,7 +225,9 @@ jobs:
             -v $HOME/.cargo:/usr/local/cargo \
             -v /usr/local/cargo/bin \
             ghcr.io/recmo/rust-static-build:$RUST_VERSION-$ARCH \
-            cargo build --locked --release --features "$FEATURES"
+            /bin/bash -c "\
+            apt-get update && apt-get install -y protobuf-compiler &&\
+            cargo build --locked --release --features \"$FEATURES\""
       - name: Build and push
         uses: docker/build-push-action@v3
         with:

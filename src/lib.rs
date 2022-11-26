@@ -12,7 +12,6 @@ mod utils;
 
 use crate::{app::App, utils::spawn_or_abort};
 use clap::Parser;
-use cli_batteries::await_shutdown;
 use eyre::Result as EyreResult;
 use std::sync::Arc;
 use tracing::info;
@@ -35,21 +34,9 @@ pub async fn main(options: Options) -> EyreResult<()> {
     // Create App struct
     let app = Arc::new(App::new(options.app).await?);
     let app_for_server = app.clone();
-    // Start server
-    let server = spawn_or_abort({
-        async move {
-            server::main(app_for_server, options.server).await?;
-            EyreResult::Ok(())
-        }
-    });
 
-    // Wait for shutdown
-    info!("Program started, waiting for shutdown signal");
-    await_shutdown().await;
-
-    // Wait for server
-    info!("Stopping server");
-    server.await?;
+    // Start server (will stop on shutdown signal)
+    server::main(app_for_server, options.server).await?;
 
     info!("Stopping the app");
     app.shutdown().await?;

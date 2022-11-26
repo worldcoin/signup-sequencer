@@ -10,7 +10,7 @@ pub mod server;
 mod timed_read_progress_lock;
 mod utils;
 
-use crate::{app::App, utils::spawn_or_abort};
+use crate::app::App;
 use clap::Parser;
 use eyre::Result as EyreResult;
 use std::sync::Arc;

@@ -47,7 +47,7 @@ impl RunningInstance {
         // already dead.
         let _ = self.shutdown_sender.send(()).await;
         info!("Awaiting committer shutdown.");
-        self.handle.await;
+        self.handle.await?;
         Ok(())
     }
 }

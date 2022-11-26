@@ -1,7 +1,7 @@
 use ethers::types::U256;
 use eyre::{Error as EyreError, Result as EyreResult};
 use futures::FutureExt;
-use std::{error::Error, fmt::Debug, future::Future};
+use std::future::Future;
 use tokio::task::JoinHandle;
 use tracing::error;
 

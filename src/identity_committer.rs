@@ -3,6 +3,7 @@ use crate::{
     contracts::Contracts,
     database::Database,
     timed_read_progress_lock::TimedReadProgressLock,
+    utils::spawn_or_abort,
 };
 use eyre::eyre;
 use std::sync::Arc;
@@ -15,7 +16,7 @@ use tracing::{debug, error, info, instrument, warn};
 
 struct RunningInstance {
     #[allow(dead_code)]
-    handle:          JoinHandle<eyre::Result<()>>,
+    handle:          JoinHandle<()>,
     wake_up_sender:  mpsc::Sender<()>,
     shutdown_sender: mpsc::Sender<()>,
 }
@@ -46,7 +47,8 @@ impl RunningInstance {
         // already dead.
         let _ = self.shutdown_sender.send(()).await;
         info!("Awaiting committer shutdown.");
-        self.handle.await?
+        self.handle.await;
+        Ok(())
     }
 }
 
@@ -89,7 +91,7 @@ impl IdentityCommitter {
         let database = self.database.clone();
         let tree_state = self.tree_state.clone();
         let contracts = self.contracts.clone();
-        let handle = tokio::spawn(async move {
+        let handle = spawn_or_abort(async move {
             loop {
                 while let Some((group_id, commitment)) =
                     database.get_oldest_unprocessed_identity().await?

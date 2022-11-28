@@ -68,11 +68,14 @@ tracing-test = "0.2"
 cli-batteries = "0.4.0"
 
 [profile.release]
-codegen-units = 1
-lto = true
 panic = "abort"
 overflow-checks = true
+codegen-units = 1
+lto = true
 strip = true
+
+[profile.dev]
+panic = "abort"
 
 # Compilation profile for any non-workspace member.
 # Dependencies are optimized, even in a dev build. This improves dev performance

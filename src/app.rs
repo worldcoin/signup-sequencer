@@ -59,13 +59,13 @@ impl Serialize for InclusionProofResponse {
         S: Serializer,
     {
         match self {
-            InclusionProofResponse::Proof { root, proof } => {
+            Self::Proof { root, proof } => {
                 let mut state = serializer.serialize_struct("InclusionProof", 2)?;
                 state.serialize_field("root", root)?;
                 state.serialize_field("proof", proof)?;
                 state.end()
             }
-            InclusionProofResponse::Pending => serializer.serialize_str("pending"),
+            Self::Pending => serializer.serialize_str("pending"),
         }
     }
 }

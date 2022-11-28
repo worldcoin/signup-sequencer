@@ -1,3 +1,7 @@
+# Test these locally using [act]
+# `act --container-architecture linux/amd64 -v -j build_and_push`
+# [act]: https://github.com/nektos/act
+
 name: Build, Test & Deploy
 
 on:
@@ -35,6 +39,8 @@ jobs:
           toolchain: ${{ env.NIGHTLY_VERSION }}
           override: true
           components: rustfmt, clippy
+      - name: Install protobuf-compiler
+        run: sudo apt-get install -y protobuf-compiler
       - name: Cache build
         uses: Swatinem/rust-cache@v2
         with:
@@ -73,6 +79,8 @@ jobs:
           profile: minimal
           toolchain: ${{ env.NIGHTLY_VERSION }}
           override: true
+      - name: Install protobuf-compiler
+        run: sudo apt-get install -y protobuf-compiler
       - name: Cache build
         uses: Swatinem/rust-cache@v2
         with:
@@ -112,6 +120,8 @@ jobs:
           toolchain: ${{ env.NIGHTLY_VERSION }}
           override: true
           components: llvm-tools-preview
+      - name: Install protobuf-compiler
+        run: sudo apt-get install -y protobuf-compiler
       - name: Cache build
         uses: Swatinem/rust-cache@v2
         with:
@@ -216,12 +226,13 @@ jobs:
             *) false
           esac
           docker run --rm \
-            -u $UID:$GID \
             -v "$(pwd)":/src \
             -v $HOME/.cargo:/usr/local/cargo \
             -v /usr/local/cargo/bin \
             ghcr.io/recmo/rust-static-build:$RUST_VERSION-$ARCH \
-            cargo build --locked --release --features "$FEATURES"
+            /bin/bash -c "\
+            apt-get update && apt-get install -y protobuf-compiler sudo &&\
+            cargo build --locked --release --features \"$FEATURES\""
       - name: Build and push
         uses: docker/build-push-action@v3
         with:

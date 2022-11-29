@@ -33,7 +33,7 @@ use ethers::{
         BlockNumber, Chain, Filter, Log, TransactionReceipt, H160, H256, U64,
     },
 };
-use eyre::{eyre, Result as EyreResult};
+use anyhow::{anyhow, Result as AnyhowResult};
 use futures::{try_join, FutureExt, Stream, StreamExt, TryStreamExt};
 use once_cell::sync::Lazy;
 use prometheus::{
@@ -204,7 +204,7 @@ pub struct Ethereum {
 
 impl Ethereum {
     #[instrument(name = "Ethereum::new", level = "debug", skip_all)]
-    pub async fn new(options: Options) -> EyreResult<Self> {
+    pub async fn new(options: Options) -> AnyhowResult<Self> {
         // Connect to the Ethereum provider
         // TODO: Allow multiple providers with failover / broadcast.
         // TODO: Requests don't seem to process in parallel. Check if this is
@@ -237,13 +237,13 @@ impl Ethereum {
 
             // Log chain state.
             let latest_block = latest_block
-                .ok_or_else(|| eyre!("Failed to get latest block from Ethereum provider"))?;
+                .ok_or_else(|| anyhow!("Failed to get latest block from Ethereum provider"))?;
             let block_hash = latest_block
                 .hash
-                .ok_or_else(|| eyre!("Could not read latest block hash"))?;
+                .ok_or_else(|| anyhow!("Could not read latest block hash"))?;
             let block_number = latest_block
                 .number
-                .ok_or_else(|| eyre!("Could not read latest block number"))?;
+                .ok_or_else(|| anyhow!("Could not read latest block number"))?;
             let block_time = latest_block.time()?;
             info!(%version, %chain_id, %chain, %eip1559, %block_number, ?block_hash, %block_time, "Connected to Ethereum provider");
 
@@ -276,7 +276,7 @@ impl Ethereum {
             median.add_weighted(0.1, ProviderOracle::new(provider.clone()));
 
             // Utility to get a Reqwest client with 30s timeout.
-            let client = || -> EyreResult<ReqwestClient> {
+            let client = || -> AnyhowResult<ReqwestClient> {
                 ReqwestClient::builder()
                     .timeout(Duration::from_secs(30))
                     .build()
@@ -335,7 +335,7 @@ impl Ethereum {
             let address = signer.address();
 
             // Create signer middleware for provider.
-            let chain_id: u64 = chain_id.try_into().map_err(|e| eyre!("{}", e))?;
+            let chain_id: u64 = chain_id.try_into().map_err(|e| anyhow!("{}", e))?;
             let signer = signer.with_chain_id(chain_id);
             let provider = SignerMiddleware::new(provider, signer);
 

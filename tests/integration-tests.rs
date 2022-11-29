@@ -11,7 +11,7 @@ use ethers::{
     types::{H256, U256},
     utils::{Anvil, AnvilInstance},
 };
-use eyre::{bail, Result as EyreResult};
+use eyre::{bail, Result as AnyhowResult};
 use hyper::{client::HttpConnector, Body, Client, Request, StatusCode};
 use semaphore::{merkle_tree::Branch, poseidon_tree::PoseidonTree};
 use serde::{Deserialize, Serialize};
@@ -311,7 +311,7 @@ fn construct_insert_identity_body(identity_commitment: &str) -> Body {
 }
 
 #[instrument(skip_all)]
-async fn spawn_app(options: Options) -> EyreResult<(JoinHandle<()>, SocketAddr)> {
+async fn spawn_app(options: Options) -> AnyhowResult<(JoinHandle<()>, SocketAddr)> {
     let app = App::new(options.app).await.expect("Failed to create App");
 
     let ip: IpAddr = match options.server.server.host() {
@@ -344,7 +344,7 @@ struct CompiledContract {
     bytecode: String,
 }
 
-fn deserialize_to_bytes(input: String) -> EyreResult<Bytes> {
+fn deserialize_to_bytes(input: String) -> AnyhowResult<Bytes> {
     if input.len() >= 2 && &input[0..2] == "0x" {
         let bytes: Vec<u8> = hex::decode(&input[2..])?;
         Ok(bytes.into())
@@ -354,7 +354,7 @@ fn deserialize_to_bytes(input: String) -> EyreResult<Bytes> {
 }
 
 #[instrument(skip_all)]
-async fn spawn_mock_chain() -> EyreResult<(AnvilInstance, H256, Address)> {
+async fn spawn_mock_chain() -> AnyhowResult<(AnvilInstance, H256, Address)> {
     let chain = Anvil::new().block_time(2u64).spawn();
     let private_key = H256::from_slice(&chain.keys()[0].to_be_bytes());
 

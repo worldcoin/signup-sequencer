@@ -12,7 +12,7 @@ mod utils;
 
 use crate::app::App;
 use clap::Parser;
-use eyre::Result as EyreResult;
+use anyhow::Result as AnyhowResult;
 use std::sync::Arc;
 use tracing::info;
 
@@ -30,7 +30,7 @@ pub struct Options {
 /// assert!(true);
 /// ```
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-pub async fn main(options: Options) -> EyreResult<()> {
+pub async fn main(options: Options) -> AnyhowResult<()> {
     // Create App struct
     let app = Arc::new(App::new(options.app).await?);
     let app_for_server = app.clone();

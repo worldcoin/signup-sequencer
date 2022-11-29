@@ -1,5 +1,5 @@
 use ethers::types::U256;
-use eyre::{Error as EyreError, Result as EyreResult};
+use anyhow::{Error as EyreError, Result as AnyhowResult};
 use futures::FutureExt;
 use std::future::Future;
 use tokio::task::JoinHandle;
@@ -15,20 +15,20 @@ macro_rules! require {
 }
 
 pub trait Any<A> {
-    fn any(self) -> EyreResult<A>;
+    fn any(self) -> AnyhowResult<A>;
 }
 
 impl<A, B> Any<A> for Result<A, B>
 where
     B: Into<EyreError>,
 {
-    fn any(self) -> EyreResult<A> {
+    fn any(self) -> AnyhowResult<A> {
         self.map_err(Into::into)
     }
 }
 
 pub trait AnyFlatten<A> {
-    fn any_flatten(self) -> EyreResult<A>;
+    fn any_flatten(self) -> AnyhowResult<A>;
 }
 
 impl<A, B, C> AnyFlatten<A> for Result<Result<A, B>, C>
@@ -36,7 +36,7 @@ where
     B: Into<EyreError>,
     C: Into<EyreError>,
 {
-    fn any_flatten(self) -> EyreResult<A> {
+    fn any_flatten(self) -> AnyhowResult<A> {
         self.map_err(Into::into)
             .and_then(|inner| inner.map_err(Into::into))
     }
@@ -45,7 +45,7 @@ where
 /// Spawn a task and abort process if it panics or results in error.
 pub fn spawn_or_abort<F, T>(future: F) -> JoinHandle<T>
 where
-    F: Future<Output = eyre::Result<T>> + Send + 'static,
+    F: Future<Output = AnyhowResult<T>> + Send + 'static,
     T: Send + 'static,
 {
     // Wrap in `AssertUnwindSafe` so we can call `FuturesExt::catch_unwind` on it.
@@ -61,7 +61,7 @@ where
                 std::process::abort();
             }
             Err(e) => {
-                error!("Task panicked: {:?}", eyre::Report::msg(format!("{e:?}")));
+                error!("Task panicked: {:?}", e);
                 std::process::abort();
             }
         }

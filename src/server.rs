@@ -4,8 +4,8 @@ use crate::{
 };
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use clap::Parser;
-use cli_batteries::{await_shutdown, trace_from_headers};
-use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
+use cli_batteries::{await_shutdown};
+use anyhow::{anyhow, bail, ensure, Error as EyreError, Result as AnyhowResult};
 use futures::Future;
 use hyper::{
     body::Buf,
@@ -173,7 +173,7 @@ where
 
 #[instrument(level="info", name="api_request", skip(app), fields(http.uri=%request.uri(), http.method=%request.method()))]
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
-    trace_from_headers(request.headers());
+    //trace_from_headers(request.headers());
 
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
@@ -222,7 +222,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
 /// a path beyond `/`, or cannot be cast into an IP address. Also returns an
 /// `Err` if the server cannot bind to the given address.
-pub async fn main(app: Arc<App>, options: Options) -> EyreResult<()> {
+pub async fn main(app: Arc<App>, options: Options) -> AnyhowResult<()> {
     ensure!(
         options.server.scheme() == "http",
         "Only http:// is supported in {}",
@@ -262,7 +262,7 @@ pub async fn bind_from_listener(
     app: Arc<App>,
     serve_timeout: Duration,
     listener: TcpListener,
-) -> EyreResult<()> {
+) -> AnyhowResult<()> {
     let local_addr = listener.local_addr()?;
     let make_svc = make_service_fn(move |_| {
         // Clone here as `make_service_fn` is called for every connection
@@ -288,7 +288,7 @@ pub async fn bind_from_listener(
     });
 
     let server = Server::from_tcp(listener)
-        .wrap_err("Failed to bind address")?
+        .map_err(|e| anyhow!("Failed to bind address: {}", e))?
         .serve(make_svc)
         .with_graceful_shutdown(await_shutdown());
 

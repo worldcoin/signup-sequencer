@@ -12,7 +12,7 @@ use ethers::{
     providers::Middleware,
     types::{Address, TransactionReceipt, U256},
 };
-use eyre::{eyre, Result as EyreResult};
+use anyhow::{anyhow, Result as AnyhowResult};
 use futures::{Stream, StreamExt, TryStreamExt};
 use semaphore::Field;
 use std::sync::Arc;
@@ -56,11 +56,11 @@ pub struct Contracts {
 
 impl Contracts {
     #[instrument(level = "debug", skip_all)]
-    pub async fn new(options: Options, ethereum: Ethereum) -> EyreResult<Self> {
+    pub async fn new(options: Options, ethereum: Ethereum) -> AnyhowResult<Self> {
         // Sanity check the group id
         if options.group_id == U256::zero() {
             error!(group_id = ?options.group_id, "Invalid group id: must be greater than zero");
-            return Err(eyre!("group id must be non-zero"));
+            return Err(anyhow!("group id must be non-zero"));
         }
 
         // Sanity check the address
@@ -72,7 +72,7 @@ impl Contracts {
                 ?address,
                 "No contract code deployed at provided Semaphore address"
             );
-            return Err(eyre!("Invalid Semaphore address"));
+            return Err(anyhow!("Invalid Semaphore address"));
         }
 
         // Connect to Contract
@@ -82,7 +82,7 @@ impl Contracts {
         let manager = semaphore.manager().call().await?;
         if manager != ethereum.address() {
             error!(?manager, signer = ?ethereum.address(), "Signer is not the manager of the Semaphore contract");
-            // return Err(eyre!("Signer is not manager"));
+            // return Err(anyhow!("Signer is not manager"));
             // TODO: If not manager, proceed in read-only mode.
         }
         info!(?address, ?manager, "Connected to Semaphore contract");
@@ -106,7 +106,7 @@ impl Contracts {
                 new_depth
             } else {
                 error!(group_id = ?options.group_id, "Group does not exist");
-                return Err(eyre!("Group does not exist"));
+                return Err(anyhow!("Group does not exist"));
             }
         } else {
             info!(group_id = ?options.group_id, ?existing_tree_depth, "Semaphore group found.");
@@ -172,7 +172,7 @@ impl Contracts {
 
     #[instrument(level = "debug", skip_all)]
     #[allow(dead_code)]
-    pub async fn is_manager(&self) -> EyreResult<bool> {
+    pub async fn is_manager(&self) -> AnyhowResult<bool> {
         info!(address = ?self.ethereum.address(), "My address");
         let manager = self.semaphore.manager().call().await?;
         info!(?manager, "Fetched manager address");
@@ -195,8 +195,9 @@ impl Contracts {
     // TODO: Ideally we'd have a `get_root` function, but the contract doesn't
     // support this.
     #[instrument(level = "debug", skip_all)]
-    pub async fn assert_valid_root(&self, root: Field) -> EyreResult<()> {
+    pub async fn assert_valid_root(&self, root: Field) -> AnyhowResult<()> {
         // HACK: Abuse the `verifyProof` function.
+
         let result = self
             .semaphore
             .verify_proof(
@@ -220,8 +221,8 @@ impl Contracts {
             return Ok(());
         }
         if error.contains("0x504570e3") {
-            return Err(eyre!("Invalid root"));
+            return Err(anyhow!("Invalid root"));
         }
-        Err(eyre!("Error verifiying root: {}", result))
+        Err(anyhow!("Error verifiying root: {}", result))
     }
 }

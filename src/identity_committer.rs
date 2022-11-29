@@ -5,7 +5,7 @@ use crate::{
     timed_read_progress_lock::TimedReadProgressLock,
     utils::spawn_or_abort,
 };
-use eyre::eyre;
+use anyhow::{anyhow, Result as AnyhowResult};
 use std::sync::Arc;
 use tokio::{
     select,
@@ -22,7 +22,7 @@ struct RunningInstance {
 }
 
 impl RunningInstance {
-    fn wake_up(&self) -> eyre::Result<()> {
+    fn wake_up(&self) -> AnyhowResult<()> {
         // We're using a 1-element channel for wake-up notifications. It is safe to
         // ignore a full channel, because that means the committer is already scheduled
         // to wake up and will process all requests inserted in the database.
@@ -35,11 +35,11 @@ impl RunningInstance {
                 debug!("Committer job already scheduled.");
                 Ok(())
             }
-            Err(TrySendError::Closed(_)) => Err(eyre!("Committer thread terminated unexpectedly.")),
+            Err(TrySendError::Closed(_)) => Err(anyhow!("Committer thread terminated unexpectedly.")),
         }
     }
 
-    async fn shutdown(self) -> eyre::Result<()> {
+    async fn shutdown(self) -> AnyhowResult<()> {
         info!("Sending a shutdown signal to the committer.");
         // Ignoring errors here, since we have two options: either the channel is full,
         // which is impossible, since this is the only use, and this method takes
@@ -129,7 +129,7 @@ impl IdentityCommitter {
         tree_state: &TimedReadProgressLock<TreeState>,
         group_id: usize,
         commitment: Hash,
-    ) -> eyre::Result<()> {
+    ) -> AnyhowResult<()> {
         // Get a progress lock on the tree for the duration of this operation. Holding a
         // progress lock ensures no other thread calls tries to insert an identity into
         // the contract, as that is an order dependent operation.
@@ -201,7 +201,7 @@ impl IdentityCommitter {
     ///
     /// Will return an Error if the committer thread cannot be shut down
     /// gracefully.
-    pub async fn shutdown(&self) -> eyre::Result<()> {
+    pub async fn shutdown(&self) -> AnyhowResult<()> {
         let mut instance = self.instance.write().await;
         if let Some(instance) = instance.take() {
             instance.shutdown().await?;

@@ -27,6 +27,7 @@ path = "criterion.rs"
 required-features = ["bench", "proptest"]
 
 [dependencies]
+anyhow = "1.0.66"
 async-stream = "0.3.3"
 async-trait = "0.1.53"
 chrono = "0.4.19"
@@ -35,7 +36,6 @@ cli-batteries = { version = "0.4.0", features = [ "signals", "prometheus", "mete
 criterion = { version = "0.4", optional = true, features = [ "async_tokio" ] } # For `bench`
 ethers = { version = "1.0.0", features = [ "ws", "ipc", "openssl", "abigen" ] }
 eyre = "0.6"
-anyhow = "1.0.66"
 futures = "0.3"
 futures-util = { version = "^0.3" }
 hyper = { version = "^0.14.17", features = [ "server", "tcp", "http1", "http2" ] }

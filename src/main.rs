@@ -3,12 +3,11 @@
 
 use cli_batteries::{run, version};
 use signup_sequencer::{main as sequencer_app, Options};
-use eyre;
 
 async fn app(options: Options) -> eyre::Result<()> {
-    sequencer_app(options).await.map_err(|e| {
-        eyre::eyre!("{:?}", e)
-    })
+    sequencer_app(options)
+        .await
+        .map_err(|e| eyre::eyre!("{:?}", e))
 }
 
 fn main() {

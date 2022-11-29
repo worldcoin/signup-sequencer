@@ -6,11 +6,11 @@ use crate::{
     server::{Error as ServerError, ToResponseCode},
     timed_read_progress_lock::TimedReadProgressLock,
 };
+use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use cli_batteries::await_shutdown;
 use core::cmp::max;
 use ethers::types::U256;
-use anyhow::Result as AnyhowResult;
 use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
 use hyper::StatusCode;
 use semaphore::{

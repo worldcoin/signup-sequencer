@@ -3,9 +3,9 @@ use crate::{
     database,
 };
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
+use anyhow::{bail, ensure, Context, Error as EyreError, Result as AnyhowResult};
 use clap::Parser;
-use cli_batteries::{await_shutdown};
-use anyhow::{anyhow, bail, ensure, Error as EyreError, Result as AnyhowResult};
+use cli_batteries::await_shutdown;
 use futures::Future;
 use hyper::{
     body::Buf,
@@ -173,7 +173,7 @@ where
 
 #[instrument(level="info", name="api_request", skip(app), fields(http.uri=%request.uri(), http.method=%request.method()))]
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
-    //trace_from_headers(request.headers());
+    // trace_from_headers(request.headers());
 
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
@@ -288,7 +288,7 @@ pub async fn bind_from_listener(
     });
 
     let server = Server::from_tcp(listener)
-        .map_err(|e| anyhow!("Failed to bind address: {}", e))?
+        .context("Failed to bind address")?
         .serve(make_svc)
         .with_graceful_shutdown(await_shutdown());
 

@@ -11,8 +11,8 @@ mod timed_read_progress_lock;
 mod utils;
 
 use crate::app::App;
-use clap::Parser;
 use anyhow::Result as AnyhowResult;
+use clap::Parser;
 use std::sync::Arc;
 use tracing::info;
 

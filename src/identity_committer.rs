@@ -35,7 +35,9 @@ impl RunningInstance {
                 debug!("Committer job already scheduled.");
                 Ok(())
             }
-            Err(TrySendError::Closed(_)) => Err(anyhow!("Committer thread terminated unexpectedly.")),
+            Err(TrySendError::Closed(_)) => {
+                Err(anyhow!("Committer thread terminated unexpectedly."))
+            }
         }
     }
 

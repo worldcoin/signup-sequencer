@@ -13,6 +13,7 @@ use crate::{
     contracts::caching_log_query::{CachingLogQuery, Error as CachingLogQueryError},
     database::Database,
 };
+use anyhow::{anyhow, Result as AnyhowResult};
 use chrono::{Duration as ChronoDuration, Utc};
 use clap::Parser;
 use ethers::{
@@ -33,7 +34,6 @@ use ethers::{
         BlockNumber, Chain, Filter, Log, TransactionReceipt, H160, H256, U64,
     },
 };
-use anyhow::{anyhow, Result as AnyhowResult};
 use futures::{try_join, FutureExt, Stream, StreamExt, TryStreamExt};
 use once_cell::sync::Lazy;
 use prometheus::{

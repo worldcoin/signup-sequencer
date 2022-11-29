@@ -1,6 +1,6 @@
 use crate::app::Hash;
-use clap::Parser;
 use anyhow::{anyhow, Context, Error as ErrReport};
+use clap::Parser;
 use ruint::{aliases::U256, uint};
 use sqlx::{
     any::AnyKind,
@@ -54,7 +54,7 @@ impl Database {
             .max_connections(options.database_max_connections)
             .connect(options.database.as_str())
             .await
-            .map_err(|e| anyhow!("error connecting to database: {}", e))?;
+            .context("error connecting to database")?;
 
         // Log DB version to test connection.
         let sql = match pool.any_kind() {
@@ -68,7 +68,7 @@ impl Database {
         let version = pool
             .fetch_one(format!("SELECT {sql};").as_str())
             .await
-            .map_err(|e| anyhow!("error getting database version: {}", e))?
+            .context("error getting database version")?
             .get::<String, _>(0);
         info!(url = %&options.database, kind = ?pool.any_kind(), ?version, "Connected to database");
 

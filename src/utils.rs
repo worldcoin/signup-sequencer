@@ -1,5 +1,5 @@
-use ethers::types::U256;
 use anyhow::{Error as EyreError, Result as AnyhowResult};
+use ethers::types::U256;
 use futures::FutureExt;
 use std::future::Future;
 use tokio::task::JoinHandle;

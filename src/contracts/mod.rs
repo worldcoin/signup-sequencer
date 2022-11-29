@@ -6,13 +6,13 @@ use crate::{
     database::Database,
     ethereum::{Ethereum, EventError, ProviderStack, TxError},
 };
+use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
 use core::future;
 use ethers::{
     providers::Middleware,
     types::{Address, TransactionReceipt, U256},
 };
-use anyhow::{anyhow, Result as AnyhowResult};
 use futures::{Stream, StreamExt, TryStreamExt};
 use semaphore::Field;
 use std::sync::Arc;

@@ -44,7 +44,7 @@ spec:
         - name: {{ . }}
       {{ end -}}
       nodeSelector:
-        beta.kubernetes.io/arch: {{ .Values.image.arch }}
+        kubernetes.io/arch: {{ .Values.image.arch }}
       securityContext:
         fsGroup: 10001
       containers:

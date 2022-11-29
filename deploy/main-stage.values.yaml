@@ -1,14 +1,14 @@
 # main-stage helm env values override
-environment: stage                                                  
+environment: stage
 ingress:
-  host: signup.stage-crypto.worldcoin.dev                     
+  host: signup.stage-crypto.worldcoin.dev
 persistentStorage:
   volumeID: aws://us-east-1a/vol-0af0c762d4294742a
 wipeDisk: true
 # Env values can be strings (to be prefixed with `value:`) or objects
 env:
   LOG_FILTER: "ethers_providers::provider=debug"
-  WIPE_STORAGE: true
-  MAX_LOG_BLOCKS: 1000000
-  STARTING_BLOCK: 0
-  CREATE_GROUP_DEPTH: 20
+  WIPE_STORAGE: "true"
+  MAX_LOG_BLOCKS: "1000000"
+  STARTING_BLOCK: "0"
+  CREATE_GROUP_DEPTH: "20"

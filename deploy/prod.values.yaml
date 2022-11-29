@@ -1,0 +1,9 @@
+# prod helm env override
+environment: prod      
+# Env values can be strings (to be prefixed with `value:`) or objects
+env:
+  LOG_FILTER: "ethers_providers::provider=debug"
+  WIPE_STORAGE: true
+  MAX_LOG_BLOCKS: 10000
+  STARTING_BLOCK: 27829300
+  PRIORITY_FEE_MULTIPLIER_PERCENTAGE: 200

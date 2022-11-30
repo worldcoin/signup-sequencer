@@ -1,6 +1,6 @@
 use crate::app::Hash;
+use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
-use eyre::{eyre, Context, ErrReport};
 use ruint::{aliases::U256, uint};
 use sqlx::{
     any::AnyKind,
@@ -54,7 +54,7 @@ impl Database {
             .max_connections(options.database_max_connections)
             .connect(options.database.as_str())
             .await
-            .wrap_err("error connecting to database")?;
+            .context("error connecting to database")?;
 
         // Log DB version to test connection.
         let sql = match pool.any_kind() {
@@ -68,7 +68,7 @@ impl Database {
         let version = pool
             .fetch_one(format!("SELECT {sql};").as_str())
             .await
-            .wrap_err("error getting database version")?
+            .context("error getting database version")?
             .get::<String, _>(0);
         info!(url = %&options.database, kind = ?pool.any_kind(), ?version, "Connected to database");
 
@@ -89,7 +89,7 @@ impl Database {
                     expected = latest,
                     "Database is in incomplete migration state.",
                 );
-                return Err(eyre!("Database is in incomplete migration state."));
+                return Err(anyhow!("Database is in incomplete migration state."));
             } else if version < latest {
                 error!(
                     url = %&options.database,
@@ -97,7 +97,7 @@ impl Database {
                     expected = latest,
                     "Database is not up to date, try rerunning with --database-migrate",
                 );
-                return Err(eyre!(
+                return Err(anyhow!(
                     "Database is not up to date, try rerunning with --database-migrate"
                 ));
             } else if version > latest {
@@ -107,7 +107,7 @@ impl Database {
                     latest,
                     "Database version is newer than this version of the software, please update.",
                 );
-                return Err(eyre!(
+                return Err(anyhow!(
                     "Database version is newer than this version of the software, please update."
                 ));
             }
@@ -119,7 +119,7 @@ impl Database {
             );
         } else {
             error!(url = %&options.database, "Could not get database version");
-            return Err(eyre!("Could not get database version."));
+            return Err(anyhow!("Could not get database version."));
         }
 
         Ok(Self { pool })

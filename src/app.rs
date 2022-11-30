@@ -6,11 +6,11 @@ use crate::{
     server::{Error as ServerError, ToResponseCode},
     timed_read_progress_lock::TimedReadProgressLock,
 };
+use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use cli_batteries::await_shutdown;
 use core::cmp::max;
 use ethers::types::U256;
-use eyre::Result as EyreResult;
 use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
 use hyper::StatusCode;
 use semaphore::{
@@ -125,7 +125,7 @@ impl App {
     /// `options.storage_file` is not accessible.
     #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
-    pub async fn new(options: Options) -> EyreResult<Self> {
+    pub async fn new(options: Options) -> AnyhowResult<Self> {
         // Connect to Ethereum and Database
         let (database, (ethereum, contracts)) = {
             let db = Database::new(options.database);
@@ -526,7 +526,7 @@ impl App {
     ///
     /// Will return an Error if any of the components cannot be shut down
     /// gracefully.
-    pub async fn shutdown(&self) -> eyre::Result<()> {
+    pub async fn shutdown(&self) -> AnyhowResult<()> {
         info!("Shutting down identity committer.");
         self.identity_committer.shutdown().await
     }

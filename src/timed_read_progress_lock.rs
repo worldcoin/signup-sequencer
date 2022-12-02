@@ -114,14 +114,20 @@ impl<T: Send + Sync> TimedReadProgressLock<T> {
     }
 }
 
-pub struct ProgressGuard<'a, T> {
+pub struct ProgressGuard<'a, T>
+where
+    T: Send + Sync,
+{
     duration:            Duration,
     mutex_guard:         MutexGuard<'a, ()>,
     resource_read_guard: OwnedRwLockReadGuard<T>,
     resource_lock:       Arc<RwLock<T>>,
 }
 
-impl<'a, T> ProgressGuard<'a, T> {
+impl<'a, T> ProgressGuard<'a, T>
+where
+    T: Send + Sync,
+{
     pub async fn upgrade_to_write(self) -> Result<WriteGuard<'a, T>, Error> {
         drop(self.resource_read_guard);
         timeout(self.duration, async move {
@@ -141,7 +147,10 @@ impl<'a, T> ProgressGuard<'a, T> {
     }
 }
 
-impl<'a, T> Deref for ProgressGuard<'a, T> {
+impl<'a, T> Deref for ProgressGuard<'a, T>
+where
+    T: Send + Sync,
+{
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -149,14 +158,20 @@ impl<'a, T> Deref for ProgressGuard<'a, T> {
     }
 }
 
-pub struct WriteGuard<'a, T> {
+pub struct WriteGuard<'a, T>
+where
+    T: Send + Sync,
+{
     duration:      Duration,
     mutex_guard:   MutexGuard<'a, ()>,
     resource_lock: Arc<RwLock<T>>,
     write_guard:   OwnedRwLockWriteGuard<T>,
 }
 
-impl<'a, T> WriteGuard<'a, T> {
+impl<'a, T> WriteGuard<'a, T>
+where
+    T: Send + Sync,
+{
     pub fn downgrade_to_progress(self) -> ProgressGuard<'a, T> {
         let resource_read_guard = self.write_guard.downgrade();
         ProgressGuard {
@@ -168,7 +183,10 @@ impl<'a, T> WriteGuard<'a, T> {
     }
 }
 
-impl<'a, T> Deref for WriteGuard<'a, T> {
+impl<'a, T> Deref for WriteGuard<'a, T>
+where
+    T: Send + Sync,
+{
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -176,7 +194,10 @@ impl<'a, T> Deref for WriteGuard<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for WriteGuard<'a, T> {
+impl<'a, T> DerefMut for WriteGuard<'a, T>
+where
+    T: Send + Sync,
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.write_guard
     }

@@ -27,6 +27,7 @@ path = "criterion.rs"
 required-features = ["bench", "proptest"]
 
 [dependencies]
+anyhow = "1.0.66"
 async-stream = "0.3.3"
 async-trait = "0.1.53"
 chrono = "0.4.19"
@@ -68,11 +69,14 @@ tracing-test = "0.2"
 cli-batteries = "0.4.0"
 
 [profile.release]
-codegen-units = 1
-lto = true
 panic = "abort"
 overflow-checks = true
+codegen-units = 1
+lto = true
 strip = true
+
+[profile.dev]
+panic = "abort"
 
 # Compilation profile for any non-workspace member.
 # Dependencies are optimized, even in a dev build. This improves dev performance

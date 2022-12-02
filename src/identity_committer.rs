@@ -1,5 +1,5 @@
-use crate::{contracts::Contracts, database::Database, identity_tree::Hash};
-use eyre::eyre;
+use crate::{contracts::Contracts, database::Database, identity_tree::Hash, utils::spawn_or_abort};
+use anyhow::{anyhow, Result as AnyhowResult};
 use std::sync::{
     atomic::{AtomicI64, Ordering},
     Arc,
@@ -13,13 +13,13 @@ use tracing::{debug, error, info, instrument, warn};
 
 struct RunningInstance {
     #[allow(dead_code)]
-    handle:          JoinHandle<eyre::Result<()>>,
+    handle:          JoinHandle<()>,
     wake_up_sender:  mpsc::Sender<()>,
     shutdown_sender: mpsc::Sender<()>,
 }
 
 impl RunningInstance {
-    fn wake_up(&self) -> eyre::Result<()> {
+    fn wake_up(&self) -> AnyhowResult<()> {
         // We're using a 1-element channel for wake-up notifications. It is safe to
         // ignore a full channel, because that means the committer is already scheduled
         // to wake up and will process all requests inserted in the database.
@@ -32,11 +32,13 @@ impl RunningInstance {
                 debug!("Committer job already scheduled.");
                 Ok(())
             }
-            Err(TrySendError::Closed(_)) => Err(eyre!("Committer thread terminated unexpectedly.")),
+            Err(TrySendError::Closed(_)) => {
+                Err(anyhow!("Committer thread terminated unexpectedly."))
+            }
         }
     }
 
-    async fn shutdown(self) -> eyre::Result<()> {
+    async fn shutdown(self) -> AnyhowResult<()> {
         info!("Sending a shutdown signal to the committer.");
         // Ignoring errors here, since we have two options: either the channel is full,
         // which is impossible, since this is the only use, and this method takes
@@ -44,7 +46,8 @@ impl RunningInstance {
         // already dead.
         let _ = self.shutdown_sender.send(()).await;
         info!("Awaiting committer shutdown.");
-        self.handle.await?
+        self.handle.await?;
+        Ok(())
     }
 }
 
@@ -80,8 +83,9 @@ impl IdentityCommitter {
         let (wake_up_sender, mut wake_up_receiver) = mpsc::channel(1);
         let database = self.database.clone();
         let contracts = self.contracts.clone();
-        let handle = tokio::spawn(async move {
+        let handle = spawn_or_abort(async move {
             let clock = AtomicI64::new(0);
+
             loop {
                 while let Some((group_id, commitment)) =
                     database.get_oldest_unprocessed_identity().await?
@@ -119,7 +123,7 @@ impl IdentityCommitter {
         index: &AtomicI64,
         group_id: usize,
         commitment: Hash,
-    ) -> eyre::Result<()> {
+    ) -> AnyhowResult<()> {
         // Send Semaphore transaction
         let receipt = contracts.insert_identity(commitment).await.map_err(|e| {
             error!(?e, "Failed to insert identity to contract.");
@@ -163,7 +167,7 @@ impl IdentityCommitter {
     ///
     /// Will return an Error if the committer thread cannot be shut down
     /// gracefully.
-    pub async fn shutdown(&self) -> eyre::Result<()> {
+    pub async fn shutdown(&self) -> AnyhowResult<()> {
         let mut instance = self.instance.write().await;
         if let Some(instance) = instance.take() {
             instance.shutdown().await?;

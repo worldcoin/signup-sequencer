@@ -2,3 +2,8 @@
 *.profraw
 commitments.json
 .*
+
+!.github
+!.editorconfig
+!.dockerignore
+!.cargo

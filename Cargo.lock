@@ -1877,9 +1877,9 @@ dependencies = [
 
 [[package]]
 name = "ethers"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d338f456cf5158d8cb630d39202cca4416ad2248193eadf9562bfb563d123176"
+checksum = "11f26f9d8d80da18ca72aca51804c65eb2153093af3bec74fd5ce32aa0c1f665"
 dependencies = [
  "ethers-addressbook",
  "ethers-contract",

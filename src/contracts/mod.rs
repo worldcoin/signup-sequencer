@@ -57,9 +57,9 @@ impl Contracts {
     #[instrument(level = "debug", skip_all)]
     pub async fn new(options: Options, ethereum: Ethereum) -> AnyhowResult<Self> {
         // Sanity check the group id
-        if options.max_group_id == U256::zero() {
-            error!(group_id = ?options.max_group_id, "Invalid max group id: must be greater than zero");
-            return Err(anyhow!("max group id must be non-zero"));
+        if options.max_group_id == U256::zero()  && options.max_group_id < U256::from(256) {
+            error!(group_id = ?options.max_group_id, "Invalid max group id: must be greater than zero and smaller than 256");
+            return Err(anyhow!("max group id must be greater than zero and smaller than 256"));
         }
 
         // Sanity check the address
@@ -104,11 +104,15 @@ impl Contracts {
                     .tx;
                 ethereum.send_transaction(tx).await?;
             } else if options.tree_depth != usize::from(existing_tree_depth) {
-                error!(group_id = group_id, options_depth=options.tree_depth, depth2=existing_tree_depth, "Group tree depth does not match");
+                error!(
+                    group_id = group_id,
+                    options_depth = options.tree_depth,
+                    existing_tree_depth = existing_tree_depth,
+                    "Group tree depth does not match"
+                );
                 return Err(anyhow!("Group tree depth does not match"));
             } else {
                 info!(max_group_id = ?options.max_group_id, ?existing_tree_depth, "Semaphore group found.");
-                
             };
         }
 
@@ -177,7 +181,11 @@ impl Contracts {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn insert_identity(&self, commitment: Field, group_id: usize) -> Result<TransactionReceipt, TxError> {
+    pub async fn insert_identity(
+        &self,
+        commitment: Field,
+        group_id: usize,
+    ) -> Result<TransactionReceipt, TxError> {
         info!(%commitment, "Inserting identity in contract");
 
         // Send create tx

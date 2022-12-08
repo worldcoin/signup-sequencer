@@ -13,7 +13,6 @@ use core::cmp::max;
 use ethers::types::U256;
 use futures::{future::join_all, pin_mut, StreamExt, TryFutureExt, TryStreamExt};
 use hyper::StatusCode;
-use proptest::option;
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
@@ -97,7 +96,7 @@ pub struct TreeState {
     pub merkle_tree: PoseidonTree,
 }
 
-pub type SharedTreeState = Arc<TimedReadProgressLock<TreeState>>;
+pub type SharedTreeState = TimedReadProgressLock<TreeState>;
 
 impl TreeState {
     #[must_use]
@@ -130,28 +129,32 @@ impl App {
         // Connect to Ethereum and Database
         let (database, (ethereum, contracts)) = {
             let db = Database::new(options.database);
-            
+
             let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
                 let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
                 Ok((ethereum, Arc::new(contracts)))
             });
-            
+
             // Connect to both in parallel
             try_join!(db, eth)?
         };
-        
+
         let database = Arc::new(database);
         let max_group_id = contracts.max_group_id().as_usize();
         let max_tree_depth = contracts.tree_depth() + 1;
         let initial_leaf = contracts.initial_leaf();
 
         // Poseidon tree depth is one more than the contract's tree depth
-        let tree_state = Arc::new((0..=max_group_id).map(|_| {
-            Arc::new(TimedReadProgressLock::new(
-                Duration::from_secs(options.lock_timeout),
-                TreeState::new(max_tree_depth, initial_leaf),
-            ))
-        }).collect::<Vec<_>>());
+        let tree_state = Arc::new(
+            (1..=max_group_id)
+                .map(|_| {
+                    TimedReadProgressLock::new(
+                        Duration::from_secs(options.lock_timeout),
+                        TreeState::new(max_tree_depth, initial_leaf),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        );
 
         let identity_committer =
             IdentityCommitter::new(database.clone(), contracts.clone(), tree_state.clone());
@@ -178,12 +181,16 @@ impl App {
                 error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
 
                 // Create a new empty MerkleTree and wipe out cache db
-                app.tree_state = Arc::new((0..=max_group_id).map(|_| {
-                    Arc::new(TimedReadProgressLock::new(
-                        Duration::from_secs(options.lock_timeout),
-                        TreeState::new(max_tree_depth, initial_leaf),
-                    ))
-                }).collect::<Vec<_>>());
+                app.tree_state = Arc::new(
+                    (1..=max_group_id)
+                        .map(|_| {
+                            TimedReadProgressLock::new(
+                                Duration::from_secs(options.lock_timeout),
+                                TreeState::new(max_tree_depth, initial_leaf),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                );
                 app.database.wipe_cache().await?;
 
                 // Retry
@@ -195,7 +202,8 @@ impl App {
 
         join_all(
             app.tree_state
-                .iter().enumerate()
+                .iter()
+                .enumerate()
                 .map(|(gid, tree)| app.check_health(tree, gid))
                 .collect::<Vec<_>>(),
         )
@@ -240,7 +248,7 @@ impl App {
         }
 
         {
-            let tree = self.tree_state[group_id].read().await?;
+            let tree = self.tree_state[group_id - 1].read().await?;
             if let Some(existing) = tree
                 .merkle_tree
                 .leaves()
@@ -279,7 +287,7 @@ impl App {
         }
 
         {
-            let tree = self.tree_state[group_id].read().await.map_err(|e| {
+            let tree = self.tree_state[group_id - 1].read().await.map_err(|e| {
                 error!(?e, "Failed to obtain tree lock in inclusion_proof.");
                 panic!("Sequencer potentially deadlocked, terminating.");
                 #[allow(unreachable_code)]
@@ -385,8 +393,8 @@ impl App {
             if tree.next_leaf < next_leaf {
                 next_leaf = tree.next_leaf;
             }
-        };
-        
+        }
+
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
             .contracts
@@ -395,7 +403,7 @@ impl App {
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
 
-        let mut indices = vec![0; self.contracts.max_group_id().as_usize() + 1];
+        let mut indices = vec![0; self.contracts.max_group_id().as_usize()];
 
         loop {
             let (leaf, root, group_id) = select! {
@@ -405,15 +413,18 @@ impl App {
                 },
                 _ = &mut shutdown => return Err(Error::Interrupted),
             };
-            let index = indices[group_id];
-            indices[group_id] += 1;
+            let index = indices[group_id - 1];
+            indices[group_id - 1] += 1;
 
             debug!(?index, ?leaf, ?root, "Received event");
 
-            let mut tree = self.tree_state[group_id].write().await.unwrap_or_else(|e| {
-                error!(?e, "Failed to obtain tree lock in process_events.");
-                panic!("Sequencer potentially deadlocked, terminating.");
-            });
+            let mut tree = self.tree_state[group_id - 1]
+                .write()
+                .await
+                .unwrap_or_else(|e| {
+                    error!(?e, "Failed to obtain tree lock in process_events.");
+                    panic!("Sequencer potentially deadlocked, terminating.");
+                });
 
             // Check leaf index is valid
             if index >= tree.merkle_tree.num_leaves() {

@@ -1,9 +1,8 @@
 use crate::{
-    app::{Hash, SharedTreeState, TreeState},
+    app::{Hash, SharedTreeState},
     contracts::Contracts,
     database::Database,
-    timed_read_progress_lock::TimedReadProgressLock,
-    utils::spawn_or_abort, bench::group,
+    utils::spawn_or_abort,
 };
 use anyhow::{anyhow, Result as AnyhowResult};
 use std::sync::Arc;
@@ -135,16 +134,19 @@ impl IdentityCommitter {
         // Get a progress lock on the tree for the duration of this operation. Holding a
         // progress lock ensures no other thread calls tries to insert an identity into
         // the contract, as that is an order dependent operation.
-        let tree = tree_state[group_id].progress().await.map_err(|e| {
+        let tree = tree_state[group_id - 1].progress().await.map_err(|e| {
             error!(?e, "Failed to obtain tree lock in commit_identity.");
             e
         })?;
 
         // Send Semaphore transaction
-        let receipt = contracts.insert_identity(commitment, group_id).await.map_err(|e| {
-            error!(?e, "Failed to insert identity to contract.");
-            e
-        })?;
+        let receipt = contracts
+            .insert_identity(commitment, group_id)
+            .await
+            .map_err(|e| {
+                error!(?e, "Failed to insert identity to contract.");
+                e
+            })?;
 
         let mut tree = tree.upgrade_to_write().await.map_err(|e| {
             error!(?e, "Failed to obtain tree lock in insert_identity.");

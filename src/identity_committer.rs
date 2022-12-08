@@ -3,7 +3,7 @@ use crate::{
     contracts::Contracts,
     database::Database,
     timed_read_progress_lock::TimedReadProgressLock,
-    utils::spawn_or_abort,
+    utils::spawn_or_abort, bench::group,
 };
 use anyhow::{anyhow, Result as AnyhowResult};
 use std::sync::Arc;
@@ -64,14 +64,14 @@ pub struct IdentityCommitter {
     instance:   RwLock<Option<RunningInstance>>,
     database:   Arc<Database>,
     contracts:  Arc<Contracts>,
-    tree_state: SharedTreeState,
+    tree_state: Arc<Vec<SharedTreeState>>,
 }
 
 impl IdentityCommitter {
     pub fn new(
         database: Arc<Database>,
         contracts: Arc<Contracts>,
-        tree_state: SharedTreeState,
+        tree_state: Arc<Vec<SharedTreeState>>,
     ) -> Self {
         Self {
             instance: RwLock::new(None),
@@ -128,20 +128,20 @@ impl IdentityCommitter {
     async fn commit_identity(
         database: &Database,
         contracts: &Contracts,
-        tree_state: &TimedReadProgressLock<TreeState>,
+        tree_state: &Arc<Vec<SharedTreeState>>,
         group_id: usize,
         commitment: Hash,
     ) -> AnyhowResult<()> {
         // Get a progress lock on the tree for the duration of this operation. Holding a
         // progress lock ensures no other thread calls tries to insert an identity into
         // the contract, as that is an order dependent operation.
-        let tree = tree_state.progress().await.map_err(|e| {
+        let tree = tree_state[group_id].progress().await.map_err(|e| {
             error!(?e, "Failed to obtain tree lock in commit_identity.");
             e
         })?;
 
         // Send Semaphore transaction
-        let receipt = contracts.insert_identity(commitment).await.map_err(|e| {
+        let receipt = contracts.insert_identity(commitment, group_id).await.map_err(|e| {
             error!(?e, "Failed to insert identity to contract.");
             e
         })?;
@@ -150,6 +150,8 @@ impl IdentityCommitter {
             error!(?e, "Failed to obtain tree lock in insert_identity.");
             e
         })?;
+
+        info!("Tree root before insert: {}", tree.merkle_tree.root());
 
         // Update  merkle tree
         let identity_index = tree.next_leaf;
@@ -173,7 +175,7 @@ impl IdentityCommitter {
 
         // Check tree root
         contracts
-            .assert_valid_root(tree.merkle_tree.root())
+            .assert_valid_root(tree.merkle_tree.root(), group_id)
             .await
             .map_err(|error| {
                 error!(

@@ -29,12 +29,12 @@ pub struct Options {
 
     /// The Semaphore group id to use
     #[clap(long, env, default_value = "1")]
-    pub group_id: U256,
+    pub max_group_id: U256,
 
     /// When set, it will create the group if it does not exist with the given
     /// depth.
-    #[clap(long, env)]
-    pub create_group_depth: Option<usize>,
+    #[clap(long, env, default_value = "21")]
+    pub tree_depth: usize,
 
     /// Initial value of the Merkle tree leaves. Defaults to the initial value
     /// in Semaphore.sol.
@@ -49,7 +49,7 @@ pub struct Options {
 pub struct Contracts {
     ethereum:     Ethereum,
     semaphore:    Semaphore<ProviderStack>,
-    group_id:     U256,
+    max_group_id: U256,
     tree_depth:   usize,
     initial_leaf: Field,
 }
@@ -58,9 +58,9 @@ impl Contracts {
     #[instrument(level = "debug", skip_all)]
     pub async fn new(options: Options, ethereum: Ethereum) -> AnyhowResult<Self> {
         // Sanity check the group id
-        if options.group_id == U256::zero() {
-            error!(group_id = ?options.group_id, "Invalid group id: must be greater than zero");
-            return Err(anyhow!("group id must be non-zero"));
+        if options.max_group_id == U256::zero() {
+            error!(group_id = ?options.max_group_id, "Invalid max group id: must be greater than zero");
+            return Err(anyhow!("max group id must be non-zero"));
         }
 
         // Sanity check the address
@@ -88,45 +88,45 @@ impl Contracts {
         info!(?address, ?manager, "Connected to Semaphore contract");
 
         // Make sure the group exists.
-        let existing_tree_depth = semaphore.get_depth(options.group_id).call().await?;
-        let actual_tree_depth = if existing_tree_depth == 0 {
-            if let Some(new_depth) = options.create_group_depth {
+        for group_id in 1..=options.max_group_id.as_usize() {
+            let existing_tree_depth = semaphore.get_depth(U256::from(group_id)).call().await?;
+
+            if existing_tree_depth == 0 {
                 info!(
                     "Group {} not found, creating it with depth {}",
-                    options.group_id, new_depth
+                    group_id, options.tree_depth
                 );
                 let tx = semaphore
                     .create_group(
-                        options.group_id,
-                        new_depth.try_into()?,
+                        group_id.into(),
+                        options.tree_depth as u8,
                         options.initial_leaf.to_be_bytes().into(),
                     )
                     .tx;
                 ethereum.send_transaction(tx).await?;
-                new_depth
+            } else if options.tree_depth != usize::from(existing_tree_depth) {
+                error!(group_id = group_id, options_depth=options.tree_depth, depth2=existing_tree_depth, "Group tree depth does not match");
+                return Err(anyhow!("Group tree depth does not match"));
             } else {
-                error!(group_id = ?options.group_id, "Group does not exist");
-                return Err(anyhow!("Group does not exist"));
-            }
-        } else {
-            info!(group_id = ?options.group_id, ?existing_tree_depth, "Semaphore group found.");
-            usize::from(existing_tree_depth)
-        };
+                info!(max_group_id = ?options.max_group_id, ?existing_tree_depth, "Semaphore group found.");
+                
+            };
+        }
 
         // TODO: Some way to check the initial leaf
 
         Ok(Self {
             ethereum,
             semaphore,
-            group_id: options.group_id,
-            tree_depth: actual_tree_depth,
+            max_group_id: options.max_group_id,
+            tree_depth: options.tree_depth,
             initial_leaf: options.initial_leaf,
         })
     }
 
     #[must_use]
-    pub const fn group_id(&self) -> U256 {
-        self.group_id
+    pub const fn max_group_id(&self) -> U256 {
+        self.max_group_id
     }
 
     #[must_use]
@@ -146,7 +146,7 @@ impl Contracts {
         starting_block: u64,
         last_leaf: usize,
         database: Arc<Database>,
-    ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
+    ) -> impl Stream<Item = Result<(usize, Field, Field, usize), EventError>> + '_ {
         info!(starting_block, last_leaf, "Reading MemberAdded events");
         // TODO: Register to the event stream and track it going forward.
 
@@ -157,7 +157,6 @@ impl Contracts {
             .from_block(starting_block);
         self.ethereum
             .fetch_events::<MemberAddedEvent>(&filter.filter, database)
-            .try_filter(|event| future::ready(event.group_id == self.group_id))
             .enumerate()
             .map(|(index, res)| res.map(|event| (index, event)))
             .map_ok(|(index, event)| {
@@ -166,6 +165,7 @@ impl Contracts {
                     // TODO: Validate values < modulus
                     event.identity_commitment.into(),
                     event.root.into(),
+                    event.group_id.as_usize(),
                 )
             })
     }
@@ -180,14 +180,14 @@ impl Contracts {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn insert_identity(&self, commitment: Field) -> Result<TransactionReceipt, TxError> {
+    pub async fn insert_identity(&self, commitment: Field, group_id: usize) -> Result<TransactionReceipt, TxError> {
         info!(%commitment, "Inserting identity in contract");
 
         // Send create tx
         let commitment = U256::from(commitment.to_be_bytes());
         let receipt = self
             .ethereum
-            .send_transaction(self.semaphore.add_member(self.group_id, commitment).tx)
+            .send_transaction(self.semaphore.add_member(group_id.into(), commitment).tx)
             .await?;
         Ok(receipt)
     }
@@ -195,14 +195,14 @@ impl Contracts {
     // TODO: Ideally we'd have a `get_root` function, but the contract doesn't
     // support this.
     #[instrument(level = "debug", skip_all)]
-    pub async fn assert_valid_root(&self, root: Field) -> AnyhowResult<()> {
+    pub async fn assert_valid_root(&self, root: Field, group_id: usize) -> AnyhowResult<()> {
         // HACK: Abuse the `verifyProof` function.
 
         let result = self
             .semaphore
             .verify_proof(
                 root.to_be_bytes().into(),
-                self.group_id,
+                group_id.into(),
                 U256::zero(),
                 U256::zero(),
                 U256::zero(),

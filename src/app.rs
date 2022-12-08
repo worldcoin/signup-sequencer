@@ -11,8 +11,9 @@ use clap::Parser;
 use cli_batteries::await_shutdown;
 use core::cmp::max;
 use ethers::types::U256;
-use futures::{pin_mut, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{future::join_all, pin_mut, StreamExt, TryFutureExt, TryStreamExt};
 use hyper::StatusCode;
+use proptest::option;
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
@@ -114,7 +115,7 @@ pub struct App {
     ethereum:           Ethereum,
     contracts:          Arc<Contracts>,
     identity_committer: IdentityCommitter,
-    tree_state:         SharedTreeState,
+    tree_state:         Arc<Vec<SharedTreeState>>,
     last_block:         u64,
 }
 
@@ -129,23 +130,28 @@ impl App {
         // Connect to Ethereum and Database
         let (database, (ethereum, contracts)) = {
             let db = Database::new(options.database);
-
+            
             let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
                 let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
                 Ok((ethereum, Arc::new(contracts)))
             });
-
+            
             // Connect to both in parallel
             try_join!(db, eth)?
         };
-
+        
         let database = Arc::new(database);
+        let max_group_id = contracts.max_group_id().as_usize();
+        let max_tree_depth = contracts.tree_depth() + 1;
+        let initial_leaf = contracts.initial_leaf();
 
         // Poseidon tree depth is one more than the contract's tree depth
-        let tree_state = Arc::new(TimedReadProgressLock::new(
-            Duration::from_secs(options.lock_timeout),
-            TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
-        ));
+        let tree_state = Arc::new((0..=max_group_id).map(|_| {
+            Arc::new(TimedReadProgressLock::new(
+                Duration::from_secs(options.lock_timeout),
+                TreeState::new(max_tree_depth, initial_leaf),
+            ))
+        }).collect::<Vec<_>>());
 
         let identity_committer =
             IdentityCommitter::new(database.clone(), contracts.clone(), tree_state.clone());
@@ -159,18 +165,25 @@ impl App {
             last_block: options.starting_block,
         };
 
-        // Sync with chain on start up
-        app.check_leaves().await;
+        join_all(
+            app.tree_state
+                .iter()
+                .map(|tree| app.check_leaves(tree))
+                .collect::<Vec<_>>(),
+        )
+        .await;
 
         match app.process_events().await {
             Err(Error::RootMismatch) => {
                 error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
 
                 // Create a new empty MerkleTree and wipe out cache db
-                app.tree_state = Arc::new(TimedReadProgressLock::new(
-                    Duration::from_secs(options.lock_timeout),
-                    TreeState::new(app.contracts.tree_depth() + 1, app.contracts.initial_leaf()),
-                ));
+                app.tree_state = Arc::new((0..=max_group_id).map(|_| {
+                    Arc::new(TimedReadProgressLock::new(
+                        Duration::from_secs(options.lock_timeout),
+                        TreeState::new(max_tree_depth, initial_leaf),
+                    ))
+                }).collect::<Vec<_>>());
                 app.database.wipe_cache().await?;
 
                 // Retry
@@ -180,7 +193,14 @@ impl App {
             Ok(_) => {}
         }
 
-        app.check_health().await;
+        join_all(
+            app.tree_state
+                .iter().enumerate()
+                .map(|(gid, tree)| app.check_health(&tree, gid))
+                .collect::<Vec<_>>(),
+        )
+        .await;
+
         app.identity_committer.start().await;
         Ok(app)
     }
@@ -197,7 +217,7 @@ impl App {
         group_id: usize,
         commitment: Hash,
     ) -> Result<(), ServerError> {
-        if U256::from(group_id) != self.contracts.group_id() {
+        if group_id == 0 || U256::from(group_id) > self.contracts.max_group_id() {
             return Err(ServerError::InvalidGroupId);
         }
 
@@ -220,7 +240,7 @@ impl App {
         }
 
         {
-            let tree = self.tree_state.read().await?;
+            let tree = self.tree_state[group_id].read().await?;
             if let Some(existing) = tree
                 .merkle_tree
                 .leaves()
@@ -250,7 +270,7 @@ impl App {
         group_id: usize,
         commitment: &Hash,
     ) -> Result<InclusionProofResponse, ServerError> {
-        if U256::from(group_id) != self.contracts.group_id() {
+        if group_id == 0 || U256::from(group_id) > self.contracts.max_group_id() {
             return Err(ServerError::InvalidGroupId);
         }
 
@@ -259,7 +279,7 @@ impl App {
         }
 
         {
-            let tree = self.tree_state.read().await.map_err(|e| {
+            let tree = self.tree_state[group_id].read().await.map_err(|e| {
                 error!(?e, "Failed to obtain tree lock in inclusion_proof.");
                 panic!("Sequencer potentially deadlocked, terminating.");
                 #[allow(unreachable_code)]
@@ -293,7 +313,7 @@ impl App {
                 drop(tree);
 
                 // Verify the root on chain
-                if let Err(error) = self.contracts.assert_valid_root(root).await {
+                if let Err(error) = self.contracts.assert_valid_root(root, group_id).await {
                     error!(
                         computed_root = ?root,
                         ?error,
@@ -317,8 +337,8 @@ impl App {
     }
 
     #[instrument(level = "debug", skip_all)]
-    async fn check_leaves(&self) {
-        let tree = self.tree_state.read().await.unwrap_or_else(|e| {
+    async fn check_leaves(&self, tree_state: &SharedTreeState) {
+        let tree = tree_state.read().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in check_leaves.");
             panic!("Sequencer potentially deadlocked, terminating.");
         });
@@ -354,20 +374,28 @@ impl App {
 
     #[instrument(level = "info", skip_all)]
     async fn process_events(&mut self) -> Result<(), Error> {
-        let mut tree = self.tree_state.write().await.unwrap_or_else(|e| {
-            error!(?e, "Failed to obtain tree lock in process_events.");
-            panic!("Sequencer potentially deadlocked, terminating.");
-        });
+        // Find minimum next_leaf across all trees
+        let mut next_leaf = usize::MAX;
+        for tree_state in self.tree_state.iter() {
+            let tree = tree_state.read().await.unwrap_or_else(|e| {
+                error!(?e, "Failed to obtain tree lock in process_events.");
+                panic!("Sequencer potentially deadlocked, terminating.");
+            });
 
+            if tree.next_leaf < next_leaf {
+                next_leaf = tree.next_leaf;
+            }
+        };
+        
         let initial_leaf = self.contracts.initial_leaf();
         let mut events = self
             .contracts
-            .fetch_events(self.last_block, tree.next_leaf, self.database.clone())
+            .fetch_events(self.last_block, next_leaf, self.database.clone())
             .boxed();
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
         loop {
-            let (index, leaf, root) = select! {
+            let (index, leaf, root, group_id) = select! {
                 v = events.try_next() => match v.map_err(Error::EventError)? {
                     Some(a) => a,
                     None => break,
@@ -375,6 +403,11 @@ impl App {
                 _ = &mut shutdown => return Err(Error::Interrupted),
             };
             debug!(?index, ?leaf, ?root, "Received event");
+
+            let mut tree = self.tree_state[group_id].write().await.unwrap_or_else(|e| {
+                error!(?e, "Failed to obtain tree lock in process_events.");
+                panic!("Sequencer potentially deadlocked, terminating.");
+            });
 
             // Check leaf index is valid
             if index >= tree.merkle_tree.num_leaves() {
@@ -440,8 +473,8 @@ impl App {
     }
 
     #[instrument(level = "debug", skip_all)]
-    async fn check_health(&self) {
-        let tree = self.tree_state.read().await.unwrap_or_else(|e| {
+    async fn check_health(&self, tree_state: &SharedTreeState, group_id: usize) {
+        let tree = tree_state.read().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in check_health.");
             panic!("Sequencer potentially deadlocked, terminating.");
         });
@@ -450,7 +483,7 @@ impl App {
         if tree.next_leaf > 0 {
             if let Err(error) = self
                 .contracts
-                .assert_valid_root(tree.merkle_tree.root())
+                .assert_valid_root(tree.merkle_tree.root(), group_id)
                 .await
             {
                 error!(root = ?tree.merkle_tree.root(), %error, "Root not valid on-chain.");

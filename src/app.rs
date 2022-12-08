@@ -196,7 +196,7 @@ impl App {
         join_all(
             app.tree_state
                 .iter().enumerate()
-                .map(|(gid, tree)| app.check_health(&tree, gid))
+                .map(|(gid, tree)| app.check_health(tree, gid))
                 .collect::<Vec<_>>(),
         )
         .await;
@@ -394,14 +394,20 @@ impl App {
             .boxed();
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
+
+        let mut indices = vec![0; self.contracts.max_group_id().as_usize() + 1];
+
         loop {
-            let (index, leaf, root, group_id) = select! {
+            let (leaf, root, group_id) = select! {
                 v = events.try_next() => match v.map_err(Error::EventError)? {
                     Some(a) => a,
                     None => break,
                 },
                 _ = &mut shutdown => return Err(Error::Interrupted),
             };
+            let index = indices[group_id];
+            indices[group_id] += 1;
+
             debug!(?index, ?leaf, ?root, "Received event");
 
             let mut tree = self.tree_state[group_id].write().await.unwrap_or_else(|e| {
@@ -442,6 +448,7 @@ impl App {
                     ?index,
                     ?tree.next_leaf,
                     ?leaf,
+                    ?group_id,
                     "Event leaf index does not match expected leaf index."
                 );
             }

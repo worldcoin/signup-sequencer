@@ -60,6 +60,7 @@ async fn insert_identity_and_proofs() {
     options.app.ethereum.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.contracts.semaphore_address = semaphore_address;
+    options.app.contracts.max_group_id = U256::from(2);
     options.app.ethereum.signing_key = private_key;
 
     let (app, local_addr) = spawn_app(options.clone())
@@ -68,6 +69,7 @@ async fn insert_identity_and_proofs() {
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
+    let mut ref_tree2 = PoseidonTree::new(22, options.app.contracts.initial_leaf);
     let client = Client::new();
     test_inclusion_proof(
         &uri,
@@ -75,6 +77,7 @@ async fn insert_identity_and_proofs() {
         0,
         &mut ref_tree,
         &options.app.contracts.initial_leaf,
+        1,
         true,
     )
     .await;
@@ -84,26 +87,44 @@ async fn insert_identity_and_proofs() {
         1,
         &mut ref_tree,
         &options.app.contracts.initial_leaf,
+        1,
         true,
     )
     .await;
-    test_insert_identity(&uri, &client, TEST_LEAFS[0]).await;
+    test_insert_identity(&uri, &client, TEST_LEAFS[0], 1).await;
     test_inclusion_proof(
         &uri,
         &client,
         0,
         &mut ref_tree,
         &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        1,
         false,
     )
     .await;
-    test_insert_identity(&uri, &client, TEST_LEAFS[1]).await;
+
+    // SWITCH GROUP
+    test_insert_identity(&uri, &client, TEST_LEAFS[0], 2).await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        0,
+        &mut ref_tree2,
+        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        2,
+        false,
+    )
+    .await;
+    // SWITCH BACK
+
+    test_insert_identity(&uri, &client, TEST_LEAFS[1], 1).await;
     test_inclusion_proof(
         &uri,
         &client,
         1,
         &mut ref_tree,
         &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        1,
         false,
     )
     .await;
@@ -113,6 +134,7 @@ async fn insert_identity_and_proofs() {
         2,
         &mut ref_tree,
         &options.app.contracts.initial_leaf,
+        1,
         true,
     )
     .await;
@@ -137,6 +159,7 @@ async fn insert_identity_and_proofs() {
         0,
         &mut ref_tree,
         &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        1,
         false,
     )
     .await;
@@ -146,6 +169,7 @@ async fn insert_identity_and_proofs() {
         1,
         &mut ref_tree,
         &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        1,
         false,
     )
     .await;
@@ -170,6 +194,7 @@ async fn insert_identity_and_proofs() {
         0,
         &mut ref_tree,
         &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        1,
         false,
     )
     .await;
@@ -179,6 +204,7 @@ async fn insert_identity_and_proofs() {
         1,
         &mut ref_tree,
         &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        1,
         false,
     )
     .await;
@@ -196,11 +222,12 @@ async fn test_inclusion_proof(
     leaf_index: usize,
     ref_tree: &mut PoseidonTree,
     leaf: &Hash,
+    group_id: usize,
     expect_failure: bool,
 ) {
     let mut success_response = None;
     for i in 1..21 {
-        let body = construct_inclusion_proof_body(TEST_LEAFS[leaf_index]);
+        let body = construct_inclusion_proof_body(TEST_LEAFS[leaf_index], group_id);
         info!(?uri, "Contacting");
         let req = Request::builder()
             .method("POST")
@@ -258,8 +285,9 @@ async fn test_insert_identity(
     uri: &str,
     client: &Client<HttpConnector>,
     identity_commitment: &str,
+    group_id: usize,
 ) {
-    let body = construct_insert_identity_body(identity_commitment);
+    let body = construct_insert_identity_body(identity_commitment, group_id);
     let req = Request::builder()
         .method("POST")
         .uri(uri.to_owned() + "/insertIdentity")
@@ -289,20 +317,20 @@ struct InsertIdentityResponse {
     identity_index: usize,
 }
 
-fn construct_inclusion_proof_body(identity_commitment: &str) -> Body {
+fn construct_inclusion_proof_body(identity_commitment: &str, group_id: usize) -> Body {
     Body::from(
         json!({
-            "groupId": 1,
+            "groupId": group_id,
             "identityCommitment": identity_commitment,
         })
         .to_string(),
     )
 }
 
-fn construct_insert_identity_body(identity_commitment: &str) -> Body {
+fn construct_insert_identity_body(identity_commitment: &str, group_id: usize) -> Body {
     Body::from(
         json!({
-            "groupId": 1,
+            "groupId": group_id,
             "identityCommitment": identity_commitment,
 
         })

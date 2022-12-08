@@ -8,7 +8,6 @@ use crate::{
 };
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
-use core::future;
 use ethers::{
     providers::Middleware,
     types::{Address, TransactionReceipt, U256},
@@ -146,7 +145,7 @@ impl Contracts {
         starting_block: u64,
         last_leaf: usize,
         database: Arc<Database>,
-    ) -> impl Stream<Item = Result<(usize, Field, Field, usize), EventError>> + '_ {
+    ) -> impl Stream<Item = Result<(Field, Field, usize), EventError>> + '_ {
         info!(starting_block, last_leaf, "Reading MemberAdded events");
         // TODO: Register to the event stream and track it going forward.
 
@@ -157,11 +156,9 @@ impl Contracts {
             .from_block(starting_block);
         self.ethereum
             .fetch_events::<MemberAddedEvent>(&filter.filter, database)
-            .enumerate()
-            .map(|(index, res)| res.map(|event| (index, event)))
-            .map_ok(|(index, event)| {
+            .map(|res| res)
+            .map_ok(|event| {
                 (
-                    index,
                     // TODO: Validate values < modulus
                     event.identity_commitment.into(),
                     event.root.into(),

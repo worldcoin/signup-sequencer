@@ -57,9 +57,11 @@ impl Contracts {
     #[instrument(level = "debug", skip_all)]
     pub async fn new(options: Options, ethereum: Ethereum) -> AnyhowResult<Self> {
         // Sanity check the group id
-        if options.max_group_id == U256::zero()  && options.max_group_id < U256::from(256) {
+        if options.max_group_id == U256::zero() && options.max_group_id < U256::from(256) {
             error!(group_id = ?options.max_group_id, "Invalid max group id: must be greater than zero and smaller than 256");
-            return Err(anyhow!("max group id must be greater than zero and smaller than 256"));
+            return Err(anyhow!(
+                "max group id must be greater than zero and smaller than 256"
+            ));
         }
 
         // Sanity check the address

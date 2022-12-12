@@ -110,13 +110,6 @@ impl EthereumSubscriber {
         database: Arc<Database>,
         identity_committer: Arc<IdentityCommitter>,
     ) -> Result<u64, Error> {
-        let mut tree = tree_state.write().await.unwrap_or_else(|e| {
-            error!(?e, "Failed to obtain tree lock in process_events.");
-            panic!("Sequencer potentially deadlocked, terminating.");
-        });
-
-        let initial_leaf = contracts.initial_leaf();
-
         let end_block = contracts
             .confirmed_block_number()
             .await
@@ -127,21 +120,26 @@ impl EthereumSubscriber {
         }
         info!(
             starting_block,
-            end_block, "processing events in chain subscriber"
+            end_block, "processing events in ethereum subscriber"
         );
 
         let mut events = contracts
             .fetch_events(
                 starting_block,
                 Some(end_block),
-                tree.next_leaf,
                 database.clone(),
             )
             .boxed();
+
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
 
         let mut retrigger_processing = Option::<i64>::None;
+
+        let mut tree = tree_state.write().await.unwrap_or_else(|e| {
+            error!(?e, "Failed to obtain tree lock in process_events.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+        });
 
         loop {
             let (leaf, root) = select! {
@@ -170,7 +168,7 @@ impl EthereumSubscriber {
                 }
             }
 
-            Self::log_event_errors(&tree, &initial_leaf, tree.next_leaf, &leaf)?;
+            Self::log_event_errors(&tree, &contracts.initial_leaf(), tree.next_leaf, &leaf)?;
 
             // Insert
             let index = tree.next_leaf;

@@ -152,10 +152,9 @@ impl Contracts {
         &self,
         starting_block: u64,
         end_block: Option<u64>,
-        last_leaf: usize,
         database: Arc<Database>,
     ) -> impl Stream<Item = Result<(Field, Field), EventError>> + '_ {
-        info!(starting_block, last_leaf, "Reading MemberAdded events");
+        info!(starting_block, "Reading MemberAdded events");
 
         // Start MemberAdded log event stream
         let mut filter = self

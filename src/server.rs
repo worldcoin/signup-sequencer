@@ -5,7 +5,7 @@ use crate::{
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use anyhow::{bail, ensure, Context, Error as EyreError, Result as AnyhowResult};
 use clap::Parser;
-use cli_batteries::await_shutdown;
+use cli_batteries::{await_shutdown, trace_from_headers};
 use futures::Future;
 use hyper::{
     body::Buf,
@@ -173,7 +173,7 @@ where
 
 #[instrument(level="info", name="api_request", skip(app), fields(http.uri=%request.uri(), http.method=%request.method()))]
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
-    // trace_from_headers(request.headers());
+    trace_from_headers(request.headers());
 
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop

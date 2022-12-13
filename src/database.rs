@@ -161,66 +161,30 @@ impl Database {
         Ok(())
     }
 
-    pub async fn is_expected_identity_confirmation(
-        &self,
-        commitment: &Hash,
-    ) -> Result<IsExpectedResponse, Error> {
-        let result = self
-            .pool
-            .fetch_optional(
-                sqlx::query(
-                    r#"SELECT commitment = $1, insertion_idx
-                           FROM pending_identities
-                           ORDER BY insertion_idx
-                           LIMIT 1;"#,
-                )
-                .bind(commitment),
-            )
-            .await?
-            .map(|row| {
-                if row.get::<bool, _>(0) {
-                    IsExpectedResponse::Ok
-                } else {
-                    IsExpectedResponse::NotExpected {
-                        starting: row.get::<i64, _>(1),
-                    }
-                }
-            })
-            .unwrap_or(IsExpectedResponse::Ok);
-
-        Ok(result)
-    }
-
     pub async fn pending_identity_confirmed(
         &self,
-        row_index: i64,
         commitment: &Hash,
-    ) -> Result<(), Error> {
-        self.pool
-            .execute(
-                sqlx::query(
-                    r#"DELETE FROM pending_identities
-                        WHERE insertion_idx = $1 AND commitment = $2;"#,
-                )
-                .bind(row_index)
-                .bind(commitment),
-            )
-            .await?;
-        Ok(())
-    }
+    ) -> Result<IdentityConfirmationResult, Error> {
+        let retrigger_query = sqlx::query(
+            r#"UPDATE pending_identities
+            SET mined_in_block = NULL, insertion_idx = NULL, created_at = CURRENT_TIMESTAMP
+            WHERE insertion_idx < (SELECT insertion_idx FROM pending_identities WHERE commitment = $1 LIMIT 1)"#,
+        );
+        let retrigger_result = self.pool.execute(retrigger_query).await?;
 
-    pub async fn retrigger_pending_identities(&self, starting_from: i64) -> Result<(), Error> {
-        self.pool
-            .execute(
-                sqlx::query(
-                    r#"UPDATE pending_identities
-                        SET mined_in_block = NULL, insertion_idx = NULL, created_at = CURRENT_TIMESTAMP
-                        WHERE insertion_idx >= $1;"#,
-                )
-                .bind(starting_from),
-            )
-            .await?;
-        Ok(())
+        let cleanup_query = sqlx::query(
+            r#"DELETE FROM pending_identities
+                WHERE commitment = $1;"#,
+        )
+        .bind(commitment);
+
+        self.pool.execute(cleanup_query).await?;
+
+        if retrigger_result.rows_affected() > 0 {
+            Ok(IdentityConfirmationResult::RetriggerProcessing)
+        } else {
+            Ok(IdentityConfirmationResult::Done)
+        }
     }
 
     pub async fn pending_identity_exists(
@@ -358,7 +322,7 @@ pub enum Error {
     InternalError(#[from] sqlx::Error),
 }
 
-pub enum IsExpectedResponse {
-    Ok,
-    NotExpected { starting: i64 },
+pub enum IdentityConfirmationResult {
+    Done,
+    RetriggerProcessing,
 }

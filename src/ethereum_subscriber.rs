@@ -1,6 +1,6 @@
 use crate::{
     contracts::Contracts,
-    database::{Database, Error as DatabaseError, IsExpectedResponse},
+    database::{Database, Error as DatabaseError, IdentityConfirmationResult},
     ethereum::EventError,
     identity_committer::IdentityCommitter,
     identity_tree::{SharedTreeState, TreeState},
@@ -124,22 +124,18 @@ impl EthereumSubscriber {
         );
 
         let mut events = contracts
-            .fetch_events(
-                starting_block,
-                Some(end_block),
-                database.clone(),
-            )
+            .fetch_events(starting_block, Some(end_block), database.clone())
             .boxed();
 
         let shutdown = await_shutdown();
         pin_mut!(shutdown);
 
-        let mut retrigger_processing = Option::<i64>::None;
-
         let mut tree = tree_state.write().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in process_events.");
             panic!("Sequencer potentially deadlocked, terminating.");
         });
+
+        let mut wake_up_committer = false;
 
         loop {
             let (leaf, root) = select! {
@@ -150,23 +146,6 @@ impl EthereumSubscriber {
                 _ = &mut shutdown => return Err(Error::Interrupted),
             };
             debug!(?leaf, ?root, end_block, "Received event");
-
-            // Confirm if this is a node expected by the identity committer
-            // If not, we need to re-add identities to the work queue
-            // We only care about the first failure as everything else needs to be
-            // recomputed anyway
-            let is_expected = database
-                .is_expected_identity_confirmation(&leaf)
-                .await
-                .map_err(Error::DatabaseError)?;
-            if retrigger_processing.is_none() {
-                if let IsExpectedResponse::NotExpected {
-                    starting: row_index,
-                } = is_expected
-                {
-                    retrigger_processing = Some(row_index);
-                }
-            }
 
             Self::log_event_errors(&tree, &contracts.initial_leaf(), tree.next_leaf, &leaf)?;
 
@@ -182,27 +161,20 @@ impl EthereumSubscriber {
             }
 
             // Remove from pending identities
-            if let IsExpectedResponse::NotExpected {
-                starting: row_index,
-            } = is_expected
-            {
-                database
-                    .pending_identity_confirmed(row_index, &leaf)
-                    .await
-                    .map_err(Error::DatabaseError)?;
+            let queue_status = database
+                .pending_identity_confirmed(&leaf)
+                .await
+                .map_err(Error::DatabaseError)?;
+            if let IdentityConfirmationResult::RetriggerProcessing = queue_status {
+                wake_up_committer = true;
             }
         }
 
-        if let Some(first_invalid_row) = retrigger_processing {
+        if wake_up_committer {
             error!(
-                first_invalid_row,
                 "event sequencing inconsistent between chain and identity committer. re-org \
                  happened?"
             );
-            database
-                .retrigger_pending_identities(first_invalid_row)
-                .await
-                .map_err(Error::DatabaseError)?;
             identity_committer.notify_queued().await;
         }
 

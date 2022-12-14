@@ -169,7 +169,9 @@ impl Database {
             r#"UPDATE pending_identities
             SET mined_in_block = NULL, insertion_idx = NULL, created_at = CURRENT_TIMESTAMP
             WHERE insertion_idx < (SELECT insertion_idx FROM pending_identities WHERE commitment = $1 LIMIT 1)"#,
-        );
+        )
+        .bind(commitment);
+
         let retrigger_result = self.pool.execute(retrigger_query).await?;
 
         let cleanup_query = sqlx::query(

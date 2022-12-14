@@ -25,7 +25,7 @@ use std::{
     time::Duration,
 };
 use tokio::{spawn, task::JoinHandle};
-use tracing::{info, instrument};
+use tracing::{debug, error, info, instrument};
 use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
 use url::{Host, Url};
 
@@ -36,15 +36,109 @@ const TEST_LEAFS: &[&str] = &[
 ];
 
 #[tokio::test]
+#[serial_test::serial]
+async fn simulate_eth_reorg() {
+    // Initialize logging for the test.
+    init_tracing_subscriber();
+    info!("Starting re-org integration test");
+
+    let mut options = Options::try_parse_from([""]).expect("Failed to create options");
+    options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
+
+    let (chain, private_key, semaphore_address) = spawn_mock_chain()
+        .await
+        .expect("Failed to spawn ganache chain");
+
+    options.app.ethereum.ethereum_provider =
+        Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
+    options.app.contracts.semaphore_address = semaphore_address;
+    options.app.ethereum.signing_key = private_key;
+    options.app.ethereum.confirmation_blocks_delay = 5;
+    options.app.ethereum.refresh_rate = Duration::from_secs(1);
+
+    let (app, local_addr) = spawn_app(options.clone())
+        .await
+        .expect("Failed to spawn app.");
+
+    let uri = "http://".to_owned() + &local_addr.to_string();
+    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
+    let client = Client::new();
+
+    let provider = Provider::<Http>::try_from(chain.endpoint())
+        .expect("Failed to initialize chain endpoint")
+        .interval(Duration::from_millis(500u64));
+
+    test_insert_identity(&uri, &client, TEST_LEAFS[0]).await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        0,
+        &mut ref_tree,
+        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        false,
+    )
+    .await;
+
+    // Create snapshot
+    let snapshot_id: U256 = provider
+        .request("evm_snapshot", ())
+        .await
+        .expect("Failed to create EVM snapshot");
+    info!("SNAPSHOT CREATED {}", snapshot_id);
+
+    test_insert_identity(&uri, &client, TEST_LEAFS[1]).await;
+
+    // Wait for the block to be mined. Don't wait too long,
+    // otherwise the transaction will be marked as confirmed
+    // TODO: there must be a better way to do this
+    tokio::time::sleep(Duration::from_secs(15)).await;
+
+    let result: bool = provider
+        .request("evm_revert", [snapshot_id])
+        .await
+        .expect("Failed to revert EVM snapshot");
+
+    info!("SNAPSHOT REVERTED {}", result);
+
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    test_insert_identity(&uri, &client, TEST_LEAFS[2]).await;
+
+    debug!(leaf = TEST_LEAFS[2], "TEST INCLUSION");
+
+    test_inclusion_proof(
+        &uri,
+        &client,
+        1,
+        &mut ref_tree,
+        &Hash::from_str_radix(TEST_LEAFS[2], 16).expect("Failed to parse Hash from test leaf 1"),
+        false,
+    )
+    .await;
+
+    debug!(leaf = TEST_LEAFS[1], "TEST INCLUSION");
+
+    test_inclusion_proof(
+        &uri,
+        &client,
+        2,
+        &mut ref_tree,
+        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        false,
+    )
+    .await;
+
+    // Shutdown app and reset mock shutdown
+    shutdown();
+    app.await.unwrap();
+    reset_shutdown();
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn insert_identity_and_proofs() {
     // Initialize logging for the test.
-    tracing_subscriber::fmt()
-        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-        .with_line_number(true)
-        .with_env_filter("info,signup_sequencer=debug")
-        .with_timer(Uptime::default())
-        .pretty()
-        .init();
+    init_tracing_subscriber();
     info!("Starting integration test");
 
     let mut options = Options::try_parse_from([""]).expect("Failed to create options");
@@ -198,8 +292,8 @@ async fn test_inclusion_proof(
     expect_failure: bool,
 ) {
     let mut success_response = None;
-    for i in 1..21 {
-        let body = construct_inclusion_proof_body(TEST_LEAFS[leaf_index]);
+    for i in 1..26 {
+        let body = construct_inclusion_proof_body(leaf);
         info!(?uri, "Contacting");
         let req = Request::builder()
             .method("POST")
@@ -288,7 +382,7 @@ struct InsertIdentityResponse {
     identity_index: usize,
 }
 
-fn construct_inclusion_proof_body(identity_commitment: &str) -> Body {
+fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
     Body::from(
         json!({
             "groupId": 1,
@@ -354,7 +448,7 @@ fn deserialize_to_bytes(input: String) -> AnyhowResult<Bytes> {
 
 #[instrument(skip_all)]
 async fn spawn_mock_chain() -> AnyhowResult<(AnvilInstance, H256, Address)> {
-    let chain = Anvil::new().block_time(2u64).spawn();
+    let chain = Anvil::new().block_time(3u64).spawn();
     let private_key = H256::from_slice(&chain.keys()[0].to_be_bytes());
 
     let provider = Provider::<Http>::try_from(chain.endpoint())
@@ -443,4 +537,17 @@ async fn spawn_mock_chain() -> AnyhowResult<(AnvilInstance, H256, Address)> {
         .await?; // Wait for TX to be mined
 
     Ok((chain, private_key, semaphore_contract.address()))
+}
+
+fn init_tracing_subscriber() {
+    let result = tracing_subscriber::fmt()
+        //.with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        .with_line_number(true)
+        .with_env_filter("info,signup_sequencer=debug")
+        .with_timer(Uptime::default())
+        //.pretty()
+        .try_init();
+    if let Err(error) = result {
+        error!(error, "Failed to initialize tracing_subscriber");
+    }
 }

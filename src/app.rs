@@ -123,6 +123,7 @@ impl App {
             identity_committer.clone(),
         );
 
+        // Sync with chain on start up
         match chain_subscriber.process_events().await {
             Err(SubscriberError::RootMismatch) => {
                 error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
@@ -148,12 +149,14 @@ impl App {
             Ok(_) => {}
         }
 
-        // Sync with chain on start up
-        // TODO: check leaves used to run before historical events. what's up with that?
+        // Basic sanity checks on the merkle tree
         chain_subscriber.check_leaves().await;
         chain_subscriber.check_health().await;
+
+        // Listen to Ethereum events
         chain_subscriber.start(refresh_rate).await;
 
+        // Process to push new identities to Ethereum
         identity_committer.start().await;
 
         Ok(Self {

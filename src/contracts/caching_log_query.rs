@@ -94,7 +94,7 @@ impl CachingLogQuery {
             let last_block = self.get_block_number().await?;
 
             let cached_events = self.load_db_logs(
-                self.filter.get_from_block().unwrap().as_u64(),
+                self.filter.get_from_block().expect("filter's from_block must be set").as_u64(),
                 self.filter.get_to_block().map(|num| num.as_u64())
             ).await?;
 
@@ -137,9 +137,11 @@ impl CachingLogQuery {
                     // If we need to decrease the page size later, don't process older blocks twice
                     retry_status.update_last_block(log.block_number);
 
-                    // TODO: remove .unwrap()
-                    let log_block = log.block_number.unwrap();
-                    let to_filter = self.filter.get_to_block().unwrap();
+                    let log_block = match log.block_number {
+                        Some(block) => block,
+                        None => continue,
+                    };
+                    let to_filter = self.filter.get_to_block().expect("filter's to_block must be set");
                     let last_block = last_block.eth;
 
                     // get_logs_paginated ignores to_block filter. Check again if the block is confirmed

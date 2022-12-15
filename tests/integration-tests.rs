@@ -8,7 +8,7 @@ use ethers::{
         SignerMiddleware,
     },
     providers::Middleware,
-    types::{H256, U256},
+    types::{BlockNumber, Filter, Log, H160, H256, U256},
     utils::{Anvil, AnvilInstance},
 };
 use eyre::{bail, Result as AnyhowResult};
@@ -84,23 +84,19 @@ async fn simulate_eth_reorg() {
         .request("evm_snapshot", ())
         .await
         .expect("Failed to create EVM snapshot");
-    info!("SNAPSHOT CREATED {}", snapshot_id);
+    info!("Created EVM snapshot with ID {}", snapshot_id);
 
     test_insert_identity(&uri, &client, TEST_LEAFS[1]).await;
 
-    // Wait for the block to be mined. Don't wait too long,
-    // otherwise the transaction will be marked as confirmed
-    // TODO: there must be a better way to do this
-    tokio::time::sleep(Duration::from_secs(15)).await;
+    // after 2 identites were mined, we should have 3 log events on the chain
+    wait_for_log_count(&provider, semaphore_address, 3).await;
 
     let result: bool = provider
         .request("evm_revert", [snapshot_id])
         .await
         .expect("Failed to revert EVM snapshot");
 
-    info!("SNAPSHOT REVERTED {}", result);
-
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    info!("Reverted EVM snapshot to simulate re-org: {}", result);
 
     test_insert_identity(&uri, &client, TEST_LEAFS[2]).await;
 
@@ -283,6 +279,49 @@ async fn insert_identity_and_proofs() {
 }
 
 #[instrument(skip_all)]
+async fn wait_for_log_count(
+    provider: &Provider<Http>,
+    semaphore_address: H160,
+    expected_count: usize,
+) {
+    for i in 1..21 {
+        let filter = Filter::new()
+            .address(semaphore_address)
+            .from_block(BlockNumber::Earliest)
+            .to_block(BlockNumber::Latest);
+        let result: Vec<Log> = provider.request("eth_getLogs", [filter]).await.unwrap();
+
+        if result.len() >= expected_count {
+            info!(
+                "Got {} logs (vs expected {}), done in iteration {}: {:?}",
+                result.len(),
+                expected_count,
+                i,
+                result
+            );
+
+            // TODO: Figure out a better way to do this.
+            // Getting a log event is not enough. The app waits for 1 transaction
+            // confirmation. It will arrive only after the first poll interval.
+            // The DEFAULT_POLL_INTERVAL in ethers-providers is 7 seconds.
+            tokio::time::sleep(Duration::from_secs(8)).await;
+
+            return;
+        }
+
+        info!(
+            "Got {} logs (vs expected {}), waiting 1 second, iteration {}",
+            result.len(),
+            expected_count,
+            i
+        );
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+    panic!("Failed waiting for {} log events", expected_count);
+}
+
+#[instrument(skip_all)]
 async fn test_inclusion_proof(
     uri: &str,
     client: &Client<HttpConnector>,
@@ -292,7 +331,7 @@ async fn test_inclusion_proof(
     expect_failure: bool,
 ) {
     let mut success_response = None;
-    for i in 1..26 {
+    for i in 1..21 {
         let body = construct_inclusion_proof_body(leaf);
         info!(?uri, "Contacting");
         let req = Request::builder()
@@ -448,7 +487,7 @@ fn deserialize_to_bytes(input: String) -> AnyhowResult<Bytes> {
 
 #[instrument(skip_all)]
 async fn spawn_mock_chain() -> AnyhowResult<(AnvilInstance, H256, Address)> {
-    let chain = Anvil::new().block_time(3u64).spawn();
+    let chain = Anvil::new().block_time(2u64).spawn();
     let private_key = H256::from_slice(&chain.keys()[0].to_be_bytes());
 
     let provider = Provider::<Http>::try_from(chain.endpoint())
@@ -541,11 +580,11 @@ async fn spawn_mock_chain() -> AnyhowResult<(AnvilInstance, H256, Address)> {
 
 fn init_tracing_subscriber() {
     let result = tracing_subscriber::fmt()
-        //.with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
         .with_line_number(true)
         .with_env_filter("info,signup_sequencer=debug")
         .with_timer(Uptime::default())
-        //.pretty()
+        .pretty()
         .try_init();
     if let Err(error) = result {
         error!(error, "Failed to initialize tracing_subscriber");

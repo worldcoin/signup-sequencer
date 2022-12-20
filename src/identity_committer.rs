@@ -89,8 +89,7 @@ impl IdentityCommitter {
                         info!("Shutdown signal received, not processing remaining items.");
                         return Ok(());
                     }
-                    Self::commit_identity(&database, &contracts, group_id, commitment)
-                        .await?;
+                    Self::commit_identity(&database, &contracts, group_id, commitment).await?;
                 }
 
                 select! {
@@ -130,11 +129,7 @@ impl IdentityCommitter {
 
         info!("Identity submitted in block {}.", block);
         database
-            .mark_identity_inserted(
-                group_id,
-                &commitment,
-                block.as_usize(),
-            )
+            .mark_identity_inserted(group_id, &commitment, block.as_usize())
             .await?;
 
         // ethereum_subscriber module takes over from now. Once identity is found in a

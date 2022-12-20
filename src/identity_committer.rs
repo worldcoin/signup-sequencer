@@ -1,9 +1,6 @@
 use crate::{contracts::Contracts, database::Database, identity_tree::Hash, utils::spawn_or_abort};
 use anyhow::{anyhow, Result as AnyhowResult};
-use std::sync::{
-    atomic::{AtomicI64, Ordering},
-    Arc,
-};
+use std::sync::Arc;
 use tokio::{
     select,
     sync::{mpsc, mpsc::error::TrySendError, RwLock},
@@ -84,8 +81,6 @@ impl IdentityCommitter {
         let database = self.database.clone();
         let contracts = self.contracts.clone();
         let handle = spawn_or_abort(async move {
-            let clock = AtomicI64::new(0);
-
             loop {
                 while let Some((group_id, commitment)) =
                     database.get_oldest_unprocessed_identity().await?
@@ -94,7 +89,7 @@ impl IdentityCommitter {
                         info!("Shutdown signal received, not processing remaining items.");
                         return Ok(());
                     }
-                    Self::commit_identity(&database, &contracts, &clock, group_id, commitment)
+                    Self::commit_identity(&database, &contracts, group_id, commitment)
                         .await?;
                 }
 
@@ -120,7 +115,6 @@ impl IdentityCommitter {
     async fn commit_identity(
         database: &Database,
         contracts: &Contracts,
-        index: &AtomicI64,
         group_id: usize,
         commitment: Hash,
     ) -> AnyhowResult<()> {
@@ -140,7 +134,6 @@ impl IdentityCommitter {
                 group_id,
                 &commitment,
                 block.as_usize(),
-                index.fetch_add(1, Ordering::AcqRel),
             )
             .await?;
 

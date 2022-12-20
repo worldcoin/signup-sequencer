@@ -145,15 +145,13 @@ impl Database {
         group_id: usize,
         commitment: &Hash,
         block_number: usize,
-        relative_index: i64,
     ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"UPDATE pending_identities
-                   SET mined_in_block = $1, insertion_idx = $2
-                   WHERE group_id = $3 AND commitment = $4;"#,
+                   SET mined_in_block = $1
+                   WHERE group_id = $2 AND commitment = $3;"#,
         )
         .bind(block_number as i64)
-        .bind(relative_index)
         .bind(group_id as i64)
         .bind(commitment);
 
@@ -167,8 +165,8 @@ impl Database {
     ) -> Result<IdentityConfirmationResult, Error> {
         let retrigger_query = sqlx::query(
             r#"UPDATE pending_identities
-            SET mined_in_block = NULL, insertion_idx = NULL, created_at = CURRENT_TIMESTAMP
-            WHERE insertion_idx < (SELECT insertion_idx FROM pending_identities WHERE commitment = $1 LIMIT 1)"#,
+            SET mined_in_block = NULL, created_at = CURRENT_TIMESTAMP
+            WHERE created_at < (SELECT created_at FROM pending_identities WHERE commitment = $1 LIMIT 1)"#,
         )
         .bind(commitment);
 

@@ -6,7 +6,7 @@ use crate::{
     identity_committer::IdentityCommitter,
     identity_tree::{Hash, SharedTreeState, TreeState},
     server::{Error as ServerError, ToResponseCode},
-    timed_read_progress_lock::TimedReadProgressLock,
+    timed_rw_lock::TimedRwLock,
 };
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
@@ -108,7 +108,7 @@ impl App {
         let database = Arc::new(database);
 
         // Poseidon tree depth is one more than the contract's tree depth
-        let mut tree_state = Arc::new(TimedReadProgressLock::new(
+        let mut tree_state = Arc::new(TimedRwLock::new(
             Duration::from_secs(options.lock_timeout),
             TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
         ));
@@ -129,7 +129,7 @@ impl App {
                 error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
 
                 // Create a new empty MerkleTree and wipe out cache db
-                tree_state = Arc::new(TimedReadProgressLock::new(
+                tree_state = Arc::new(TimedRwLock::new(
                     Duration::from_secs(options.lock_timeout),
                     TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
                 ));

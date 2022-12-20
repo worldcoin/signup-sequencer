@@ -1,4 +1,4 @@
-use crate::timed_read_progress_lock::TimedReadProgressLock;
+use crate::timed_rw_lock::TimedRwLock;
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree},
@@ -13,7 +13,7 @@ pub struct TreeState {
     pub merkle_tree: PoseidonTree,
 }
 
-pub type SharedTreeState = Arc<TimedReadProgressLock<TreeState>>;
+pub type SharedTreeState = Arc<TimedRwLock<TreeState>>;
 
 impl TreeState {
     #[must_use]

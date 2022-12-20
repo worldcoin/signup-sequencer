@@ -162,7 +162,7 @@ impl EthereumSubscriber {
 
             // Remove from pending identities
             let queue_status = database
-                .pending_identity_confirmed(&leaf)
+                .confirm_identity_and_retrigger_stale_recods(&leaf)
                 .await
                 .map_err(Error::DatabaseError)?;
             if let IdentityConfirmationResult::RetriggerProcessing = queue_status {

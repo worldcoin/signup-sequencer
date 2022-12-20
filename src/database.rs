@@ -159,7 +159,7 @@ impl Database {
         Ok(())
     }
 
-    pub async fn pending_identity_confirmed(
+    pub async fn confirm_identity_and_retrigger_stale_recods(
         &self,
         commitment: &Hash,
     ) -> Result<IdentityConfirmationResult, Error> {

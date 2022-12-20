@@ -5,12 +5,11 @@ use crate::{
     identity_committer::IdentityCommitter,
     identity_tree::{SharedTreeState, TreeState},
 };
-use cli_batteries::await_shutdown;
-use futures::{pin_mut, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt};
 use semaphore::Field;
 use std::{sync::Arc, time::Duration};
 use thiserror::Error;
-use tokio::{select, sync::RwLock, task::JoinHandle, time::sleep};
+use tokio::{sync::RwLock, task::JoinHandle, time::sleep};
 use tracing::{debug, error, info, instrument, warn};
 
 struct RunningInstance {
@@ -113,7 +112,7 @@ impl EthereumSubscriber {
         let end_block = contracts
             .confirmed_block_number()
             .await
-            .map_err(Error::EventError)?;
+            .map_err(Error::Event)?;
 
         if starting_block > end_block {
             return Ok(end_block);
@@ -127,9 +126,6 @@ impl EthereumSubscriber {
             .fetch_events(starting_block, Some(end_block), database.clone())
             .boxed();
 
-        let shutdown = await_shutdown();
-        pin_mut!(shutdown);
-
         let mut tree = tree_state.write().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in process_events.");
             panic!("Sequencer potentially deadlocked, terminating.");
@@ -138,12 +134,9 @@ impl EthereumSubscriber {
         let mut wake_up_committer = false;
 
         loop {
-            let (leaf, root) = select! {
-                v = events.try_next() => match v.map_err(Error::EventError)? {
-                    Some(a) => a,
-                    None => break,
-                },
-                _ = &mut shutdown => return Err(Error::Interrupted),
+            let (leaf, root) = match events.try_next().await.map_err(Error::Event)? {
+                Some(a) => a,
+                None => break,
             };
             debug!(?leaf, ?root, end_block, "Received event");
 
@@ -164,7 +157,7 @@ impl EthereumSubscriber {
             let queue_status = database
                 .confirm_identity_and_retrigger_stale_recods(&leaf)
                 .await
-                .map_err(Error::DatabaseError)?;
+                .map_err(Error::Database)?;
             if let IdentityConfirmationResult::RetriggerProcessing = queue_status {
                 wake_up_committer = true;
             }
@@ -375,14 +368,12 @@ impl EthereumSubscriber {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Interrupted")]
-    Interrupted,
     #[error("Root mismatch between event and computed tree.")]
     RootMismatch,
     #[error("Received event out of range")]
     EventOutOfRange,
     #[error("Event error: {0}")]
-    EventError(#[source] EventError),
+    Event(#[source] EventError),
     #[error("Database error: {0}")]
-    DatabaseError(#[source] DatabaseError),
+    Database(#[source] DatabaseError),
 }

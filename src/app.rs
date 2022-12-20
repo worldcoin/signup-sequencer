@@ -8,15 +8,16 @@ use crate::{
     server::{Error as ServerError, ToResponseCode},
     timed_rw_lock::TimedRwLock,
 };
-use anyhow::Result as AnyhowResult;
+use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
+use cli_batteries::await_shutdown;
 use ethers::types::U256;
 use futures::TryFutureExt;
 use hyper::StatusCode;
 use semaphore::{poseidon_tree::Proof, Field};
 use serde::{ser::SerializeStruct, Serialize, Serializer};
 use std::{sync::Arc, time::Duration};
-use tokio::try_join;
+use tokio::{select, try_join};
 use tracing::{error, info, instrument, warn};
 
 pub enum InclusionProofResponse {
@@ -108,14 +109,14 @@ impl App {
         let database = Arc::new(database);
 
         // Poseidon tree depth is one more than the contract's tree depth
-        let mut tree_state = Arc::new(TimedRwLock::new(
+        let tree_state = Arc::new(TimedRwLock::new(
             Duration::from_secs(options.lock_timeout),
             TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
         ));
 
         let identity_committer =
             Arc::new(IdentityCommitter::new(database.clone(), contracts.clone()));
-        let mut chain_subscriber = EthereumSubscriber::new(
+        let chain_subscriber = EthereumSubscriber::new(
             options.starting_block,
             database.clone(),
             contracts.clone(),
@@ -124,49 +125,66 @@ impl App {
         );
 
         // Sync with chain on start up
-        match chain_subscriber.process_events().await {
-            Err(SubscriberError::RootMismatch) => {
-                error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
-
-                // Create a new empty MerkleTree and wipe out cache db
-                tree_state = Arc::new(TimedRwLock::new(
-                    Duration::from_secs(options.lock_timeout),
-                    TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
-                ));
-                database.wipe_cache().await?;
-
-                // Retry
-                chain_subscriber = EthereumSubscriber::new(
-                    options.starting_block,
-                    database.clone(),
-                    contracts.clone(),
-                    tree_state.clone(),
-                    identity_committer.clone(),
-                );
-                chain_subscriber.process_events().await?;
-            }
-            Err(e) => return Err(e.into()),
-            Ok(_) => {}
-        }
-
-        // Basic sanity checks on the merkle tree
-        chain_subscriber.check_leaves().await;
-        chain_subscriber.check_health().await;
-
-        // Listen to Ethereum events
-        chain_subscriber.start(refresh_rate).await;
-
-        // Process to push new identities to Ethereum
-        identity_committer.start().await;
-
-        Ok(Self {
+        let mut app = Self {
             database,
             ethereum,
             contracts,
             identity_committer,
             chain_subscriber,
             tree_state,
-        })
+        };
+
+        select! {
+            _ = app.load_initial_events(options.lock_timeout, options.starting_block) => {},
+            _ = await_shutdown() => return Err(anyhow!("Interrupted"))
+        }
+
+        // Basic sanity checks on the merkle tree
+        app.chain_subscriber.check_leaves().await;
+        app.chain_subscriber.check_health().await;
+
+        // Listen to Ethereum events
+        app.chain_subscriber.start(refresh_rate).await;
+
+        // Process to push new identities to Ethereum
+        app.identity_committer.start().await;
+
+        Ok(app)
+    }
+
+    async fn load_initial_events(
+        &mut self,
+        lock_timeout: u64,
+        starting_block: u64,
+    ) -> AnyhowResult<()> {
+        match self.chain_subscriber.process_events().await {
+            Err(SubscriberError::RootMismatch) => {
+                error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
+
+                // Create a new empty MerkleTree and wipe out cache db
+                self.tree_state = Arc::new(TimedRwLock::new(
+                    Duration::from_secs(lock_timeout),
+                    TreeState::new(
+                        self.contracts.tree_depth() + 1,
+                        self.contracts.initial_leaf(),
+                    ),
+                ));
+                self.database.wipe_cache().await?;
+
+                // Retry
+                self.chain_subscriber = EthereumSubscriber::new(
+                    starting_block,
+                    self.database.clone(),
+                    self.contracts.clone(),
+                    self.tree_state.clone(),
+                    self.identity_committer.clone(),
+                );
+                self.chain_subscriber.process_events().await?;
+            }
+            Err(e) => return Err(e.into()),
+            Ok(_) => {}
+        }
+        Ok(())
     }
 
     /// Queues an insert into the merkle tree.

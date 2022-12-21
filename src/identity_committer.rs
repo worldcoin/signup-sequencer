@@ -1,10 +1,4 @@
-use crate::{
-    app::{Hash, SharedTreeState, TreeState},
-    contracts::Contracts,
-    database::Database,
-    timed_read_progress_lock::TimedReadProgressLock,
-    utils::spawn_or_abort,
-};
+use crate::{contracts::Contracts, database::Database, identity_tree::Hash, utils::spawn_or_abort};
 use anyhow::{anyhow, Result as AnyhowResult};
 use std::sync::Arc;
 use tokio::{
@@ -54,30 +48,24 @@ impl RunningInstance {
     }
 }
 
-/// A worker that commits identities to the tree.
+/// A worker that commits identities to the blockchain.
 ///
 /// This uses the database to keep track of identities that need to be
 /// committed. It assumes that there's only one such worker spawned at
 /// a time. Spawning multiple worker threads will result in undefined behavior,
 /// including data duplication.
 pub struct IdentityCommitter {
-    instance:   RwLock<Option<RunningInstance>>,
-    database:   Arc<Database>,
-    contracts:  Arc<Contracts>,
-    tree_state: SharedTreeState,
+    instance:  RwLock<Option<RunningInstance>>,
+    database:  Arc<Database>,
+    contracts: Arc<Contracts>,
 }
 
 impl IdentityCommitter {
-    pub fn new(
-        database: Arc<Database>,
-        contracts: Arc<Contracts>,
-        tree_state: SharedTreeState,
-    ) -> Self {
+    pub fn new(database: Arc<Database>, contracts: Arc<Contracts>) -> Self {
         Self {
             instance: RwLock::new(None),
             database,
             contracts,
-            tree_state,
         }
     }
 
@@ -91,7 +79,6 @@ impl IdentityCommitter {
         let (shutdown_sender, mut shutdown_receiver) = mpsc::channel(1);
         let (wake_up_sender, mut wake_up_receiver) = mpsc::channel(1);
         let database = self.database.clone();
-        let tree_state = self.tree_state.clone();
         let contracts = self.contracts.clone();
         let handle = spawn_or_abort(async move {
             loop {
@@ -102,8 +89,7 @@ impl IdentityCommitter {
                         info!("Shutdown signal received, not processing remaining items.");
                         return Ok(());
                     }
-                    Self::commit_identity(&database, &contracts, &tree_state, group_id, commitment)
-                        .await?;
+                    Self::commit_identity(&database, &contracts, group_id, commitment).await?;
                 }
 
                 select! {
@@ -128,61 +114,27 @@ impl IdentityCommitter {
     async fn commit_identity(
         database: &Database,
         contracts: &Contracts,
-        tree_state: &TimedReadProgressLock<TreeState>,
         group_id: usize,
         commitment: Hash,
     ) -> AnyhowResult<()> {
-        // Get a progress lock on the tree for the duration of this operation. Holding a
-        // progress lock ensures no other thread calls tries to insert an identity into
-        // the contract, as that is an order dependent operation.
-        let tree = tree_state.progress().await.map_err(|e| {
-            error!(?e, "Failed to obtain tree lock in commit_identity.");
-            e
-        })?;
-
         // Send Semaphore transaction
         let receipt = contracts.insert_identity(commitment).await.map_err(|e| {
             error!(?e, "Failed to insert identity to contract.");
             e
         })?;
 
-        let mut tree = tree.upgrade_to_write().await.map_err(|e| {
-            error!(?e, "Failed to obtain tree lock in insert_identity.");
-            e
-        })?;
-
-        // Update  merkle tree
-        let identity_index = tree.next_leaf;
-        tree.merkle_tree.set(identity_index, commitment);
-        tree.next_leaf += 1;
-
-        // Downgrade write lock to progress lock – tree is now up to date, but still
-        // need to update the database.
-        let tree = tree.downgrade_to_progress();
-
         let block = receipt
             .block_number
             .expect("Transaction is mined, block number must be present.");
-        info!(
-            "Identity inserted in block {} at index {}.",
-            block, identity_index
-        );
+
+        info!("Identity submitted in block {}.", block);
         database
-            .mark_identity_inserted(group_id, &commitment, block.as_usize(), identity_index)
+            .mark_identity_inserted(group_id, &commitment, block.as_usize())
             .await?;
 
-        // Check tree root
-        contracts
-            .assert_valid_root(tree.merkle_tree.root())
-            .await
-            .map_err(|error| {
-                error!(
-                    computed_root = ?tree.merkle_tree.root(),
-                    ?error,
-                    "Root mismatch between tree and contract."
-                );
-                error
-            })?;
+        // ethereum_subscriber module takes over from now. Once identity is found in a
+        // confirmed block, it'll update the merkle tree and remove job from
+        // pending_identities queue.
 
         Ok(())
     }

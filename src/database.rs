@@ -1,4 +1,4 @@
-use crate::app::Hash;
+use crate::identity_tree::Hash;
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
 use ruint::{aliases::U256, uint};
@@ -145,19 +145,46 @@ impl Database {
         group_id: usize,
         commitment: &Hash,
         block_number: usize,
-        tree_idx: usize,
     ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"UPDATE pending_identities
-                   SET mined_in_block = $1, assigned_leaf_idx = $2
-                   WHERE group_id = $3 AND commitment = $4;"#,
+                   SET mined_in_block = $1
+                   WHERE group_id = $2 AND commitment = $3;"#,
         )
         .bind(block_number as i64)
-        .bind(tree_idx as i64)
         .bind(group_id as i64)
         .bind(commitment);
+
         self.pool.execute(query).await?;
         Ok(())
+    }
+
+    pub async fn confirm_identity_and_retrigger_stale_recods(
+        &self,
+        commitment: &Hash,
+    ) -> Result<IdentityConfirmationResult, Error> {
+        let retrigger_query = sqlx::query(
+            r#"UPDATE pending_identities
+            SET mined_in_block = NULL, created_at = CURRENT_TIMESTAMP
+            WHERE created_at < (SELECT created_at FROM pending_identities WHERE commitment = $1 LIMIT 1)"#,
+        )
+        .bind(commitment);
+
+        let retrigger_result = self.pool.execute(retrigger_query).await?;
+
+        let cleanup_query = sqlx::query(
+            r#"DELETE FROM pending_identities
+                WHERE commitment = $1;"#,
+        )
+        .bind(commitment);
+
+        self.pool.execute(cleanup_query).await?;
+
+        if retrigger_result.rows_affected() > 0 {
+            Ok(IdentityConfirmationResult::RetriggerProcessing)
+        } else {
+            Ok(IdentityConfirmationResult::Done)
+        }
     }
 
     pub async fn pending_identity_exists(
@@ -234,12 +261,20 @@ impl Database {
         }
     }
 
-    pub async fn load_logs(&self) -> Result<Vec<String>, Error> {
+    pub async fn load_logs(
+        &self,
+        from_block: i64,
+        to_block: Option<i64>,
+    ) -> Result<Vec<String>, Error> {
         let rows = self
             .pool
-            .fetch_all(sqlx::query(
-                r#"SELECT raw FROM logs ORDER BY block_index, transaction_index, log_index;"#,
-            ))
+            .fetch_all(
+                sqlx::query(
+                r#"SELECT raw FROM logs WHERE block_index >= $1 AND block_index <= $2 ORDER BY block_index, transaction_index, log_index;"#,
+                )
+                .bind(from_block)
+                .bind(to_block.unwrap_or(i64::MAX))
+            )
             .await?
             .iter()
             .map(|row| row.get(0))
@@ -285,4 +320,9 @@ impl Database {
 pub enum Error {
     #[error("database error")]
     InternalError(#[from] sqlx::Error),
+}
+
+pub enum IdentityConfirmationResult {
+    Done,
+    RetriggerProcessing,
 }

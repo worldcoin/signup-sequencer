@@ -9,7 +9,7 @@ use ethers::{
     types::{Filter, Log, U64},
 };
 use futures::{Stream, StreamExt};
-use std::{cmp::max, sync::Arc, time::Duration};
+use std::{cmp::max, num::TryFromIntError, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::time::sleep;
 use tracing::{error, info};
@@ -93,9 +93,15 @@ impl CachingLogQuery {
         try_stream! {
             let last_block = self.get_block_number().await?;
 
-            info!("Reading MemberAdded events from cache");
+            let cached_events = self.load_db_logs(
+                self.filter.get_from_block().expect("filter's from_block must be set").as_u64(),
+                self.filter.get_to_block().map(|num| num.as_u64())
+            ).await?;
 
-            let cached_events = self.load_db_logs().await?;
+            if cached_events.len() > 0 {
+                info!("Reading MemberAdded events from cache");
+            }
+
             for log in cached_events {
                 yield serde_json::from_str(&log).map_err(Error::Parse)?;
             }
@@ -128,15 +134,23 @@ impl CachingLogQuery {
                         }
                     };
 
-                    // If we need to decrease page size later, don't process same blocks twice
+                    // If we need to decrease the page size later, don't process older blocks twice
                     retry_status.update_last_block(log.block_number);
 
-                    if self.is_confirmed(&log, last_block) {
+                    let log_block = match log.block_number {
+                        Some(block) => block,
+                        None => continue,
+                    };
+                    let to_filter = self.filter.get_to_block().expect("filter's to_block must be set");
+                    let last_block = last_block.eth;
+
+                    // get_logs_paginated ignores to_block filter. Check again if the block is confirmed
+                    let is_confirmed = log_block + self.confirmation_blocks_delay <= last_block && log_block <= to_filter;
+                    if is_confirmed {
                         let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;
                         self.cache_log(raw_log, &log).await?;
+                        yield log;
                     }
-
-                    yield log;
                 }
 
                 // We've iterated over all events, we can kill the restart loop
@@ -176,17 +190,25 @@ impl CachingLogQuery {
         })
     }
 
-    async fn load_db_logs(&self) -> Result<Vec<String>, Error<ProviderError>> {
+    async fn load_db_logs(
+        &self,
+        from_block: u64,
+        to_block: Option<u64>,
+    ) -> Result<Vec<String>, Error<ProviderError>> {
+        let from: i64 = from_block.try_into().map_err(|e: TryFromIntError| {
+            Error::<ProviderError>::BlockIndexOutOfRange(e.to_string())
+        })?;
+        let to: Option<i64> = match to_block {
+            Some(num) => Some(
+                i64::try_from(num)
+                    .map_err(|e| Error::<ProviderError>::BlockIndexOutOfRange(e.to_string()))?,
+            ),
+            None => None,
+        };
         match &self.database {
-            Some(database) => database.load_logs().await.map_err(Error::Database),
+            Some(database) => database.load_logs(from, to).await.map_err(Error::Database),
             None => Ok(vec![]),
         }
-    }
-
-    fn is_confirmed(&self, log: &Log, last_block: LastBlock) -> bool {
-        log.block_number.map_or(false, |block| {
-            block + self.confirmation_blocks_delay <= last_block.eth
-        })
     }
 
     async fn cache_log(&self, raw_log: String, log: &Log) -> Result<(), Error<ProviderError>> {

@@ -1,7 +1,4 @@
-use crate::{
-    app::{App, Hash},
-    database,
-};
+use crate::{app::App, database, identity_tree::Hash};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use anyhow::{bail, ensure, Context, Error as EyreError, Result as AnyhowResult};
 use clap::Parser;
@@ -112,7 +109,7 @@ pub enum Error {
     #[error(transparent)]
     Elapsed(#[from] tokio::time::error::Elapsed),
     #[error(transparent)]
-    LockTimeout(#[from] crate::timed_read_progress_lock::Error),
+    LockTimeout(#[from] crate::timed_rw_lock::Error),
     #[error(transparent)]
     Other(#[from] EyreError),
 }

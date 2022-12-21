@@ -8,7 +8,7 @@ use ethers::{
         SignerMiddleware,
     },
     providers::Middleware,
-    types::{H256, U256},
+    types::{BlockNumber, Filter, Log, H160, H256, U256},
     utils::{Anvil, AnvilInstance},
 };
 use eyre::{bail, Result as AnyhowResult};
@@ -16,10 +16,7 @@ use hyper::{client::HttpConnector, Body, Client, Request, StatusCode};
 use semaphore::{merkle_tree::Branch, poseidon_tree::PoseidonTree};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use signup_sequencer::{
-    app::{App, Hash},
-    server, Options,
-};
+use signup_sequencer::{app::App, identity_tree::Hash, server, Options};
 use std::{
     fs::File,
     io::BufReader,
@@ -28,7 +25,7 @@ use std::{
     time::Duration,
 };
 use tokio::{spawn, task::JoinHandle};
-use tracing::{info, instrument};
+use tracing::{debug, error, info, instrument};
 use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
 use url::{Host, Url};
 
@@ -39,15 +36,105 @@ const TEST_LEAFS: &[&str] = &[
 ];
 
 #[tokio::test]
+#[serial_test::serial]
+async fn simulate_eth_reorg() {
+    // Initialize logging for the test.
+    init_tracing_subscriber();
+    info!("Starting re-org integration test");
+
+    let mut options = Options::try_parse_from([""]).expect("Failed to create options");
+    options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
+
+    let (chain, private_key, semaphore_address) = spawn_mock_chain()
+        .await
+        .expect("Failed to spawn ganache chain");
+
+    options.app.ethereum.ethereum_provider =
+        Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
+    options.app.contracts.semaphore_address = semaphore_address;
+    options.app.ethereum.signing_key = private_key;
+    options.app.ethereum.confirmation_blocks_delay = 5;
+    options.app.ethereum.refresh_rate = Duration::from_secs(1);
+
+    let (app, local_addr) = spawn_app(options.clone())
+        .await
+        .expect("Failed to spawn app.");
+
+    let uri = "http://".to_owned() + &local_addr.to_string();
+    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
+    let client = Client::new();
+
+    let provider = Provider::<Http>::try_from(chain.endpoint())
+        .expect("Failed to initialize chain endpoint")
+        .interval(Duration::from_millis(500u64));
+
+    test_insert_identity(&uri, &client, TEST_LEAFS[0]).await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        0,
+        &mut ref_tree,
+        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        false,
+    )
+    .await;
+
+    // Create snapshot
+    let snapshot_id: U256 = provider
+        .request("evm_snapshot", ())
+        .await
+        .expect("Failed to create EVM snapshot");
+    info!("Created EVM snapshot with ID {}", snapshot_id);
+
+    test_insert_identity(&uri, &client, TEST_LEAFS[1]).await;
+
+    // after 2 identites were mined, we should have 3 log events on the chain
+    wait_for_log_count(&provider, semaphore_address, 3).await;
+
+    let result: bool = provider
+        .request("evm_revert", [snapshot_id])
+        .await
+        .expect("Failed to revert EVM snapshot");
+
+    info!("Reverted EVM snapshot to simulate re-org: {}", result);
+
+    test_insert_identity(&uri, &client, TEST_LEAFS[2]).await;
+
+    debug!(leaf = TEST_LEAFS[2], "TEST INCLUSION");
+
+    test_inclusion_proof(
+        &uri,
+        &client,
+        1,
+        &mut ref_tree,
+        &Hash::from_str_radix(TEST_LEAFS[2], 16).expect("Failed to parse Hash from test leaf 1"),
+        false,
+    )
+    .await;
+
+    debug!(leaf = TEST_LEAFS[1], "TEST INCLUSION");
+
+    test_inclusion_proof(
+        &uri,
+        &client,
+        2,
+        &mut ref_tree,
+        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        false,
+    )
+    .await;
+
+    // Shutdown app and reset mock shutdown
+    shutdown();
+    app.await.unwrap();
+    reset_shutdown();
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn insert_identity_and_proofs() {
     // Initialize logging for the test.
-    tracing_subscriber::fmt()
-        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-        .with_line_number(true)
-        .with_env_filter("info,signup_sequencer=debug")
-        .with_timer(Uptime::default())
-        .pretty()
-        .init();
+    init_tracing_subscriber();
     info!("Starting integration test");
 
     let mut options = Options::try_parse_from([""]).expect("Failed to create options");
@@ -61,6 +148,8 @@ async fn insert_identity_and_proofs() {
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.contracts.semaphore_address = semaphore_address;
     options.app.ethereum.signing_key = private_key;
+    options.app.ethereum.confirmation_blocks_delay = 2;
+    options.app.ethereum.refresh_rate = Duration::from_secs(1);
 
     let (app, local_addr) = spawn_app(options.clone())
         .await
@@ -190,6 +279,49 @@ async fn insert_identity_and_proofs() {
 }
 
 #[instrument(skip_all)]
+async fn wait_for_log_count(
+    provider: &Provider<Http>,
+    semaphore_address: H160,
+    expected_count: usize,
+) {
+    for i in 1..21 {
+        let filter = Filter::new()
+            .address(semaphore_address)
+            .from_block(BlockNumber::Earliest)
+            .to_block(BlockNumber::Latest);
+        let result: Vec<Log> = provider.request("eth_getLogs", [filter]).await.unwrap();
+
+        if result.len() >= expected_count {
+            info!(
+                "Got {} logs (vs expected {}), done in iteration {}: {:?}",
+                result.len(),
+                expected_count,
+                i,
+                result
+            );
+
+            // TODO: Figure out a better way to do this.
+            // Getting a log event is not enough. The app waits for 1 transaction
+            // confirmation. It will arrive only after the first poll interval.
+            // The DEFAULT_POLL_INTERVAL in ethers-providers is 7 seconds.
+            tokio::time::sleep(Duration::from_secs(8)).await;
+
+            return;
+        }
+
+        info!(
+            "Got {} logs (vs expected {}), waiting 1 second, iteration {}",
+            result.len(),
+            expected_count,
+            i
+        );
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+    panic!("Failed waiting for {} log events", expected_count);
+}
+
+#[instrument(skip_all)]
 async fn test_inclusion_proof(
     uri: &str,
     client: &Client<HttpConnector>,
@@ -200,7 +332,7 @@ async fn test_inclusion_proof(
 ) {
     let mut success_response = None;
     for i in 1..21 {
-        let body = construct_inclusion_proof_body(TEST_LEAFS[leaf_index]);
+        let body = construct_inclusion_proof_body(leaf);
         info!(?uri, "Contacting");
         let req = Request::builder()
             .method("POST")
@@ -289,7 +421,7 @@ struct InsertIdentityResponse {
     identity_index: usize,
 }
 
-fn construct_inclusion_proof_body(identity_commitment: &str) -> Body {
+fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
     Body::from(
         json!({
             "groupId": 1,
@@ -444,4 +576,17 @@ async fn spawn_mock_chain() -> AnyhowResult<(AnvilInstance, H256, Address)> {
         .await?; // Wait for TX to be mined
 
     Ok((chain, private_key, semaphore_contract.address()))
+}
+
+fn init_tracing_subscriber() {
+    let result = tracing_subscriber::fmt()
+        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        .with_line_number(true)
+        .with_env_filter("info,signup_sequencer=debug")
+        .with_timer(Uptime::default())
+        .pretty()
+        .try_init();
+    if let Err(error) = result {
+        error!(error, "Failed to initialize tracing_subscriber");
+    }
 }

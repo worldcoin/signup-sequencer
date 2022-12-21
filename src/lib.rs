@@ -5,9 +5,11 @@ pub mod app;
 mod contracts;
 mod database;
 mod ethereum;
+mod ethereum_subscriber;
 mod identity_committer;
+pub mod identity_tree;
 pub mod server;
-mod timed_read_progress_lock;
+mod timed_rw_lock;
 mod utils;
 
 use crate::app::App;

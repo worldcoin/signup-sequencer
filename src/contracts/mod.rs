@@ -13,7 +13,7 @@ use ethers::{
     providers::Middleware,
     types::{Address, TransactionReceipt, U256},
 };
-use futures::{Stream, StreamExt, TryStreamExt};
+use futures::{Stream, TryStreamExt};
 use semaphore::Field;
 use std::sync::Arc;
 use tracing::{error, info, instrument};
@@ -139,30 +139,37 @@ impl Contracts {
         self.initial_leaf
     }
 
+    pub async fn confirmed_block_number(&self) -> Result<u64, EventError> {
+        self.ethereum
+            .confirmed_block_number()
+            .await
+            .map(|num| num.as_u64())
+    }
+
     #[allow(clippy::disallowed_methods)] // False positive from macro expansion.
     #[instrument(level = "debug", skip(self, database))]
     pub fn fetch_events(
         &self,
         starting_block: u64,
-        last_leaf: usize,
+        end_block: Option<u64>,
         database: Arc<Database>,
-    ) -> impl Stream<Item = Result<(usize, Field, Field), EventError>> + '_ {
-        info!(starting_block, last_leaf, "Reading MemberAdded events");
-        // TODO: Register to the event stream and track it going forward.
+    ) -> impl Stream<Item = Result<(Field, Field), EventError>> + '_ {
+        info!(starting_block, "Reading MemberAdded events");
 
         // Start MemberAdded log event stream
-        let filter = self
+        let mut filter = self
             .semaphore
             .member_added_filter()
             .from_block(starting_block);
+
+        if let Some(end_block) = end_block {
+            filter = filter.to_block(end_block);
+        }
         self.ethereum
             .fetch_events::<MemberAddedEvent>(&filter.filter, database)
             .try_filter(|event| future::ready(event.group_id == self.group_id))
-            .enumerate()
-            .map(|(index, res)| res.map(|event| (index, event)))
-            .map_ok(|(index, event)| {
+            .map_ok(|event| {
                 (
-                    index,
                     // TODO: Validate values < modulus
                     event.identity_commitment.into(),
                     event.root.into(),

@@ -116,13 +116,17 @@ pub struct Options {
     #[clap(long, env, default_value = "1000")]
     pub min_log_blocks: usize,
 
-    /// Maximum amount of wait time before request is retried, in seconds.
+    /// Maximum amount of wait time before request is retried (seconds).
     #[clap(long, env, value_parser=duration_from_str, default_value="32")]
     pub max_backoff_time: Duration,
 
     /// Minimum number of blocks before events are considered confirmed.
     #[clap(long, env, default_value = "10")]
     pub confirmation_blocks_delay: usize,
+
+    /// Frequency of event fetching from Ethereum (seconds)
+    #[clap(long, env, value_parser=duration_from_str, default_value="60")]
+    pub refresh_rate: Duration,
 
     /// Minimum `max_fee_per_gas` to use in GWei. The default is for Polygon
     /// mainnet.
@@ -520,6 +524,15 @@ impl Ethereum {
             return Err(TxError::Failed(Box::new(receipt)));
         }
         Ok(receipt)
+    }
+
+    pub async fn confirmed_block_number(&self) -> Result<U64, EventError> {
+        self.provider
+            .provider()
+            .get_block_number()
+            .await
+            .map(|num| num.saturating_sub(U64::from(self.confirmation_blocks_delay)))
+            .map_err(|e| EventError::Fetching(CachingLogQueryError::LoadLastBlock(e)))
     }
 
     pub fn fetch_events_raw(

@@ -2,7 +2,10 @@ mod abi;
 pub mod confirmed_log_query;
 
 use self::abi::{MemberAddedFilter, SemaphoreContract as Semaphore};
-use crate::ethereum::{Ethereum, EventError, Log, ProviderStack, TxError};
+use crate::{
+    ethereum::{Ethereum, EventError, Log, ProviderStack, TxError},
+    tx_sitter::Sitter,
+};
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
 use core::future;
@@ -44,6 +47,7 @@ pub struct Options {
 
 pub struct Contracts {
     ethereum:     Ethereum,
+    sitter:       Sitter,
     semaphore:    Semaphore<ProviderStack>,
     group_id:     U256,
     tree_depth:   usize,
@@ -83,6 +87,8 @@ impl Contracts {
         }
         info!(?address, ?manager, "Connected to Semaphore contract");
 
+        let sitter = Sitter::new(ethereum.clone()).await?;
+
         // Make sure the group exists.
         let existing_tree_depth = semaphore.get_depth(options.group_id).call().await?;
         let actual_tree_depth = if existing_tree_depth == 0 {
@@ -98,7 +104,7 @@ impl Contracts {
                         options.initial_leaf.to_be_bytes().into(),
                     )
                     .tx;
-                ethereum.send_transaction(tx).await?;
+                sitter.send(tx).await?;
                 new_depth
             } else {
                 error!(group_id = ?options.group_id, "Group does not exist");
@@ -113,6 +119,7 @@ impl Contracts {
 
         Ok(Self {
             ethereum,
+            sitter,
             semaphore,
             group_id: options.group_id,
             tree_depth: actual_tree_depth,
@@ -179,8 +186,8 @@ impl Contracts {
         // Send create tx
         let commitment = U256::from(commitment.to_be_bytes());
         let receipt = self
-            .ethereum
-            .send_transaction(self.semaphore.add_member(self.group_id, commitment).tx)
+            .sitter
+            .send(self.semaphore.add_member(self.group_id, commitment).tx)
             .await?;
         Ok(receipt)
     }

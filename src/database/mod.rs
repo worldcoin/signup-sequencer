@@ -13,6 +13,8 @@ use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;
 
+mod sitter;
+
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 

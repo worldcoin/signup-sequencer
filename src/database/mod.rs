@@ -14,6 +14,7 @@ use tracing::{error, info, instrument, warn};
 use url::Url;
 
 mod sitter;
+pub use sitter::InsertTxError;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");

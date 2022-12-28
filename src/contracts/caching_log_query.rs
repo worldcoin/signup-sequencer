@@ -89,7 +89,7 @@ impl CachingLogQuery {
         self
     }
 
-    pub fn into_stream(self) -> impl Stream<Item = Result<Log, Error<ProviderError>>> {
+    pub fn into_stream(self) -> impl Stream<Item = Result<Vec<Log>, Error<ProviderError>>> {
         try_stream! {
             let last_block = self.get_block_number().await?;
 
@@ -100,10 +100,12 @@ impl CachingLogQuery {
 
             if cached_events.len() > 0 {
                 info!("Reading MemberAdded events from cache");
-            }
 
-            for log in cached_events {
-                yield serde_json::from_str(&log).map_err(Error::Parse)?;
+                let logs = cached_events.into_iter().map(|cached| {
+                    serde_json::from_str(&cached).expect("couldn't parse cached row")
+                }).collect();
+
+                yield logs;
             }
 
             let mut retry_status = RetryStatus::new(self.start_page_size, self.min_page_size, self.max_backoff_time);
@@ -149,7 +151,7 @@ impl CachingLogQuery {
                     if is_confirmed {
                         let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;
                         self.cache_log(raw_log, &log).await?;
-                        yield log;
+                        yield vec![log];
                     }
                 }
 

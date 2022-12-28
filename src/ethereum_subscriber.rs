@@ -134,18 +134,28 @@ impl EthereumSubscriber {
         let mut wake_up_committer = false;
 
         loop {
-            let (leaf, root) = match events.try_next().await.map_err(Error::Event)? {
+            let events_page = match events.try_next().await.map_err(Error::Event)? {
                 Some(a) => a,
                 None => break,
             };
-            debug!(?leaf, ?root, end_block, "Received event");
+            // TODO: can be removed?
+            //debug!(?leaf, ?root, end_block, "Received event");
 
-            Self::log_event_errors(&tree, &contracts.initial_leaf(), tree.next_leaf, &leaf)?;
+            // TODO: those checks should still be performed
+            // Self::log_event_errors(&tree, &contracts.initial_leaf(), tree.next_leaf, &leaf)?;
+            // for (index, (leaf, _)) in events_page.iter().enumerate() {
+            //     Self::log_event_errors(&tree, &contracts.initial_leaf(), tree.next_leaf + index, leaf)?;
+            // }
+            let leaves = events_page.iter().map(|event| {
+                event.0
+            });
+            let count = leaves.len();
+            let root = events_page.last().expect("page should not be empty").1;
 
             // Insert
             let index = tree.next_leaf;
-            tree.merkle_tree.set(index, leaf);
-            tree.next_leaf += 1;
+            tree.merkle_tree.set_range(index, leaves);
+            tree.next_leaf += count;
 
             // Check root
             if root != tree.merkle_tree.root() {
@@ -154,13 +164,16 @@ impl EthereumSubscriber {
             }
 
             // Remove from pending identities
-            let queue_status = database
-                .confirm_identity_and_retrigger_stale_recods(&leaf)
-                .await
-                .map_err(Error::Database)?;
-            if let IdentityConfirmationResult::RetriggerProcessing = queue_status {
-                wake_up_committer = true;
-            }
+            // TODO: figure out if there is a more efficient way to do it
+            // for (leaf, _root) in events_page.iter() {
+            //     let queue_status = database
+            //         .confirm_identity_and_retrigger_stale_recods(&leaf)
+            //         .await
+            //         .map_err(Error::Database)?;
+            //     if let IdentityConfirmationResult::RetriggerProcessing = queue_status {
+            //         wake_up_committer = true;
+            //     }
+            // }
         }
 
         if wake_up_committer {
@@ -191,31 +204,6 @@ impl EthereumSubscriber {
         if leaf == initial_leaf {
             error!(?index, ?leaf, "Inserting empty leaf");
             return Ok(());
-        }
-
-        // Check leaf value with existing value
-        let existing = &tree.merkle_tree.leaves()[index];
-        if existing != initial_leaf {
-            if existing == leaf {
-                error!(?index, ?leaf, "Received event for already existing leaf.");
-                return Ok(());
-            }
-            error!(
-                ?index,
-                ?leaf,
-                ?existing,
-                "Received event for already set leaf."
-            );
-        }
-
-        // Check insertion counter
-        if index != tree.next_leaf {
-            error!(
-                ?index,
-                ?tree.next_leaf,
-                ?leaf,
-                "Event leaf index does not match expected leaf index."
-            );
         }
 
         // Check duplicates
@@ -260,12 +248,12 @@ impl EthereumSubscriber {
                 );
             }
             if leaf != initial_leaf {
-                if let Some(previous) = tree.merkle_tree.leaves()[..index]
-                    .iter()
-                    .position(|&l| l == leaf)
-                {
-                    error!(?index, ?leaf, ?previous, "Leaf not unique.");
-                }
+                // if let Some(previous) = tree.merkle_tree.leaves()[..index]
+                //     .iter()
+                //     .position(|&l| l == leaf)
+                // {
+                //     error!(?index, ?leaf, ?previous, "Leaf not unique.");
+                // }
             }
         }
     }

@@ -539,7 +539,7 @@ impl Ethereum {
         &self,
         filter: &Filter,
         database: Arc<Database>,
-    ) -> impl Stream<Item = Result<Vec<Log>, EventError>> + '_ {
+    ) -> impl Stream<Item = Result<Log, EventError>> + '_ {
         CachingLogQuery::new(self.provider.clone(), filter)
             .with_start_page_size(self.max_log_blocks as u64)
             .with_min_page_size(self.min_log_blocks as u64)
@@ -554,17 +554,15 @@ impl Ethereum {
         &self,
         filter: &Filter,
         database: Arc<Database>,
-    ) -> impl Stream<Item = Result<Vec<T>, EventError>> + '_ {
+    ) -> impl Stream<Item = Result<T, EventError>> + '_ {
         // TODO: Add `Log` struct for blocknumber and other metadata.
         self.fetch_events_raw(filter, database).map(|res| {
-            res.and_then(|logs| {
-                logs.into_iter().map(|log| {
-                    T::decode_log(&RawLog {
-                        topics: log.topics,
-                        data:   log.data.to_vec(),
-                    })
-                    .map_err(Into::into)    
-                }).collect()
+            res.and_then(|log| {
+                T::decode_log(&RawLog {
+                    topics: log.topics,
+                    data:   log.data.to_vec(),
+                })
+                .map_err(Into::into)
             })
         })
     }

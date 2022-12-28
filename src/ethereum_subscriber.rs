@@ -8,10 +8,10 @@ use crate::{
 use ethers::{abi::RawLog, contract::EthEvent, types::Log};
 use futures::{StreamExt, TryStreamExt};
 use semaphore::Field;
-use std::{sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration, cmp::min};
 use thiserror::Error;
 use tokio::{sync::RwLock, task::JoinHandle, time::sleep};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 
 struct RunningInstance {
     #[allow(dead_code)]
@@ -151,11 +151,11 @@ impl EthereumSubscriber {
             return Ok(end_block);
         }
 
-        let last_block = database.get_block_number().await.unwrap();
+        let last_cached_block = database.get_block_number().await.unwrap();
 
         info!(
             start_block,
-            end_block, last_block, "processing cached events in ethereum subscriber"
+            end_block, last_cached_block, "processing cached events in ethereum subscriber"
         );
 
         let logs = database
@@ -203,8 +203,7 @@ impl EthereumSubscriber {
             }
         }
 
-        // TODO: get minimum
-        Ok(last_block)
+        Ok(min(end_block, last_cached_block))
     }
 
     async fn process_blockchain_events(
@@ -240,14 +239,8 @@ impl EthereumSubscriber {
                 Some(a) => a,
                 None => break,
             };
-            // TODO: can be removed?
-            // debug!(?leaf, ?root, end_block, "Received event");
 
-            // TODO: those checks should still be performed
-            // Self::log_event_errors(&tree, &contracts.initial_leaf(), tree.next_leaf,
-            // &leaf)?; for (index, (leaf, _)) in events_page.iter().enumerate()
-            // {     Self::log_event_errors(&tree, &contracts.initial_leaf(),
-            // tree.next_leaf + index, leaf)?; }
+            Self::log_event_errors(&tree, &contracts.initial_leaf(), tree.next_leaf, &leaf)?;
 
             // Insert
             let index = tree.next_leaf;

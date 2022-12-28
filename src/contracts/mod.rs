@@ -8,6 +8,7 @@ use crate::{
 };
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
+use core::future;
 use ethers::{
     providers::Middleware,
     types::{Address, TransactionReceipt, U256},
@@ -166,8 +167,7 @@ impl Contracts {
         }
         self.ethereum
             .fetch_events::<MemberAddedEvent>(&filter.filter, database)
-            // TODO: gswirski bring group filter back
-            //.try_filter(|event| future::ready(event.group_id == self.group_id))
+            .try_filter(|event| future::ready(event.group_id == self.group_id))
             .map_ok(|event| {
                 (
                     // TODO: Validate values < modulus

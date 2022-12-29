@@ -1,7 +1,7 @@
 use crate::{
     contracts::{Contracts, MemberAddedEvent},
-    database::{Database, Error as DatabaseError, IdentityConfirmationResult},
-    ethereum::EventError,
+    database::{ConfirmedIdentityEvent, Database, Error as DatabaseError, IdentityConfirmationResult},
+    ethereum::{EventError, Log},
     identity_committer::IdentityCommitter,
     identity_tree::{SharedTreeState, TreeState},
 };
@@ -219,50 +219,36 @@ impl EthereumSubscriber {
                 Some(a) => a,
                 None => break,
             };
-            let commitment = IdentityCommitment::from(event.event);
+
+            let identity = ConfirmedIdentityEvent::try_from(event)?;
+
             Self::log_event_errors(
                 &tree,
                 &contracts.initial_leaf(),
                 tree.next_leaf,
-                &commitment.leaf,
+                &identity.leaf,
             )?;
 
             // Cache event
             database
-                .save_log(
-                    event
-                        .block_index
-                        .try_into()
-                        .map_err(|e: &str| Error::Conversion(e.to_owned()))?,
-                    event
-                        .transaction_index
-                        .try_into()
-                        .map_err(|e: &str| Error::Conversion(e.to_owned()))?,
-                    event
-                        .log_index
-                        .try_into()
-                        .map_err(|e: &str| Error::Conversion(e.to_owned()))?,
-                    event.raw_log,
-                    commitment.leaf,
-                    commitment.root,
-                )
+                .save_log(&identity)
                 .await
                 .map_err(Error::Database)?;
 
             // Insert
             let index = tree.next_leaf;
-            tree.merkle_tree.set(index, commitment.leaf);
+            tree.merkle_tree.set(index, identity.leaf);
             tree.next_leaf += 1;
 
             // Check root
-            if commitment.root != tree.merkle_tree.root() {
-                error!(computed_root = ?tree.merkle_tree.root(), event_root = ?commitment.root, "Root mismatch between event and computed tree.");
+            if identity.root != tree.merkle_tree.root() {
+                error!(computed_root = ?tree.merkle_tree.root(), event_root = ?identity.root, "Root mismatch between event and computed tree.");
                 return Err(Error::RootMismatch);
             }
 
             // Remove from pending identities
             let queue_status = database
-                .confirm_identity_and_retrigger_stale_recods(&commitment.leaf)
+                .confirm_identity_and_retrigger_stale_recods(&identity.leaf)
                 .await
                 .map_err(Error::Database)?;
             if let IdentityConfirmationResult::RetriggerProcessing = queue_status {
@@ -473,5 +459,37 @@ impl From<MemberAddedEvent> for IdentityCommitment {
             leaf: value.identity_commitment.into(),
             root: value.root.into(),
         }
+    }
+}
+
+impl TryFrom<Log<MemberAddedEvent>> for ConfirmedIdentityEvent {
+    type Error = Error;
+
+    fn try_from(value: Log<MemberAddedEvent>) -> Result<Self, Self::Error> {
+        let commitment = IdentityCommitment::from(value.event);
+
+        let block_index: i64 = value
+            .block_index
+            .try_into()
+            .map_err(|e: &str| Error::Conversion(e.to_owned()))?;
+
+        let transaction_index: i32 = value
+            .transaction_index
+            .try_into()
+            .map_err(|e: &str| Error::Conversion(e.to_owned()))?;
+
+        let log_index: i32 = value
+            .log_index
+            .try_into()
+            .map_err(|e: &str| Error::Conversion(e.to_owned()))?;
+
+        Ok(Self {
+            block_index,
+            transaction_index,
+            log_index,
+            raw_log: value.raw_log,
+            leaf: commitment.leaf,
+            root: commitment.root,
+        })
     }
 }

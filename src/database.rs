@@ -284,27 +284,19 @@ impl Database {
         Ok(rows)
     }
 
-    pub async fn save_log(
-        &self,
-        block_index: i64,
-        transaction_index: i32,
-        log_index: i32,
-        raw_log: String,
-        leaf: Field,
-        root: Field,
-    ) -> Result<(), Error> {
+    pub async fn save_log(&self, identity: &ConfirmedIdentityEvent) -> Result<(), Error> {
         self.pool
             .execute(
                 sqlx::query(
                     r#"INSERT INTO logs (block_index, transaction_index, log_index, raw, leaf, root)
                     VALUES ($1, $2, $3, $4, $5, $6);"#,
                 )
-                .bind(block_index)
-                .bind(transaction_index)
-                .bind(log_index)
-                .bind(raw_log)
-                .bind(leaf)
-                .bind(root),
+                .bind(identity.block_index)
+                .bind(identity.transaction_index)
+                .bind(identity.log_index)
+                .bind(identity.raw_log.clone())
+                .bind(identity.leaf)
+                .bind(identity.root),
             )
             .await
             .map_err(Error::InternalError)?;
@@ -330,4 +322,13 @@ pub enum Error {
 pub enum IdentityConfirmationResult {
     Done,
     RetriggerProcessing,
+}
+
+pub struct ConfirmedIdentityEvent {
+    pub block_index:       i64,
+    pub transaction_index: i32,
+    pub log_index:         i32,
+    pub raw_log:           String,
+    pub leaf:              Field,
+    pub root:              Field,
 }

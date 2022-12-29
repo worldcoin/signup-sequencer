@@ -278,7 +278,7 @@ impl Database {
             )
             .await?
             .iter()
-            .map(|row| (row.get(0), row.get(1)))
+            .map(|row| (row.try_get(0).unwrap_or_default(), row.try_get(1).unwrap_or_default()))
             .collect();
 
         Ok(rows)

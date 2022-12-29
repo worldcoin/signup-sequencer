@@ -1,6 +1,8 @@
 use crate::{
     contracts::{Contracts, MemberAddedEvent},
-    database::{ConfirmedIdentityEvent, Database, Error as DatabaseError, IdentityConfirmationResult},
+    database::{
+        ConfirmedIdentityEvent, Database, Error as DatabaseError, IdentityConfirmationResult,
+    },
     ethereum::{EventError, Log},
     identity_committer::IdentityCommitter,
     identity_tree::{SharedTreeState, TreeState},

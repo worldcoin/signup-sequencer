@@ -89,9 +89,23 @@ impl EthereumSubscriber {
     }
 
     #[instrument(level = "info", skip_all)]
-    pub async fn process_events(&mut self) -> Result<(), Error> {
-        let processed_block = Self::process_events_internal(
+    pub async fn process_initial_events(&mut self) -> Result<(), Error> {
+        let end_block = self
+            .contracts
+            .confirmed_block_number()
+            .await
+            .map_err(Error::Event)?;
+
+        let last_db_block = Self::process_cached_events(
             self.starting_block,
+            end_block,
+            self.tree_state.clone(),
+            self.database.clone(),
+        )
+        .await?;
+        let processed_block = Self::process_blockchain_events(
+            last_db_block + 1,
+            end_block,
             self.tree_state.clone(),
             self.contracts.clone(),
             self.database.clone(),
@@ -114,23 +128,8 @@ impl EthereumSubscriber {
             .await
             .map_err(Error::Event)?;
 
-        if start_block > end_block {
-            return Ok(end_block);
-        }
-        info!(
-            start_block,
-            end_block, "processing events in ethereum subscriber"
-        );
-
-        let last_db_block = Self::process_cached_events(
-            start_block,
-            end_block,
-            tree_state.clone(),
-            database.clone(),
-        )
-        .await?;
         Self::process_blockchain_events(
-            last_db_block + 1,
+            start_block,
             end_block,
             tree_state,
             contracts,

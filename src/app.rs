@@ -157,7 +157,7 @@ impl App {
         lock_timeout: u64,
         starting_block: u64,
     ) -> AnyhowResult<()> {
-        match self.chain_subscriber.process_events().await {
+        match self.chain_subscriber.process_initial_events().await {
             Err(SubscriberError::RootMismatch) => {
                 error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
 
@@ -179,7 +179,7 @@ impl App {
                     self.tree_state.clone(),
                     self.identity_committer.clone(),
                 );
-                self.chain_subscriber.process_events().await?;
+                self.chain_subscriber.process_initial_events().await?;
             }
             Err(e) => return Err(e.into()),
             Ok(_) => {}

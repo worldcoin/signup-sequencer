@@ -149,8 +149,6 @@ impl Contracts {
         starting_block: u64,
         end_block: Option<u64>,
     ) -> impl Stream<Item = Result<Log<MemberAddedEvent>, EventError>> + '_ {
-        info!(starting_block, "Reading MemberAdded events");
-
         // Start MemberAdded log event stream
         let mut filter = self
             .semaphore

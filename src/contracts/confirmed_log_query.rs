@@ -76,7 +76,7 @@ impl ConfirmedLogQuery {
                 info!(
                     page_size = retry_status.page_size,
                     from_block = filter.get_from_block().unwrap_or_default().as_u64(),
-                    "Reading MemberAdded events from chains"
+                    "Reading MemberAdded events"
                 );
 
                 let mut stream = self.provider

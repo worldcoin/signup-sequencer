@@ -7,7 +7,7 @@ use crate::{
 };
 use futures::{StreamExt, TryStreamExt};
 use semaphore::Field;
-use std::{cmp::min, sync::Arc, time::Duration};
+use std::{cmp::min, collections::HashMap, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{sync::RwLock, task::JoinHandle, time::sleep};
 use tracing::{error, info, instrument, warn};
@@ -324,6 +324,8 @@ impl EthereumSubscriber {
         });
         let next_leaf = tree.next_leaf;
         let initial_leaf = self.contracts.initial_leaf();
+
+        let mut visited_identities = HashMap::<Field, usize>::new();
         for (index, &leaf) in tree.merkle_tree.leaves().iter().enumerate() {
             if index < next_leaf && leaf == initial_leaf {
                 error!(
@@ -342,13 +344,11 @@ impl EthereumSubscriber {
                 );
             }
             if leaf != initial_leaf {
-                // if let Some(previous) = tree.merkle_tree.leaves()[..index]
-                //     .iter()
-                //     .position(|&l| l == leaf)
-                // {
-                //     error!(?index, ?leaf, ?previous, "Leaf not unique.");
-                // }
+                if let Some(previous) = visited_identities.get(&leaf) {
+                    error!(?index, ?leaf, ?previous, "Leaf not unique.");
+                }
             }
+            visited_identities.insert(leaf, index);
         }
     }
 

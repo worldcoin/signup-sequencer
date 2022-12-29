@@ -9,10 +9,7 @@ use self::{
     estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees,
     rpc_logger::RpcLogger, transport::Transport,
 };
-use crate::{
-    contracts::caching_log_query::{CachingLogQuery, Error as CachingLogQueryError},
-    database::Database,
-};
+use crate::contracts::confirmed_log_query::{ConfirmedLogQuery, Error as CachingLogQueryError};
 use anyhow::{anyhow, Result as AnyhowResult};
 use chrono::{Duration as ChronoDuration, Utc};
 use clap::Parser;
@@ -31,7 +28,7 @@ use ethers::{
     signers::{LocalWallet, Signer, Wallet},
     types::{
         transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,
-        BlockNumber, Chain, Filter, Log, TransactionReceipt, H160, H256, U64,
+        BlockNumber, Chain, Filter, Log as EthLog, TransactionReceipt, H160, H256, U256, U64,
     },
 };
 use futures::{try_join, FutureExt, Stream, StreamExt, TryStreamExt};
@@ -188,9 +185,16 @@ pub enum TxError {
 pub enum EventError {
     #[error("Error fetching log event: {0}")]
     Fetching(#[from] CachingLogQueryError<ProviderError>),
-
     #[error("Error parsing log event: {0}")]
     Parsing(#[from] AbiError),
+    #[error("couldn't serialize log to json: {0}")]
+    Serialize(#[source] serde_json::Error),
+    #[error("empty block index")]
+    EmptyBlockIndex,
+    #[error("empty transaction index")]
+    EmptyTransactionIndex,
+    #[error("empty log index")]
+    EmptyLogIndex,
 }
 
 #[derive(Clone, Debug)]
@@ -538,13 +542,11 @@ impl Ethereum {
     pub fn fetch_events_raw(
         &self,
         filter: &Filter,
-        database: Arc<Database>,
-    ) -> impl Stream<Item = Result<Log, EventError>> + '_ {
-        CachingLogQuery::new(self.provider.clone(), filter)
+    ) -> impl Stream<Item = Result<EthLog, EventError>> + '_ {
+        ConfirmedLogQuery::new(self.provider.clone(), filter)
             .with_start_page_size(self.max_log_blocks as u64)
             .with_min_page_size(self.min_log_blocks as u64)
             .with_max_backoff_time(self.max_backoff_time)
-            .with_database(database)
             .with_blocks_delay(self.confirmation_blocks_delay as u64)
             .into_stream()
             .map_err(Into::into)
@@ -553,17 +555,32 @@ impl Ethereum {
     pub fn fetch_events<T: EthEvent>(
         &self,
         filter: &Filter,
-        database: Arc<Database>,
-    ) -> impl Stream<Item = Result<T, EventError>> + '_ {
-        // TODO: Add `Log` struct for blocknumber and other metadata.
-        self.fetch_events_raw(filter, database).map(|res| {
+    ) -> impl Stream<Item = Result<Log<T>, EventError>> + '_ {
+        self.fetch_events_raw(filter).map(|res| {
             res.and_then(|log| {
-                T::decode_log(&RawLog {
-                    topics: log.topics,
+                let event = T::decode_log(&RawLog {
+                    topics: log.topics.clone(),
                     data:   log.data.to_vec(),
                 })
-                .map_err(Into::into)
+                .map_err(EventError::from)?;
+
+                Ok(Log {
+                    block_index: log.block_number.ok_or(EventError::EmptyBlockIndex)?,
+                    transaction_index: log
+                        .transaction_index
+                        .ok_or(EventError::EmptyTransactionIndex)?,
+                    log_index: log.log_index.ok_or(EventError::EmptyLogIndex)?,
+                    raw_log: serde_json::to_string(&log).map_err(EventError::Serialize)?,
+                    event,
+                })
             })
         })
     }
+}
+pub struct Log<Event: EthEvent> {
+    pub block_index:       U64,
+    pub transaction_index: U64,
+    pub log_index:         U256,
+    pub raw_log:           String,
+    pub event:             Event,
 }

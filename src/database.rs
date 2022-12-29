@@ -2,6 +2,7 @@ use crate::identity_tree::Hash;
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
 use ruint::{aliases::U256, uint};
+use semaphore::Field;
 use sqlx::{
     any::AnyKind,
     migrate::{Migrate, MigrateDatabase, Migrator},
@@ -265,19 +266,19 @@ impl Database {
         &self,
         from_block: i64,
         to_block: Option<i64>,
-    ) -> Result<Vec<String>, Error> {
+    ) -> Result<Vec<(Field, Field)>, Error> {
         let rows = self
             .pool
             .fetch_all(
                 sqlx::query(
-                r#"SELECT raw FROM logs WHERE block_index >= $1 AND block_index <= $2 ORDER BY block_index, transaction_index, log_index;"#,
+                r#"SELECT leaf, root FROM logs WHERE block_index >= $1 AND block_index <= $2 ORDER BY block_index, transaction_index, log_index;"#,
                 )
                 .bind(from_block)
                 .bind(to_block.unwrap_or(i64::MAX))
             )
             .await?
             .iter()
-            .map(|row| row.get(0))
+            .map(|row| (row.get(0), row.get(1)))
             .collect();
 
         Ok(rows)
@@ -288,18 +289,22 @@ impl Database {
         block_index: i64,
         transaction_index: i32,
         log_index: i32,
-        log: String,
+        raw_log: String,
+        leaf: Field,
+        root: Field,
     ) -> Result<(), Error> {
         self.pool
             .execute(
                 sqlx::query(
-                    r#"INSERT INTO logs (block_index, transaction_index, log_index, raw)
-                    VALUES ($1, $2, $3, $4);"#,
+                    r#"INSERT INTO logs (block_index, transaction_index, log_index, raw, leaf, root)
+                    VALUES ($1, $2, $3, $4, $5, $6);"#,
                 )
                 .bind(block_index)
                 .bind(transaction_index)
                 .bind(log_index)
-                .bind(log),
+                .bind(raw_log)
+                .bind(leaf)
+                .bind(root),
             )
             .await
             .map_err(Error::InternalError)?;

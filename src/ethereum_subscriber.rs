@@ -5,10 +5,9 @@ use crate::{
     identity_committer::IdentityCommitter,
     identity_tree::{SharedTreeState, TreeState},
 };
-use ethers::{abi::RawLog, contract::EthEvent, types::Log};
 use futures::{StreamExt, TryStreamExt};
 use semaphore::Field;
-use std::{sync::Arc, time::Duration, cmp::min};
+use std::{cmp::min, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{sync::RwLock, task::JoinHandle, time::sleep};
 use tracing::{error, info, instrument, warn};
@@ -158,31 +157,15 @@ impl EthereumSubscriber {
             end_block, last_cached_block, "processing cached events in ethereum subscriber"
         );
 
-        let logs = database
+        let events = database
             .load_logs(
                 i64::try_from(start_block).unwrap(),
                 Some(i64::try_from(end_block).unwrap()),
             )
             .await
             .map_err(Error::Database)?;
-        let parsed_logs = logs
-            .into_iter()
-            .map(|log| serde_json::from_str::<Log>(&log).expect("couldn't parse cached row"));
-        let events: Vec<MemberAddedEvent> = parsed_logs
-            .map(|log| {
-                MemberAddedEvent::decode_log(&RawLog {
-                    topics: log.topics,
-                    data:   log.data.to_vec(),
-                })
-                .unwrap()
-            })
-            .collect();
-        let root = events
-            .last()
-            .map(|event| Field::try_from(event.root).unwrap());
-        let leaves = events
-            .iter()
-            .map(|event| Field::try_from(event.identity_commitment).unwrap());
+        let root = events.last().map(|event| event.1);
+        let leaves = events.iter().map(|event| event.0);
         let count = leaves.len();
 
         let mut tree = tree_state.write().await.unwrap_or_else(|e| {
@@ -223,9 +206,7 @@ impl EthereumSubscriber {
             end_block, "processing blockchain events in ethereum subscriber"
         );
 
-        let mut events = contracts
-            .fetch_events(start_block, Some(end_block), database.clone())
-            .boxed();
+        let mut events = contracts.fetch_events(start_block, Some(end_block)).boxed();
 
         let mut tree = tree_state.write().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in process_events.");
@@ -235,27 +216,54 @@ impl EthereumSubscriber {
         let mut wake_up_committer = false;
 
         loop {
-            let (leaf, root) = match events.try_next().await.map_err(Error::Event)? {
+            let event = match events.try_next().await.map_err(Error::Event)? {
                 Some(a) => a,
                 None => break,
             };
+            let commitment = IdentityCommitment::from(event.event);
+            Self::log_event_errors(
+                &tree,
+                &contracts.initial_leaf(),
+                tree.next_leaf,
+                &commitment.leaf,
+            )?;
 
-            Self::log_event_errors(&tree, &contracts.initial_leaf(), tree.next_leaf, &leaf)?;
+            // Cache event
+            database
+                .save_log(
+                    event
+                        .block_index
+                        .try_into()
+                        .map_err(|e: &str| Error::Conversion(e.to_owned()))?,
+                    event
+                        .transaction_index
+                        .try_into()
+                        .map_err(|e: &str| Error::Conversion(e.to_owned()))?,
+                    event
+                        .log_index
+                        .try_into()
+                        .map_err(|e: &str| Error::Conversion(e.to_owned()))?,
+                    event.raw_log,
+                    commitment.leaf,
+                    commitment.root,
+                )
+                .await
+                .map_err(Error::Database)?;
 
             // Insert
             let index = tree.next_leaf;
-            tree.merkle_tree.set(index, leaf);
+            tree.merkle_tree.set(index, commitment.leaf);
             tree.next_leaf += 1;
 
             // Check root
-            if root != tree.merkle_tree.root() {
-                error!(computed_root = ?tree.merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
+            if commitment.root != tree.merkle_tree.root() {
+                error!(computed_root = ?tree.merkle_tree.root(), event_root = ?commitment.root, "Root mismatch between event and computed tree.");
                 return Err(Error::RootMismatch);
             }
 
             // Remove from pending identities
             let queue_status = database
-                .confirm_identity_and_retrigger_stale_recods(&leaf)
+                .confirm_identity_and_retrigger_stale_recods(&commitment.leaf)
                 .await
                 .map_err(Error::Database)?;
             if let IdentityConfirmationResult::RetriggerProcessing = queue_status {
@@ -451,4 +459,20 @@ pub enum Error {
     Event(#[source] EventError),
     #[error("Database error: {0}")]
     Database(#[source] DatabaseError),
+    #[error("Integer conversion error: {0}")]
+    Conversion(String),
+}
+
+struct IdentityCommitment {
+    leaf: Field,
+    root: Field,
+}
+
+impl From<MemberAddedEvent> for IdentityCommitment {
+    fn from(value: MemberAddedEvent) -> Self {
+        Self {
+            leaf: value.identity_commitment.into(),
+            root: value.root.into(),
+        }
+    }
 }

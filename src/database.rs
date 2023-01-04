@@ -126,7 +126,6 @@ impl Database {
         Ok(Self { pool })
     }
 
-    #[instrument(level = "info", skip_all)]
     pub async fn insert_pending_identity(
         &self,
         group_id: usize,
@@ -142,7 +141,6 @@ impl Database {
         Ok(())
     }
 
-    #[instrument(level = "info", skip_all)]
     pub async fn mark_identity_inserted(
         &self,
         group_id: usize,
@@ -162,7 +160,6 @@ impl Database {
         Ok(())
     }
 
-    #[instrument(level = "info", skip_all)]
     pub async fn confirm_identity_and_retrigger_stale_recods(
         &self,
         commitment: &Hash,
@@ -191,7 +188,6 @@ impl Database {
         }
     }
 
-    #[instrument(level = "info", skip_all)]
     pub async fn pending_identity_exists(
         &self,
         group_id: usize,
@@ -209,7 +205,6 @@ impl Database {
         Ok(row.is_some())
     }
 
-    #[instrument(level = "debug", skip_all)]
     pub async fn get_oldest_unprocessed_identity(&self) -> Result<Option<(usize, Hash)>, Error> {
         let query = sqlx::query(
             r#"SELECT group_id, commitment
@@ -251,7 +246,6 @@ impl Database {
         Ok(Hash::default())
     }
 
-    #[instrument(level = "info", skip_all)]
     pub async fn get_block_number(&self) -> Result<u64, Error> {
         let row = self
             .pool
@@ -268,7 +262,6 @@ impl Database {
         }
     }
 
-    #[instrument(level = "info", skip_all)]
     pub async fn load_logs(
         &self,
         from_block: i64,
@@ -291,7 +284,6 @@ impl Database {
         Ok(rows)
     }
 
-    #[instrument(level = "info", skip_all)]
     pub async fn save_log(&self, identity: &ConfirmedIdentityEvent) -> Result<(), Error> {
         self.pool
             .execute(
@@ -312,7 +304,6 @@ impl Database {
         Ok(())
     }
 
-    #[instrument(level = "info", skip_all)]
     pub async fn wipe_cache(&self) -> Result<(), Error> {
         self.pool
             .execute(sqlx::query("DELETE FROM logs;"))

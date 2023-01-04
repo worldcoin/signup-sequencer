@@ -155,7 +155,7 @@ impl EthereumSubscriber {
 
         info!(
             start_block,
-            end_block, last_cached_block, "Processing cached events"
+            end_block, last_cached_block, "processing cached events in ethereum subscriber"
         );
 
         let events = database

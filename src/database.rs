@@ -2,6 +2,7 @@ use crate::identity_tree::Hash;
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
 use ruint::{aliases::U256, uint};
+use semaphore::Field;
 use sqlx::{
     any::AnyKind,
     migrate::{Migrate, MigrateDatabase, Migrator},
@@ -265,41 +266,37 @@ impl Database {
         &self,
         from_block: i64,
         to_block: Option<i64>,
-    ) -> Result<Vec<String>, Error> {
+    ) -> Result<Vec<(Field, Field)>, Error> {
         let rows = self
             .pool
             .fetch_all(
                 sqlx::query(
-                r#"SELECT raw FROM logs WHERE block_index >= $1 AND block_index <= $2 ORDER BY block_index, transaction_index, log_index;"#,
+                r#"SELECT leaf, root FROM logs WHERE block_index >= $1 AND block_index <= $2 ORDER BY block_index, transaction_index, log_index;"#,
                 )
                 .bind(from_block)
                 .bind(to_block.unwrap_or(i64::MAX))
             )
             .await?
             .iter()
-            .map(|row| row.get(0))
+            .map(|row| (row.try_get(0).unwrap_or_default(), row.try_get(1).unwrap_or_default()))
             .collect();
 
         Ok(rows)
     }
 
-    pub async fn save_log(
-        &self,
-        block_index: i64,
-        transaction_index: i32,
-        log_index: i32,
-        log: String,
-    ) -> Result<(), Error> {
+    pub async fn save_log(&self, identity: &ConfirmedIdentityEvent) -> Result<(), Error> {
         self.pool
             .execute(
                 sqlx::query(
-                    r#"INSERT INTO logs (block_index, transaction_index, log_index, raw)
-                    VALUES ($1, $2, $3, $4);"#,
+                    r#"INSERT INTO logs (block_index, transaction_index, log_index, raw, leaf, root)
+                    VALUES ($1, $2, $3, $4, $5, $6);"#,
                 )
-                .bind(block_index)
-                .bind(transaction_index)
-                .bind(log_index)
-                .bind(log),
+                .bind(identity.block_index)
+                .bind(identity.transaction_index)
+                .bind(identity.log_index)
+                .bind(identity.raw_log.clone())
+                .bind(identity.leaf)
+                .bind(identity.root),
             )
             .await
             .map_err(Error::InternalError)?;
@@ -325,4 +322,13 @@ pub enum Error {
 pub enum IdentityConfirmationResult {
     Done,
     RetriggerProcessing,
+}
+
+pub struct ConfirmedIdentityEvent {
+    pub block_index:       i64,
+    pub transaction_index: i32,
+    pub log_index:         i32,
+    pub raw_log:           String,
+    pub leaf:              Field,
+    pub root:              Field,
 }

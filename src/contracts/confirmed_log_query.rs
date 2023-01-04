@@ -1,7 +1,4 @@
-use crate::{
-    database::{Database, Error as DatabaseError},
-    ethereum::ProviderStack,
-};
+use crate::ethereum::ProviderStack;
 use async_stream::try_stream;
 use core::fmt::Debug;
 use ethers::{
@@ -9,19 +6,18 @@ use ethers::{
     types::{Filter, Log, U64},
 };
 use futures::{Stream, StreamExt};
-use std::{cmp::max, num::TryFromIntError, sync::Arc, time::Duration};
+use std::{cmp::max, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::time::sleep;
 use tracing::{error, info};
 
-pub struct CachingLogQuery {
+pub struct ConfirmedLogQuery {
     provider:                  Arc<ProviderStack>,
     filter:                    Filter,
     start_page_size:           u64,
     min_page_size:             u64,
     max_backoff_time:          Duration,
     confirmation_blocks_delay: u64,
-    database:                  Option<Arc<Database>>,
 }
 
 #[derive(Error, Debug)]
@@ -30,27 +26,9 @@ pub enum Error<ProviderError> {
     LoadLastBlock(#[source] ProviderError),
     #[error("error loading logs")]
     LoadLogs(#[from] LogQueryError<ProviderError>),
-    #[error(transparent)]
-    Database(#[from] DatabaseError),
-    #[error("couldn't parse log json: {0}")]
-    Parse(#[source] serde_json::Error),
-    #[error("couldn't serialize log to json: {0}")]
-    Serialize(#[source] serde_json::Error),
-    #[error("empty block index")]
-    EmptyBlockIndex,
-    #[error("empty transaction index")]
-    EmptyTransactionIndex,
-    #[error("empty log index")]
-    EmptyLogIndex,
-    #[error("block index out of range: {0}")]
-    BlockIndexOutOfRange(String),
-    #[error("transaction index out of range: {0}")]
-    TransactionIndexOutOfRange(String),
-    #[error("log index out of range: {0}")]
-    LogIndexOutOfRange(String),
 }
 
-impl CachingLogQuery {
+impl ConfirmedLogQuery {
     pub fn new(provider: Arc<ProviderStack>, filter: &Filter) -> Self {
         Self {
             provider,
@@ -59,7 +37,6 @@ impl CachingLogQuery {
             min_page_size: 1000,
             max_backoff_time: Duration::from_secs(32),
             confirmation_blocks_delay: 0,
-            database: None,
         }
     }
 
@@ -84,40 +61,22 @@ impl CachingLogQuery {
         self
     }
 
-    pub fn with_database(mut self, database: Arc<Database>) -> Self {
-        self.database = Some(database);
-        self
-    }
-
     pub fn into_stream(self) -> impl Stream<Item = Result<Log, Error<ProviderError>>> {
         try_stream! {
             let last_block = self.get_block_number().await?;
-
-            let cached_events = self.load_db_logs(
-                self.filter.get_from_block().expect("filter's from_block must be set").as_u64(),
-                self.filter.get_to_block().map(|num| num.as_u64())
-            ).await?;
-
-            if cached_events.len() > 0 {
-                info!("Reading MemberAdded events from cache");
-            }
-
-            for log in cached_events {
-                yield serde_json::from_str(&log).map_err(Error::Parse)?;
-            }
 
             let mut retry_status = RetryStatus::new(self.start_page_size, self.min_page_size, self.max_backoff_time);
 
             'restart: loop {
                 let filter = self.filter.clone().from_block(max(
-                    max(retry_status.last_block + 1, last_block.db + 1),
+                    retry_status.last_block + 1,
                     self.filter.get_from_block().unwrap_or_default(),
                 ));
 
                 info!(
                     page_size = retry_status.page_size,
                     from_block = filter.get_from_block().unwrap_or_default().as_u64(),
-                    "Reading MemberAdded events from chains"
+                    "Reading MemberAdded events"
                 );
 
                 let mut stream = self.provider
@@ -142,13 +101,10 @@ impl CachingLogQuery {
                         None => continue,
                     };
                     let to_filter = self.filter.get_to_block().expect("filter's to_block must be set");
-                    let last_block = last_block.eth;
 
                     // get_logs_paginated ignores to_block filter. Check again if the block is confirmed
                     let is_confirmed = log_block + self.confirmation_blocks_delay <= last_block && log_block <= to_filter;
                     if is_confirmed {
-                        let raw_log = serde_json::to_string(&log).map_err(Error::Serialize)?;
-                        self.cache_log(raw_log, &log).await?;
                         yield log;
                     }
                 }
@@ -173,78 +129,13 @@ impl CachingLogQuery {
         }
     }
 
-    async fn get_block_number(&self) -> Result<LastBlock, Error<ProviderError>> {
+    async fn get_block_number(&self) -> Result<U64, Error<ProviderError>> {
         let provider = self.provider.provider();
-        let last_eth_block = provider
+        provider
             .get_block_number()
             .await
-            .map_err(Error::LoadLastBlock)?;
-        let last_db_block: u64 = match &self.database {
-            Some(database) => database.get_block_number().await?,
-            None => 0,
-        };
-
-        Ok(LastBlock {
-            eth: last_eth_block,
-            db:  U64([last_db_block]),
-        })
+            .map_err(Error::LoadLastBlock)
     }
-
-    async fn load_db_logs(
-        &self,
-        from_block: u64,
-        to_block: Option<u64>,
-    ) -> Result<Vec<String>, Error<ProviderError>> {
-        let from: i64 = from_block.try_into().map_err(|e: TryFromIntError| {
-            Error::<ProviderError>::BlockIndexOutOfRange(e.to_string())
-        })?;
-        let to: Option<i64> = match to_block {
-            Some(num) => Some(
-                i64::try_from(num)
-                    .map_err(|e| Error::<ProviderError>::BlockIndexOutOfRange(e.to_string()))?,
-            ),
-            None => None,
-        };
-        match &self.database {
-            Some(database) => database.load_logs(from, to).await.map_err(Error::Database),
-            None => Ok(vec![]),
-        }
-    }
-
-    async fn cache_log(&self, raw_log: String, log: &Log) -> Result<(), Error<ProviderError>> {
-        if let Some(database) = &self.database {
-            database
-                .save_log(
-                    log.block_number
-                        .ok_or(Error::<ProviderError>::EmptyBlockIndex)?
-                        .try_into()
-                        .map_err(|e: &str| {
-                            Error::<ProviderError>::BlockIndexOutOfRange(e.into())
-                        })?,
-                    log.transaction_index
-                        .ok_or(Error::<ProviderError>::EmptyTransactionIndex)?
-                        .try_into()
-                        .map_err(|e: &str| {
-                            Error::<ProviderError>::TransactionIndexOutOfRange(e.into())
-                        })?,
-                    log.log_index
-                        .ok_or(Error::<ProviderError>::EmptyLogIndex)?
-                        .try_into()
-                        .map_err(|e: &str| Error::<ProviderError>::LogIndexOutOfRange(e.into()))?,
-                    raw_log,
-                )
-                .await
-                .map_err(Error::Database)?;
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Copy, Clone)]
-struct LastBlock {
-    eth: U64,
-    db:  U64,
 }
 
 struct RetryStatus {

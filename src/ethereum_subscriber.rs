@@ -1,16 +1,18 @@
 use crate::{
-    contracts::Contracts,
-    database::{Database, Error as DatabaseError, IdentityConfirmationResult},
-    ethereum::EventError,
+    contracts::{Contracts, MemberAddedEvent},
+    database::{
+        ConfirmedIdentityEvent, Database, Error as DatabaseError, IdentityConfirmationResult,
+    },
+    ethereum::{EventError, Log},
     identity_committer::IdentityCommitter,
     identity_tree::{SharedTreeState, TreeState},
 };
 use futures::{StreamExt, TryStreamExt};
 use semaphore::Field;
-use std::{sync::Arc, time::Duration};
+use std::{cmp::min, collections::HashMap, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{sync::RwLock, task::JoinHandle, time::sleep};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 
 struct RunningInstance {
     #[allow(dead_code)]
@@ -89,9 +91,23 @@ impl EthereumSubscriber {
     }
 
     #[instrument(level = "info", skip_all)]
-    pub async fn process_events(&mut self) -> Result<(), Error> {
-        let processed_block = Self::process_events_internal(
+    pub async fn process_initial_events(&mut self) -> Result<(), Error> {
+        let end_block = self
+            .contracts
+            .confirmed_block_number()
+            .await
+            .map_err(Error::Event)?;
+
+        let last_db_block = Self::process_cached_events(
             self.starting_block,
+            end_block,
+            self.tree_state.clone(),
+            self.database.clone(),
+        )
+        .await?;
+        let processed_block = Self::process_blockchain_events(
+            last_db_block + 1,
+            end_block,
             self.tree_state.clone(),
             self.contracts.clone(),
             self.database.clone(),
@@ -103,7 +119,7 @@ impl EthereumSubscriber {
     }
 
     async fn process_events_internal(
-        starting_block: u64,
+        start_block: u64,
         tree_state: SharedTreeState,
         contracts: Arc<Contracts>,
         database: Arc<Database>,
@@ -114,17 +130,84 @@ impl EthereumSubscriber {
             .await
             .map_err(Error::Event)?;
 
-        if starting_block > end_block {
+        Self::process_blockchain_events(
+            start_block,
+            end_block,
+            tree_state,
+            contracts,
+            database,
+            identity_committer,
+        )
+        .await
+    }
+
+    async fn process_cached_events(
+        start_block: u64,
+        end_block: u64,
+        tree_state: SharedTreeState,
+        database: Arc<Database>,
+    ) -> Result<u64, Error> {
+        if start_block > end_block {
             return Ok(end_block);
         }
+
+        let last_cached_block = database.get_block_number().await.unwrap();
+
         info!(
-            starting_block,
-            end_block, "processing events in ethereum subscriber"
+            start_block,
+            end_block, last_cached_block, "processing cached events in ethereum subscriber"
         );
 
-        let mut events = contracts
-            .fetch_events(starting_block, Some(end_block), database.clone())
-            .boxed();
+        let events = database
+            .load_logs(
+                i64::try_from(start_block).unwrap(),
+                Some(i64::try_from(end_block).unwrap()),
+            )
+            .await
+            .map_err(Error::Database)?;
+        let root = events.last().map(|event| event.1);
+        let leaves = events.iter().map(|event| event.0);
+        let count = leaves.len();
+
+        let mut tree = tree_state.write().await.unwrap_or_else(|e| {
+            error!(?e, "Failed to obtain tree lock in process_events.");
+            panic!("Sequencer potentially deadlocked, terminating.");
+        });
+
+        // Insert
+        let index = tree.next_leaf;
+        tree.merkle_tree.set_range(index, leaves);
+        tree.next_leaf += count;
+
+        // Check root
+        if let Some(root) = root {
+            if root != tree.merkle_tree.root() {
+                error!(computed_root = ?tree.merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
+                return Err(Error::RootMismatch);
+            }
+        }
+
+        Ok(min(end_block, last_cached_block))
+    }
+
+    async fn process_blockchain_events(
+        start_block: u64,
+        end_block: u64,
+        tree_state: SharedTreeState,
+        contracts: Arc<Contracts>,
+        database: Arc<Database>,
+        identity_committer: Arc<IdentityCommitter>,
+    ) -> Result<u64, Error> {
+        if start_block > end_block {
+            return Ok(end_block);
+        }
+
+        info!(
+            start_block,
+            end_block, "processing blockchain events in ethereum subscriber"
+        );
+
+        let mut events = contracts.fetch_events(start_block, Some(end_block)).boxed();
 
         let mut tree = tree_state.write().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in process_events.");
@@ -134,28 +217,40 @@ impl EthereumSubscriber {
         let mut wake_up_committer = false;
 
         loop {
-            let (leaf, root) = match events.try_next().await.map_err(Error::Event)? {
+            let event = match events.try_next().await.map_err(Error::Event)? {
                 Some(a) => a,
                 None => break,
             };
-            debug!(?leaf, ?root, end_block, "Received event");
 
-            Self::log_event_errors(&tree, &contracts.initial_leaf(), tree.next_leaf, &leaf)?;
+            let identity = ConfirmedIdentityEvent::try_from(event)?;
+
+            Self::log_event_errors(
+                &tree,
+                &contracts.initial_leaf(),
+                tree.next_leaf,
+                &identity.leaf,
+            )?;
+
+            // Cache event
+            database
+                .save_log(&identity)
+                .await
+                .map_err(Error::Database)?;
 
             // Insert
             let index = tree.next_leaf;
-            tree.merkle_tree.set(index, leaf);
+            tree.merkle_tree.set(index, identity.leaf);
             tree.next_leaf += 1;
 
             // Check root
-            if root != tree.merkle_tree.root() {
-                error!(computed_root = ?tree.merkle_tree.root(), event_root = ?root, "Root mismatch between event and computed tree.");
+            if identity.root != tree.merkle_tree.root() {
+                error!(computed_root = ?tree.merkle_tree.root(), event_root = ?identity.root, "Root mismatch between event and computed tree.");
                 return Err(Error::RootMismatch);
             }
 
             // Remove from pending identities
             let queue_status = database
-                .confirm_identity_and_retrigger_stale_recods(&leaf)
+                .confirm_identity_and_retrigger_stale_recods(&identity.leaf)
                 .await
                 .map_err(Error::Database)?;
             if let IdentityConfirmationResult::RetriggerProcessing = queue_status {
@@ -193,31 +288,6 @@ impl EthereumSubscriber {
             return Ok(());
         }
 
-        // Check leaf value with existing value
-        let existing = &tree.merkle_tree.leaves()[index];
-        if existing != initial_leaf {
-            if existing == leaf {
-                error!(?index, ?leaf, "Received event for already existing leaf.");
-                return Ok(());
-            }
-            error!(
-                ?index,
-                ?leaf,
-                ?existing,
-                "Received event for already set leaf."
-            );
-        }
-
-        // Check insertion counter
-        if index != tree.next_leaf {
-            error!(
-                ?index,
-                ?tree.next_leaf,
-                ?leaf,
-                "Event leaf index does not match expected leaf index."
-            );
-        }
-
         // Check duplicates
         if let Some(previous) = tree.merkle_tree.leaves()[..index]
             .iter()
@@ -242,6 +312,8 @@ impl EthereumSubscriber {
         });
         let next_leaf = tree.next_leaf;
         let initial_leaf = self.contracts.initial_leaf();
+
+        let mut visited_identities = HashMap::<Field, usize>::new();
         for (index, &leaf) in tree.merkle_tree.leaves().iter().enumerate() {
             if index < next_leaf && leaf == initial_leaf {
                 error!(
@@ -260,13 +332,11 @@ impl EthereumSubscriber {
                 );
             }
             if leaf != initial_leaf {
-                if let Some(previous) = tree.merkle_tree.leaves()[..index]
-                    .iter()
-                    .position(|&l| l == leaf)
-                {
+                if let Some(previous) = visited_identities.get(&leaf) {
                     error!(?index, ?leaf, ?previous, "Leaf not unique.");
                 }
             }
+            visited_identities.insert(leaf, index);
         }
     }
 
@@ -376,4 +446,52 @@ pub enum Error {
     Event(#[source] EventError),
     #[error("Database error: {0}")]
     Database(#[source] DatabaseError),
+    #[error("Integer conversion error: {0}")]
+    Conversion(String),
+}
+
+struct IdentityCommitment {
+    leaf: Field,
+    root: Field,
+}
+
+impl From<MemberAddedEvent> for IdentityCommitment {
+    fn from(value: MemberAddedEvent) -> Self {
+        Self {
+            leaf: value.identity_commitment.into(),
+            root: value.root.into(),
+        }
+    }
+}
+
+impl TryFrom<Log<MemberAddedEvent>> for ConfirmedIdentityEvent {
+    type Error = Error;
+
+    fn try_from(value: Log<MemberAddedEvent>) -> Result<Self, Self::Error> {
+        let commitment = IdentityCommitment::from(value.event);
+
+        let block_index: i64 = value
+            .block_index
+            .try_into()
+            .map_err(|e: &str| Error::Conversion(e.to_owned()))?;
+
+        let transaction_index: i32 = value
+            .transaction_index
+            .try_into()
+            .map_err(|e: &str| Error::Conversion(e.to_owned()))?;
+
+        let log_index: i32 = value
+            .log_index
+            .try_into()
+            .map_err(|e: &str| Error::Conversion(e.to_owned()))?;
+
+        Ok(Self {
+            block_index,
+            transaction_index,
+            log_index,
+            raw_log: value.raw_log,
+            leaf: commitment.leaf,
+            root: commitment.root,
+        })
+    }
 }

@@ -118,6 +118,7 @@ impl EthereumSubscriber {
         Ok(())
     }
 
+    #[instrument(level = "info", skip_all)]
     async fn process_events_internal(
         start_block: u64,
         tree_state: SharedTreeState,
@@ -141,6 +142,7 @@ impl EthereumSubscriber {
         .await
     }
 
+    #[instrument(level = "info", skip_all)]
     async fn process_cached_events(
         start_block: u64,
         end_block: u64,
@@ -190,6 +192,7 @@ impl EthereumSubscriber {
         Ok(min(end_block, last_cached_block))
     }
 
+    #[instrument(level = "info", skip_all)]
     async fn process_blockchain_events(
         start_block: u64,
         end_block: u64,

@@ -1,4 +1,9 @@
-use crate::{contracts::Contracts, database::Database, identity_tree::Hash, utils::spawn_or_abort};
+use crate::{
+    contracts::Contracts,
+    database::Database,
+    identity_tree::{Hash, SharedTreeState},
+    utils::spawn_or_abort,
+};
 use anyhow::{anyhow, Result as AnyhowResult};
 use std::sync::Arc;
 use tokio::{
@@ -55,17 +60,23 @@ impl RunningInstance {
 /// a time. Spawning multiple worker threads will result in undefined behavior,
 /// including data duplication.
 pub struct IdentityCommitter {
-    instance:  RwLock<Option<RunningInstance>>,
-    database:  Arc<Database>,
-    contracts: Arc<Contracts>,
+    instance:   RwLock<Option<RunningInstance>>,
+    database:   Arc<Database>,
+    contracts:  Arc<Contracts>,
+    tree_state: SharedTreeState,
 }
 
 impl IdentityCommitter {
-    pub fn new(database: Arc<Database>, contracts: Arc<Contracts>) -> Self {
+    pub fn new(
+        database: Arc<Database>,
+        contracts: Arc<Contracts>,
+        tree_state: SharedTreeState,
+    ) -> Self {
         Self {
             instance: RwLock::new(None),
             database,
             contracts,
+            tree_state,
         }
     }
 
@@ -80,6 +91,7 @@ impl IdentityCommitter {
         let (wake_up_sender, mut wake_up_receiver) = mpsc::channel(1);
         let database = self.database.clone();
         let contracts = self.contracts.clone();
+        let tree_state = self.tree_state.clone();
         let handle = spawn_or_abort(async move {
             loop {
                 while let Some((group_id, commitment)) =
@@ -89,7 +101,9 @@ impl IdentityCommitter {
                         info!("Shutdown signal received, not processing remaining items.");
                         return Ok(());
                     }
-                    Self::commit_identity(&database, &contracts, group_id, commitment).await?;
+
+                    Self::commit_identity(&database, &contracts, &tree_state, group_id, commitment)
+                        .await?;
                 }
 
                 select! {
@@ -114,9 +128,28 @@ impl IdentityCommitter {
     async fn commit_identity(
         database: &Database,
         contracts: &Contracts,
+        tree_state: &SharedTreeState,
         group_id: usize,
         commitment: Hash,
     ) -> AnyhowResult<()> {
+        {
+            let tree = tree_state.read().await.unwrap_or_else(|e| {
+                error!(?e, "Failed to obtain tree lock in check_leaves.");
+                panic!("Sequencer potentially deadlocked, terminating.");
+            });
+            let is_duplicate = tree.merkle_tree.leaves()[..tree.next_leaf].contains(&commitment);
+            if is_duplicate {
+                warn!(
+                    ?commitment,
+                    "Attempted to insert duplicate identity, skipping"
+                );
+                database
+                    .delete_pending_identity(group_id, &commitment)
+                    .await?;
+                return Ok(());
+            }
+        }
+
         // Send Semaphore transaction
         let receipt = contracts.insert_identity(commitment).await.map_err(|e| {
             error!(?e, "Failed to insert identity to contract.");

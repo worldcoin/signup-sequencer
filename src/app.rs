@@ -114,8 +114,11 @@ impl App {
             TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
         ));
 
-        let identity_committer =
-            Arc::new(IdentityCommitter::new(database.clone(), contracts.clone()));
+        let identity_committer = Arc::new(IdentityCommitter::new(
+            database.clone(),
+            contracts.clone(),
+            tree_state.clone(),
+        ));
         let chain_subscriber = EthereumSubscriber::new(
             options.starting_block,
             database.clone(),

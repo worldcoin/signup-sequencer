@@ -12,6 +12,7 @@ use crate::{
 use ethers::types::{transaction::eip2718::TypedTransaction, TxHash, H256};
 use std::sync::Arc;
 use thiserror::Error;
+use anyhow::bail;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -39,6 +40,8 @@ pub enum TxStatus {
     },
 }
 
+const BACKGROUND_TASK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
 impl Sitter {
     pub async fn new(database: Arc<Database>, options: Options) -> Result<Self, anyhow::Error> {
         let eth = Ethereum::new(options).await?;
@@ -51,24 +54,31 @@ impl Sitter {
 
     async fn background_task(database: Arc<Database>, eth: Ethereum) {
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            tokio::time::sleep(BACKGROUND_TASK_INTERVAL).await;
+            let res = Self::background_task_iteration(database.clone(), &eth).await;
 
-            let (txid, tx) = match database.unsubmitted_transaction_request().await {
-                Ok(Some((txid, tx))) => (txid, tx),
-                Ok(None) => {
-                    continue;
-                }
-                Err(err) => {
-                    panic!("failed to get unsubmitted transaction: {}", err);
-                }
-            };
-
-            let receipt = eth.send_transaction(tx).await
-                .expect("TODO: do somthing sensible with this error");
-
-            database.submit_transaction(&txid, &receipt).await
-                .expect("TODO: do somthing sensible with this error");
+            if let Err(e) = res {
+                tracing::error!("background task iteration failed: {}", e);
+            }
         }
+    }
+
+    async fn background_task_iteration(database: Arc<Database>, eth: &Ethereum) -> anyhow::Result<()> {
+        let id_and_tx = database.unsubmitted_transaction_request().await
+            .map_err(|e| anyhow::anyhow!("failed to get unsubmitted transaction request: {}", e))?;
+
+        let (txid, tx) = match id_and_tx {
+            None => return Ok(()),
+            Some(i) => i,
+        };
+
+        let receipt = eth.send_transaction(tx).await
+            .map_err(|err| anyhow::anyhow!("failed to send transaction: {}", err))?;
+
+        database.submit_transaction(&txid, &receipt).await
+            .map_err(|err| anyhow::anyhow!("failed to submit transaction: {}", err))?;
+
+        Ok(())
     }
 
     /// Send a transaction to the blockchain. `id` is used to make this method
@@ -81,6 +91,7 @@ impl Sitter {
     /// number. This method will return [`Error::DuplicateTransactionId`] if
     /// a transaction with this id has already been sent.
     pub async fn send(&self, id: &[u8], tx: TypedTransaction) -> Result<(), InsertTxError> {
+        // TODO: do some validation on the transaction
         self.database.insert_transaction_reqest(id, tx).await
     }
 

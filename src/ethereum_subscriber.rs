@@ -289,17 +289,17 @@ impl EthereumSubscriber {
         }
 
         // Check duplicates
-        if let Some(previous) = tree.merkle_tree.leaves()[..index]
-            .iter()
-            .position(|l| l == leaf)
-        {
-            error!(
-                ?index,
-                ?leaf,
-                ?previous,
-                "Received event for already inserted leaf."
-            );
-        }
+        // if let Some(previous) = tree.merkle_tree.leaves()[..index]
+        //     .iter()
+        //     .position(|l| l == leaf)
+        // {
+        //     error!(
+        //         ?index,
+        //         ?leaf,
+        //         ?previous,
+        //         "Received event for already inserted leaf."
+        //     );
+        // }
 
         Ok(())
     }

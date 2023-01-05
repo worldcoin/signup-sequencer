@@ -160,6 +160,22 @@ impl Database {
         Ok(())
     }
 
+    pub async fn delete_pending_identity(
+        &self,
+        group_id: usize,
+        commitment: &Hash,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"DELETE FROM pending_identities
+                WHERE group_id = $1 AND commitment = $2;"#,
+        )
+        .bind(group_id as i64)
+        .bind(commitment);
+
+        self.pool.execute(query).await?;
+        Ok(())
+    }
+
     pub async fn confirm_identity_and_retrigger_stale_recods(
         &self,
         commitment: &Hash,
@@ -206,6 +222,10 @@ impl Database {
     }
 
     pub async fn get_oldest_unprocessed_identity(&self) -> Result<Option<(usize, Hash)>, Error> {
+        let queue_size = sqlx::query("SELECT COUNT(1) FROM pending_identities");
+        let size: i64 = self.pool.fetch_one(queue_size).await?.get(0);
+        info!(size, "pending identity queue size fetched");
+
         let query = sqlx::query(
             r#"SELECT group_id, commitment
                    FROM pending_identities

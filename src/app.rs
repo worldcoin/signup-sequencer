@@ -94,19 +94,19 @@ impl App {
         let refresh_rate = options.ethereum.refresh_rate;
 
         // Connect to Ethereum and Database
-        let (database, (ethereum, contracts)) = {
+        let (database, ethereum) = {
             let db = Database::new(options.database);
-
-            let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
-                let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
-                Ok((ethereum, Arc::new(contracts)))
-            });
+            let eth = Ethereum::new(options.ethereum);
 
             // Connect to both in parallel
             try_join!(db, eth)?
         };
 
         let database = Arc::new(database);
+
+        let contracts =
+            Contracts::new(options.contracts, database.clone(), ethereum.clone()).await?;
+        let contracts = Arc::new(contracts);
 
         // Poseidon tree depth is one more than the contract's tree depth
         let tree_state = Arc::new(TimedRwLock::new(

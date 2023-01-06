@@ -3,6 +3,7 @@ pub mod confirmed_log_query;
 
 use self::abi::{MemberAddedFilter, SemaphoreContract as Semaphore};
 use crate::{
+    database::Database,
     ethereum::{Ethereum, EventError, Log, ProviderStack, TxError},
     tx_sitter::Sitter,
 };
@@ -15,6 +16,7 @@ use ethers::{
 };
 use futures::{Stream, TryStreamExt};
 use semaphore::Field;
+use std::sync::Arc;
 use tracing::{error, info, instrument};
 
 pub type MemberAddedEvent = MemberAddedFilter;
@@ -56,7 +58,11 @@ pub struct Contracts {
 
 impl Contracts {
     #[instrument(level = "debug", skip_all)]
-    pub async fn new(options: Options, ethereum: Ethereum) -> AnyhowResult<Self> {
+    pub async fn new(
+        options: Options,
+        database: Arc<Database>,
+        ethereum: Ethereum,
+    ) -> AnyhowResult<Self> {
         // Sanity check the group id
         if options.group_id == U256::zero() {
             error!(group_id = ?options.group_id, "Invalid group id: must be greater than zero");
@@ -87,7 +93,7 @@ impl Contracts {
         }
         info!(?address, ?manager, "Connected to Semaphore contract");
 
-        let sitter = Sitter::new(ethereum.clone()).await?;
+        let sitter = Sitter::new(database, ethereum.clone()).await?;
 
         // Make sure the group exists.
         let existing_tree_depth = semaphore.get_depth(options.group_id).call().await?;
@@ -104,7 +110,8 @@ impl Contracts {
                         options.initial_leaf.to_be_bytes().into(),
                     )
                     .tx;
-                sitter.send(tx).await?;
+                let id = format!("create_group({})", options.group_id);
+                sitter.send(id.as_bytes(), tx).await?;
                 new_depth
             } else {
                 error!(group_id = ?options.group_id, "Group does not exist");
@@ -180,14 +187,21 @@ impl Contracts {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn insert_identity(&self, commitment: Field) -> Result<TransactionReceipt, TxError> {
+    pub async fn insert_identity(
+        &self,
+        commitment: Field,
+    ) -> Result<TransactionReceipt, anyhow::Error> {
         info!(%commitment, "Inserting identity in contract");
 
         // Send create tx
         let commitment = U256::from(commitment.to_be_bytes());
+        let id = format!("FIXME");
         let receipt = self
             .sitter
-            .send(self.semaphore.add_member(self.group_id, commitment).tx)
+            .send(
+                id.as_bytes(),
+                self.semaphore.add_member(self.group_id, commitment).tx,
+            )
             .await?;
         Ok(receipt)
     }

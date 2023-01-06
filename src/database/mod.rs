@@ -13,6 +13,9 @@ use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;
 
+mod sitter;
+pub use sitter::InsertTxError;
+
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 
@@ -330,6 +333,10 @@ impl Database {
             .await
             .map_err(Error::InternalError)?;
         Ok(())
+    }
+
+    pub async fn close(self) {
+        self.pool.close().await
     }
 }
 

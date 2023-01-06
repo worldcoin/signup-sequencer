@@ -3,7 +3,7 @@
 
 pub mod app;
 mod contracts;
-mod database;
+pub mod database;
 mod ethereum;
 mod ethereum_subscriber;
 mod identity_committer;

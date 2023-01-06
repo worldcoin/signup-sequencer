@@ -106,6 +106,17 @@ impl App {
             try_join!(db, eth)?
         };
 
+
+        // info!("inserting test identities");
+
+        // let result = contracts.insert_batch().await;
+
+        // info!(?result, "insertion result");
+
+        info!("pulling data from calldata");
+
+        todo!();
+
         let database = Arc::new(database);
 
         // Poseidon tree depth is one more than the contract's tree depth

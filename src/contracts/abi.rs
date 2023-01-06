@@ -14,3 +14,11 @@ abigen!(
     ]"#,
     event_derives(serde::Deserialize, serde::Serialize)
 );
+
+abigen!(
+    BatchContract,
+    r#"[
+        function registerIdentities(uint256[8] calldata insertionProof, uint256 preRoot, uint32 startIndex, uint256[] calldata identityCommitments, uint256 postRoot) public onlyManager
+        function verifyProof(uint256 root, uint256 signalHash, uint256 nullifierHash, uint256 externalNullifierHash, uint256[8] calldata proof) public view
+    ]"#,
+);

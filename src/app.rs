@@ -11,7 +11,7 @@ use crate::{
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
 use cli_batteries::await_shutdown;
-use ethers::types::U256;
+use ethers::{abi::AbiDecode, providers::Middleware, types::U256};
 use futures::TryFutureExt;
 use hyper::StatusCode;
 use semaphore::{poseidon_tree::Proof, Field};
@@ -91,6 +91,7 @@ impl App {
     #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
+        let batch_address = options.contracts.batch_address.clone();
         let refresh_rate = options.ethereum.refresh_rate;
 
         // Connect to Ethereum and Database
@@ -106,7 +107,6 @@ impl App {
             try_join!(db, eth)?
         };
 
-
         // info!("inserting test identities");
 
         // let result = contracts.insert_batch().await;
@@ -115,6 +115,23 @@ impl App {
 
         info!("pulling data from calldata");
 
+        let block_number = ethereum.provider().get_block_number().await?.as_u64();
+        info!(block_number, "block count");
+
+        for i in 0..=block_number {
+            info!(i, "querying block");
+            if let Some(block) = ethereum.provider().get_block_with_txs(i).await? {
+                for transaction in block.transactions {
+                    if transaction.to == Some(batch_address) {
+                        if let Ok(call) = crate::contracts::abi::RegisterIdentitiesCall::decode(
+                            &transaction.input,
+                        ) {
+                            info!(?call, "registerIdentities call");
+                        }
+                    }
+                }
+            }
+        }
         todo!();
 
         let database = Arc::new(database);

@@ -157,41 +157,32 @@ impl App {
 
     async fn load_initial_events(
         &mut self,
-        _lock_timeout: u64,
-        _starting_block: u64,
+        lock_timeout: u64,
+        starting_block: u64,
     ) -> AnyhowResult<()> {
-        // TODO(gswirski): remove after 2023-Jan-07 prod fix
-        let first_faulty_block = 37_781_665;
-        let result = self
-            .database
-            .wipe_cache_from_block(first_faulty_block - 2000)
-            .await;
-        info!(?result, "prod fix cache removal");
-
         match self.chain_subscriber.process_initial_events().await {
             Err(SubscriberError::RootMismatch) => {
-                error!("Error when rebuilding tree from cache. NOT retrying with db cache busted.");
-                // TODO(gswirski): re-enable after 2023-Jan-07 prod fix
+                error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
 
-                // // Create a new empty MerkleTree and wipe out cache db
-                // self.tree_state = Arc::new(TimedRwLock::new(
-                //     Duration::from_secs(lock_timeout),
-                //     TreeState::new(
-                //         self.contracts.tree_depth() + 1,
-                //         self.contracts.initial_leaf(),
-                //     ),
-                // ));
-                // self.database.wipe_cache().await?;
+                // Create a new empty MerkleTree and wipe out cache db
+                self.tree_state = Arc::new(TimedRwLock::new(
+                    Duration::from_secs(lock_timeout),
+                    TreeState::new(
+                        self.contracts.tree_depth() + 1,
+                        self.contracts.initial_leaf(),
+                    ),
+                ));
+                self.database.wipe_cache().await?;
 
-                // // Retry
-                // self.chain_subscriber = EthereumSubscriber::new(
-                //     starting_block,
-                //     self.database.clone(),
-                //     self.contracts.clone(),
-                //     self.tree_state.clone(),
-                //     self.identity_committer.clone(),
-                // );
-                // self.chain_subscriber.process_initial_events().await?;
+                // Retry
+                self.chain_subscriber = EthereumSubscriber::new(
+                    starting_block,
+                    self.database.clone(),
+                    self.contracts.clone(),
+                    self.tree_state.clone(),
+                    self.identity_committer.clone(),
+                );
+                self.chain_subscriber.process_initial_events().await?;
             }
             Err(e) => return Err(e.into()),
             Ok(_) => {}

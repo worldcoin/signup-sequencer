@@ -324,9 +324,9 @@ impl Database {
         Ok(())
     }
 
-    pub async fn wipe_cache_from_block(&self, from_block: i64) -> Result<(), Error> {
+    pub async fn wipe_cache(&self) -> Result<(), Error> {
         self.pool
-            .execute(sqlx::query("DELETE FROM logs WHERE block_index > $1;").bind(from_block))
+            .execute(sqlx::query("DELETE FROM logs;"))
             .await
             .map_err(Error::InternalError)?;
         Ok(())

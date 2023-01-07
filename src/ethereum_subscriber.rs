@@ -82,7 +82,7 @@ impl EthereumSubscriber {
                 match processed_block {
                     Ok(block_number) => starting_block = block_number + 1,
                     Err(error) => {
-                        error!(?error, "Couldn't process events update");
+                        panic!("Couldn't process events update: {error:?}");
                     }
                 }
             }
@@ -231,12 +231,6 @@ impl EthereumSubscriber {
                 &identity.leaf,
             )?;
 
-            // Cache event
-            database
-                .save_log(&identity)
-                .await
-                .map_err(Error::Database)?;
-
             // Insert
             let index = tree.next_leaf;
             tree.merkle_tree.set(index, identity.leaf);
@@ -247,6 +241,12 @@ impl EthereumSubscriber {
                 error!(computed_root = ?tree.merkle_tree.root(), event_root = ?identity.root, "Root mismatch between event and computed tree.");
                 return Err(Error::RootMismatch);
             }
+
+            // Cache event
+            database
+                .save_log(&identity)
+                .await
+                .map_err(Error::Database)?;
 
             // Remove from pending identities
             let queue_status = database

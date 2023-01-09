@@ -92,6 +92,7 @@ impl App {
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         let refresh_rate = options.ethereum.refresh_rate;
+        let cache_recovery_step_size = options.ethereum.cache_recovery_step_size;
 
         // Connect to Ethereum and Database
         let (database, (ethereum, contracts)) = {
@@ -138,7 +139,7 @@ impl App {
         };
 
         select! {
-            _ = app.load_initial_events(options.lock_timeout, options.starting_block) => {},
+            _ = app.load_initial_events(options.lock_timeout, options.starting_block, cache_recovery_step_size) => {},
             _ = await_shutdown() => return Err(anyhow!("Interrupted"))
         }
 
@@ -159,6 +160,7 @@ impl App {
         &mut self,
         lock_timeout: u64,
         starting_block: u64,
+        cache_recovery_step_size: usize,
     ) -> AnyhowResult<()> {
         match self.chain_subscriber.process_initial_events().await {
             Err(SubscriberError::RootMismatch) => {
@@ -172,7 +174,9 @@ impl App {
                         self.contracts.initial_leaf(),
                     ),
                 ));
-                self.database.wipe_cache().await?;
+                self.database
+                    .delete_most_recent_cached_events(cache_recovery_step_size as i64)
+                    .await?;
 
                 // Retry
                 self.chain_subscriber = EthereumSubscriber::new(

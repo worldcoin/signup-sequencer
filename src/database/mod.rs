@@ -324,9 +324,17 @@ impl Database {
         Ok(())
     }
 
-    pub async fn wipe_cache(&self) -> Result<(), Error> {
+    pub async fn delete_most_recent_cached_events(
+        &self,
+        recovery_step_size: i64,
+    ) -> Result<(), Error> {
+        let max_block_number =
+            i64::try_from(self.get_block_number().await?).expect("block number must be i64");
         self.pool
-            .execute(sqlx::query("DELETE FROM logs;"))
+            .execute(
+                sqlx::query("DELETE FROM logs WHERE block_index >= $1;")
+                    .bind(max_block_number - recovery_step_size),
+            )
             .await
             .map_err(Error::InternalError)?;
         Ok(())

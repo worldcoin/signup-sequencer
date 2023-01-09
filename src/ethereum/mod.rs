@@ -118,7 +118,7 @@ pub struct Options {
     pub max_backoff_time: Duration,
 
     /// Minimum number of blocks before events are considered confirmed.
-    #[clap(long, env, default_value = "10")]
+    #[clap(long, env, default_value = "35")]
     pub confirmation_blocks_delay: usize,
 
     /// The number of most recent blocks to be removed from cache on root

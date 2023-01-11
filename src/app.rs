@@ -169,7 +169,7 @@ impl App {
                     .delete_most_recent_cached_events(cache_recovery_step_size as i64)
                     .await?;
             } else if root_mismatch_count == 2 {
-                error!(cache_recovery_step_size, "Wiping out the entire cache.");
+                error!("Wiping out the entire cache.");
                 self.database.wipe_cache().await?;
             } else if root_mismatch_count >= 3 {
                 return Err(SubscriberError::RootMismatch.into());

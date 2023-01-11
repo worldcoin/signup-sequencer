@@ -9,7 +9,7 @@ use crate::{
 };
 use futures::{StreamExt, TryStreamExt};
 use semaphore::Field;
-use std::{cmp::min, collections::HashMap, sync::Arc, time::Duration};
+use std::{cmp::min, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{sync::RwLock, task::JoinHandle, time::sleep};
 use tracing::{error, info, instrument, warn};

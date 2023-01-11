@@ -162,36 +162,47 @@ impl App {
         starting_block: u64,
         cache_recovery_step_size: usize,
     ) -> AnyhowResult<()> {
-        match self.chain_subscriber.process_initial_events().await {
-            Err(SubscriberError::RootMismatch) => {
-                error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
-
-                // Create a new empty MerkleTree and wipe out cache db
-                self.tree_state = Arc::new(TimedRwLock::new(
-                    Duration::from_secs(lock_timeout),
-                    TreeState::new(
-                        self.contracts.tree_depth() + 1,
-                        self.contracts.initial_leaf(),
-                    ),
-                ));
+        let mut root_mismatch_count = 0;
+        loop {
+            if root_mismatch_count == 1 {
+                error!(cache_recovery_step_size, "Removing most recent cache.");
                 self.database
                     .delete_most_recent_cached_events(cache_recovery_step_size as i64)
                     .await?;
-
-                // Retry
-                self.chain_subscriber = EthereumSubscriber::new(
-                    starting_block,
-                    self.database.clone(),
-                    self.contracts.clone(),
-                    self.tree_state.clone(),
-                    self.identity_committer.clone(),
-                );
-                self.chain_subscriber.process_initial_events().await?;
+            } else if root_mismatch_count == 2 {
+                error!(cache_recovery_step_size, "Wiping out the entire cache.");
+                self.database.wipe_cache().await?;
+            } else if root_mismatch_count >= 3 {
+                return Err(SubscriberError::RootMismatch.into());
             }
-            Err(e) => return Err(e.into()),
-            Ok(_) => {}
+
+            match self.chain_subscriber.process_initial_events().await {
+                Err(SubscriberError::RootMismatch) => {
+                    error!("Error when rebuilding tree from cache.");
+                    root_mismatch_count += 1;
+
+                    // Create a new empty MerkleTree
+                    self.tree_state = Arc::new(TimedRwLock::new(
+                        Duration::from_secs(lock_timeout),
+                        TreeState::new(
+                            self.contracts.tree_depth() + 1,
+                            self.contracts.initial_leaf(),
+                        ),
+                    ));
+
+                    // Retry
+                    self.chain_subscriber = EthereumSubscriber::new(
+                        starting_block,
+                        self.database.clone(),
+                        self.contracts.clone(),
+                        self.tree_state.clone(),
+                        self.identity_committer.clone(),
+                    );
+                }
+                Err(e) => return Err(e.into()),
+                Ok(_) => return Ok(()),
+            }
         }
-        Ok(())
     }
 
     /// Queues an insert into the merkle tree.

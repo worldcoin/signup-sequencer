@@ -92,6 +92,7 @@ impl App {
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         let refresh_rate = options.ethereum.refresh_rate;
+        let cache_recovery_step_size = options.ethereum.cache_recovery_step_size;
 
         // Connect to Ethereum and Database
         let (database, (ethereum, contracts)) = {
@@ -138,12 +139,11 @@ impl App {
         };
 
         select! {
-            _ = app.load_initial_events(options.lock_timeout, options.starting_block) => {},
+            _ = app.load_initial_events(options.lock_timeout, options.starting_block, cache_recovery_step_size) => {},
             _ = await_shutdown() => return Err(anyhow!("Interrupted"))
         }
 
         // Basic sanity checks on the merkle tree
-        app.chain_subscriber.check_leaves().await;
         app.chain_subscriber.check_health().await;
 
         // Listen to Ethereum events
@@ -159,35 +159,49 @@ impl App {
         &mut self,
         lock_timeout: u64,
         starting_block: u64,
+        cache_recovery_step_size: usize,
     ) -> AnyhowResult<()> {
-        match self.chain_subscriber.process_initial_events().await {
-            Err(SubscriberError::RootMismatch) => {
-                error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
-
-                // Create a new empty MerkleTree and wipe out cache db
-                self.tree_state = Arc::new(TimedRwLock::new(
-                    Duration::from_secs(lock_timeout),
-                    TreeState::new(
-                        self.contracts.tree_depth() + 1,
-                        self.contracts.initial_leaf(),
-                    ),
-                ));
+        let mut root_mismatch_count = 0;
+        loop {
+            if root_mismatch_count == 1 {
+                error!(cache_recovery_step_size, "Removing most recent cache.");
+                self.database
+                    .delete_most_recent_cached_events(cache_recovery_step_size as i64)
+                    .await?;
+            } else if root_mismatch_count == 2 {
+                error!("Wiping out the entire cache.");
                 self.database.wipe_cache().await?;
-
-                // Retry
-                self.chain_subscriber = EthereumSubscriber::new(
-                    starting_block,
-                    self.database.clone(),
-                    self.contracts.clone(),
-                    self.tree_state.clone(),
-                    self.identity_committer.clone(),
-                );
-                self.chain_subscriber.process_initial_events().await?;
+            } else if root_mismatch_count >= 3 {
+                return Err(SubscriberError::RootMismatch.into());
             }
-            Err(e) => return Err(e.into()),
-            Ok(_) => {}
+
+            match self.chain_subscriber.process_initial_events().await {
+                Err(SubscriberError::RootMismatch) => {
+                    error!("Error when rebuilding tree from cache.");
+                    root_mismatch_count += 1;
+
+                    // Create a new empty MerkleTree
+                    self.tree_state = Arc::new(TimedRwLock::new(
+                        Duration::from_secs(lock_timeout),
+                        TreeState::new(
+                            self.contracts.tree_depth() + 1,
+                            self.contracts.initial_leaf(),
+                        ),
+                    ));
+
+                    // Retry
+                    self.chain_subscriber = EthereumSubscriber::new(
+                        starting_block,
+                        self.database.clone(),
+                        self.contracts.clone(),
+                        self.tree_state.clone(),
+                        self.identity_committer.clone(),
+                    );
+                }
+                Err(e) => return Err(e.into()),
+                Ok(_) => return Ok(()),
+            }
         }
-        Ok(())
     }
 
     /// Queues an insert into the merkle tree.

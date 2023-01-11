@@ -118,8 +118,13 @@ pub struct Options {
     pub max_backoff_time: Duration,
 
     /// Minimum number of blocks before events are considered confirmed.
-    #[clap(long, env, default_value = "10")]
+    #[clap(long, env, default_value = "35")]
     pub confirmation_blocks_delay: usize,
+
+    /// The number of most recent blocks to be removed from cache on root
+    /// mismatch
+    #[clap(long, env, default_value = "1000")]
+    pub cache_recovery_step_size: usize,
 
     /// Frequency of event fetching from Ethereum (seconds)
     #[clap(long, env, value_parser=duration_from_str, default_value="60")]

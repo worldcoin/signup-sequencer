@@ -292,42 +292,6 @@ impl EthereumSubscriber {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn check_leaves(&self) {
-        let tree = self.tree_state.read().await.unwrap_or_else(|e| {
-            error!(?e, "Failed to obtain tree lock in check_leaves.");
-            panic!("Sequencer potentially deadlocked, terminating.");
-        });
-        let next_leaf = tree.next_leaf;
-        let initial_leaf = self.contracts.initial_leaf();
-
-        let mut visited_identities = HashMap::<Field, usize>::new();
-        for (index, &leaf) in tree.merkle_tree.leaves().iter().enumerate() {
-            if index < next_leaf && leaf == initial_leaf {
-                error!(
-                    ?index,
-                    ?leaf,
-                    ?next_leaf,
-                    "Leaf in non-empty spot set to initial leaf value."
-                );
-            }
-            if index >= next_leaf && leaf != initial_leaf {
-                error!(
-                    ?index,
-                    ?leaf,
-                    ?next_leaf,
-                    "Leaf in empty spot not set to initial leaf value."
-                );
-            }
-            if leaf != initial_leaf {
-                if let Some(previous) = visited_identities.get(&leaf) {
-                    error!(?index, ?leaf, ?previous, "Leaf not unique.");
-                }
-            }
-            visited_identities.insert(leaf, index);
-        }
-    }
-
-    #[instrument(level = "debug", skip_all)]
     pub async fn check_health(&self) {
         let tree = self.tree_state.read().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in check_leaves.");

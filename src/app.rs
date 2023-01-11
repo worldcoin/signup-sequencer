@@ -144,7 +144,6 @@ impl App {
         }
 
         // Basic sanity checks on the merkle tree
-        app.chain_subscriber.check_leaves().await;
         app.chain_subscriber.check_health().await;
 
         // Listen to Ethereum events

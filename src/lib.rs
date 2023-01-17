@@ -10,7 +10,6 @@ mod identity_committer;
 pub mod identity_tree;
 pub mod server;
 mod timed_rw_lock;
-mod tx_sitter;
 mod utils;
 
 use crate::app::App;

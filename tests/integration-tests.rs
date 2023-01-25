@@ -49,11 +49,11 @@ async fn simulate_eth_reorg() {
         .await
         .expect("Failed to spawn ganache chain");
 
-    options.app.ethereum.ethereum_provider =
+    options.app.ethereum.read_options.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.contracts.semaphore_address = semaphore_address;
-    options.app.ethereum.signing_key = private_key;
-    options.app.ethereum.confirmation_blocks_delay = 5;
+    options.app.ethereum.write_options.signing_key = private_key;
+    options.app.ethereum.read_options.confirmation_blocks_delay = 5;
     options.app.ethereum.refresh_rate = Duration::from_secs(1);
 
     let (app, local_addr) = spawn_app(options.clone())
@@ -144,11 +144,11 @@ async fn insert_identity_and_proofs() {
         .await
         .expect("Failed to spawn ganache chain");
 
-    options.app.ethereum.ethereum_provider =
+    options.app.ethereum.read_options.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.contracts.semaphore_address = semaphore_address;
-    options.app.ethereum.signing_key = private_key;
-    options.app.ethereum.confirmation_blocks_delay = 2;
+    options.app.ethereum.write_options.signing_key = private_key;
+    options.app.ethereum.read_options.confirmation_blocks_delay = 2;
     options.app.ethereum.refresh_rate = Duration::from_secs(1);
 
     let (app, local_addr) = spawn_app(options.clone())

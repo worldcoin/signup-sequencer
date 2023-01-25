@@ -9,13 +9,13 @@ use crate::{
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
 use core::future;
-use std::sync::Arc;
 use ethers::{
     providers::Middleware,
     types::{Address, TransactionReceipt, U256},
 };
 use futures::{Stream, TryStreamExt};
 use semaphore::Field;
+use std::sync::Arc;
 use tracing::{error, info, instrument};
 
 pub type MemberAddedEvent = MemberAddedFilter;

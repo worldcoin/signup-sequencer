@@ -1,46 +1,15 @@
-mod write_dev;
 mod read;
+mod write_dev;
 
-pub use read::{ReadProvider, Log, EventError};
-use sqlx::Type;
+pub use read::{EventError, Log, ReadProvider};
 pub use write_dev::TxError;
 
-use crate::contracts::confirmed_log_query::{ConfirmedLogQuery, Error as CachingLogQueryError};
-use anyhow::{anyhow, Result as AnyhowResult};
-use chrono::{Duration as ChronoDuration, Utc};
-use clap::Parser;
-use ethers::{
-    abi::{Error as AbiError, RawLog},
-    contract::EthEvent,
-    core::k256::ecdsa::SigningKey,
-    middleware::{
-        gas_oracle::{
-            Cache, EthGasStation, Etherchain, GasNow, GasOracle, GasOracleMiddleware, Median,
-            Polygon, ProviderOracle,
-        },
-        SignerMiddleware,
-    },
-    providers::{Middleware, Provider, ProviderError},
-    signers::{LocalWallet, Signer, Wallet},
-    types::{
-        transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,
-        BlockNumber, Chain, Filter, Log as EthLog, TransactionReceipt, H160, H256, U256, U64,
-    },
-};
-use futures::{try_join, FutureExt, Stream, StreamExt, TryStreamExt};
-use once_cell::sync::Lazy;
-use prometheus::{
-    exponential_buckets, register_counter, register_gauge, register_histogram,
-    register_int_counter_vec, Counter, Gauge, Histogram, IntCounterVec,
-};
-use reqwest::Client as ReqwestClient;
-use std::{error::Error, num::ParseIntError, str::FromStr, sync::Arc, time::Duration, fmt::Write};
-use thiserror::Error;
-use tokio::time::timeout;
-use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
-use url::Url;
-
 use self::write_dev::WriteProvider;
+use anyhow::Result as AnyhowResult;
+use clap::Parser;
+use ethers::types::{transaction::eip2718::TypedTransaction, Address, TransactionReceipt, H160};
+use std::{num::ParseIntError, str::FromStr, sync::Arc, time::Duration};
+use tracing::instrument;
 
 fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
     Ok(Duration::from_secs(u64::from_str(value)?))
@@ -68,19 +37,20 @@ pub struct Options {
 
 #[derive(Clone, Debug)]
 pub struct Ethereum {
-    read_provider:             Arc<ReadProvider>,
-    write_provider:            WriteProvider,
-    address:                   H160,
+    read_provider:  Arc<ReadProvider>,
+    write_provider: WriteProvider,
+    address:        H160,
 }
 
 impl Ethereum {
     #[instrument(name = "Ethereum::new", level = "debug", skip_all)]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         let read_provider = ReadProvider::new(options.read_options).await?;
-        let write_provider = WriteProvider::new(read_provider.clone(), options.write_options).await?;
+        let write_provider =
+            WriteProvider::new(read_provider.clone(), options.write_options).await?;
 
-        let address = write_provider.address.clone();
-    
+        let address = write_provider.address;
+
         Ok(Self {
             read_provider: Arc::new(read_provider),
             write_provider,
@@ -98,7 +68,10 @@ impl Ethereum {
         self.address
     }
 
-    pub async fn send_transaction( &self, tx: TypedTransaction) -> Result<TransactionReceipt, TxError> {
+    pub async fn send_transaction(
+        &self,
+        tx: TypedTransaction,
+    ) -> Result<TransactionReceipt, TxError> {
         self.write_provider.send_transaction(tx).await
     }
 }

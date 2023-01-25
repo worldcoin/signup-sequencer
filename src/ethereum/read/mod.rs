@@ -1,14 +1,19 @@
-use std::{time::Duration, num::ParseIntError, str::FromStr};
+use self::{rpc_logger::RpcLogger, transport::Transport};
+use crate::contracts::confirmed_log_query::{ConfirmedLogQuery, Error as CachingLogQueryError};
 use anyhow::{anyhow, Result as AnyhowResult};
 use chrono::{Duration as ChronoDuration, Utc};
-use ethers::{contract::EthEvent, providers::{Provider, Middleware, ProviderError}, types::{U256, Chain, BlockNumber, BlockId, U64, Filter, Log as EthLog}, abi::{Error as AbiError, RawLog}};
-use futures::{try_join, FutureExt, Stream, StreamExt, TryStreamExt};
-use tracing::{info, error};
-use self::{transport::Transport, rpc_logger::RpcLogger};
-use crate::contracts::confirmed_log_query::{ConfirmedLogQuery, Error as CachingLogQueryError};
-use url::Url;
 use clap::Parser;
+use ethers::{
+    abi::{Error as AbiError, RawLog},
+    contract::EthEvent,
+    providers::{Middleware, Provider, ProviderError},
+    types::{BlockId, BlockNumber, Chain, Filter, Log as EthLog, U256, U64},
+};
+use futures::{try_join, FutureExt, Stream, StreamExt, TryStreamExt};
+use std::{num::ParseIntError, str::FromStr, time::Duration};
 use thiserror::Error;
+use tracing::{error, info};
+use url::Url;
 
 pub mod rpc_logger;
 pub mod transport;
@@ -16,7 +21,7 @@ pub mod transport;
 type InnerProvider = Provider<RpcLogger<Transport>>;
 
 // TODO: Log and metrics for signer / nonces.
-#[derive(Clone, Debug, PartialEq, Parser)]
+#[derive(Clone, Debug, PartialEq, Eq, Parser)]
 #[group(skip)]
 pub struct Options {
     /// Ethereum API Provider
@@ -44,11 +49,12 @@ fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
     Ok(Duration::from_secs(u64::from_str(value)?))
 }
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug)]
 pub struct ReadProvider {
-    inner: InnerProvider,
-    pub chain_id: U256,
-    pub legacy: bool,
+    inner:                     InnerProvider,
+    pub chain_id:              U256,
+    pub legacy:                bool,
     max_log_blocks:            usize,
     min_log_blocks:            usize,
     max_backoff_time:          Duration,
@@ -57,7 +63,7 @@ pub struct ReadProvider {
 
 impl ReadProvider {
     pub async fn new(options: Options) -> AnyhowResult<Self> {
-                // Connect to the Ethereum provider
+        // Connect to the Ethereum provider
         // TODO: Allow multiple providers with failover / broadcast.
         // TODO: Requests don't seem to process in parallel. Check if this is
         // a limitation client side or server side.
@@ -175,10 +181,10 @@ impl ReadProvider {
 
 impl Middleware for ReadProvider {
     type Error = <InnerProvider as Middleware>::Error;
-    type Provider = <InnerProvider as Middleware>::Provider;
     type Inner = InnerProvider;
+    type Provider = <InnerProvider as Middleware>::Provider;
 
-    fn inner(&self) ->  &Self::Inner {
+    fn inner(&self) -> &Self::Inner {
         &self.inner
     }
 }
@@ -190,7 +196,6 @@ pub struct Log<Event: EthEvent> {
     pub raw_log:           String,
     pub event:             Event,
 }
-
 
 #[derive(Debug, Error)]
 pub enum EventError {

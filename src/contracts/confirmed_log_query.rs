@@ -6,7 +6,7 @@ use ethers::{
     types::{Filter, Log, U64},
 };
 use futures::{Stream, StreamExt};
-use std::{cmp::max, sync::Arc, time::Duration};
+use std::{cmp::max, time::Duration};
 use thiserror::Error;
 use tokio::time::sleep;
 use tracing::{error, info};

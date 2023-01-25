@@ -1,10 +1,7 @@
+use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
+use super::read::ReadProvider;
 use anyhow::{anyhow, Result as AnyhowResult};
-use futures::try_join;
-use tracing::{info, error, instrument, info_span, debug_span, warn, Instrument};
-use tokio::time::timeout;
-use std::{error::Error, sync::Arc, time::Duration};
-use once_cell::sync::Lazy;
-use reqwest::Client as ReqwestClient;
+use clap::Parser;
 use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::{
@@ -21,18 +18,21 @@ use ethers::{
         BlockNumber, Chain, TransactionReceipt, H256, U64,
     },
 };
-use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
-use super::read::ReadProvider;
-use clap::Parser;
+use futures::try_join;
+use once_cell::sync::Lazy;
 use prometheus::{
     exponential_buckets, register_counter, register_gauge, register_histogram,
     register_int_counter_vec, Counter, Gauge, Histogram, IntCounterVec,
 };
+use reqwest::Client as ReqwestClient;
+use std::{error::Error, sync::Arc, time::Duration};
 use thiserror::Error;
+use tokio::time::timeout;
+use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
 
 mod estimator;
-mod min_gas_fees;
 mod gas_oracle_logger;
+mod min_gas_fees;
 
 // Code out the provider stack in types
 // Needed because of <https://github.com/gakonst/ethers-rs/issues/592>
@@ -92,7 +92,7 @@ pub struct Options {
     )]
     // NOTE: We abuse `Hash` here because it has the right `FromStr` implementation.
     pub signing_key: H256,
-    
+
     /// Minimum `max_fee_per_gas` to use in GWei. The default is for Polygon
     /// mainnet.
     #[clap(long, env, default_value = "1250.0")]
@@ -113,23 +113,23 @@ pub struct Options {
 
     /// Timeout for mining transaction (seconds).
     #[clap(long, env, default_value = "300")]
-    pub mine_timeout: u64,    
+    pub mine_timeout: u64,
 }
 
 #[derive(Clone, Debug)]
 pub struct WriteProvider {
-    inner: Arc<InnerProvider>,
-    pub address: Address,
-    legacy: bool,
-    send_timeout:              Duration,
-    mine_timeout:              Duration,
+    inner:        Arc<InnerProvider>,
+    pub address:  Address,
+    legacy:       bool,
+    send_timeout: Duration,
+    mine_timeout: Duration,
 }
 
 impl WriteProvider {
     pub async fn new(read_provider: ReadProvider, options: Options) -> AnyhowResult<Self> {
         let legacy = read_provider.legacy;
 
-                // Add a gas estimator with 10% and 10k gas bonus over provider.
+        // Add a gas estimator with 10% and 10k gas bonus over provider.
         // TODO: Use local EVM evaluation?
         let provider = Estimator::new(read_provider.clone(), 1.10, 10e3);
 
@@ -183,12 +183,12 @@ impl WriteProvider {
 
             // Sanity check. fetch current prices.
             let legacy_fee = oracle.fetch().await?;
-            if !read_provider.legacy {
+            if read_provider.legacy {
+                info!(%legacy_fee, "Fetched gas price (no eip1559)");
+            } else {
                 let (max_fee, priority_fee) = oracle.estimate_eip1559_fees().await?;
                 info!(%legacy_fee, %max_fee, %priority_fee, "Fetched gas prices");
-            } else {
-                info!(%legacy_fee, "Fetched gas price (no eip1559)");
-            };
+            }
 
             // Wrap in a middleware
             GasOracleMiddleware::new(provider, oracle)
@@ -202,7 +202,10 @@ impl WriteProvider {
             let address = signer.address();
 
             // Create signer middleware for provider.
-            let chain_id: u64 = read_provider.chain_id.try_into().map_err(|e| anyhow!("{}", e))?;
+            let chain_id: u64 = read_provider
+                .chain_id
+                .try_into()
+                .map_err(|e| anyhow!("{}", e))?;
             let signer = signer.with_chain_id(chain_id);
             let provider = SignerMiddleware::new(provider, signer);
 
@@ -241,7 +244,6 @@ impl WriteProvider {
             mine_timeout: Duration::from_secs(options.mine_timeout),
         })
     }
-
 
     #[instrument(level = "debug", skip_all)]
     pub async fn send_transaction(
@@ -375,7 +377,6 @@ impl WriteProvider {
         Ok(receipt)
     }
 }
-
 
 #[derive(Debug, Error)]
 pub enum TxError {

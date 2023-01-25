@@ -20,11 +20,11 @@ pub struct Options {
     #[clap(flatten)]
     pub read_options: read::Options,
 
-    #[cfg(not(feature = "oz_provider"))]
+    #[cfg(feature = "dev-provider")]
     #[clap(flatten)]
     pub write_options: write_dev::Options,
 
-    #[cfg(feature = "oz_provider")]
+    #[cfg(not(feature = "dev-provider"))]
     #[clap(flatten)]
     pub write_options: write_oz::Options,
 
@@ -49,11 +49,11 @@ impl Ethereum {
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         let read_provider = ReadProvider::new(options.read_options).await?;
 
-        #[cfg(not(feature = "oz_provider"))]
+        #[cfg(feature = "dev-provider")]
         let write_provider: Arc<dyn WriteProvider> =
             Arc::new(write_dev::Provider::new(read_provider.clone(), options.write_options).await?);
 
-        #[cfg(feature = "oz_provider")]
+        #[cfg(not(feature = "dev-provider"))]
         let write_provider: Arc<dyn WriteProvider> =
             Arc::new(write_oz::Provider::new(&options.write_options)?);
 

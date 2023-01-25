@@ -6,16 +6,12 @@ mod write_oz;
 pub use read::{EventError, Log, ReadProvider};
 pub use write::TxError;
 
-use self::{write::WriteProvider, write_dev::Provider};
+use self::{read::duration_from_str, write::WriteProvider, write_dev::Provider};
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use ethers::types::{transaction::eip2718::TypedTransaction, Address, TransactionReceipt};
-use std::{num::ParseIntError, str::FromStr, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tracing::instrument;
-
-fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
-    Ok(Duration::from_secs(u64::from_str(value)?))
-}
 
 // TODO: Log and metrics for signer / nonces.
 #[derive(Clone, Debug, PartialEq, Parser)]

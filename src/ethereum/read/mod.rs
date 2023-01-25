@@ -45,7 +45,7 @@ pub struct Options {
     pub confirmation_blocks_delay: usize,
 }
 
-fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
+pub fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
     Ok(Duration::from_secs(u64::from_str(value)?))
 }
 

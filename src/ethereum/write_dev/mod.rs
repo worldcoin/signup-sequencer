@@ -144,6 +144,7 @@ impl WriteProvider for Provider {
 }
 
 impl Provider {
+    #[allow(dead_code)]
     pub async fn new(read_provider: ReadProvider, options: Options) -> AnyhowResult<Self> {
         let legacy = read_provider.legacy;
 

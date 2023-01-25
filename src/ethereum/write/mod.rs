@@ -1,8 +1,9 @@
+use async_trait::async_trait;
 use ethers::{
     providers::ProviderError,
-    types::{TransactionReceipt, H256},
+    types::{transaction::eip2718::TypedTransaction, Address, TransactionReceipt, H256},
 };
-use std::error::Error;
+use std::{error::Error, fmt::Debug};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -27,4 +28,16 @@ pub enum TxError {
 
     #[error("Transaction failed.")]
     Failed(Box<TransactionReceipt>),
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[async_trait]
+pub trait WriteProvider: Sync + Send + Debug {
+    async fn send_transaction(
+        &self,
+        tx: TypedTransaction,
+        is_retry: bool,
+    ) -> Result<TransactionReceipt, TxError>;
+
+    fn address(&self) -> Address;
 }

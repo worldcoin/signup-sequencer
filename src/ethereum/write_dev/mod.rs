@@ -1,6 +1,10 @@
 use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
-use super::{read::ReadProvider, write::TxError};
+use super::{
+    read::ReadProvider,
+    write::{TxError, WriteProvider},
+};
 use anyhow::{anyhow, Result as AnyhowResult};
+use async_trait::async_trait;
 use clap::Parser;
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -116,15 +120,30 @@ pub struct Options {
 }
 
 #[derive(Clone, Debug)]
-pub struct WriteProvider {
+pub struct Provider {
     inner:        Arc<InnerProvider>,
-    pub address:  Address,
+    address:      Address,
     legacy:       bool,
     send_timeout: Duration,
     mine_timeout: Duration,
 }
 
-impl WriteProvider {
+#[async_trait]
+impl WriteProvider for Provider {
+    async fn send_transaction(
+        &self,
+        tx: TypedTransaction,
+        _is_retry: bool,
+    ) -> Result<TransactionReceipt, TxError> {
+        self.send_transaction(tx).await
+    }
+
+    fn address(&self) -> Address {
+        self.address
+    }
+}
+
+impl Provider {
     pub async fn new(read_provider: ReadProvider, options: Options) -> AnyhowResult<Self> {
         let legacy = read_provider.legacy;
 
@@ -245,10 +264,7 @@ impl WriteProvider {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn send_transaction(
-        &self,
-        tx: TypedTransaction,
-    ) -> Result<TransactionReceipt, TxError> {
+    async fn send_transaction(&self, tx: TypedTransaction) -> Result<TransactionReceipt, TxError> {
         self.send_transaction_unlogged(tx).await.map_err(|e| {
             error!(?e, "Transaction failed");
             e

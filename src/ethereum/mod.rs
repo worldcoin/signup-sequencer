@@ -6,10 +6,10 @@ mod write_oz;
 pub use read::{EventError, Log, ReadProvider};
 pub use write::TxError;
 
-use self::write_dev::WriteProvider;
+use self::{write::WriteProvider, write_dev::Provider};
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
-use ethers::types::{transaction::eip2718::TypedTransaction, Address, TransactionReceipt, H160};
+use ethers::types::{transaction::eip2718::TypedTransaction, Address, TransactionReceipt};
 use std::{num::ParseIntError, str::FromStr, sync::Arc, time::Duration};
 use tracing::instrument;
 
@@ -40,23 +40,19 @@ pub struct Options {
 #[derive(Clone, Debug)]
 pub struct Ethereum {
     read_provider:  Arc<ReadProvider>,
-    write_provider: WriteProvider,
-    address:        H160,
+    write_provider: Arc<dyn WriteProvider>,
 }
 
 impl Ethereum {
     #[instrument(name = "Ethereum::new", level = "debug", skip_all)]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         let read_provider = ReadProvider::new(options.read_options).await?;
-        let write_provider =
-            WriteProvider::new(read_provider.clone(), options.write_options).await?;
-
-        let address = write_provider.address;
+        let write_provider: Arc<dyn WriteProvider> =
+            Arc::new(Provider::new(read_provider.clone(), options.write_options).await?);
 
         Ok(Self {
             read_provider: Arc::new(read_provider),
             write_provider,
-            address,
         })
     }
 
@@ -66,14 +62,14 @@ impl Ethereum {
     }
 
     #[must_use]
-    pub const fn address(&self) -> Address {
-        self.address
+    pub fn address(&self) -> Address {
+        self.write_provider.address()
     }
 
     pub async fn send_transaction(
         &self,
         tx: TypedTransaction,
     ) -> Result<TransactionReceipt, TxError> {
-        self.write_provider.send_transaction(tx).await
+        self.write_provider.send_transaction(tx, false).await
     }
 }

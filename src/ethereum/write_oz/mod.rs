@@ -1,9 +1,9 @@
-use std::{sync::Arc, time::Duration};
-
 use self::openzeppelin::OzRelay;
+use anyhow::Result as AnyhowResult;
 use async_trait::async_trait;
 use clap::Parser;
 use ethers::types::{transaction::eip2718::TypedTransaction, Address, TransactionReceipt, H160};
+use std::{sync::Arc, time::Duration};
 
 use super::{read::duration_from_str, write::WriteProvider, TxError};
 
@@ -29,8 +29,9 @@ pub struct Options {
     )]
     pub oz_address: H160,
 
-    /// How long pending transactions should be retried
-    #[clap(long, env, value_parser=duration_from_str, default_value="60")]
+    /// For how long OpenZeppelin should track and retry the transaction (in
+    /// seconds) Default: 7 days (7 * 24 * 60 * 60 = 604800 seconds)
+    #[clap(long, env, value_parser=duration_from_str, default_value="604800")]
     pub oz_transaction_validity: Duration,
 }
 
@@ -42,13 +43,13 @@ pub struct Provider {
 
 impl Provider {
     #[allow(dead_code)]
-    pub fn new(options: &Options) -> Self {
-        let relay = OzRelay::new(&options.oz_api_key, &options.oz_api_secret);
+    pub fn new(options: &Options) -> AnyhowResult<Self> {
+        let relay = OzRelay::new(options)?;
 
-        Self {
+        Ok(Self {
             inner:   Arc::new(relay),
             address: options.oz_address,
-        }
+        })
     }
 }
 

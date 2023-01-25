@@ -1,3 +1,5 @@
+use anyhow::Result as AnyhowResult;
+use chrono::{DateTime, Utc};
 use cognitoauth::cognito_srp_auth::{auth, CognitoAuthInput};
 use ethers::{
     providers::ProviderError,
@@ -19,6 +21,8 @@ use tracing::{error, info, info_span, Instrument};
 
 use crate::ethereum::TxError;
 
+use super::Options;
+
 // Same for every project, taken from here: https://docs.openzeppelin.com/defender/api-auth
 const RELAY_TXS_URL: &str = "https://api.defender.openzeppelin.com/txs";
 const CLIENT_ID: &str = "1bpd19lcr33qvg5cr3oi79rdap";
@@ -36,18 +40,20 @@ static TX_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
 
 #[derive(Clone, Debug)]
 pub struct OzRelay {
-    api_key:      String,
-    api_secret:   String,
-    send_timeout: Duration,
+    api_key:              String,
+    api_secret:           String,
+    transaction_validity: chrono::Duration,
+    send_timeout:         Duration,
 }
 
 impl OzRelay {
-    pub fn new(api_key: &str, api_secret: &str) -> Self {
-        Self {
-            api_key:      api_key.to_string(),
-            api_secret:   api_secret.to_string(),
-            send_timeout: Duration::from_secs(60),
-        }
+    pub fn new(options: &Options) -> AnyhowResult<Self> {
+        Ok(Self {
+            api_key:              options.oz_api_key.to_string(),
+            api_secret:           options.oz_api_secret.to_string(),
+            transaction_validity: chrono::Duration::from_std(options.oz_transaction_validity)?,
+            send_timeout:         Duration::from_secs(60),
+        })
     }
 
     async fn query(&self, tx_id: &str) -> Result<SubmittedTransaction, Error> {
@@ -125,10 +131,11 @@ impl OzRelay {
 
         let tx: TypedTransaction = tx.into();
         let api_tx = Transaction {
-            to:        tx.to(),
-            value:     tx.value(),
-            gas_limit: tx.gas(),
-            data:      tx.data(),
+            to:          tx.to(),
+            value:       tx.value(),
+            gas_limit:   tx.gas(),
+            data:        tx.data(),
+            valid_until: Some(chrono::Utc::now() + self.transaction_validity),
         };
 
         let res = client
@@ -301,13 +308,15 @@ impl From<Error> for ProviderError {
 #[serde(rename_all = "camelCase")]
 pub struct Transaction<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub to:        Option<&'a NameOrAddress>,
+    pub to:          Option<&'a NameOrAddress>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub value:     Option<&'a U256>,
+    pub value:       Option<&'a U256>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub gas_limit: Option<&'a U256>,
+    pub gas_limit:   Option<&'a U256>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub data:      Option<&'a Bytes>,
+    pub data:        Option<&'a Bytes>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valid_until: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -323,6 +332,8 @@ pub struct SubmittedTransaction {
     pub gas_limit:      Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data:           Option<Bytes>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valid_until:    Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status:         Option<String>,
 }

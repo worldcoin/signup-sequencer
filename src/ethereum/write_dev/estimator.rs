@@ -21,7 +21,7 @@ impl<Inner: Middleware> FromErr<Inner::Error> for EstimatorError<Inner> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 /// Middleware used for setting gas limit. Uses the gas limit from
 /// the inner middleware, scales it by a factor and adds extra gas.
 pub struct Estimator<Inner> {

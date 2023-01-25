@@ -3,12 +3,13 @@ pub mod confirmed_log_query;
 
 use self::abi::{MemberAddedFilter, SemaphoreContract as Semaphore};
 use crate::{
-    ethereum::{Ethereum, EventError, Log, ProviderStack, TxError},
+    ethereum::{Ethereum, EventError, Log, ReadProvider, TxError},
     tx_sitter::Sitter,
 };
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
 use core::future;
+use std::sync::Arc;
 use ethers::{
     providers::Middleware,
     types::{Address, TransactionReceipt, U256},
@@ -46,9 +47,10 @@ pub struct Options {
 }
 
 pub struct Contracts {
-    ethereum:     Ethereum,
+    ethereum:     Arc<ReadProvider>,
+    address:      Address,
     sitter:       Sitter,
-    semaphore:    Semaphore<ProviderStack>,
+    semaphore:    Semaphore<ReadProvider>,
     group_id:     U256,
     tree_depth:   usize,
     initial_leaf: Field,
@@ -118,7 +120,8 @@ impl Contracts {
         // TODO: Some way to check the initial leaf
 
         Ok(Self {
-            ethereum,
+            ethereum: ethereum.provider().clone(),
+            address: ethereum.address(),
             sitter,
             semaphore,
             group_id: options.group_id,
@@ -173,10 +176,10 @@ impl Contracts {
     #[instrument(level = "debug", skip_all)]
     #[allow(dead_code)]
     pub async fn is_manager(&self) -> AnyhowResult<bool> {
-        info!(address = ?self.ethereum.address(), "My address");
+        info!(address = ?self.address, "My address");
         let manager = self.semaphore.manager().call().await?;
         info!(?manager, "Fetched manager address");
-        Ok(manager == self.ethereum.address())
+        Ok(manager == self.address)
     }
 
     #[instrument(level = "debug", skip_all)]

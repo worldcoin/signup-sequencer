@@ -6,7 +6,7 @@ mod write_oz;
 pub use read::{EventError, Log, ReadProvider};
 pub use write::TxError;
 
-use self::{read::duration_from_str, write::WriteProvider, write_dev::Provider};
+use self::{read::duration_from_str, write::WriteProvider};
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use ethers::types::{transaction::eip2718::TypedTransaction, Address, TransactionReceipt};
@@ -20,8 +20,13 @@ pub struct Options {
     #[clap(flatten)]
     pub read_options: read::Options,
 
+    #[cfg(not(feature = "oz_provider"))]
     #[clap(flatten)]
     pub write_options: write_dev::Options,
+
+    #[cfg(feature = "oz_provider")]
+    #[clap(flatten)]
+    pub write_options: write_oz::Options,
 
     /// The number of most recent blocks to be removed from cache on root
     /// mismatch
@@ -43,8 +48,14 @@ impl Ethereum {
     #[instrument(name = "Ethereum::new", level = "debug", skip_all)]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         let read_provider = ReadProvider::new(options.read_options).await?;
+
+        #[cfg(not(feature = "oz_provider"))]
         let write_provider: Arc<dyn WriteProvider> =
-            Arc::new(Provider::new(read_provider.clone(), options.write_options).await?);
+            Arc::new(write_dev::Provider::new(read_provider.clone(), options.write_options).await?);
+
+        #[cfg(feature = "oz_provider")]
+        let write_provider: Arc<dyn WriteProvider> =
+            Arc::new(write_oz::Provider::new(&options.write_options));
 
         Ok(Self {
             read_provider: Arc::new(read_provider),

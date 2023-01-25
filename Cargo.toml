@@ -17,6 +17,7 @@ license-file = "mit-license.md"
 
 [features]
 default = [ ]
+oz_provider = [ ]
 bench = ["criterion", "proptest"]
 mimalloc = ["cli-batteries/mimalloc"]
 

@@ -136,7 +136,7 @@ impl OzRelay {
             .body(json!(api_tx).to_string())
             .send()
             .await
-            .map_err(|_| Error::Authentication)?;
+            .map_err(|_| Error::RequestFailed)?;
 
         if res.status() == StatusCode::OK {
             let obj = res
@@ -263,7 +263,7 @@ async fn get_client(api_key: &str, api_secret: &str) -> eyre::Result<Client> {
         .access_token()
         .ok_or(eyre::eyre!("Authentication failed"))?;
 
-    let mut auth_value = HeaderValue::from_str(access_token)?;
+    let mut auth_value = HeaderValue::from_str(&format!("Bearer {access_token}"))?;
     auth_value.set_sensitive(true);
 
     let mut headers = reqwest::header::HeaderMap::new();
@@ -285,6 +285,8 @@ pub enum Error {
     Transport(#[from] ethers::providers::HttpClientError),
     #[error("Authentication error")]
     Authentication,
+    #[error("Request failed")]
+    RequestFailed,
     #[error("Unknown response")]
     UnknownResponse,
 }

@@ -2,10 +2,7 @@ mod abi;
 pub mod confirmed_log_query;
 
 use self::abi::{MemberAddedFilter, SemaphoreContract as Semaphore};
-use crate::{
-    ethereum::{Ethereum, EventError, Log, ReadProvider, TxError},
-    tx_sitter::Sitter,
-};
+use crate::ethereum::{Ethereum, EventError, Log, ReadProvider, TxError};
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
 use core::future;
@@ -15,7 +12,6 @@ use ethers::{
 };
 use futures::{Stream, TryStreamExt};
 use semaphore::Field;
-use std::sync::Arc;
 use tracing::{error, info, instrument};
 
 pub type MemberAddedEvent = MemberAddedFilter;
@@ -47,9 +43,7 @@ pub struct Options {
 }
 
 pub struct Contracts {
-    ethereum:     Arc<ReadProvider>,
-    address:      Address,
-    sitter:       Sitter,
+    ethereum:     Ethereum,
     semaphore:    Semaphore<ReadProvider>,
     group_id:     U256,
     tree_depth:   usize,
@@ -89,8 +83,6 @@ impl Contracts {
         }
         info!(?address, ?manager, "Connected to Semaphore contract");
 
-        let sitter = Sitter::new(ethereum.clone()).await?;
-
         // Make sure the group exists.
         let existing_tree_depth = semaphore.get_depth(options.group_id).call().await?;
         let actual_tree_depth = if existing_tree_depth == 0 {
@@ -106,7 +98,7 @@ impl Contracts {
                         options.initial_leaf.to_be_bytes().into(),
                     )
                     .tx;
-                sitter.send(tx).await?;
+                ethereum.send_transaction(tx).await?;
                 new_depth
             } else {
                 error!(group_id = ?options.group_id, "Group does not exist");
@@ -120,9 +112,7 @@ impl Contracts {
         // TODO: Some way to check the initial leaf
 
         Ok(Self {
-            ethereum: ethereum.provider().clone(),
-            address: ethereum.address(),
-            sitter,
+            ethereum,
             semaphore,
             group_id: options.group_id,
             tree_depth: actual_tree_depth,
@@ -147,6 +137,7 @@ impl Contracts {
 
     pub async fn confirmed_block_number(&self) -> Result<u64, EventError> {
         self.ethereum
+            .provider()
             .confirmed_block_number()
             .await
             .map(|num| num.as_u64())
@@ -169,6 +160,7 @@ impl Contracts {
             filter = filter.to_block(end_block);
         }
         self.ethereum
+            .provider()
             .fetch_events::<MemberAddedEvent>(&filter.filter)
             .try_filter(|event| future::ready(event.event.group_id == self.group_id))
     }
@@ -176,10 +168,10 @@ impl Contracts {
     #[instrument(level = "debug", skip_all)]
     #[allow(dead_code)]
     pub async fn is_manager(&self) -> AnyhowResult<bool> {
-        info!(address = ?self.address, "My address");
+        info!(address = ?self.ethereum.address(), "My address");
         let manager = self.semaphore.manager().call().await?;
         info!(?manager, "Fetched manager address");
-        Ok(manager == self.address)
+        Ok(manager == self.ethereum.address())
     }
 
     #[instrument(level = "debug", skip_all)]
@@ -189,8 +181,8 @@ impl Contracts {
         // Send create tx
         let commitment = U256::from(commitment.to_be_bytes());
         let receipt = self
-            .sitter
-            .send(self.semaphore.add_member(self.group_id, commitment).tx)
+            .ethereum
+            .send_transaction(self.semaphore.add_member(self.group_id, commitment).tx)
             .await?;
         Ok(receipt)
     }

@@ -1,5 +1,5 @@
 use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
-use super::read::ReadProvider;
+use super::{read::ReadProvider, write::TxError};
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
 use ethers::{
@@ -11,7 +11,7 @@ use ethers::{
         },
         SignerMiddleware,
     },
-    providers::{Middleware, ProviderError},
+    providers::Middleware,
     signers::{LocalWallet, Signer, Wallet},
     types::{
         transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,
@@ -25,8 +25,7 @@ use prometheus::{
     register_int_counter_vec, Counter, Gauge, Histogram, IntCounterVec,
 };
 use reqwest::Client as ReqwestClient;
-use std::{error::Error, sync::Arc, time::Duration};
-use thiserror::Error;
+use std::{sync::Arc, time::Duration};
 use tokio::time::timeout;
 use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
 
@@ -376,28 +375,4 @@ impl WriteProvider {
         }
         Ok(receipt)
     }
-}
-
-#[derive(Debug, Error)]
-pub enum TxError {
-    #[error("Error filling transaction: {0}")]
-    Fill(Box<dyn Error + Send + Sync + 'static>),
-
-    #[error("Timeout while sending transaction")]
-    SendTimeout,
-
-    #[error("Error sending transaction: {0}")]
-    Send(Box<dyn Error + Send + Sync + 'static>),
-
-    #[error("Timeout while waiting for confirmations")]
-    ConfirmationTimeout,
-
-    #[error("Error waiting for confirmations: {0}")]
-    Confirmation(ProviderError),
-
-    #[error("Transaction dropped from mempool.")]
-    Dropped(H256),
-
-    #[error("Transaction failed.")]
-    Failed(Box<TransactionReceipt>),
 }

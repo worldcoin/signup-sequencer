@@ -1,8 +1,10 @@
 mod read;
+mod write;
 mod write_dev;
+mod write_oz;
 
 pub use read::{EventError, Log, ReadProvider};
-pub use write_dev::TxError;
+pub use write::TxError;
 
 use self::write_dev::WriteProvider;
 use anyhow::Result as AnyhowResult;

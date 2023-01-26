@@ -182,20 +182,14 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
         (&Method::POST, "/inclusionProof") => {
             json_middleware(request, |request: InclusionProofRequest| {
                 let app = app.clone();
-                async move {
-                    app.inclusion_proof(request.group_id, &request.identity_commitment)
-                        .await
-                }
+                async move { app.inclusion_proof(&request.identity_commitment).await }
             })
             .await
         }
         (&Method::POST, "/insertIdentity") => {
             json_middleware(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
-                async move {
-                    app.insert_identity(request.group_id, request.identity_commitment)
-                        .await
-                }
+                async move { app.insert_identity(request.identity_commitment).await }
             })
             .await
         }

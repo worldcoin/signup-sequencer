@@ -5,7 +5,7 @@ use crate::{
     },
     ethereum::{EventError, Log},
     identity_committer::IdentityCommitter,
-    identity_tree::{SharedTreeState, TreeState},
+    identity_tree::{SharedTreeState, OldTreeState},
 };
 use futures::{StreamExt, TryStreamExt};
 use semaphore::Field;
@@ -271,7 +271,7 @@ impl EthereumSubscriber {
 
     #[allow(clippy::cognitive_complexity)]
     fn log_event_errors(
-        tree: &TreeState,
+        tree: &OldTreeState,
         initial_leaf: &Field,
         index: usize,
         leaf: &Field,

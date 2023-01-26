@@ -1,4 +1,4 @@
-use crate::identity_tree::Hash;
+use crate::identity_tree::{Hash, TreeUpdate};
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
 use ruint::{aliases::U256, uint};
@@ -219,6 +219,45 @@ impl Database {
         .bind(identity);
         let row = self.pool.fetch_optional(query).await?;
         Ok(row.is_some())
+    }
+
+    pub async fn insert_identity_if_not_duplicate(
+        &self,
+        identity: &Hash,
+    ) -> Result<Option<usize>, Error> {
+        let query = sqlx::query(
+            r#"INSERT INTO identities (commitment, leaf_index)
+                   VALUES ($1, SELECT COALESCE(MAX(leaf_index), 0) FROM identities)
+                   ON CONFLICT DO NOTHING
+                   RETURNING leaf_index;"#,
+        )
+        .bind(identity);
+        let row = self.pool.fetch_optional(query).await?;
+        let ret = Ok(row.map(|row| row.get::<i64, _>(0) as usize));
+        todo!("Is it all?");
+        ret
+    }
+
+    pub async fn get_updates_range(
+        &self,
+        from_index: usize,
+        to_index: usize,
+    ) -> Result<Vec<TreeUpdate>, Error> {
+        todo!();
+    }
+
+    pub async fn get_identity_index(&self, identity: &Hash) -> Result<Option<usize>, Error> {
+        let query = sqlx::query(
+            r#"SELECT leaf_index
+                   FROM identities
+                   WHERE commitment = $1
+                   LIMIT 1;"#,
+        )
+        .bind(identity);
+        let row = self.pool.fetch_optional(query).await?;
+        let ret = Ok(row.map(|row| row.get::<i64, _>(0) as usize));
+        todo!("Is it all?");
+        ret
     }
 
     pub async fn get_oldest_unprocessed_identity(&self) -> Result<Option<(usize, Hash)>, Error> {

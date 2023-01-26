@@ -12,6 +12,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::{debug, error, info, instrument, warn};
+use crate::identity_tree::TreeState;
 
 struct RunningInstance {
     #[allow(dead_code)]
@@ -63,14 +64,14 @@ pub struct IdentityCommitter {
     instance:   RwLock<Option<RunningInstance>>,
     database:   Arc<Database>,
     contracts:  Arc<Contracts>,
-    tree_state: SharedTreeState,
+    tree_state: Arc<TreeState>,
 }
 
 impl IdentityCommitter {
     pub fn new(
         database: Arc<Database>,
         contracts: Arc<Contracts>,
-        tree_state: SharedTreeState,
+        tree_state: Arc<TreeState>,
     ) -> Self {
         Self {
             instance: RwLock::new(None),
@@ -128,7 +129,7 @@ impl IdentityCommitter {
     async fn commit_identity(
         database: &Database,
         contracts: &Contracts,
-        tree_state: &SharedTreeState,
+        tree_state: &TreeState,
         group_id: usize,
         commitment: Hash,
     ) -> AnyhowResult<()> {

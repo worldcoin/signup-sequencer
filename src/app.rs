@@ -125,7 +125,6 @@ impl App {
             database.clone(),
             contracts.clone(),
             tree_state.clone(),
-            identity_committer.clone(),
         );
 
         // Sync with chain on start up
@@ -195,7 +194,6 @@ impl App {
                         self.database.clone(),
                         self.contracts.clone(),
                         self.tree_state.clone(),
-                        self.identity_committer.clone(),
                     );
                 }
                 Err(e) => return Err(e.into()),

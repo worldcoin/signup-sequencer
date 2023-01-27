@@ -1,7 +1,7 @@
 use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
 use super::{
     read::ReadProvider,
-    write::{TxError, WriteProvider},
+    write::{TransactionId, TxError, WriteProvider},
 };
 use anyhow::{anyhow, Result as AnyhowResult};
 use async_trait::async_trait;
@@ -19,7 +19,7 @@ use ethers::{
     signers::{LocalWallet, Signer, Wallet},
     types::{
         transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,
-        BlockNumber, Chain, TransactionReceipt, H256, U64,
+        BlockNumber, Chain, H256, U64,
     },
 };
 use futures::try_join;
@@ -134,7 +134,7 @@ impl WriteProvider for Provider {
         &self,
         tx: TypedTransaction,
         _is_retry: bool,
-    ) -> Result<TransactionReceipt, TxError> {
+    ) -> Result<TransactionId, TxError> {
         self.send_transaction(tx).await
     }
 
@@ -265,7 +265,7 @@ impl Provider {
     }
 
     #[instrument(level = "debug", skip_all)]
-    async fn send_transaction(&self, tx: TypedTransaction) -> Result<TransactionReceipt, TxError> {
+    async fn send_transaction(&self, tx: TypedTransaction) -> Result<TransactionId, TxError> {
         self.send_transaction_unlogged(tx).await.map_err(|e| {
             error!(?e, "Transaction failed");
             e
@@ -278,7 +278,7 @@ impl Provider {
     async fn send_transaction_unlogged(
         &self,
         tx: TypedTransaction,
-    ) -> Result<TransactionReceipt, TxError> {
+    ) -> Result<TransactionId, TxError> {
         // Convert to legacy transaction if required
         let mut tx = if self.legacy {
             TypedTransaction::Legacy(match tx {
@@ -390,6 +390,10 @@ impl Provider {
         if receipt.status != Some(U64::from(1_u64)) {
             return Err(TxError::Failed(Box::new(receipt)));
         }
-        Ok(receipt)
+
+        let transaction_id = receipt
+            .block_number
+            .map_or(String::new(), |b| b.to_string());
+        Ok(TransactionId(transaction_id))
     }
 }

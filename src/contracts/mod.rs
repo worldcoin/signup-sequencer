@@ -2,13 +2,13 @@ mod abi;
 pub mod confirmed_log_query;
 
 use self::abi::{MemberAddedFilter, SemaphoreContract as Semaphore};
-use crate::ethereum::{Ethereum, EventError, Log, ReadProvider, TxError};
+use crate::ethereum::{write::TransactionId, Ethereum, EventError, Log, ReadProvider, TxError};
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
 use core::future;
 use ethers::{
     providers::Middleware,
-    types::{Address, TransactionReceipt, U256},
+    types::{Address, U256},
 };
 use futures::{Stream, TryStreamExt};
 use semaphore::Field;
@@ -98,7 +98,7 @@ impl Contracts {
                         options.initial_leaf.to_be_bytes().into(),
                     )
                     .tx;
-                ethereum.send_transaction(tx).await?;
+                ethereum.send_transaction(tx, false).await?;
                 new_depth
             } else {
                 error!(group_id = ?options.group_id, "Group does not exist");
@@ -175,14 +175,21 @@ impl Contracts {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn insert_identity(&self, commitment: Field) -> Result<TransactionReceipt, TxError> {
+    pub async fn insert_identity(
+        &self,
+        commitment: Field,
+        is_retry: bool,
+    ) -> Result<TransactionId, TxError> {
         info!(%commitment, "Inserting identity in contract");
 
         // Send create tx
         let commitment = U256::from(commitment.to_be_bytes());
         let receipt = self
             .ethereum
-            .send_transaction(self.semaphore.add_member(self.group_id, commitment).tx)
+            .send_transaction(
+                self.semaphore.add_member(self.group_id, commitment).tx,
+                is_retry,
+            )
             .await?;
         Ok(receipt)
     }

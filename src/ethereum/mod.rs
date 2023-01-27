@@ -1,15 +1,18 @@
 mod read;
-mod write;
+pub mod write;
 mod write_dev;
 mod write_oz;
 
 pub use read::{EventError, Log, ReadProvider};
 pub use write::TxError;
 
-use self::{read::duration_from_str, write::WriteProvider};
+use self::{
+    read::duration_from_str,
+    write::{TransactionId, WriteProvider},
+};
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
-use ethers::types::{transaction::eip2718::TypedTransaction, Address, TransactionReceipt};
+use ethers::types::{transaction::eip2718::TypedTransaction, Address};
 use std::{sync::Arc, time::Duration};
 use tracing::instrument;
 
@@ -76,7 +79,8 @@ impl Ethereum {
     pub async fn send_transaction(
         &self,
         tx: TypedTransaction,
-    ) -> Result<TransactionReceipt, TxError> {
-        self.write_provider.send_transaction(tx, false).await
+        is_retry: bool,
+    ) -> Result<TransactionId, TxError> {
+        self.write_provider.send_transaction(tx, is_retry).await
     }
 }

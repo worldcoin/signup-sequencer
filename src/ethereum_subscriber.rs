@@ -1,10 +1,7 @@
 use crate::{
     contracts::{Contracts, MemberAddedEvent},
-    database::{
-        ConfirmedIdentityEvent, Database, Error as DatabaseError, IdentityConfirmationResult,
-    },
+    database::{ConfirmedIdentityEvent, Database, Error as DatabaseError},
     ethereum::{EventError, Log},
-    identity_committer::IdentityCommitter,
     identity_tree::{SharedTreeState, TreeState},
 };
 use futures::{StreamExt, TryStreamExt};
@@ -27,12 +24,11 @@ impl RunningInstance {
 }
 
 pub struct EthereumSubscriber {
-    instance:           RwLock<Option<RunningInstance>>,
-    starting_block:     u64,
-    database:           Arc<Database>,
-    contracts:          Arc<Contracts>,
-    tree_state:         SharedTreeState,
-    identity_committer: Arc<IdentityCommitter>,
+    instance:       RwLock<Option<RunningInstance>>,
+    starting_block: u64,
+    database:       Arc<Database>,
+    contracts:      Arc<Contracts>,
+    tree_state:     SharedTreeState,
 }
 
 impl EthereumSubscriber {
@@ -41,7 +37,6 @@ impl EthereumSubscriber {
         database: Arc<Database>,
         contracts: Arc<Contracts>,
         tree_state: SharedTreeState,
-        identity_committer: Arc<IdentityCommitter>,
     ) -> Self {
         Self {
             instance: RwLock::new(None),
@@ -49,7 +44,6 @@ impl EthereumSubscriber {
             database,
             contracts,
             tree_state,
-            identity_committer,
         }
     }
 
@@ -65,7 +59,6 @@ impl EthereumSubscriber {
         let database = self.database.clone();
         let tree_state = self.tree_state.clone();
         let contracts = self.contracts.clone();
-        let identity_committer = self.identity_committer.clone();
 
         let handle = tokio::spawn(async move {
             loop {
@@ -76,7 +69,6 @@ impl EthereumSubscriber {
                     tree_state.clone(),
                     contracts.clone(),
                     database.clone(),
-                    identity_committer.clone(),
                 )
                 .await;
                 match processed_block {
@@ -111,7 +103,6 @@ impl EthereumSubscriber {
             self.tree_state.clone(),
             self.contracts.clone(),
             self.database.clone(),
-            self.identity_committer.clone(),
         )
         .await?;
         self.starting_block = processed_block + 1;
@@ -123,22 +114,14 @@ impl EthereumSubscriber {
         tree_state: SharedTreeState,
         contracts: Arc<Contracts>,
         database: Arc<Database>,
-        identity_committer: Arc<IdentityCommitter>,
     ) -> Result<u64, Error> {
         let end_block = contracts
             .confirmed_block_number()
             .await
             .map_err(Error::Event)?;
 
-        Self::process_blockchain_events(
-            start_block,
-            end_block,
-            tree_state,
-            contracts,
-            database,
-            identity_committer,
-        )
-        .await
+        Self::process_blockchain_events(start_block, end_block, tree_state, contracts, database)
+            .await
     }
 
     async fn process_cached_events(
@@ -196,7 +179,6 @@ impl EthereumSubscriber {
         tree_state: SharedTreeState,
         contracts: Arc<Contracts>,
         database: Arc<Database>,
-        identity_committer: Arc<IdentityCommitter>,
     ) -> Result<u64, Error> {
         if start_block > end_block {
             return Ok(end_block);
@@ -213,8 +195,6 @@ impl EthereumSubscriber {
             error!(?e, "Failed to obtain tree lock in process_events.");
             panic!("Sequencer potentially deadlocked, terminating.");
         });
-
-        let mut wake_up_committer = false;
 
         loop {
             let event = match events.try_next().await.map_err(Error::Event)? {
@@ -249,21 +229,10 @@ impl EthereumSubscriber {
                 .map_err(Error::Database)?;
 
             // Remove from pending identities
-            let queue_status = database
-                .confirm_identity_and_retrigger_stale_recods(&identity.leaf)
+            database
+                .confirm_identity(&identity.leaf)
                 .await
                 .map_err(Error::Database)?;
-            if let IdentityConfirmationResult::RetriggerProcessing = queue_status {
-                wake_up_committer = true;
-            }
-        }
-
-        if wake_up_committer {
-            error!(
-                "event sequencing inconsistent between chain and identity committer. re-org \
-                 happened?"
-            );
-            identity_committer.notify_queued().await;
         }
 
         Ok(end_block)

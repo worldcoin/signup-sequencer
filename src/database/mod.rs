@@ -141,18 +141,35 @@ impl Database {
         Ok(())
     }
 
+    pub async fn attempt_identity_insertion(
+        &self,
+        group_id: usize,
+        commitment: &Hash,
+    ) -> Result<bool, Error> {
+        let query = sqlx::query(
+            r#"UPDATE pending_identities
+                   SET status = 'submission_attempt'
+                   WHERE group_id = $2 AND commitment = $3 AND status = 'pending';"#,
+        )
+        .bind(group_id as i64)
+        .bind(commitment);
+
+        let result = self.pool.execute(query).await?.rows_affected();
+        Ok(result > 0)
+    }
+
     pub async fn mark_identity_inserted(
         &self,
         group_id: usize,
         commitment: &Hash,
-        block_number: usize,
+        transaction_id: &str,
     ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"UPDATE pending_identities
-                   SET mined_in_block = $1
+                   SET transaction_id = $1, status = 'mined'
                    WHERE group_id = $2 AND commitment = $3;"#,
         )
-        .bind(block_number as i64)
+        .bind(transaction_id)
         .bind(group_id as i64)
         .bind(commitment);
 
@@ -176,19 +193,7 @@ impl Database {
         Ok(())
     }
 
-    pub async fn confirm_identity_and_retrigger_stale_recods(
-        &self,
-        commitment: &Hash,
-    ) -> Result<IdentityConfirmationResult, Error> {
-        let retrigger_query = sqlx::query(
-            r#"UPDATE pending_identities
-            SET mined_in_block = NULL, created_at = CURRENT_TIMESTAMP
-            WHERE created_at < (SELECT created_at FROM pending_identities WHERE commitment = $1 LIMIT 1)"#,
-        )
-        .bind(commitment);
-
-        let retrigger_result = self.pool.execute(retrigger_query).await?;
-
+    pub async fn confirm_identity(&self, commitment: &Hash) -> Result<(), Error> {
         let cleanup_query = sqlx::query(
             r#"DELETE FROM pending_identities
                 WHERE commitment = $1;"#,
@@ -196,12 +201,7 @@ impl Database {
         .bind(commitment);
 
         self.pool.execute(cleanup_query).await?;
-
-        if retrigger_result.rows_affected() > 0 {
-            Ok(IdentityConfirmationResult::RetriggerProcessing)
-        } else {
-            Ok(IdentityConfirmationResult::Done)
-        }
+        Ok(())
     }
 
     pub async fn pending_identity_exists(
@@ -229,7 +229,7 @@ impl Database {
         let query = sqlx::query(
             r#"SELECT group_id, commitment
                    FROM pending_identities
-                   WHERE mined_in_block IS NULL
+                   WHERE status <> 'mined'
                    ORDER BY created_at ASC
                    LIMIT 1;"#,
         );
@@ -353,11 +353,6 @@ impl Database {
 pub enum Error {
     #[error("database error")]
     InternalError(#[from] sqlx::Error),
-}
-
-pub enum IdentityConfirmationResult {
-    Done,
-    RetriggerProcessing,
 }
 
 pub struct ConfirmedIdentityEvent {

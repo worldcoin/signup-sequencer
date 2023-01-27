@@ -2,10 +2,14 @@ use self::openzeppelin::OzRelay;
 use anyhow::Result as AnyhowResult;
 use async_trait::async_trait;
 use clap::Parser;
-use ethers::types::{transaction::eip2718::TypedTransaction, Address, TransactionReceipt, H160};
+use ethers::types::{transaction::eip2718::TypedTransaction, Address, H160};
 use std::{sync::Arc, time::Duration};
 
-use super::{read::duration_from_str, write::WriteProvider, TxError};
+use super::{
+    read::duration_from_str,
+    write::{TransactionId, WriteProvider},
+    TxError,
+};
 
 mod openzeppelin;
 
@@ -59,7 +63,7 @@ impl WriteProvider for Provider {
         &self,
         tx: TypedTransaction,
         is_retry: bool,
-    ) -> Result<TransactionReceipt, TxError> {
+    ) -> Result<TransactionId, TxError> {
         self.inner.send_transaction(tx, is_retry).await
     }
 

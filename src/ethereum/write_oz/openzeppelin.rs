@@ -3,10 +3,7 @@ use chrono::{DateTime, Utc};
 use cognitoauth::cognito_srp_auth::{auth, CognitoAuthInput};
 use ethers::{
     providers::ProviderError,
-    types::{
-        transaction::eip2718::TypedTransaction, Bytes, NameOrAddress, TransactionReceipt, TxHash,
-        U256, U64,
-    },
+    types::{transaction::eip2718::TypedTransaction, Bytes, NameOrAddress, TxHash, U256},
 };
 use hyper::StatusCode;
 use once_cell::sync::Lazy;
@@ -19,7 +16,7 @@ use thiserror::Error;
 use tokio::{sync::Mutex, time::timeout};
 use tracing::{error, info, info_span, Instrument};
 
-use crate::ethereum::TxError;
+use crate::ethereum::{write::TransactionId, TxError};
 
 use super::Options;
 
@@ -169,7 +166,7 @@ impl OzRelay {
         &self,
         tx: TypedTransaction,
         is_retry: bool,
-    ) -> Result<TransactionReceipt, TxError> {
+    ) -> Result<TransactionId, TxError> {
         let mut tx = tx.clone();
         tx.set_gas(1_000_000);
 
@@ -190,14 +187,9 @@ impl OzRelay {
                     });
 
             if let Some(existing_transaction) = existing_transaction {
-                self.mine_transaction_id(existing_transaction.transaction_id.as_ref().unwrap())
-                    .await?;
-
-                // TODO: return something meaningful
-                return Ok(TransactionReceipt {
-                    block_number: Some(U64::from(10)),
-                    ..Default::default()
-                });
+                let transaction_id = existing_transaction.transaction_id.clone().unwrap();
+                self.mine_transaction_id(&transaction_id).await?;
+                return Ok(TransactionId(transaction_id));
             }
         }
 
@@ -226,12 +218,7 @@ impl OzRelay {
         info!(?tx_id, "Transaction submitted to OZ Relay");
 
         self.mine_transaction_id(&tx_id).await?;
-
-        // TODO: return something meaningful
-        Ok(TransactionReceipt {
-            block_number: Some(U64::from(10)),
-            ..Default::default()
-        })
+        Ok(TransactionId(tx_id))
     }
 }
 

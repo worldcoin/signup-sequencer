@@ -6,6 +6,15 @@ use ethers::{
 use std::{error::Error, fmt::Debug};
 use thiserror::Error;
 
+#[derive(Clone, Debug)]
+pub struct TransactionId(pub String);
+
+impl AsRef<str> for TransactionId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum TxError {
     #[error("Error filling transaction: {0}")]
@@ -37,7 +46,7 @@ pub trait WriteProvider: Sync + Send + Debug {
         &self,
         tx: TypedTransaction,
         is_retry: bool,
-    ) -> Result<TransactionReceipt, TxError>;
+    ) -> Result<TransactionId, TxError>;
 
     fn address(&self) -> Address;
 }

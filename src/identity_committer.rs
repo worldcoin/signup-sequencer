@@ -150,19 +150,22 @@ impl IdentityCommitter {
             }
         }
 
+        let is_retry = database
+            .attempt_identity_insertion(group_id, &commitment)
+            .await?;
+
         // Send Semaphore transaction
-        let receipt = contracts.insert_identity(commitment).await.map_err(|e| {
-            error!(?e, "Failed to insert identity to contract.");
-            e
-        })?;
+        let transaction_id = contracts
+            .insert_identity(commitment, is_retry)
+            .await
+            .map_err(|e| {
+                error!(?e, "Failed to insert identity to contract.");
+                e
+            })?;
 
-        let block = receipt
-            .block_number
-            .expect("Transaction is mined, block number must be present.");
-
-        info!("Identity submitted in block {}.", block);
+        info!("Identity submitted in transaction {:?}.", transaction_id);
         database
-            .mark_identity_inserted(group_id, &commitment, block.as_usize())
+            .mark_identity_inserted(group_id, &commitment, transaction_id.as_ref())
             .await?;
 
         // ethereum_subscriber module takes over from now. Once identity is found in a

@@ -28,8 +28,8 @@ impl OldTreeState {
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TreeUpdate {
-    leaf_index: usize,
-    element:    Hash,
+    pub leaf_index: usize,
+    pub element:    Hash,
 }
 
 impl TreeUpdate {
@@ -42,30 +42,30 @@ impl TreeUpdate {
     }
 }
 
-struct TreeVersion {
+struct TreeVersionData {
     tree:      PoseidonTree,
     diff:      Vec<TreeUpdate>,
     last_leaf: usize,
-    next:      Option<Arc<RwLock<TreeVersion>>>,
+    next:      Option<TreeVersion>,
 }
 
-impl TreeVersion {
-    fn new(tree_depth: usize, initial_leaf: Field) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(Self {
+impl TreeVersionData {
+    fn new(tree_depth: usize, initial_leaf: Field) -> Self {
+        Self {
             tree:      PoseidonTree::new(tree_depth, initial_leaf),
             diff:      Vec::new(),
             last_leaf: 0,
             next:      None,
-        }))
+        }
     }
 
-    fn next_version(&mut self) -> Arc<RwLock<Self>> {
-        let next = Arc::new(RwLock::new(TreeVersion {
+    fn next_version(&mut self) -> TreeVersion {
+        let next = TreeVersion::from(Self {
             tree:      self.tree.clone(),
             diff:      Vec::new(),
             last_leaf: self.last_leaf,
             next:      None,
-        }));
+        });
         self.next = Some(next.clone());
         next
     }
@@ -73,7 +73,7 @@ impl TreeVersion {
     async fn peek_next_update(&self) -> Option<TreeUpdate> {
         match &self.next {
             Some(next) => {
-                let next = next.read().await;
+                let next = next.0.read().await;
                 next.diff.first().cloned()
             }
             None => None,
@@ -82,16 +82,15 @@ impl TreeVersion {
 
     async fn apply_next_update(&mut self) {
         if let Some(next) = self.next.clone() {
-            let mut next = next.write().await;
+            let mut next = next.0.write().await;
             if let Some(update) = next.diff.first().cloned() {
-                self.tree.set(update.leaf_index, update.element);
-                self.diff.push(update);
+                self.update(update.leaf_index, update.element);
                 next.diff.remove(0);
             }
         }
     }
 
-    async fn update(&mut self, leaf_index: usize, element: Hash) {
+    fn update(&mut self, leaf_index: usize, element: Hash) {
         self.tree.set(leaf_index, element);
         self.diff.push(TreeUpdate {
             leaf_index,
@@ -101,31 +100,42 @@ impl TreeVersion {
     }
 }
 
-pub struct TreeState {
-    confirmed: Arc<RwLock<TreeVersion>>,
-    minted:    Arc<RwLock<TreeVersion>>,
-    latest:    Arc<RwLock<TreeVersion>>,
+#[derive(Clone)]
+pub struct TreeVersion(Arc<RwLock<TreeVersionData>>);
+
+impl From<TreeVersionData> for TreeVersion {
+    fn from(data: TreeVersionData) -> Self {
+        Self(Arc::new(RwLock::new(data)))
+    }
 }
 
-impl TreeState {
-    #[must_use]
-    pub async fn new(tree_depth: usize, initial_leaf: Field) -> TreeState {
-        let confirmed = TreeVersion::new(tree_depth, initial_leaf);
-        let minted = confirmed.write().await.next_version();
-        let latest = minted.write().await.next_version();
-        TreeState {
-            confirmed,
-            minted,
-            latest,
-        }
+impl TreeVersion {
+    fn new(tree_depth: usize, initial_leaf: Field) -> Self {
+        Self::from(TreeVersionData::new(tree_depth, initial_leaf))
     }
 
-    pub async fn set_leaf(&self, value: Hash, leaf_index: usize) {
-        self.latest.write().await.update(leaf_index, value).await;
+    pub async fn peek_next_update(&self) -> Option<TreeUpdate> {
+        let data = self.0.read().await;
+        data.peek_next_update().await
     }
 
-    pub async fn append_range(&self, updates: &[TreeUpdate]) {
-        let mut latest = self.latest.write().await;
+    pub async fn apply_next_update(&self) {
+        let mut data = self.0.write().await;
+        data.apply_next_update().await;
+    }
+
+    pub async fn update(&self, leaf_index: usize, element: Hash) {
+        let mut data = self.0.write().await;
+        data.update(leaf_index, element);
+    }
+
+    async fn next_version(&self) -> TreeVersion {
+        let mut data = self.0.write().await;
+        data.next_version()
+    }
+
+    pub async fn append_many(&self, updates: &[TreeUpdate]) {
+        let mut latest = self.0.write().await;
         let last_leaf = latest.last_leaf;
         updates
             .iter()
@@ -134,12 +144,34 @@ impl TreeState {
                 latest.update(update.leaf_index, update.element);
             });
     }
+}
 
-    pub async fn last_index(&self) -> usize {
-        self.latest.read().await.last_leaf
+pub struct TreeState {
+    confirmed: TreeVersion,
+    mined:     TreeVersion,
+    latest:    TreeVersion,
+}
+
+impl TreeState {
+    #[must_use]
+    pub async fn new(tree_depth: usize, initial_leaf: Field) -> TreeState {
+        let confirmed = TreeVersion::new(tree_depth, initial_leaf);
+        let mined = confirmed.next_version().await;
+        let latest = mined.next_version().await;
+        TreeState {
+            confirmed,
+            mined,
+            latest,
+        }
     }
 
-    pub async fn get_most_stable_proof(&self, leaf_idx: usize, commitment: &Hash) -> Option<()> {
-        todo!();
+    pub fn get_latest_tree(&self) -> TreeVersion {
+        self.latest.clone()
     }
+
+    pub fn get_mined_tree(&self) -> TreeVersion {
+        self.mined.clone()
+    }
+
+    pub async fn get_most_stable_proof(&self, leaf_index: usize, commitment: Hash) -> () {}
 }

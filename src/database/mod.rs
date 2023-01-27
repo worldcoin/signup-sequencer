@@ -238,6 +238,15 @@ impl Database {
         ret
     }
 
+    pub async fn mark_identity_submitted_to_contract(
+        &self,
+        identity: &Hash,
+        leaf_index: usize,
+        block_number: usize,
+    ) -> Result<(), Error> {
+        todo!()
+    }
+
     pub async fn get_updates_range(
         &self,
         from_index: usize,

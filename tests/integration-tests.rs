@@ -51,7 +51,7 @@ async fn simulate_eth_reorg() {
 
     options.app.ethereum.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
-    options.app.contracts.semaphore_address = semaphore_address;
+    options.app.contracts.identity_manager_address = semaphore_address;
     options.app.ethereum.signing_key = private_key;
     options.app.ethereum.confirmation_blocks_delay = 5;
     options.app.ethereum.refresh_rate = Duration::from_secs(1);
@@ -61,7 +61,7 @@ async fn simulate_eth_reorg() {
         .expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
-    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
+    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf_value);
     let client = Client::new();
 
     let provider = Provider::<Http>::try_from(chain.endpoint())
@@ -146,7 +146,7 @@ async fn insert_identity_and_proofs() {
 
     options.app.ethereum.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
-    options.app.contracts.semaphore_address = semaphore_address;
+    options.app.contracts.identity_manager_address = semaphore_address;
     options.app.ethereum.signing_key = private_key;
     options.app.ethereum.confirmation_blocks_delay = 2;
     options.app.ethereum.refresh_rate = Duration::from_secs(1);
@@ -156,14 +156,14 @@ async fn insert_identity_and_proofs() {
         .expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
-    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
+    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf_value);
     let client = Client::new();
     test_inclusion_proof(
         &uri,
         &client,
         0,
         &mut ref_tree,
-        &options.app.contracts.initial_leaf,
+        &options.app.contracts.initial_leaf_value,
         true,
     )
     .await;
@@ -172,7 +172,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &options.app.contracts.initial_leaf,
+        &options.app.contracts.initial_leaf_value,
         true,
     )
     .await;
@@ -201,7 +201,7 @@ async fn insert_identity_and_proofs() {
         &client,
         2,
         &mut ref_tree,
-        &options.app.contracts.initial_leaf,
+        &options.app.contracts.initial_leaf_value,
         true,
     )
     .await;

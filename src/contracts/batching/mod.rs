@@ -4,7 +4,6 @@ use self::abi::BatchingContract as ContractAbi;
 use crate::{
     contracts::{EventStream, IdentityManager, Options},
     ethereum::{Ethereum, EventError, ProviderStack, TxError},
-    tx_sitter::Sitter,
 };
 use async_trait::async_trait;
 use ethers::{
@@ -14,16 +13,14 @@ use ethers::{
 use semaphore::Field;
 use tracing::{error, info, instrument};
 
-// TODO [Ara] Remove the allows.
 /// A structure representing the interface to the batch-based identity manager
 /// contract.
+#[derive(Clone, Debug)]
 pub struct Contract {
-    #[allow(dead_code)]
-    ethereum: Ethereum,
-    #[allow(dead_code)]
-    sitter:   Sitter,
-    #[allow(dead_code)]
-    abi:      ContractAbi<ProviderStack>,
+    ethereum:           Ethereum,
+    abi:                ContractAbi<ProviderStack>,
+    initial_leaf_value: Field,
+    tree_depth:         usize,
 }
 
 #[async_trait]
@@ -57,27 +54,31 @@ impl IdentityManager for Contract {
             "Connected to the WorldID Identity Manager"
         );
 
-        let sitter = Sitter::new(ethereum.clone()).await?;
+        let initial_leaf_value = options.initial_leaf_value;
+        let tree_depth = options.tree_depth;
 
         let identity_manager = Self {
             ethereum,
-            sitter,
             abi,
+            initial_leaf_value,
+            tree_depth,
         };
 
         Ok(identity_manager)
     }
 
     fn tree_depth(&self) -> usize {
-        todo!()
+        self.tree_depth
     }
 
     fn initial_leaf_value(&self) -> Field {
-        todo!()
+        self.initial_leaf_value
     }
 
     fn group_id(&self) -> U256 {
-        todo!()
+        // The batch verifier only ever works with one group, so while we still have to
+        // contend with groups in the interface we can just hard-code a constant.
+        1.into()
     }
 
     async fn confirmed_block_number(&self) -> Result<u64, EventError> {
@@ -100,6 +101,7 @@ impl IdentityManager for Contract {
         &self,
         _identity_commitments: Vec<Field>,
     ) -> Result<TransactionReceipt, TxError> {
+        // TODO [Ara] Assert length of merkle tree proofs.
         todo!()
     }
 
@@ -114,8 +116,12 @@ impl IdentityManager for Contract {
     }
 
     #[instrument(level = "debug", skip_all)]
-    async fn assert_valid_root(&self, _root: Field) -> anyhow::Result<()> {
-        todo!()
+    async fn assert_valid_root(&self, root: Field) -> anyhow::Result<()> {
+        if self.abi.check_valid_root(root.into()).call().await? {
+            Ok(())
+        } else {
+            Err(anyhow::Error::msg("Root no longer valid"))
+        }
     }
 
     fn fetch_events(&self, _: u64, _: Option<u64>) -> Option<EventStream<'_>> {

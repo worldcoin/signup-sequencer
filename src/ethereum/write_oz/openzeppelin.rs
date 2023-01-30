@@ -63,15 +63,13 @@ impl OzRelay {
             .get(url)
             .send()
             .await
-            .map_err(|_| Error::Authentication)?;
+            .map_err(|_| Error::RequestFailed)?;
 
         let status = res.status();
         let item = res.json::<SubmittedTransaction>().await.map_err(|e| {
-            error!(?e, "error occurred");
-            Error::UnknownResponse
+            error!(?status, ?e, "error occurred, unknown response format");
+            Error::UnknownResponseFormat
         })?;
-
-        info!(?status, ?item, "query response");
 
         Ok(item)
     }
@@ -85,15 +83,13 @@ impl OzRelay {
             .get(RELAY_TXS_URL)
             .send()
             .await
-            .map_err(|_| Error::Authentication)?;
+            .map_err(|_| Error::RequestFailed)?;
 
         let status = res.status();
         let items = res.json::<Vec<SubmittedTransaction>>().await.map_err(|e| {
-            error!(?e, "error occurred");
-            Error::UnknownResponse
+            error!(?status, ?e, "error occurred, unknown response format");
+            Error::UnknownResponseFormat
         })?;
-
-        info!(?status, ?items, "list response");
 
         Ok(items)
     }
@@ -146,19 +142,18 @@ impl OzRelay {
             let obj = res
                 .json::<Value>()
                 .await
-                .map_err(|_| Error::UnknownResponse)?;
+                .map_err(|_| Error::UnknownResponseFormat)?;
             let id = obj
                 .get("transactionId")
-                .ok_or(Error::UnknownResponse)?
+                .ok_or(Error::MissingTransactionId)?
                 .as_str()
                 .unwrap();
             Ok(id.to_string())
         } else {
-            info!(?res, "response status");
             let text = res.text().await;
             info!(?text, "response error");
 
-            Err(Error::Authentication)
+            Err(Error::UnknownResponseFormat)
         }
     }
 
@@ -187,6 +182,8 @@ impl OzRelay {
                     });
 
             if let Some(existing_transaction) = existing_transaction {
+                info!(is_retry, "mining previously submitted transaction");
+
                 let transaction_id = existing_transaction.transaction_id.clone().unwrap();
                 self.mine_transaction_id(&transaction_id).await?;
                 return Ok(TransactionId(transaction_id));
@@ -281,8 +278,10 @@ pub enum Error {
     Authentication,
     #[error("Request failed")]
     RequestFailed,
-    #[error("Unknown response")]
-    UnknownResponse,
+    #[error("Unknown response format")]
+    UnknownResponseFormat,
+    #[error("Missing transaction id")]
+    MissingTransactionId,
 }
 
 impl From<Error> for ProviderError {

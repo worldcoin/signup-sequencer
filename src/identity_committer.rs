@@ -8,7 +8,10 @@ use anyhow::{anyhow, Result as AnyhowResult};
 use std::sync::Arc;
 use tokio::{
     select,
-    sync::{mpsc, mpsc::error::TrySendError, RwLock},
+    sync::{
+        mpsc::{self, error::TrySendError, Receiver},
+        RwLock,
+    },
     task::JoinHandle,
 };
 use tracing::{debug, error, info, instrument, warn};
@@ -93,35 +96,41 @@ impl IdentityCommitter {
         let contracts = self.contracts.clone();
         let tree_state = self.tree_state.clone();
         let handle = spawn_or_abort(async move {
-            loop {
-                while let Some((group_id, commitment)) =
-                    database.get_oldest_unprocessed_identity().await?
-                {
-                    if (shutdown_receiver.try_recv()).is_ok() {
-                        info!("Shutdown signal received, not processing remaining items.");
-                        return Ok(());
-                    }
-
-                    Self::commit_identity(&database, &contracts, &tree_state, group_id, commitment)
-                        .await?;
+            select! {
+                result = Self::process_identities(&database, &contracts, &tree_state, &mut wake_up_receiver) => {
+                    result?;
                 }
-
-                select! {
-                    _ = wake_up_receiver.recv() => {
-                        debug!("Woke up by a request.");
-                    }
-                    _ = shutdown_receiver.recv() => {
-                        info!("Woke up by shutdown signal, exiting.");
-                        return Ok(());
-                    }
+                _ = shutdown_receiver.recv() => {
+                    info!("Woke up by shutdown signal, exiting.");
+                    return Ok(());
                 }
             }
+            Ok(())
         });
         *instance = Some(RunningInstance {
             handle,
             wake_up_sender,
             shutdown_sender,
         });
+    }
+
+    async fn process_identities(
+        database: &Database,
+        contracts: &Contracts,
+        tree_state: &SharedTreeState,
+        wake_up_receiver: &mut Receiver<()>,
+    ) -> AnyhowResult<()> {
+        loop {
+            while let Some((group_id, commitment)) =
+                database.get_oldest_unprocessed_identity().await?
+            {
+                Self::commit_identity(database, contracts, tree_state, group_id, commitment)
+                    .await?;
+            }
+
+            wake_up_receiver.recv().await;
+            debug!("Woke up by a request.");
+        }
     }
 
     #[instrument(level = "info", skip_all)]

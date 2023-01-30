@@ -149,7 +149,7 @@ impl Database {
         let query = sqlx::query(
             r#"UPDATE pending_identities
                    SET status = 'submission_attempt'
-                   WHERE group_id = $2 AND commitment = $3 AND status = 'pending';"#,
+                   WHERE group_id = $1 AND commitment = $2 AND status = 'pending';"#,
         )
         .bind(group_id as i64)
         .bind(commitment);

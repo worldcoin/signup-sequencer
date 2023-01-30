@@ -155,7 +155,7 @@ impl Database {
         .bind(commitment);
 
         let result = self.pool.execute(query).await?.rows_affected();
-        Ok(result > 0)
+        Ok(result == 0)
     }
 
     pub async fn mark_identity_inserted(

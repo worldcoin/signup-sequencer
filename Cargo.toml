@@ -16,8 +16,8 @@ readme = "Readme.md"
 license-file = "mit-license.md"
 
 [features]
-default = ["dev-provider"]
-dev-provider = [ ]
+default = [ ]
+oz-provider = [ ]
 bench = ["criterion", "proptest"]
 mimalloc = ["cli-batteries/mimalloc"]
 

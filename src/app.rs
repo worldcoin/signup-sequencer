@@ -1,5 +1,6 @@
 use crate::{
-    contracts::{self, Contracts},
+    contracts,
+    contracts::{legacy::Contract as LegacyContract, IdentityManager, SharedIdentityManager},
     database::{self, Database},
     ethereum::{self, Ethereum},
     ethereum_subscriber::{Error as SubscriberError, EthereumSubscriber},
@@ -76,7 +77,7 @@ pub struct App {
     database:           Arc<Database>,
     #[allow(dead_code)]
     ethereum:           Ethereum,
-    contracts:          Arc<Contracts>,
+    identity_manager:   SharedIdentityManager,
     identity_committer: Arc<IdentityCommitter>,
     #[allow(dead_code)]
     chain_subscriber:   EthereumSubscriber,
@@ -92,14 +93,19 @@ impl App {
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         let refresh_rate = options.ethereum.refresh_rate;
+        let cache_recovery_step_size = options.ethereum.cache_recovery_step_size;
 
         // Connect to Ethereum and Database
-        let (database, (ethereum, contracts)) = {
+        let (database, (ethereum, identity_manager)) = {
             let db = Database::new(options.database);
 
             let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
-                let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
-                Ok((ethereum, Arc::new(contracts)))
+                let identity_manager = if cfg!(feature = "batching-contract") {
+                    panic!("The batching contract does not yet exist but was requested.");
+                } else {
+                    LegacyContract::new(options.contracts, ethereum.clone()).await?
+                };
+                Ok((ethereum, Arc::new(identity_manager)))
             });
 
             // Connect to both in parallel
@@ -111,39 +117,40 @@ impl App {
         // Poseidon tree depth is one more than the contract's tree depth
         let tree_state = Arc::new(TimedRwLock::new(
             Duration::from_secs(options.lock_timeout),
-            TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
+            TreeState::new(
+                identity_manager.tree_depth() + 1,
+                identity_manager.initial_leaf_value(),
+            ),
         ));
 
         let identity_committer = Arc::new(IdentityCommitter::new(
             database.clone(),
-            contracts.clone(),
+            identity_manager.clone(),
             tree_state.clone(),
         ));
         let chain_subscriber = EthereumSubscriber::new(
             options.starting_block,
             database.clone(),
-            contracts.clone(),
+            identity_manager.clone(),
             tree_state.clone(),
-            identity_committer.clone(),
         );
 
         // Sync with chain on start up
         let mut app = Self {
             database,
             ethereum,
-            contracts,
+            identity_manager,
             identity_committer,
             chain_subscriber,
             tree_state,
         };
 
         select! {
-            _ = app.load_initial_events(options.lock_timeout, options.starting_block) => {},
+            _ = app.load_initial_events(options.lock_timeout, options.starting_block, cache_recovery_step_size) => {},
             _ = await_shutdown() => return Err(anyhow!("Interrupted"))
         }
 
         // Basic sanity checks on the merkle tree
-        app.chain_subscriber.check_leaves().await;
         app.chain_subscriber.check_health().await;
 
         // Listen to Ethereum events
@@ -159,35 +166,48 @@ impl App {
         &mut self,
         lock_timeout: u64,
         starting_block: u64,
+        cache_recovery_step_size: usize,
     ) -> AnyhowResult<()> {
-        match self.chain_subscriber.process_initial_events().await {
-            Err(SubscriberError::RootMismatch) => {
-                error!("Error when rebuilding tree from cache. Retrying with db cache busted.");
-
-                // Create a new empty MerkleTree and wipe out cache db
-                self.tree_state = Arc::new(TimedRwLock::new(
-                    Duration::from_secs(lock_timeout),
-                    TreeState::new(
-                        self.contracts.tree_depth() + 1,
-                        self.contracts.initial_leaf(),
-                    ),
-                ));
+        let mut root_mismatch_count = 0;
+        loop {
+            if root_mismatch_count == 1 {
+                error!(cache_recovery_step_size, "Removing most recent cache.");
+                self.database
+                    .delete_most_recent_cached_events(cache_recovery_step_size as i64)
+                    .await?;
+            } else if root_mismatch_count == 2 {
+                error!("Wiping out the entire cache.");
                 self.database.wipe_cache().await?;
-
-                // Retry
-                self.chain_subscriber = EthereumSubscriber::new(
-                    starting_block,
-                    self.database.clone(),
-                    self.contracts.clone(),
-                    self.tree_state.clone(),
-                    self.identity_committer.clone(),
-                );
-                self.chain_subscriber.process_initial_events().await?;
+            } else if root_mismatch_count >= 3 {
+                return Err(SubscriberError::RootMismatch.into());
             }
-            Err(e) => return Err(e.into()),
-            Ok(_) => {}
+
+            match self.chain_subscriber.process_initial_events().await {
+                Err(SubscriberError::RootMismatch) => {
+                    error!("Error when rebuilding tree from cache.");
+                    root_mismatch_count += 1;
+
+                    // Create a new empty MerkleTree
+                    self.tree_state = Arc::new(TimedRwLock::new(
+                        Duration::from_secs(lock_timeout),
+                        TreeState::new(
+                            self.identity_manager.tree_depth() + 1,
+                            self.identity_manager.initial_leaf_value(),
+                        ),
+                    ));
+
+                    // Retry
+                    self.chain_subscriber = EthereumSubscriber::new(
+                        starting_block,
+                        self.database.clone(),
+                        self.identity_manager.clone(),
+                        self.tree_state.clone(),
+                    );
+                }
+                Err(e) => return Err(e.into()),
+                Ok(_) => return Ok(()),
+            }
         }
-        Ok(())
     }
 
     /// Queues an insert into the merkle tree.
@@ -202,11 +222,11 @@ impl App {
         group_id: usize,
         commitment: Hash,
     ) -> Result<(), ServerError> {
-        if U256::from(group_id) != self.contracts.group_id() {
+        if U256::from(group_id) != self.identity_manager.group_id() {
             return Err(ServerError::InvalidGroupId);
         }
 
-        if commitment == self.contracts.initial_leaf() {
+        if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
         }
@@ -255,11 +275,11 @@ impl App {
         group_id: usize,
         commitment: &Hash,
     ) -> Result<InclusionProofResponse, ServerError> {
-        if U256::from(group_id) != self.contracts.group_id() {
+        if U256::from(group_id) != self.identity_manager.group_id() {
             return Err(ServerError::InvalidGroupId);
         }
 
-        if commitment == &self.contracts.initial_leaf() {
+        if commitment == &self.identity_manager.initial_leaf_value() {
             return Err(ServerError::InvalidCommitment);
         }
 
@@ -298,7 +318,7 @@ impl App {
                 drop(tree);
 
                 // Verify the root on chain
-                if let Err(error) = self.contracts.assert_valid_root(root).await {
+                if let Err(error) = self.identity_manager.assert_valid_root(root).await {
                     error!(
                         computed_root = ?root,
                         ?error,

@@ -1,0 +1,73 @@
+use self::openzeppelin::OzRelay;
+use anyhow::Result as AnyhowResult;
+use async_trait::async_trait;
+use clap::Parser;
+use ethers::types::{transaction::eip2718::TypedTransaction, Address, H160};
+use std::{sync::Arc, time::Duration};
+
+use super::{
+    read::duration_from_str,
+    write::{TransactionId, WriteProvider},
+    TxError,
+};
+
+mod openzeppelin;
+
+// TODO: Log and metrics for signer / nonces.
+#[derive(Clone, Debug, Eq, PartialEq, Parser)]
+#[group(skip)]
+pub struct Options {
+    /// OpenZeppelin Defender API Key
+    #[clap(long, env)]
+    pub oz_api_key: String,
+
+    /// OpenZeppelin Defender API Secret
+    #[clap(long, env)]
+    pub oz_api_secret: String,
+
+    /// OpenZeppelin Defender API Secret
+    #[clap(
+        long,
+        env,
+        default_value = "0x30dcc24131223d4f8af69226e7b11b83e6a68b8b"
+    )]
+    pub oz_address: H160,
+
+    /// For how long OpenZeppelin should track and retry the transaction (in
+    /// seconds) Default: 7 days (7 * 24 * 60 * 60 = 604800 seconds)
+    #[clap(long, env, value_parser=duration_from_str, default_value="604800")]
+    pub oz_transaction_validity: Duration,
+}
+
+#[derive(Clone, Debug)]
+pub struct Provider {
+    inner:   Arc<OzRelay>,
+    address: Address,
+}
+
+impl Provider {
+    #[allow(dead_code)]
+    pub fn new(options: &Options) -> AnyhowResult<Self> {
+        let relay = OzRelay::new(options)?;
+
+        Ok(Self {
+            inner:   Arc::new(relay),
+            address: options.oz_address,
+        })
+    }
+}
+
+#[async_trait]
+impl WriteProvider for Provider {
+    async fn send_transaction(
+        &self,
+        tx: TypedTransaction,
+        only_once: bool,
+    ) -> Result<TransactionId, TxError> {
+        self.inner.send_transaction(tx, only_once).await
+    }
+
+    fn address(&self) -> Address {
+        self.address
+    }
+}

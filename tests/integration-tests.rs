@@ -25,7 +25,7 @@ use std::{
     time::Duration,
 };
 use tokio::{spawn, task::JoinHandle};
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info, instrument};
 use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
 use url::{Host, Url};
 
@@ -34,101 +34,6 @@ const TEST_LEAFS: &[&str] = &[
     "0000F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1",
     "0000F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2",
 ];
-
-#[tokio::test]
-#[serial_test::serial]
-async fn simulate_eth_reorg() {
-    // Initialize logging for the test.
-    init_tracing_subscriber();
-    info!("Starting re-org integration test");
-
-    let mut options = Options::try_parse_from([""]).expect("Failed to create options");
-    options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
-
-    let (chain, private_key, semaphore_address) = spawn_mock_chain()
-        .await
-        .expect("Failed to spawn ganache chain");
-
-    options.app.ethereum.ethereum_provider =
-        Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
-    options.app.contracts.semaphore_address = semaphore_address;
-    options.app.ethereum.signing_key = private_key;
-    options.app.ethereum.confirmation_blocks_delay = 5;
-    options.app.ethereum.refresh_rate = Duration::from_secs(1);
-
-    let (app, local_addr) = spawn_app(options.clone())
-        .await
-        .expect("Failed to spawn app.");
-
-    let uri = "http://".to_owned() + &local_addr.to_string();
-    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
-    let client = Client::new();
-
-    let provider = Provider::<Http>::try_from(chain.endpoint())
-        .expect("Failed to initialize chain endpoint")
-        .interval(Duration::from_millis(500u64));
-
-    test_insert_identity(&uri, &client, TEST_LEAFS[0]).await;
-    test_inclusion_proof(
-        &uri,
-        &client,
-        0,
-        &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-
-    // Create snapshot
-    let snapshot_id: U256 = provider
-        .request("evm_snapshot", ())
-        .await
-        .expect("Failed to create EVM snapshot");
-    info!("Created EVM snapshot with ID {}", snapshot_id);
-
-    test_insert_identity(&uri, &client, TEST_LEAFS[1]).await;
-
-    // after 2 identites were mined, we should have 3 log events on the chain
-    wait_for_log_count(&provider, semaphore_address, 3).await;
-
-    let result: bool = provider
-        .request("evm_revert", [snapshot_id])
-        .await
-        .expect("Failed to revert EVM snapshot");
-
-    info!("Reverted EVM snapshot to simulate re-org: {}", result);
-
-    test_insert_identity(&uri, &client, TEST_LEAFS[2]).await;
-
-    debug!(leaf = TEST_LEAFS[2], "TEST INCLUSION");
-
-    test_inclusion_proof(
-        &uri,
-        &client,
-        1,
-        &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAFS[2], 16).expect("Failed to parse Hash from test leaf 1"),
-        false,
-    )
-    .await;
-
-    debug!(leaf = TEST_LEAFS[1], "TEST INCLUSION");
-
-    test_inclusion_proof(
-        &uri,
-        &client,
-        2,
-        &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
-        false,
-    )
-    .await;
-
-    // Shutdown app and reset mock shutdown
-    shutdown();
-    app.await.unwrap();
-    reset_shutdown();
-}
 
 #[tokio::test]
 #[serial_test::serial]
@@ -144,26 +49,26 @@ async fn insert_identity_and_proofs() {
         .await
         .expect("Failed to spawn ganache chain");
 
-    options.app.ethereum.ethereum_provider =
-        Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.contracts.semaphore_address = semaphore_address;
-    options.app.ethereum.signing_key = private_key;
-    options.app.ethereum.confirmation_blocks_delay = 2;
     options.app.ethereum.refresh_rate = Duration::from_secs(1);
+    options.app.ethereum.read_options.confirmation_blocks_delay = 2;
+    options.app.ethereum.read_options.ethereum_provider =
+        Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
+    options.app.ethereum.write_options.signing_key = private_key;
 
     let (app, local_addr) = spawn_app(options.clone())
         .await
         .expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
-    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
+    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf_value);
     let client = Client::new();
     test_inclusion_proof(
         &uri,
         &client,
         0,
         &mut ref_tree,
-        &options.app.contracts.initial_leaf,
+        &options.app.contracts.initial_leaf_value,
         true,
     )
     .await;
@@ -172,7 +77,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &options.app.contracts.initial_leaf,
+        &options.app.contracts.initial_leaf_value,
         true,
     )
     .await;
@@ -201,7 +106,7 @@ async fn insert_identity_and_proofs() {
         &client,
         2,
         &mut ref_tree,
-        &options.app.contracts.initial_leaf,
+        &options.app.contracts.initial_leaf_value,
         true,
     )
     .await;

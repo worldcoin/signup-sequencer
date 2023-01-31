@@ -16,6 +16,10 @@ use url::Url;
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 
+static IDENTITY_PENDING: &str = "pending";
+static IDENTITY_SUBMITTING: &str = "submission_attempt";
+static IDENTITY_MINED: &str = "mined";
+
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 pub struct Options {
     /// Database server connection string.
@@ -132,11 +136,31 @@ impl Database {
         identity: &Hash,
     ) -> Result<(), Error> {
         let query = sqlx::query(
-            r#"INSERT INTO pending_identities (group_id, commitment)
-                   VALUES ($1, $2);"#,
+            r#"INSERT INTO pending_identities (group_id, commitment, status)
+                   VALUES ($1, $2, $3);"#,
         )
         .bind(group_id as i64)
-        .bind(identity);
+        .bind(identity)
+        .bind(IDENTITY_PENDING);
+        self.pool.execute(query).await?;
+        Ok(())
+    }
+
+    pub async fn start_identity_insertion(
+        &self,
+        group_id: usize,
+        commitment: &Hash,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"UPDATE pending_identities
+                   SET status = $4
+                   WHERE group_id = $1 AND commitment = $2 AND status = $3;"#,
+        )
+        .bind(group_id as i64)
+        .bind(commitment)
+        .bind(IDENTITY_PENDING) // previous status
+        .bind(IDENTITY_SUBMITTING); // new status
+
         self.pool.execute(query).await?;
         Ok(())
     }
@@ -145,16 +169,15 @@ impl Database {
         &self,
         group_id: usize,
         commitment: &Hash,
-        block_number: usize,
     ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"UPDATE pending_identities
-                   SET mined_in_block = $1
-                   WHERE group_id = $2 AND commitment = $3;"#,
+                   SET status = $3
+                   WHERE group_id = $1 AND commitment = $2;"#,
         )
-        .bind(block_number as i64)
         .bind(group_id as i64)
-        .bind(commitment);
+        .bind(commitment)
+        .bind(IDENTITY_MINED);
 
         self.pool.execute(query).await?;
         Ok(())
@@ -176,19 +199,7 @@ impl Database {
         Ok(())
     }
 
-    pub async fn confirm_identity_and_retrigger_stale_recods(
-        &self,
-        commitment: &Hash,
-    ) -> Result<IdentityConfirmationResult, Error> {
-        let retrigger_query = sqlx::query(
-            r#"UPDATE pending_identities
-            SET mined_in_block = NULL, created_at = CURRENT_TIMESTAMP
-            WHERE created_at < (SELECT created_at FROM pending_identities WHERE commitment = $1 LIMIT 1)"#,
-        )
-        .bind(commitment);
-
-        let retrigger_result = self.pool.execute(retrigger_query).await?;
-
+    pub async fn confirm_identity(&self, commitment: &Hash) -> Result<(), Error> {
         let cleanup_query = sqlx::query(
             r#"DELETE FROM pending_identities
                 WHERE commitment = $1;"#,
@@ -196,12 +207,7 @@ impl Database {
         .bind(commitment);
 
         self.pool.execute(cleanup_query).await?;
-
-        if retrigger_result.rows_affected() > 0 {
-            Ok(IdentityConfirmationResult::RetriggerProcessing)
-        } else {
-            Ok(IdentityConfirmationResult::Done)
-        }
+        Ok(())
     }
 
     pub async fn pending_identity_exists(
@@ -229,10 +235,11 @@ impl Database {
         let query = sqlx::query(
             r#"SELECT group_id, commitment
                    FROM pending_identities
-                   WHERE mined_in_block IS NULL
+                   WHERE status <> $1
                    ORDER BY created_at ASC
                    LIMIT 1;"#,
-        );
+        )
+        .bind(IDENTITY_MINED);
         let row = self.pool.fetch_optional(query).await?;
         Ok(row.map(|row| (row.get::<i64, _>(0).try_into().unwrap(), row.get(1))))
     }
@@ -324,6 +331,22 @@ impl Database {
         Ok(())
     }
 
+    pub async fn delete_most_recent_cached_events(
+        &self,
+        recovery_step_size: i64,
+    ) -> Result<(), Error> {
+        let max_block_number =
+            i64::try_from(self.get_block_number().await?).expect("block number must be i64");
+        self.pool
+            .execute(
+                sqlx::query("DELETE FROM logs WHERE block_index >= $1;")
+                    .bind(max_block_number - recovery_step_size),
+            )
+            .await
+            .map_err(Error::InternalError)?;
+        Ok(())
+    }
+
     pub async fn wipe_cache(&self) -> Result<(), Error> {
         self.pool
             .execute(sqlx::query("DELETE FROM logs;"))
@@ -337,11 +360,6 @@ impl Database {
 pub enum Error {
     #[error("database error")]
     InternalError(#[from] sqlx::Error),
-}
-
-pub enum IdentityConfirmationResult {
-    Done,
-    RetriggerProcessing,
 }
 
 pub struct ConfirmedIdentityEvent {

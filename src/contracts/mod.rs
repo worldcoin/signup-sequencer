@@ -1,221 +1,110 @@
-mod abi;
+//! Functionality for interacting with smart contracts deployed on chain.
+pub mod batching;
 pub mod confirmed_log_query;
+pub mod legacy;
 
-use self::abi::{MemberAddedFilter, SemaphoreContract as Semaphore};
-use crate::ethereum::{Ethereum, EventError, Log, ProviderStack, TxError};
-use anyhow::{anyhow, Result as AnyhowResult};
-use clap::Parser;
-use core::future;
-use ethers::{
-    providers::Middleware,
-    types::{Address, TransactionReceipt, U256},
+use crate::{
+    contracts::legacy::MemberAddedEvent,
+    ethereum::{write::TransactionId, Ethereum, EventError, Log, TxError},
 };
-use futures::{Stream, TryStreamExt};
+use async_trait::async_trait;
+use clap::Parser;
+use ethers::prelude::{Address, U256};
+use futures::Stream;
 use semaphore::Field;
-use tracing::{error, info, instrument};
+use std::{pin::Pin, sync::Arc};
 
-pub type MemberAddedEvent = MemberAddedFilter;
-
+/// Configuration options for the component responsible for interacting with the
+/// contract.
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 #[group(skip)]
 pub struct Options {
-    /// Semaphore contract address.
+    /// The address of the identity manager contract.
     #[clap(long, env, default_value = "174ee9b5fBb5Eb68B6C61032946486dD9c2Dc4b6")]
     pub semaphore_address: Address,
 
-    /// The Semaphore group id to use
+    // TODO This option should be removed.
+    /// The semaphore group identifier to use.
     #[clap(long, env, default_value = "1")]
     pub group_id: U256,
 
+    // TODO This option should be removed.
     /// When set, it will create the group if it does not exist with the given
     /// depth.
     #[clap(long, env)]
     pub create_group_depth: Option<usize>,
 
     /// Initial value of the Merkle tree leaves. Defaults to the initial value
-    /// in Semaphore.sol.
+    /// in the identity manager contract.
     #[clap(
         long,
         env,
         default_value = "0000000000000000000000000000000000000000000000000000000000000000"
     )]
-    pub initial_leaf: Field,
+    pub initial_leaf_value: Field,
 }
 
-pub struct Contracts {
-    ethereum:     Ethereum,
-    semaphore:    Semaphore<ProviderStack>,
-    group_id:     U256,
-    tree_depth:   usize,
-    initial_leaf: Field,
-}
+/// A trait representing an identity manager that is able to submit user
+/// identities to a contract located on the blockchain.
+#[async_trait]
+pub trait IdentityManager {
+    /// Create and configure a new instance of the identity manager.
+    ///
+    /// # Arguments
+    ///
+    /// - `options`: The options used to configure the identity manager.
+    /// - `ethereum`: A connector for an ethereum-compatible blockchain.
+    async fn new(options: Options, ethereum: Ethereum) -> anyhow::Result<Self>
+    where
+        Self: Sized;
 
-impl Contracts {
-    #[instrument(level = "debug", skip_all)]
-    pub async fn new(options: Options, ethereum: Ethereum) -> AnyhowResult<Self> {
-        // Sanity check the group id
-        if options.group_id == U256::zero() {
-            error!(group_id = ?options.group_id, "Invalid group id: must be greater than zero");
-            return Err(anyhow!("group id must be non-zero"));
-        }
+    /// Returns the depth of the merkle tree managed by this `IdentityManager`.
+    fn tree_depth(&self) -> usize;
 
-        // Sanity check the address
-        // TODO: Check that the contract is actually a Semaphore by matching bytecode.
-        let address = options.semaphore_address;
-        let code = ethereum.provider().get_code(address, None).await?;
-        if code.as_ref().is_empty() {
-            error!(
-                ?address,
-                "No contract code deployed at provided Semaphore address"
-            );
-            return Err(anyhow!("Invalid Semaphore address"));
-        }
+    /// Returns the value used for a newly initialized merkle tree leaf.
+    fn initial_leaf_value(&self) -> Field;
 
-        // Connect to Contract
-        let semaphore = Semaphore::new(options.semaphore_address, ethereum.provider().clone());
+    /// Returns the group identifier associated with the identity manager.
+    fn group_id(&self) -> U256;
 
-        // Test contract by calling a view function and make sure we are manager.
-        let manager = semaphore.manager().call().await?;
-        if manager != ethereum.address() {
-            error!(?manager, signer = ?ethereum.address(), "Signer is not the manager of the Semaphore contract");
-            // return Err(anyhow!("Signer is not manager"));
-            // TODO: If not manager, proceed in read-only mode.
-        }
-        info!(?address, ?manager, "Connected to Semaphore contract");
+    /// Returns the number of the latest block that is confirmed to have been
+    /// mined.
+    async fn confirmed_block_number(&self) -> Result<u64, EventError>;
 
-        // Make sure the group exists.
-        let existing_tree_depth = semaphore.get_depth(options.group_id).call().await?;
-        let actual_tree_depth = if existing_tree_depth == 0 {
-            if let Some(new_depth) = options.create_group_depth {
-                info!(
-                    "Group {} not found, creating it with depth {}",
-                    options.group_id, new_depth
-                );
-                let tx = semaphore
-                    .create_group(
-                        options.group_id,
-                        new_depth.try_into()?,
-                        options.initial_leaf.to_be_bytes().into(),
-                    )
-                    .tx;
-                ethereum.send_transaction(tx).await?;
-                new_depth
-            } else {
-                error!(group_id = ?options.group_id, "Group does not exist");
-                return Err(anyhow!("Group does not exist"));
-            }
-        } else {
-            info!(group_id = ?options.group_id, ?existing_tree_depth, "Semaphore group found.");
-            usize::from(existing_tree_depth)
-        };
+    /// Returns `true` if this `IdentityManager` acts via the manager address of
+    /// the on-chain contract it manages.
+    async fn is_owner(&self) -> anyhow::Result<bool>;
 
-        // TODO: Some way to check the initial leaf
-
-        Ok(Self {
-            ethereum,
-            semaphore,
-            group_id: options.group_id,
-            tree_depth: actual_tree_depth,
-            initial_leaf: options.initial_leaf,
-        })
-    }
-
-    #[must_use]
-    pub const fn group_id(&self) -> U256 {
-        self.group_id
-    }
-
-    #[must_use]
-    pub const fn tree_depth(&self) -> usize {
-        self.tree_depth
-    }
-
-    #[must_use]
-    pub const fn initial_leaf(&self) -> Field {
-        self.initial_leaf
-    }
-
-    pub async fn confirmed_block_number(&self) -> Result<u64, EventError> {
-        self.ethereum
-            .confirmed_block_number()
-            .await
-            .map(|num| num.as_u64())
-    }
-
-    #[allow(clippy::disallowed_methods)] // False positive from macro expansion.
-    #[instrument(level = "debug", skip(self))]
-    pub fn fetch_events(
+    /// Registers the provided `identity_commitments` with the contract on
+    /// chain.
+    async fn register_identities(
         &self,
-        starting_block: u64,
-        end_block: Option<u64>,
-    ) -> impl Stream<Item = Result<Log<MemberAddedEvent>, EventError>> + '_ {
-        // Start MemberAdded log event stream
-        let mut filter = self
-            .semaphore
-            .member_added_filter()
-            .from_block(starting_block);
+        identity_commitments: Vec<Field>,
+    ) -> Result<TransactionId, TxError>;
 
-        if let Some(end_block) = end_block {
-            filter = filter.to_block(end_block);
-        }
-        self.ethereum
-            .fetch_events::<MemberAddedEvent>(&filter.filter)
-            .try_filter(|event| future::ready(event.event.group_id == self.group_id))
-    }
+    /// Asserts that the provided `root` is the current root held by the
+    /// contract on the chain.
+    async fn assert_latest_root(&self, root: Field) -> anyhow::Result<()>;
 
-    #[instrument(level = "debug", skip_all)]
-    #[allow(dead_code)]
-    pub async fn is_manager(&self) -> AnyhowResult<bool> {
-        info!(address = ?self.ethereum.address(), "My address");
-        let manager = self.semaphore.manager().call().await?;
-        info!(?manager, "Fetched manager address");
-        Ok(manager == self.ethereum.address())
-    }
+    /// Asserts that the provided `root` is a valid root.
+    ///
+    /// A valid root is one that has not expired based on the time since it was
+    /// inserted into the history of roots on chain.
+    async fn assert_valid_root(&self, root: Field) -> anyhow::Result<()>;
 
-    #[instrument(level = "debug", skip_all)]
-    pub async fn insert_identity(&self, commitment: Field) -> Result<TransactionReceipt, TxError> {
-        info!(%commitment, "Inserting identity in contract");
-
-        // Send create tx
-        let commitment = U256::from(commitment.to_be_bytes());
-        let receipt = self
-            .ethereum
-            .send_transaction(self.semaphore.add_member(self.group_id, commitment).tx)
-            .await?;
-        Ok(receipt)
-    }
-
-    // TODO: Ideally we'd have a `get_root` function, but the contract doesn't
-    // support this.
-    #[instrument(level = "debug", skip_all)]
-    pub async fn assert_valid_root(&self, root: Field) -> AnyhowResult<()> {
-        // HACK: Abuse the `verifyProof` function.
-
-        let result = self
-            .semaphore
-            .verify_proof(
-                root.to_be_bytes().into(),
-                self.group_id,
-                U256::zero(),
-                U256::zero(),
-                U256::zero(),
-                [U256::zero(); 8],
-            )
-            .call()
-            .await
-            .expect_err("Proof is invalid");
-        // Result will be either `0x09bde339`: `InvalidProof()` (good) or
-        // `0x504570e3`: `InvalidRoot()` (bad).
-        // See <https://github.com/worldcoin/world-id-example-airdrop/blob/03de53d2cb016ddef28b26e8237e85b62ec385c7/src/Semaphore.sol#L141>
-        // See <https://sig.eth.samczsun.com/>
-        // HACK: There's really no good way to parse these errors
-        let error = result.to_string();
-        if error.contains("0x09bde339") {
-            return Ok(());
-        }
-        if error.contains("0x504570e3") {
-            return Err(anyhow!("Invalid root"));
-        }
-        Err(anyhow!("Error verifiying root: {}", result))
-    }
+    // TODO [Ara] Remove this once the OZ relay work is integrated.
+    /// Fetches member added events from the blockchain from a starting block to
+    /// an optionally specified end block.
+    ///
+    /// Such functionality need not be supported by all identity managers, and
+    /// these may return `None` to signify such a situation.
+    fn fetch_events(&self, starting_block: u64, end_block: Option<u64>) -> Option<EventStream>;
 }
+
+/// The type of the event stream used by the contracts to receive events from on
+/// chain.
+type EventStream<'a> =
+    Pin<Box<dyn Stream<Item = Result<Log<MemberAddedEvent>, EventError>> + Send + 'a>>;
+
+/// A type for an identity manager object that can be sent across threads.
+pub type SharedIdentityManager = Arc<dyn IdentityManager + Send + Sync>;

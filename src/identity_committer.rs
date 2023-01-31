@@ -1,5 +1,5 @@
 use crate::{
-    contracts::Contracts,
+    contracts::{IdentityManager, SharedIdentityManager},
     database::Database,
     identity_tree::{Hash, SharedTreeState},
     utils::spawn_or_abort,
@@ -8,7 +8,10 @@ use anyhow::{anyhow, Result as AnyhowResult};
 use std::sync::Arc;
 use tokio::{
     select,
-    sync::{mpsc, mpsc::error::TrySendError, RwLock},
+    sync::{
+        mpsc::{self, error::TrySendError, Receiver},
+        RwLock,
+    },
     task::JoinHandle,
 };
 use tracing::{debug, error, info, instrument, warn};
@@ -60,22 +63,22 @@ impl RunningInstance {
 /// a time. Spawning multiple worker threads will result in undefined behavior,
 /// including data duplication.
 pub struct IdentityCommitter {
-    instance:   RwLock<Option<RunningInstance>>,
-    database:   Arc<Database>,
-    contracts:  Arc<Contracts>,
-    tree_state: SharedTreeState,
+    instance:         RwLock<Option<RunningInstance>>,
+    database:         Arc<Database>,
+    identity_manager: SharedIdentityManager,
+    tree_state:       SharedTreeState,
 }
 
 impl IdentityCommitter {
     pub fn new(
         database: Arc<Database>,
-        contracts: Arc<Contracts>,
+        contracts: SharedIdentityManager,
         tree_state: SharedTreeState,
     ) -> Self {
         Self {
             instance: RwLock::new(None),
             database,
-            contracts,
+            identity_manager: contracts,
             tree_state,
         }
     }
@@ -90,32 +93,20 @@ impl IdentityCommitter {
         let (shutdown_sender, mut shutdown_receiver) = mpsc::channel(1);
         let (wake_up_sender, mut wake_up_receiver) = mpsc::channel(1);
         let database = self.database.clone();
-        let contracts = self.contracts.clone();
+        let identity_manager = self.identity_manager.clone();
         let tree_state = self.tree_state.clone();
         let handle = spawn_or_abort(async move {
-            loop {
-                while let Some((group_id, commitment)) =
-                    database.get_oldest_unprocessed_identity().await?
-                {
-                    if (shutdown_receiver.try_recv()).is_ok() {
-                        info!("Shutdown signal received, not processing remaining items.");
-                        return Ok(());
-                    }
+            select! {
+                result = Self::process_identities(&database, &*identity_manager, &tree_state, &mut wake_up_receiver) => {
+                    result?;
 
-                    Self::commit_identity(&database, &contracts, &tree_state, group_id, commitment)
-                        .await?;
                 }
-
-                select! {
-                    _ = wake_up_receiver.recv() => {
-                        debug!("Woke up by a request.");
-                    }
-                    _ = shutdown_receiver.recv() => {
-                        info!("Woke up by shutdown signal, exiting.");
-                        return Ok(());
-                    }
+                _ = shutdown_receiver.recv() => {
+                    info!("Woke up by shutdown signal, exiting.");
+                    return Ok(());
                 }
             }
+            Ok(())
         });
         *instance = Some(RunningInstance {
             handle,
@@ -124,10 +115,29 @@ impl IdentityCommitter {
         });
     }
 
+    async fn process_identities(
+        database: &Database,
+        identity_manager: &(dyn IdentityManager + Send + Sync),
+        tree_state: &SharedTreeState,
+        wake_up_receiver: &mut Receiver<()>,
+    ) -> AnyhowResult<()> {
+        loop {
+            while let Some((group_id, commitment)) =
+                database.get_oldest_unprocessed_identity().await?
+            {
+                Self::commit_identity(database, identity_manager, tree_state, group_id, commitment)
+                    .await?;
+            }
+
+            wake_up_receiver.recv().await;
+            debug!("Woke up by a request.");
+        }
+    }
+
     #[instrument(level = "info", skip_all)]
     async fn commit_identity(
         database: &Database,
-        contracts: &Contracts,
+        identity_manager: &(dyn IdentityManager + Send + Sync),
         tree_state: &SharedTreeState,
         group_id: usize,
         commitment: Hash,
@@ -150,19 +160,22 @@ impl IdentityCommitter {
             }
         }
 
-        // Send Semaphore transaction
-        let receipt = contracts.insert_identity(commitment).await.map_err(|e| {
-            error!(?e, "Failed to insert identity to contract.");
-            e
-        })?;
-
-        let block = receipt
-            .block_number
-            .expect("Transaction is mined, block number must be present.");
-
-        info!("Identity submitted in block {}.", block);
         database
-            .mark_identity_inserted(group_id, &commitment, block.as_usize())
+            .start_identity_insertion(group_id, &commitment)
+            .await?;
+
+        // Send Semaphore transaction
+        let transaction_id = identity_manager
+            .register_identities(vec![commitment])
+            .await
+            .map_err(|e| {
+                error!(?e, "Failed to insert identity to contract.");
+                e
+            })?;
+
+        info!("Identity submitted in transaction {:?}.", transaction_id);
+        database
+            .mark_identity_inserted(group_id, &commitment)
             .await?;
 
         // ethereum_subscriber module takes over from now. Once identity is found in a

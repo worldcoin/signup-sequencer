@@ -10,7 +10,7 @@ use tracing::{info, instrument, warn};
 
 use crate::{
     contracts,
-    contracts::{IdentityManager, legacy::Contract as LegacyContract, SharedIdentityManager},
+    contracts::{legacy::Contract as LegacyContract, IdentityManager, SharedIdentityManager},
     database::{self, Database},
     ethereum::{self, Ethereum},
     identity_committer::IdentityCommitter,
@@ -72,7 +72,6 @@ impl App {
     #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
-
         // Connect to Ethereum and Database
         let (database, (ethereum, identity_manager)) = {
             let db = Database::new(options.database);
@@ -153,7 +152,7 @@ impl App {
             self.tree_state
                 .get_proof(&TreeItem {
                     leaf_index: leaf_idx,
-                    scope:      ValidityScope::SequencerOnly,
+                    scope:      ValidityScope::Pending,
                 })
                 .await,
         ))

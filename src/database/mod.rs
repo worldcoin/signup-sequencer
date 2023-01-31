@@ -1,4 +1,4 @@
-use crate::identity_tree::{Hash, TreeItem, TreeUpdate};
+use crate::identity_tree::{Hash, TreeItem, TreeUpdate, ValidityScope};
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
 use ruint::{aliases::U256, uint};
@@ -131,16 +131,15 @@ impl Database {
         identity: &Hash,
     ) -> Result<Option<usize>, Error> {
         let query = sqlx::query(
-            r#"INSERT INTO identities (commitment, leaf_index)
-                   VALUES ($1, SELECT COALESCE(MAX(leaf_index), 0) FROM identities)
+            r#"INSERT INTO identities (commitment, leaf_index, status)
+                   VALUES ($1, (SELECT COALESCE(MAX(leaf_index), 0) FROM identities), $2)
                    ON CONFLICT DO NOTHING
                    RETURNING leaf_index;"#,
         )
-        .bind(identity);
+        .bind(identity)
+        .bind(<&str>::from(ValidityScope::Pending));
         let row = self.pool.fetch_optional(query).await?;
-        let ret = Ok(row.map(|row| row.get::<i64, _>(0) as usize));
-        todo!("Is it all?");
-        ret
+        Ok(row.map(|row| row.get::<i64, _>(0) as usize))
     }
 
     pub async fn mark_identity_submitted_to_contract(
@@ -156,7 +155,25 @@ impl Database {
         from_index: usize,
         to_index: usize,
     ) -> Result<Vec<TreeUpdate>, Error> {
-        todo!();
+        let query = sqlx::query(
+            r#"SELECT commitment, leaf_index, status
+                       FROM identities
+                       WHERE leaf_index >= $1 AND leaf_index <= $2
+                       ORDER BY leaf_index ASC;"#,
+        )
+        .bind(from_index as i64)
+        .bind(to_index as i64);
+        let rows = self.pool.fetch_all(query).await?;
+        rows.iter()
+            .map(|row| {
+                let element = row.get::<Hash, _>(0);
+                let leaf_index = row.get::<i64, _>(1) as usize;
+                Ok(TreeUpdate {
+                    leaf_index,
+                    element,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
     }
 
     pub async fn get_identity_index(&self, identity: &Hash) -> Result<Option<TreeItem>, Error> {
@@ -175,6 +192,6 @@ impl Database {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("database error")]
+    #[error(transparent)]
     InternalError(#[from] sqlx::Error),
 }

@@ -1,4 +1,4 @@
-use std::{str::FromStr, sync::Arc};
+use std::{fmt::Display, str::FromStr, sync::Arc};
 
 use semaphore::{
     merkle_tree::Hasher,
@@ -6,6 +6,7 @@ use semaphore::{
     Field,
 };
 use serde::Serialize;
+use thiserror::Error;
 use tokio::sync::RwLock;
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -156,22 +157,31 @@ pub struct TreeItem {
 
 #[derive(Clone, Copy, Serialize)]
 pub enum ValidityScope {
-    SequencerOnly,
-    MinedOnChain,
-    ConfirmedOnChain,
+    Pending,
+    Mined,
 }
 
-pub struct UnknownVariant;
+#[derive(Debug, Error)]
+#[error("unknown validity scope")]
+pub struct UnknownValidityScope;
 
 impl FromStr for ValidityScope {
-    type Err = UnknownVariant;
+    type Err = UnknownValidityScope;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "pending" => Ok(Self::SequencerOnly),
-            "mined" => Ok(Self::MinedOnChain),
-            "confirmed" => Ok(Self::ConfirmedOnChain),
-            _ => Err(UnknownVariant),
+            "pending" => Ok(Self::Pending),
+            "mined" => Ok(Self::Mined),
+            _ => Err(UnknownValidityScope),
+        }
+    }
+}
+
+impl From<ValidityScope> for &str {
+    fn from(scope: ValidityScope) -> Self {
+        match scope {
+            ValidityScope::Pending => "pending",
+            ValidityScope::Mined => "mined",
         }
     }
 }
@@ -186,21 +196,15 @@ pub struct InclusionProof {
 
 #[derive(Clone)]
 pub struct TreeState {
-    confirmed: TreeVersion,
-    mined:     TreeVersion,
-    latest:    TreeVersion,
+    mined:  TreeVersion,
+    latest: TreeVersion,
 }
 
 impl TreeState {
     pub async fn new(tree_depth: usize, initial_leaf: Field) -> TreeState {
-        let confirmed = TreeVersion::new(tree_depth, initial_leaf);
-        let mined = confirmed.next_version().await;
+        let mined = TreeVersion::new(tree_depth, initial_leaf);
         let latest = mined.next_version().await;
-        TreeState {
-            confirmed,
-            mined,
-            latest,
-        }
+        TreeState { mined, latest }
     }
 
     pub fn get_latest_tree(&self) -> TreeVersion {
@@ -211,15 +215,10 @@ impl TreeState {
         self.mined.clone()
     }
 
-    pub fn get_confirmed_tree(&self) -> TreeVersion {
-        self.confirmed.clone()
-    }
-
     pub async fn get_proof(&self, item: &TreeItem) -> InclusionProof {
         let tree = match item.scope {
-            ValidityScope::SequencerOnly => &self.latest,
-            ValidityScope::MinedOnChain => &self.mined,
-            ValidityScope::ConfirmedOnChain => &self.confirmed,
+            ValidityScope::Pending => &self.latest,
+            ValidityScope::Mined => &self.mined,
         };
         let (root, proof) = tree.get_proof(item.leaf_index).await;
         InclusionProof {

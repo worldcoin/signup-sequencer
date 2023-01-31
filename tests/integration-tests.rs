@@ -49,7 +49,7 @@ async fn insert_identity_and_proofs() {
         .await
         .expect("Failed to spawn ganache chain");
 
-    options.app.contracts.identity_manager_address = semaphore_address;
+    options.app.contracts.semaphore_address = semaphore_address;
     options.app.ethereum.refresh_rate = Duration::from_secs(1);
     options.app.ethereum.read_options.confirmation_blocks_delay = 2;
     options.app.ethereum.read_options.ethereum_provider =

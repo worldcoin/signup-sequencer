@@ -140,7 +140,7 @@ impl IdentityCommitter {
         update: &TreeUpdate,
     ) -> AnyhowResult<()> {
         // Send Semaphore transaction
-        let transaction_id = identity_manager
+        identity_manager
             .register_identities(vec![update.element])
             .await
             .map_err(|e| {
@@ -149,11 +149,7 @@ impl IdentityCommitter {
             })?;
 
         database
-            .mark_identity_submitted_to_contract(
-                &update.element,
-                update.leaf_index,
-                transaction_id.as_ref(),
-            )
+            .mark_identity_submitted_to_contract(&update.element, update.leaf_index)
             .await?;
 
         tree.apply_next_update().await;

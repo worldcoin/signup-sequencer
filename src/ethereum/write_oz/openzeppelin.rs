@@ -41,6 +41,7 @@ pub struct OzRelay {
     api_secret:           String,
     transaction_validity: chrono::Duration,
     send_timeout:         Duration,
+    mine_timeout:         Duration,
 }
 
 impl OzRelay {
@@ -50,6 +51,7 @@ impl OzRelay {
             api_secret:           options.oz_api_secret.to_string(),
             transaction_validity: chrono::Duration::from_std(options.oz_transaction_validity)?,
             send_timeout:         Duration::from_secs(60),
+            mine_timeout:         Duration::from_secs(60),
         })
     }
 
@@ -74,13 +76,13 @@ impl OzRelay {
         Ok(item)
     }
 
-    async fn list_transactions(&self) -> Result<Vec<SubmittedTransaction>, Error> {
+    async fn list_recent_transactions(&self) -> Result<Vec<SubmittedTransaction>, Error> {
         let client = get_client(&self.api_key, &self.api_secret)
             .await
             .map_err(|_| Error::Authentication)?;
 
         let res = client
-            .get(RELAY_TXS_URL)
+            .get(format!("{RELAY_TXS_URL}?limit=10"))
             .send()
             .await
             .map_err(|_| Error::RequestFailed)?;
@@ -94,7 +96,10 @@ impl OzRelay {
         Ok(items)
     }
 
-    async fn mine_transaction_id(&self, id: &str) -> Result<SubmittedTransaction, TxError> {
+    async fn mine_transaction_id_unchecked(
+        &self,
+        id: &str,
+    ) -> Result<SubmittedTransaction, TxError> {
         loop {
             let transaction = self.query(id).await.map_err(|error| {
                 error!(?error, "Failed to get transaction status");
@@ -105,13 +110,29 @@ impl OzRelay {
                 .as_ref()
                 .ok_or_else(|| TxError::Dropped(TxHash::default()))?;
 
-            if status == "mined" || status == "confirmed" || status == "failed" {
+            // Transaction statuses documented here:
+            // https://docs.openzeppelin.com/defender/relay-api-reference#transaction-status
+
+            // Terminal failure. The transaction won't be retried by OpenZeppelin. No reason
+            // provided
+            if status == "failed" {
+                return Err(TxError::Failed(None));
+            }
+
+            // Transaction mined successfully
+            if status == "mined" || status == "confirmed" {
                 return Ok(transaction);
             }
 
             info!("waiting 5 s to mine");
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
+    }
+
+    async fn mine_transaction_id(&self, id: &str) -> Result<SubmittedTransaction, TxError> {
+        timeout(self.mine_timeout, self.mine_transaction_id_unchecked(id))
+            .await
+            .map_err(|_| TxError::ConfirmationTimeout)?
     }
 
     async fn send_oz_transaction<T: Into<TypedTransaction> + Send + Sync>(
@@ -157,18 +178,28 @@ impl OzRelay {
         }
     }
 
+    /// When `only_once` is set to true, this method tries to be idempotent.
+    ///
+    /// Before submiting a transaction, it'll query `OpenZepellin` for the list
+    /// of 10 most recent transactions to see if it's not processing already
+    ///
+    /// `OpenZeppelin` doesn't provide guarantees on how fast transactions will
+    /// show up on the list of recent transactions ("order of seconds to be
+    /// safe"). Don't rely on `only_once` option in high frequency code.
+    /// This is mostly useful to recover from timeouts or app crashes that
+    /// take multiple seconds to restart.
     pub async fn send_transaction(
         &self,
         tx: TypedTransaction,
-        is_retry: bool,
+        only_once: bool,
     ) -> Result<TransactionId, TxError> {
         let mut tx = tx.clone();
         tx.set_gas(1_000_000);
 
-        if is_retry {
-            info!(is_retry, "checking if can resubmit");
+        if only_once {
+            info!("checking if can resubmit");
 
-            let existing_transactions = self.list_transactions().await.map_err(|e| {
+            let existing_transactions = self.list_recent_transactions().await.map_err(|e| {
                 error!(?e, "error occurred");
                 TxError::Send(Box::new(e))
             })?;
@@ -182,7 +213,7 @@ impl OzRelay {
                     });
 
             if let Some(existing_transaction) = existing_transaction {
-                info!(is_retry, "mining previously submitted transaction");
+                info!(only_once, "mining previously submitted transaction");
 
                 let transaction_id = existing_transaction.transaction_id.clone().unwrap();
                 self.mine_transaction_id(&transaction_id).await?;

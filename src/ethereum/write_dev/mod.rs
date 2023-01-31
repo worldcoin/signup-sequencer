@@ -133,7 +133,7 @@ impl WriteProvider for Provider {
     async fn send_transaction(
         &self,
         tx: TypedTransaction,
-        _is_retry: bool,
+        _only_once: bool,
     ) -> Result<TransactionId, TxError> {
         self.send_transaction(tx).await
     }
@@ -388,7 +388,7 @@ impl Provider {
 
         // Check receipt status for success
         if receipt.status != Some(U64::from(1_u64)) {
-            return Err(TxError::Failed(Box::new(receipt)));
+            return Err(TxError::Failed(Some(receipt)));
         }
 
         let transaction_id = receipt

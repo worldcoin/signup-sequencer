@@ -49,26 +49,26 @@ async fn insert_identity_and_proofs() {
         .await
         .expect("Failed to spawn ganache chain");
 
+    options.app.contracts.identity_manager_address = semaphore_address;
+    options.app.ethereum.refresh_rate = Duration::from_secs(1);
+    options.app.ethereum.read_options.confirmation_blocks_delay = 2;
     options.app.ethereum.read_options.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
-    options.app.contracts.semaphore_address = semaphore_address;
     options.app.ethereum.write_options.signing_key = private_key;
-    options.app.ethereum.read_options.confirmation_blocks_delay = 2;
-    options.app.ethereum.refresh_rate = Duration::from_secs(1);
 
     let (app, local_addr) = spawn_app(options.clone())
         .await
         .expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
-    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
+    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf_value);
     let client = Client::new();
     test_inclusion_proof(
         &uri,
         &client,
         0,
         &mut ref_tree,
-        &options.app.contracts.initial_leaf,
+        &options.app.contracts.initial_leaf_value,
         true,
     )
     .await;
@@ -77,7 +77,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &options.app.contracts.initial_leaf,
+        &options.app.contracts.initial_leaf_value,
         true,
     )
     .await;
@@ -106,7 +106,7 @@ async fn insert_identity_and_proofs() {
         &client,
         2,
         &mut ref_tree,
-        &options.app.contracts.initial_leaf,
+        &options.app.contracts.initial_leaf_value,
         true,
     )
     .await;

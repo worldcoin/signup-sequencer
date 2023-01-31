@@ -1,4 +1,4 @@
-use crate::identity_tree::{Hash, TreeUpdate};
+use crate::identity_tree::{Hash, TreeItem, TreeUpdate};
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
 use ruint::{aliases::U256, uint};
@@ -247,6 +247,14 @@ impl Database {
         todo!()
     }
 
+    pub async fn mark_identity_picked_up_for_submission(
+        &self,
+        identity: &Hash,
+        leaf_index: usize,
+    ) -> Result<(), Error> {
+        todo!()
+    }
+
     pub async fn get_updates_range(
         &self,
         from_index: usize,
@@ -255,7 +263,7 @@ impl Database {
         todo!();
     }
 
-    pub async fn get_identity_index(&self, identity: &Hash) -> Result<Option<usize>, Error> {
+    pub async fn get_identity_index(&self, identity: &Hash) -> Result<Option<TreeItem>, Error> {
         let query = sqlx::query(
             r#"SELECT leaf_index
                    FROM identities
@@ -264,9 +272,8 @@ impl Database {
         )
         .bind(identity);
         let row = self.pool.fetch_optional(query).await?;
-        let ret = Ok(row.map(|row| row.get::<i64, _>(0) as usize));
+        // let ret = Ok(row.map(|row| row.get::<i64, _>(0) as usize));
         todo!("Is it all?");
-        ret
     }
 
     pub async fn get_oldest_unprocessed_identity(&self) -> Result<Option<(usize, Hash)>, Error> {

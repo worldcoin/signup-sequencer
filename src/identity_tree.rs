@@ -1,9 +1,12 @@
 use crate::timed_rw_lock::TimedRwLock;
 use semaphore::{
     merkle_tree::Hasher,
-    poseidon_tree::{PoseidonHash, PoseidonTree},
+    poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
     Field,
 };
+use std::str::FromStr;
+
+use serde::Serialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -134,18 +137,69 @@ impl TreeVersion {
         data.next_version()
     }
 
-    pub async fn append_many(&self, updates: &[TreeUpdate]) {
-        let mut latest = self.0.write().await;
-        let last_leaf = latest.last_leaf;
+    pub async fn append_many_fresh(&self, updates: &[TreeUpdate]) {
+        let mut data = self.0.write().await;
+        let last_leaf = data.last_leaf;
         updates
             .iter()
             .filter(|update| update.leaf_index > last_leaf)
             .for_each(|update| {
-                latest.update(update.leaf_index, update.element);
+                data.update(update.leaf_index, update.element);
             });
+    }
+
+    pub async fn last_leaf(&self) -> usize {
+        let data = self.0.read().await;
+        data.last_leaf
+    }
+
+    async fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
+        let tree = self.0.read().await;
+        (
+            tree.tree.root(),
+            tree.tree
+                .proof(leaf)
+                .expect("impossible, tree depth mismatch between database and runtime"),
+        )
     }
 }
 
+pub struct TreeItem {
+    pub scope:      ValidityScope,
+    pub leaf_index: usize,
+}
+
+#[derive(Clone, Copy, Serialize)]
+pub enum ValidityScope {
+    SequencerOnly,
+    MinedOnChain,
+    ConfirmedOnChain,
+}
+
+pub struct UnknownVariant;
+
+impl FromStr for ValidityScope {
+    type Err = UnknownVariant;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pending" => Ok(Self::SequencerOnly),
+            "mined" => Ok(Self::MinedOnChain),
+            "confirmed" => Ok(Self::ConfirmedOnChain),
+            _ => Err(UnknownVariant),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InclusionProof {
+    pub validity_scope: ValidityScope,
+    pub root:           Field,
+    pub proof:          Proof,
+}
+
+#[derive(Clone)]
 pub struct TreeState {
     confirmed: TreeVersion,
     mined:     TreeVersion,
@@ -153,7 +207,6 @@ pub struct TreeState {
 }
 
 impl TreeState {
-    #[must_use]
     pub async fn new(tree_depth: usize, initial_leaf: Field) -> TreeState {
         let confirmed = TreeVersion::new(tree_depth, initial_leaf);
         let mined = confirmed.next_version().await;
@@ -173,5 +226,21 @@ impl TreeState {
         self.mined.clone()
     }
 
-    pub async fn get_most_stable_proof(&self, leaf_index: usize, commitment: Hash) -> () {}
+    pub fn get_confirmed_tree(&self) -> TreeVersion {
+        self.confirmed.clone()
+    }
+
+    pub async fn get_proof(&self, item: &TreeItem) -> InclusionProof {
+        let tree = match item.scope {
+            ValidityScope::SequencerOnly => &self.latest,
+            ValidityScope::MinedOnChain => &self.mined,
+            ValidityScope::ConfirmedOnChain => &self.confirmed,
+        };
+        let (root, proof) = tree.get_proof(item.leaf_index).await;
+        InclusionProof {
+            validity_scope: item.scope,
+            root,
+            proof,
+        }
+    }
 }

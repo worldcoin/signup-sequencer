@@ -1,53 +1,39 @@
+use std::{sync::Arc, time::Duration};
+
+use anyhow::Result as AnyhowResult;
+use clap::Parser;
+use futures::TryFutureExt;
+use hyper::StatusCode;
+use serde::Serialize;
+use tokio::try_join;
+use tracing::{error, info, instrument, warn};
+
 use crate::{
     contracts::{self, Contracts},
     database::{self, Database},
     ethereum::{self, Ethereum},
     ethereum_subscriber::{Error as SubscriberError, EthereumSubscriber},
     identity_committer::IdentityCommitter,
-    identity_tree::{Hash, OldTreeState, SharedTreeState, TreeState},
+    identity_tree::{
+        Hash, InclusionProof, OldTreeState, SharedTreeState, TreeItem, TreeState, ValidityScope,
+    },
     server::{Error as ServerError, ToResponseCode},
     timed_rw_lock::TimedRwLock,
 };
-use anyhow::{anyhow, Result as AnyhowResult};
-use clap::Parser;
-use cli_batteries::await_shutdown;
-use ethers::types::U256;
-use futures::TryFutureExt;
-use hyper::StatusCode;
-use semaphore::{poseidon_tree::Proof, Field};
-use serde::{ser::SerializeStruct, Serialize, Serializer};
-use std::{sync::Arc, time::Duration};
-use tokio::{select, try_join};
-use tracing::{error, info, instrument, warn};
 
-pub enum InclusionProofResponse {
-    Proof { root: Field, proof: Proof },
-    Pending,
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct InclusionProofResponse(InclusionProof);
+
+impl From<InclusionProof> for InclusionProofResponse {
+    fn from(value: InclusionProof) -> Self {
+        Self(value)
+    }
 }
 
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
-        match self {
-            Self::Proof { .. } => StatusCode::OK,
-            Self::Pending => StatusCode::ACCEPTED,
-        }
-    }
-}
-
-impl Serialize for InclusionProofResponse {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Self::Proof { root, proof } => {
-                let mut state = serializer.serialize_struct("InclusionProof", 2)?;
-                state.serialize_field("root", root)?;
-                state.serialize_field("proof", proof)?;
-                state.end()
-            }
-            Self::Pending => serializer.serialize_str("pending"),
-        }
+        StatusCode::OK
     }
 }
 
@@ -116,10 +102,13 @@ impl App {
             OldTreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
         ));
 
+        let merkle_tree =
+            TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()).await;
+
         let identity_committer = Arc::new(IdentityCommitter::new(
             database.clone(),
             contracts.clone(),
-            tree_state.clone(),
+            merkle_tree.clone(),
         ));
         let chain_subscriber = EthereumSubscriber::new(
             options.starting_block,
@@ -137,7 +126,7 @@ impl App {
             identity_committer,
             chain_subscriber,
             old_tree_state: tree_state,
-            merkle_tree: TreeState::new(/* TODO */ 20, contracts.initial_leaf()).await,
+            merkle_tree,
         };
 
         // TODO Rethink these with new arch
@@ -214,7 +203,10 @@ impl App {
     /// Will return `Err` if identity is already queued, or in the tree, or the
     /// queue malfunctions.
     #[instrument(level = "debug", skip_all)]
-    pub async fn insert_identity(&self, commitment: Hash) -> Result<(), ServerError> {
+    pub async fn insert_identity(
+        &self,
+        commitment: Hash,
+    ) -> Result<InclusionProofResponse, ServerError> {
         if commitment == self.contracts.initial_leaf() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
@@ -234,11 +226,19 @@ impl App {
 
         self.identity_committer.notify_queued().await;
 
-        Ok(())
+        Ok(InclusionProofResponse::from(
+            self.merkle_tree
+                .get_proof(&TreeItem {
+                    leaf_index: leaf_idx,
+                    scope:      ValidityScope::SequencerOnly,
+                })
+                .await,
+        ))
     }
 
     async fn sync_tree_to(&self, leaf_idx: usize) -> Result<(), ServerError> {
-        let last_index = self.merkle_tree.last_index().await;
+        let tree = self.merkle_tree.get_latest_tree();
+        let last_index = tree.last_leaf().await;
         if leaf_idx <= last_index {
             return Ok(()); // Someone sync'd first, we're up to date
         }
@@ -246,7 +246,7 @@ impl App {
             .database
             .get_updates_range(last_index + 1, leaf_idx)
             .await?;
-        self.merkle_tree.append_range(&identities).await;
+        tree.append_many_fresh(&identities).await;
         Ok(())
     }
 
@@ -262,22 +262,15 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        let leaf_idx = self
+        let item = self
             .database
             .get_identity_index(commitment)
             .await?
             .ok_or(ServerError::InvalidCommitment)?;
 
-        let proof = self
-            .merkle_tree
-            .get_most_stable_proof(leaf_idx, commitment)
-            .await;
+        let proof = self.merkle_tree.get_proof(&item).await;
 
-        // Ok(InclusionProofResponse {
-        //     proof,
-        //     leaf_index: leaf_idx,
-        // });
-        todo!();
+        Ok(InclusionProofResponse(proof))
     }
 
     /// # Errors

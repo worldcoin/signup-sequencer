@@ -1,17 +1,19 @@
-use crate::{
-    contracts::Contracts,
-    database::Database,
-    identity_tree::{Hash, SharedTreeState, TreeState, TreeUpdate, TreeVersion},
-    utils::spawn_or_abort,
-};
-use anyhow::{anyhow, Result as AnyhowResult};
 use std::sync::Arc;
+
+use anyhow::{anyhow, Result as AnyhowResult};
 use tokio::{
     select,
     sync::{mpsc, mpsc::error::TrySendError, RwLock},
     task::JoinHandle,
 };
 use tracing::{debug, error, info, instrument, warn};
+
+use crate::{
+    contracts::Contracts,
+    database::Database,
+    identity_tree::{TreeState, TreeUpdate, TreeVersion},
+    utils::spawn_or_abort,
+};
 
 struct RunningInstance {
     #[allow(dead_code)]
@@ -63,15 +65,11 @@ pub struct IdentityCommitter {
     instance:   RwLock<Option<RunningInstance>>,
     database:   Arc<Database>,
     contracts:  Arc<Contracts>,
-    tree_state: Arc<TreeState>,
+    tree_state: TreeState,
 }
 
 impl IdentityCommitter {
-    pub fn new(
-        database: Arc<Database>,
-        contracts: Arc<Contracts>,
-        tree_state: Arc<TreeState>,
-    ) -> Self {
+    pub fn new(database: Arc<Database>, contracts: Arc<Contracts>, tree_state: TreeState) -> Self {
         Self {
             instance: RwLock::new(None),
             database,

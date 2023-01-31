@@ -44,10 +44,7 @@ impl IdentityManager for Contract {
         }
 
         // Connect to the running batching contract.
-        let abi = ContractAbi::new(
-            options.semaphore_address,
-            ethereum.provider().clone(),
-        );
+        let abi = ContractAbi::new(options.semaphore_address, ethereum.provider().clone());
 
         let owner = abi.owner().call().await?;
         if owner != ethereum.address() {

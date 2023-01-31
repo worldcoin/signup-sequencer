@@ -160,8 +160,8 @@ impl IdentityCommitter {
             }
         }
 
-        let is_retry = database
-            .attempt_identity_insertion(group_id, &commitment)
+        database
+            .start_identity_insertion(group_id, &commitment)
             .await?;
 
         // Send Semaphore transaction

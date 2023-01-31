@@ -32,11 +32,11 @@ pub enum TxError {
     #[error("Error waiting for confirmations: {0}")]
     Confirmation(ProviderError),
 
-    #[error("Transaction dropped from mempool.")]
+    #[error("Transaction dropped from mempool: {0}.")]
     Dropped(H256),
 
-    #[error("Transaction failed.")]
-    Failed(Box<TransactionReceipt>),
+    #[error("Transaction failed: {0:?}.")]
+    Failed(Option<TransactionReceipt>),
 }
 
 #[allow(clippy::module_name_repetitions)]
@@ -45,7 +45,7 @@ pub trait WriteProvider: Sync + Send + Debug {
     async fn send_transaction(
         &self,
         tx: TypedTransaction,
-        is_retry: bool,
+        only_once: bool,
     ) -> Result<TransactionId, TxError>;
 
     fn address(&self) -> Address;

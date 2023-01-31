@@ -16,6 +16,10 @@ use url::Url;
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 
+static IDENTITY_PENDING: &str = "pending";
+static IDENTITY_SUBMITTING: &str = "submission_attempt";
+static IDENTITY_MINED: &str = "mined";
+
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 pub struct Options {
     /// Database server connection string.
@@ -132,30 +136,33 @@ impl Database {
         identity: &Hash,
     ) -> Result<(), Error> {
         let query = sqlx::query(
-            r#"INSERT INTO pending_identities (group_id, commitment)
-                   VALUES ($1, $2);"#,
+            r#"INSERT INTO pending_identities (group_id, commitment, status)
+                   VALUES ($1, $2, $3);"#,
         )
         .bind(group_id as i64)
-        .bind(identity);
+        .bind(identity)
+        .bind(IDENTITY_PENDING);
         self.pool.execute(query).await?;
         Ok(())
     }
 
-    pub async fn attempt_identity_insertion(
+    pub async fn start_identity_insertion(
         &self,
         group_id: usize,
         commitment: &Hash,
-    ) -> Result<bool, Error> {
+    ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"UPDATE pending_identities
-                   SET status = 'submission_attempt'
-                   WHERE group_id = $1 AND commitment = $2 AND status = 'pending';"#,
+                   SET status = $4
+                   WHERE group_id = $1 AND commitment = $2 AND status = $3;"#,
         )
         .bind(group_id as i64)
-        .bind(commitment);
+        .bind(commitment)
+        .bind(IDENTITY_PENDING) // previous status
+        .bind(IDENTITY_SUBMITTING); // new status
 
-        let result = self.pool.execute(query).await?.rows_affected();
-        Ok(result == 0)
+        self.pool.execute(query).await?;
+        Ok(())
     }
 
     pub async fn mark_identity_inserted(
@@ -166,12 +173,13 @@ impl Database {
     ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"UPDATE pending_identities
-                   SET transaction_id = $1, status = 'mined'
+                   SET transaction_id = $1, status = $4
                    WHERE group_id = $2 AND commitment = $3;"#,
         )
         .bind(transaction_id)
         .bind(group_id as i64)
-        .bind(commitment);
+        .bind(commitment)
+        .bind(IDENTITY_MINED);
 
         self.pool.execute(query).await?;
         Ok(())
@@ -229,10 +237,11 @@ impl Database {
         let query = sqlx::query(
             r#"SELECT group_id, commitment
                    FROM pending_identities
-                   WHERE status <> 'mined'
+                   WHERE status <> $1
                    ORDER BY created_at ASC
                    LIMIT 1;"#,
-        );
+        )
+        .bind(IDENTITY_MINED);
         let row = self.pool.fetch_optional(query).await?;
         Ok(row.map(|row| (row.get::<i64, _>(0).try_into().unwrap(), row.get(1))))
     }

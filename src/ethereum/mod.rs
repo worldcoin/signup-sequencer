@@ -79,8 +79,8 @@ impl Ethereum {
     pub async fn send_transaction(
         &self,
         tx: TypedTransaction,
-        is_retry: bool,
+        only_once: bool,
     ) -> Result<TransactionId, TxError> {
-        self.write_provider.send_transaction(tx, is_retry).await
+        self.write_provider.send_transaction(tx, only_once).await
     }
 }

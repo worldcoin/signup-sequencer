@@ -1,10 +1,3 @@
-use crate::{
-    contracts::{IdentityManager, SharedIdentityManager},
-    database::Database,
-    identity_tree::{Hash, SharedTreeState},
-    utils::spawn_or_abort,
-};
-use anyhow::{anyhow, Result as AnyhowResult};
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result as AnyhowResult};
@@ -19,7 +12,7 @@ use tokio::{
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
-    contracts::Contracts,
+    contracts::{IdentityManager, SharedIdentityManager},
     database::Database,
     identity_tree::{TreeState, TreeUpdate, TreeVersion},
     utils::spawn_or_abort,
@@ -72,14 +65,18 @@ impl RunningInstance {
 /// a time. Spawning multiple worker threads will result in undefined behavior,
 /// including data duplication.
 pub struct IdentityCommitter {
-    instance:   RwLock<Option<RunningInstance>>,
-    database:   Arc<Database>,
-    contracts:  SharedIdentityManager,
-    tree_state: TreeState,
+    instance:         RwLock<Option<RunningInstance>>,
+    database:         Arc<Database>,
+    identity_manager: SharedIdentityManager,
+    tree_state:       TreeState,
 }
 
 impl IdentityCommitter {
-    pub fn new(database: Arc<Database>, contracts: SharedIdentityManager, tree_state: TreeState) -> Self {
+    pub fn new(
+        database: Arc<Database>,
+        contracts: SharedIdentityManager,
+        tree_state: TreeState,
+    ) -> Self {
         Self {
             instance: RwLock::new(None),
             database,
@@ -98,27 +95,16 @@ impl IdentityCommitter {
         let (shutdown_sender, mut shutdown_receiver) = mpsc::channel(1);
         let (wake_up_sender, mut wake_up_receiver) = mpsc::channel(1);
         let database = self.database.clone();
-        let contracts = self.contracts.clone();
+        let identity_manager = self.identity_manager.clone();
         let tree = self.tree_state.get_mined_tree();
         let handle = spawn_or_abort(async move {
-            loop {
-                while let Some(update) = tree.peek_next_update().await {
-                    if (shutdown_receiver.try_recv()).is_ok() {
-                        info!("Shutdown signal received, not processing remaining items.");
-                        return Ok(());
-                    }
-
-                    Self::commit_identity(&database, &contracts, &tree, &update).await?;
+            select! {
+                result = Self::process_identities(&database, &*identity_manager, &tree, &mut wake_up_receiver) => {
+                    result?
                 }
-
-                select! {
-                    _ = wake_up_receiver.recv() => {
-                        debug!("Woke up by a request.");
-                    }
-                    _ = shutdown_receiver.recv() => {
-                        info!("Woke up by shutdown signal, exiting.");
-                        return Ok(());
-                    }
+                _ = shutdown_receiver.recv() => {
+                    info!("Woke up by shutdown signal, exiting.");
+                    return Ok(());
                 }
             }
             Ok(())
@@ -133,15 +119,12 @@ impl IdentityCommitter {
     async fn process_identities(
         database: &Database,
         identity_manager: &(dyn IdentityManager + Send + Sync),
-        tree_state: &SharedTreeState,
+        tree: &TreeVersion,
         wake_up_receiver: &mut Receiver<()>,
     ) -> AnyhowResult<()> {
         loop {
-            while let Some((group_id, commitment)) =
-                database.get_oldest_unprocessed_identity().await?
-            {
-                Self::commit_identity(database, identity_manager, tree_state, group_id, commitment)
-                    .await?;
+            while let Some(update) = tree.peek_next_update().await {
+                Self::commit_identity(database, identity_manager, tree, &update).await?;
             }
 
             wake_up_receiver.recv().await;
@@ -152,25 +135,24 @@ impl IdentityCommitter {
     #[instrument(level = "info", skip_all)]
     async fn commit_identity(
         database: &Database,
-        contracts: &Contracts,
+        identity_manager: &(dyn IdentityManager + Send + Sync),
         tree: &TreeVersion,
         update: &TreeUpdate,
     ) -> AnyhowResult<()> {
         // Send Semaphore transaction
-        let receipt = contracts
-            .insert_identity(update.element)
+        let transaction_id = identity_manager
+            .register_identities(vec![update.element])
             .await
             .map_err(|e| {
                 error!(?e, "Failed to insert identity to contract.");
                 e
             })?;
 
-        info!("Identity submitted in transaction {:?}.", transaction_id);
         database
             .mark_identity_submitted_to_contract(
                 &update.element,
                 update.leaf_index,
-                block.as_usize(),
+                transaction_id.as_ref(),
             )
             .await?;
 

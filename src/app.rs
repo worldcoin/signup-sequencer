@@ -110,8 +110,11 @@ impl App {
             ),
         ));
 
-        let merkle_tree =
-            TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()).await;
+        let merkle_tree = TreeState::new(
+            identity_manager.tree_depth() + 1,
+            identity_manager.initial_leaf_value(),
+        )
+        .await;
 
         let identity_committer = Arc::new(IdentityCommitter::new(
             database.clone(),

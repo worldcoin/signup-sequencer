@@ -242,7 +242,7 @@ impl Database {
         &self,
         identity: &Hash,
         leaf_index: usize,
-        block_number: usize,
+        transaction_id: &str,
     ) -> Result<(), Error> {
         todo!()
     }

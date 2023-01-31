@@ -45,10 +45,7 @@ impl IdentityManager for Contract {
         }
 
         // Connect to Contract
-        let semaphore = ContractAbi::new(
-            options.semaphore_address,
-            ethereum.provider().clone(),
-        );
+        let semaphore = ContractAbi::new(options.semaphore_address, ethereum.provider().clone());
 
         // Test contract by calling a view function and make sure we are manager.
         let manager = semaphore.manager().call().await?;

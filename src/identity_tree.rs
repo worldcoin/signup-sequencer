@@ -1,33 +1,14 @@
-use crate::timed_rw_lock::TimedRwLock;
+use std::{str::FromStr, sync::Arc};
+
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
     Field,
 };
-use std::str::FromStr;
-
 use serde::Serialize;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub type Hash = <PoseidonHash as Hasher>::Hash;
-
-pub struct OldTreeState {
-    pub next_leaf:   usize,
-    pub merkle_tree: PoseidonTree,
-}
-
-pub type SharedTreeState = Arc<TimedRwLock<OldTreeState>>;
-
-impl OldTreeState {
-    #[must_use]
-    pub fn new(tree_depth: usize, initial_leaf: Field) -> Self {
-        Self {
-            next_leaf:   0,
-            merkle_tree: PoseidonTree::new(tree_depth, initial_leaf),
-        }
-    }
-}
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TreeUpdate {
@@ -162,6 +143,10 @@ impl TreeVersion {
                 .expect("impossible, tree depth mismatch between database and runtime"),
         )
     }
+
+    pub async fn apply_updates_until(&self, leaf: usize) {
+        todo!()
+    }
 }
 
 pub struct TreeItem {
@@ -242,5 +227,13 @@ impl TreeState {
             root,
             proof,
         }
+    }
+}
+
+pub struct TreeVersionBuilder(TreeVersion);
+
+impl TreeVersionBuilder {
+    pub fn new(tree_depth: usize, initial_leaf: Field) -> Self {
+        Self(TreeVersion::new(tree_depth, initial_leaf))
     }
 }

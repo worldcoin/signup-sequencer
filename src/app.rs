@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
@@ -6,20 +6,16 @@ use futures::TryFutureExt;
 use hyper::StatusCode;
 use serde::Serialize;
 use tokio::try_join;
-use tracing::{error, info, instrument, warn};
+use tracing::{info, instrument, warn};
 
 use crate::{
     contracts,
-    contracts::{legacy::Contract as LegacyContract, IdentityManager, SharedIdentityManager},
+    contracts::{IdentityManager, legacy::Contract as LegacyContract, SharedIdentityManager},
     database::{self, Database},
     ethereum::{self, Ethereum},
-    ethereum_subscriber::{Error as SubscriberError, EthereumSubscriber},
     identity_committer::IdentityCommitter,
-    identity_tree::{
-        Hash, InclusionProof, OldTreeState, SharedTreeState, TreeItem, TreeState, ValidityScope,
-    },
+    identity_tree::{Hash, InclusionProof, TreeItem, TreeState, ValidityScope},
     server::{Error as ServerError, ToResponseCode},
-    timed_rw_lock::TimedRwLock,
 };
 
 #[derive(Serialize)]
@@ -65,10 +61,7 @@ pub struct App {
     ethereum:           Ethereum,
     identity_manager:   SharedIdentityManager,
     identity_committer: Arc<IdentityCommitter>,
-    #[allow(dead_code)]
-    chain_subscriber:   EthereumSubscriber,
-    old_tree_state:     SharedTreeState,
-    merkle_tree:        TreeState,
+    tree_state:         TreeState,
 }
 
 impl App {
@@ -79,8 +72,6 @@ impl App {
     #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
-        let refresh_rate = options.ethereum.refresh_rate;
-        let cache_recovery_step_size = options.ethereum.cache_recovery_step_size;
 
         // Connect to Ethereum and Database
         let (database, (ethereum, identity_manager)) = {
@@ -101,16 +92,7 @@ impl App {
 
         let database = Arc::new(database);
 
-        // Poseidon tree depth is one more than the contract's tree depth
-        let tree_state = Arc::new(TimedRwLock::new(
-            Duration::from_secs(options.lock_timeout),
-            OldTreeState::new(
-                identity_manager.tree_depth() + 1,
-                identity_manager.initial_leaf_value(),
-            ),
-        ));
-
-        let merkle_tree = TreeState::new(
+        let tree_state = TreeState::new(
             identity_manager.tree_depth() + 1,
             identity_manager.initial_leaf_value(),
         )
@@ -119,14 +101,8 @@ impl App {
         let identity_committer = Arc::new(IdentityCommitter::new(
             database.clone(),
             identity_manager.clone(),
-            merkle_tree.clone(),
-        ));
-        let chain_subscriber = EthereumSubscriber::new(
-            options.starting_block,
-            database.clone(),
-            identity_manager.clone(),
             tree_state.clone(),
-        );
+        ));
 
         // Sync with chain on start up
         let mut app = Self {
@@ -134,75 +110,13 @@ impl App {
             ethereum,
             identity_manager,
             identity_committer,
-            chain_subscriber,
-            old_tree_state: tree_state,
-            merkle_tree,
+            tree_state,
         };
-
-        // TODO Rethink these with new arch
-        // select! {
-        //     _ = app.load_initial_events(options.lock_timeout, options.starting_block,
-        // cache_recovery_step_size) => {},     _ = await_shutdown() => return
-        // Err(anyhow!("Innterrupted")) }
-        //
-        // // Basic sanity checks on the merkle tree
-        // app.chain_subscriber.check_health().await;
-        //
-        // // Listen to Ethereum events
-        // app.chain_subscriber.start(refresh_rate).await;
 
         // Process to push new identities to Ethereum
         app.identity_committer.start().await;
 
         Ok(app)
-    }
-
-    async fn load_initial_events(
-        &mut self,
-        lock_timeout: u64,
-        starting_block: u64,
-        cache_recovery_step_size: usize,
-    ) -> AnyhowResult<()> {
-        let mut root_mismatch_count = 0;
-        loop {
-            if root_mismatch_count == 1 {
-                error!(cache_recovery_step_size, "Removing most recent cache.");
-                self.database
-                    .delete_most_recent_cached_events(cache_recovery_step_size as i64)
-                    .await?;
-            } else if root_mismatch_count == 2 {
-                error!("Wiping out the entire cache.");
-                self.database.wipe_cache().await?;
-            } else if root_mismatch_count >= 3 {
-                return Err(SubscriberError::RootMismatch.into());
-            }
-
-            match self.chain_subscriber.process_initial_events().await {
-                Err(SubscriberError::RootMismatch) => {
-                    error!("Error when rebuilding tree from cache.");
-                    root_mismatch_count += 1;
-
-                    // Create a new empty MerkleTree
-                    self.old_tree_state = Arc::new(TimedRwLock::new(
-                        Duration::from_secs(lock_timeout),
-                        OldTreeState::new(
-                            self.identity_manager.tree_depth() + 1,
-                            self.identity_manager.initial_leaf_value(),
-                        ),
-                    ));
-
-                    // Retry
-                    self.chain_subscriber = EthereumSubscriber::new(
-                        starting_block,
-                        self.database.clone(),
-                        self.identity_manager.clone(),
-                        self.old_tree_state.clone(),
-                    );
-                }
-                Err(e) => return Err(e.into()),
-                Ok(_) => return Ok(()),
-            }
-        }
     }
 
     /// Queues an insert into the merkle tree.
@@ -236,7 +150,7 @@ impl App {
         self.identity_committer.notify_queued().await;
 
         Ok(InclusionProofResponse::from(
-            self.merkle_tree
+            self.tree_state
                 .get_proof(&TreeItem {
                     leaf_index: leaf_idx,
                     scope:      ValidityScope::SequencerOnly,
@@ -246,7 +160,7 @@ impl App {
     }
 
     async fn sync_tree_to(&self, leaf_idx: usize) -> Result<(), ServerError> {
-        let tree = self.merkle_tree.get_latest_tree();
+        let tree = self.tree_state.get_latest_tree();
         let last_index = tree.last_leaf().await;
         if leaf_idx <= last_index {
             return Ok(()); // Someone sync'd first, we're up to date
@@ -277,7 +191,7 @@ impl App {
             .await?
             .ok_or(ServerError::InvalidCommitment)?;
 
-        let proof = self.merkle_tree.get_proof(&item).await;
+        let proof = self.tree_state.get_proof(&item).await;
 
         Ok(InclusionProofResponse(proof))
     }
@@ -287,8 +201,7 @@ impl App {
     /// Will return an Error if any of the components cannot be shut down
     /// gracefully.
     pub async fn shutdown(&self) -> AnyhowResult<()> {
-        info!("Shutting down identity committer and chain subscriber.");
-        self.chain_subscriber.shutdown().await;
+        info!("Shutting down identity committer.");
         self.identity_committer.shutdown().await
     }
 }

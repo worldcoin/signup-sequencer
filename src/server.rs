@@ -109,8 +109,6 @@ pub enum Error {
     #[error(transparent)]
     Elapsed(#[from] tokio::time::error::Elapsed),
     #[error(transparent)]
-    LockTimeout(#[from] crate::timed_rw_lock::Error),
-    #[error(transparent)]
     Other(#[from] EyreError),
 }
 

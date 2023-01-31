@@ -30,15 +30,6 @@ pub struct Options {
     #[cfg(feature = "oz-provider")]
     #[clap(flatten)]
     pub write_options: write_oz::Options,
-
-    /// The number of most recent blocks to be removed from cache on root
-    /// mismatch
-    #[clap(long, env, default_value = "1000")]
-    pub cache_recovery_step_size: usize,
-
-    /// Frequency of event fetching from Ethereum (seconds)
-    #[clap(long, env, value_parser=duration_from_str, default_value="60")]
-    pub refresh_rate: Duration,
 }
 
 #[derive(Clone, Debug)]

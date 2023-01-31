@@ -28,7 +28,7 @@ impl IdentityManager for Contract {
         Self: Sized,
     {
         // Check that there is code deployed at the target address.
-        let address = options.identity_manager_address;
+        let address = options.semaphore_address;
         let code = ethereum.provider().get_code(address, None).await?;
         if code.as_ref().is_empty() {
             error!(
@@ -39,7 +39,7 @@ impl IdentityManager for Contract {
 
         // Connect to the running batching contract.
         let abi = ContractAbi::new(
-            options.identity_manager_address,
+            options.semaphore_address,
             ethereum.provider().clone(),
         );
 

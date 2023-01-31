@@ -21,7 +21,7 @@ use std::{pin::Pin, sync::Arc};
 pub struct Options {
     /// The address of the identity manager contract.
     #[clap(long, env, default_value = "174ee9b5fBb5Eb68B6C61032946486dD9c2Dc4b6")]
-    pub identity_manager_address: Address,
+    pub semaphore_address: Address,
 
     // TODO This option should be removed.
     /// The semaphore group identifier to use.

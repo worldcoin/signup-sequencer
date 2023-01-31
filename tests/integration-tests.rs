@@ -51,7 +51,7 @@ async fn simulate_eth_reorg() {
 
     options.app.ethereum.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
-    options.app.contracts.identity_manager_address = semaphore_address;
+    options.app.contracts.semaphore_address = semaphore_address;
     options.app.ethereum.signing_key = private_key;
     options.app.ethereum.confirmation_blocks_delay = 5;
     options.app.ethereum.refresh_rate = Duration::from_secs(1);
@@ -146,7 +146,7 @@ async fn insert_identity_and_proofs() {
 
     options.app.ethereum.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
-    options.app.contracts.identity_manager_address = semaphore_address;
+    options.app.contracts.semaphore_address = semaphore_address;
     options.app.ethereum.signing_key = private_key;
     options.app.ethereum.confirmation_blocks_delay = 2;
     options.app.ethereum.refresh_rate = Duration::from_secs(1);

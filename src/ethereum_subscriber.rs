@@ -218,7 +218,6 @@ impl EthereumSubscriber {
 
         let mut wake_up_committer = false;
 
-        #[allow(clippy::manual_let_else)]
         loop {
             let event = match events.try_next().await.map_err(Error::Event)? {
                 Some(a) => a,

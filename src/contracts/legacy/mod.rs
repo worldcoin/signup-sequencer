@@ -39,7 +39,7 @@ impl IdentityManager for Contract {
     {
         // Sanity check the address
         // TODO: Check that the contract is actually a Semaphore by matching bytecode.
-        let address = options.identity_manager_address;
+        let address = options.semaphore_address;
         let code = ethereum.provider().get_code(address, None).await?;
         if code.as_ref().is_empty() {
             error!(
@@ -50,10 +50,7 @@ impl IdentityManager for Contract {
         }
 
         // Connect to Contract
-        let semaphore = ContractAbi::new(
-            options.identity_manager_address,
-            ethereum.provider().clone(),
-        );
+        let semaphore = ContractAbi::new(options.semaphore_address, ethereum.provider().clone());
 
         // Test contract by calling a view function and make sure we are manager.
         let manager = semaphore.manager().call().await?;

@@ -1,9 +1,19 @@
+use crate::{
+    contracts::{IdentityManager, SharedIdentityManager},
+    database::Database,
+    identity_tree::{Hash, SharedTreeState},
+    utils::spawn_or_abort,
+};
+use anyhow::{anyhow, Result as AnyhowResult};
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result as AnyhowResult};
 use tokio::{
     select,
-    sync::{mpsc, mpsc::error::TrySendError, RwLock},
+    sync::{
+        mpsc::{self, error::TrySendError, Receiver},
+        RwLock,
+    },
     task::JoinHandle,
 };
 use tracing::{debug, error, info, instrument, warn};
@@ -64,16 +74,16 @@ impl RunningInstance {
 pub struct IdentityCommitter {
     instance:   RwLock<Option<RunningInstance>>,
     database:   Arc<Database>,
-    contracts:  Arc<Contracts>,
+    contracts:  SharedIdentityManager,
     tree_state: TreeState,
 }
 
 impl IdentityCommitter {
-    pub fn new(database: Arc<Database>, contracts: Arc<Contracts>, tree_state: TreeState) -> Self {
+    pub fn new(database: Arc<Database>, contracts: SharedIdentityManager, tree_state: TreeState) -> Self {
         Self {
             instance: RwLock::new(None),
             database,
-            contracts,
+            identity_manager: contracts,
             tree_state,
         }
     }
@@ -111,12 +121,32 @@ impl IdentityCommitter {
                     }
                 }
             }
+            Ok(())
         });
         *instance = Some(RunningInstance {
             handle,
             wake_up_sender,
             shutdown_sender,
         });
+    }
+
+    async fn process_identities(
+        database: &Database,
+        identity_manager: &(dyn IdentityManager + Send + Sync),
+        tree_state: &SharedTreeState,
+        wake_up_receiver: &mut Receiver<()>,
+    ) -> AnyhowResult<()> {
+        loop {
+            while let Some((group_id, commitment)) =
+                database.get_oldest_unprocessed_identity().await?
+            {
+                Self::commit_identity(database, identity_manager, tree_state, group_id, commitment)
+                    .await?;
+            }
+
+            wake_up_receiver.recv().await;
+            debug!("Woke up by a request.");
+        }
     }
 
     #[instrument(level = "info", skip_all)]
@@ -135,11 +165,7 @@ impl IdentityCommitter {
                 e
             })?;
 
-        let block = receipt
-            .block_number
-            .expect("Transaction is mined, block number must be present.");
-
-        info!("Identity submitted in block {}.", block);
+        info!("Identity submitted in transaction {:?}.", transaction_id);
         database
             .mark_identity_submitted_to_contract(
                 &update.element,

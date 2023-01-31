@@ -1,4 +1,4 @@
-use crate::ethereum::ProviderStack;
+use crate::ethereum::ReadProvider;
 use async_stream::try_stream;
 use core::fmt::Debug;
 use ethers::{
@@ -6,13 +6,13 @@ use ethers::{
     types::{Filter, Log, U64},
 };
 use futures::{Stream, StreamExt};
-use std::{cmp::max, sync::Arc, time::Duration};
+use std::{cmp::max, time::Duration};
 use thiserror::Error;
 use tokio::time::sleep;
 use tracing::{error, info};
 
 pub struct ConfirmedLogQuery {
-    provider:                  Arc<ProviderStack>,
+    provider:                  ReadProvider,
     filter:                    Filter,
     start_page_size:           u64,
     min_page_size:             u64,
@@ -29,7 +29,7 @@ pub enum Error<ProviderError> {
 }
 
 impl ConfirmedLogQuery {
-    pub fn new(provider: Arc<ProviderStack>, filter: &Filter) -> Self {
+    pub fn new(provider: ReadProvider, filter: &Filter) -> Self {
         Self {
             provider,
             filter: filter.clone(),

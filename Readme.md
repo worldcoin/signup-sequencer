@@ -19,7 +19,7 @@ docker run --rm -ti -p 5432:5432 -e POSTGRES_PASSWORD=password postgres
 Lint, build, test, run
 
 ```shell
-cargo fmt && cargo clippy --all-targets --all-features && cargo build --all-targets --all-features && cargo test --all-targets --all-features && cargo run --
+cargo fmt && cargo clippy --all-targets --features "bench, mimalloc" && cargo build --all-targets --features "bench, mimalloc" && cargo test --all-targets --features "bench, mimalloc" && cargo run --
 ```
 
 Run benchmarks

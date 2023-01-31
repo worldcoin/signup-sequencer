@@ -60,12 +60,12 @@ jobs:
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --locked --all-features --all-targets
+          args: --locked --features "bench, mimalloc" --all-targets
       - name: Check docs
         uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --locked --all-features --no-deps --document-private-items
+          args: --locked --features "bench, mimalloc" --no-deps --document-private-items
 
   test:
     name: Test
@@ -151,7 +151,7 @@ jobs:
             $(
               for file in
                 $(
-                  cargo test --locked --all-features --all-targets
+                  cargo test --locked --features "bench, mimalloc" --all-targets
                     --no-fail-fast --no-run --message-format=json
                     | jq -r "select(.profile.test == true) | .filenames[]"
                     | grep -v dSYM -

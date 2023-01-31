@@ -169,16 +169,14 @@ impl Database {
         &self,
         group_id: usize,
         commitment: &Hash,
-        transaction_id: &str,
     ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"UPDATE pending_identities
-                   SET transaction_id = $3, status = $4
+                   SET status = $3
                    WHERE group_id = $1 AND commitment = $2;"#,
         )
         .bind(group_id as i64)
         .bind(commitment)
-        .bind(transaction_id)
         .bind(IDENTITY_MINED);
 
         self.pool.execute(query).await?;

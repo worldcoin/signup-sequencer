@@ -175,7 +175,7 @@ impl IdentityCommitter {
 
         info!("Identity submitted in transaction {:?}.", transaction_id);
         database
-            .mark_identity_inserted(group_id, &commitment, transaction_id.as_ref())
+            .mark_identity_inserted(group_id, &commitment)
             .await?;
 
         // ethereum_subscriber module takes over from now. Once identity is found in a

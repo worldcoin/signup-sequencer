@@ -16,11 +16,11 @@ use ethers::{
         SignerMiddleware,
     },
     providers::Middleware,
-    types::{BlockNumber, Filter, H160, H256, Log, U256},
+    types::{BlockNumber, Filter, Log, H160, H256, U256},
     utils::{Anvil, AnvilInstance},
 };
 use eyre::{bail, Result as AnyhowResult};
-use hyper::{Body, Client, client::HttpConnector, Request};
+use hyper::{client::HttpConnector, Body, Client, Request};
 use semaphore::{merkle_tree::Branch, poseidon_tree::PoseidonTree};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -30,7 +30,7 @@ use tracing::{error, info, instrument};
 use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
 use url::{Host, Url};
 
-use signup_sequencer::{app::App, identity_tree::Hash, Options, server};
+use signup_sequencer::{app::App, identity_tree::Hash, server, Options};
 
 const TEST_LEAFS: &[&str] = &[
     "0000F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0",

@@ -1,8 +1,5 @@
-use crate::identity_tree::{Hash, TreeItem, TreeUpdate, ValidityScope};
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
-use ruint::{aliases::U256, uint};
-use semaphore::Field;
 use sqlx::{
     any::AnyKind,
     migrate::{Migrate, MigrateDatabase, Migrator},
@@ -13,6 +10,8 @@ use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;
 
+use crate::identity_tree::{Hash, Status, TreeItem, TreeUpdate};
+
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 
@@ -22,7 +21,7 @@ pub struct Options {
     /// Example: `postgres://user:password@localhost:5432/database`
     /// Sqlite file: ``
     /// In memory DB: `sqlite::memory:`
-    #[clap(long, env, default_value = "sqlite::memory:")]
+    #[clap(long, env)]
     pub database: Url,
 
     /// Allow creation or migration of the database schema.
@@ -132,22 +131,29 @@ impl Database {
     ) -> Result<Option<usize>, Error> {
         let query = sqlx::query(
             r#"INSERT INTO identities (commitment, leaf_index, status)
-                   VALUES ($1, (SELECT COALESCE(MAX(leaf_index), 0) FROM identities), $2)
-                   ON CONFLICT DO NOTHING
-                   RETURNING leaf_index;"#,
+                       VALUES ($1, (SELECT COALESCE(MAX(leaf_index) + 1, 0) FROM identities), $2)
+                       ON CONFLICT DO NOTHING
+                       RETURNING leaf_index;"#,
         )
         .bind(identity)
-        .bind(<&str>::from(ValidityScope::Pending));
+        .bind(<&str>::from(Status::Pending));
         let row = self.pool.fetch_optional(query).await?;
         Ok(row.map(|row| row.get::<i64, _>(0) as usize))
     }
 
     pub async fn mark_identity_submitted_to_contract(
         &self,
-        identity: &Hash,
         leaf_index: usize,
     ) -> Result<(), Error> {
-        todo!()
+        let query = sqlx::query(
+            r#"UPDATE identities
+                       SET status = $2
+                       WHERE leaf_index = $1;"#,
+        )
+        .bind(leaf_index as i64)
+        .bind(<&str>::from(Status::Mined));
+        self.pool.execute(query).await?;
+        Ok(())
     }
 
     pub async fn get_updates_range(
@@ -178,15 +184,44 @@ impl Database {
 
     pub async fn get_identity_index(&self, identity: &Hash) -> Result<Option<TreeItem>, Error> {
         let query = sqlx::query(
-            r#"SELECT leaf_index
-                   FROM identities
-                   WHERE commitment = $1
-                   LIMIT 1;"#,
+            r#"SELECT leaf_index, status
+                       FROM identities
+                       WHERE commitment = $1
+                       LIMIT 1;"#,
         )
         .bind(identity);
-        let row = self.pool.fetch_optional(query).await?;
-        // let ret = Ok(row.map(|row| row.get::<i64, _>(0) as usize));
-        todo!("Is it all?");
+        let Some(row) = self.pool.fetch_optional(query).await? else {
+            return Ok(None);
+        };
+
+        let leaf_index = row.get::<i64, _>(0) as usize;
+        let status = row
+            .get::<&str, _>(1)
+            .parse()
+            .expect("Status is unreadable, database is corrupt");
+
+        Ok(Some(TreeItem { leaf_index, status }))
+    }
+
+    pub async fn get_commitments_by_status(
+        &self,
+        status: Status,
+    ) -> Result<Vec<TreeUpdate>, Error> {
+        let query = sqlx::query(
+            r#"SELECT leaf_index, commitment
+                       FROM identities
+                       WHERE status = $1
+                       ORDER BY leaf_index ASC;"#,
+        )
+        .bind(<&str>::from(status));
+        let rows = self.pool.fetch_all(query).await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| TreeUpdate {
+                leaf_index: row.get::<i64, _>(0) as usize,
+                element:    row.get::<Hash, _>(1),
+            })
+            .collect::<Vec<_>>())
     }
 }
 

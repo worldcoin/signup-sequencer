@@ -1,20 +1,21 @@
-mod read;
-pub mod write;
-mod write_dev;
-mod write_oz;
+use std::sync::Arc;
+
+use anyhow::Result as AnyhowResult;
+use clap::Parser;
+use ethers::types::{Address, transaction::eip2718::TypedTransaction};
+use tracing::instrument;
 
 pub use read::{EventError, Log, ReadProvider};
 pub use write::TxError;
 
 use self::{
-    read::duration_from_str,
     write::{TransactionId, WriteProvider},
 };
-use anyhow::Result as AnyhowResult;
-use clap::Parser;
-use ethers::types::{transaction::eip2718::TypedTransaction, Address};
-use std::{sync::Arc, time::Duration};
-use tracing::instrument;
+
+mod read;
+pub mod write;
+mod write_dev;
+mod write_oz;
 
 // TODO: Log and metrics for signer / nonces.
 #[derive(Clone, Debug, PartialEq, Parser)]

@@ -14,7 +14,7 @@ use crate::{
     database::{self, Database},
     ethereum::{self, Ethereum},
     identity_committer::IdentityCommitter,
-    identity_tree::{Hash, InclusionProof, TreeItem, TreeState, ValidityScope},
+    identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, Status, TreeItem, TreeState},
     server::{Error as ServerError, ToResponseCode},
 };
 
@@ -91,11 +91,12 @@ impl App {
 
         let database = Arc::new(database);
 
-        let tree_state = TreeState::new(
+        let tree_state = Self::initialize_tree(
+            &database,
             identity_manager.tree_depth() + 1,
             identity_manager.initial_leaf_value(),
         )
-        .await;
+        .await?;
 
         let identity_committer = Arc::new(IdentityCommitter::new(
             database.clone(),
@@ -104,7 +105,7 @@ impl App {
         ));
 
         // Sync with chain on start up
-        let mut app = Self {
+        let app = Self {
             database,
             ethereum,
             identity_manager,
@@ -116,6 +117,23 @@ impl App {
         app.identity_committer.start().await;
 
         Ok(app)
+    }
+
+    async fn initialize_tree(
+        database: &Database,
+        tree_depth: usize,
+        initial_leaf_value: Hash,
+    ) -> AnyhowResult<TreeState> {
+        let mut mined_builder = CanonicalTreeBuilder::new(tree_depth, initial_leaf_value);
+        let mined_items = database.get_commitments_by_status(Status::Mined).await?;
+        for update in mined_items {
+            mined_builder.append(update);
+        }
+        let mined = mined_builder.seal();
+        let latest = mined.next_version().await;
+        let pending_items = database.get_commitments_by_status(Status::Pending).await?;
+        latest.append_many_fresh(&pending_items).await;
+        Ok(TreeState::new(mined, latest))
     }
 
     /// Queues an insert into the merkle tree.
@@ -141,6 +159,7 @@ impl App {
 
         let Some(leaf_idx) = insertion_result else {
             warn!(?commitment, "Pending identity already exists.");
+
             return Err(ServerError::DuplicateCommitment);
         };
 
@@ -152,7 +171,7 @@ impl App {
             self.tree_state
                 .get_proof(&TreeItem {
                     leaf_index: leaf_idx,
-                    scope:      ValidityScope::Pending,
+                    status:     Status::Pending,
                 })
                 .await,
         ))
@@ -160,13 +179,13 @@ impl App {
 
     async fn sync_tree_to(&self, leaf_idx: usize) -> Result<(), ServerError> {
         let tree = self.tree_state.get_latest_tree();
-        let last_index = tree.last_leaf().await;
-        if leaf_idx <= last_index {
+        let next_index = tree.next_leaf().await;
+        if leaf_idx < next_index {
             return Ok(()); // Someone sync'd first, we're up to date
         }
         let identities = self
             .database
-            .get_updates_range(last_index + 1, leaf_idx)
+            .get_updates_range(next_index, leaf_idx)
             .await?;
         tree.append_many_fresh(&identities).await;
         Ok(())

@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc};
 
 use semaphore::{
     merkle_tree::Hasher,
@@ -30,16 +30,16 @@ impl TreeUpdate {
 struct TreeVersionData {
     tree:      PoseidonTree,
     diff:      Vec<TreeUpdate>,
-    last_leaf: usize,
+    next_leaf: usize,
     next:      Option<TreeVersion>,
 }
 
 impl TreeVersionData {
-    fn new(tree_depth: usize, initial_leaf: Field) -> Self {
+    fn empty(tree_depth: usize, initial_leaf: Field) -> Self {
         Self {
             tree:      PoseidonTree::new(tree_depth, initial_leaf),
             diff:      Vec::new(),
-            last_leaf: 0,
+            next_leaf: 0,
             next:      None,
         }
     }
@@ -48,7 +48,7 @@ impl TreeVersionData {
         let next = TreeVersion::from(Self {
             tree:      self.tree.clone(),
             diff:      Vec::new(),
-            last_leaf: self.last_leaf,
+            next_leaf: self.next_leaf,
             next:      None,
         });
         self.next = Some(next.clone());
@@ -76,12 +76,16 @@ impl TreeVersionData {
     }
 
     fn update(&mut self, leaf_index: usize, element: Hash) {
-        self.tree.set(leaf_index, element);
+        self.update_without_diff(leaf_index, element);
         self.diff.push(TreeUpdate {
             leaf_index,
             element,
         });
-        self.last_leaf = leaf_index;
+    }
+
+    fn update_without_diff(&mut self, leaf_index: usize, element: Hash) {
+        self.tree.set(leaf_index, element);
+        self.next_leaf = leaf_index + 1;
     }
 }
 
@@ -95,10 +99,6 @@ impl From<TreeVersionData> for TreeVersion {
 }
 
 impl TreeVersion {
-    fn new(tree_depth: usize, initial_leaf: Field) -> Self {
-        Self::from(TreeVersionData::new(tree_depth, initial_leaf))
-    }
-
     pub async fn peek_next_update(&self) -> Option<TreeUpdate> {
         let data = self.0.read().await;
         data.peek_next_update().await
@@ -114,25 +114,25 @@ impl TreeVersion {
         data.update(leaf_index, element);
     }
 
-    async fn next_version(&self) -> TreeVersion {
+    pub async fn next_version(&self) -> TreeVersion {
         let mut data = self.0.write().await;
         data.next_version()
     }
 
     pub async fn append_many_fresh(&self, updates: &[TreeUpdate]) {
         let mut data = self.0.write().await;
-        let last_leaf = data.last_leaf;
+        let next_leaf = data.next_leaf;
         updates
             .iter()
-            .filter(|update| update.leaf_index > last_leaf)
+            .filter(|update| update.leaf_index >= next_leaf)
             .for_each(|update| {
                 data.update(update.leaf_index, update.element);
             });
     }
 
-    pub async fn last_leaf(&self) -> usize {
+    pub async fn next_leaf(&self) -> usize {
         let data = self.0.read().await;
-        data.last_leaf
+        data.next_leaf
     }
 
     async fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
@@ -144,44 +144,41 @@ impl TreeVersion {
                 .expect("impossible, tree depth mismatch between database and runtime"),
         )
     }
-
-    pub async fn apply_updates_until(&self, leaf: usize) {
-        todo!()
-    }
 }
 
 pub struct TreeItem {
-    pub scope:      ValidityScope,
+    pub status:     Status,
     pub leaf_index: usize,
 }
 
 #[derive(Clone, Copy, Serialize)]
-pub enum ValidityScope {
+#[serde(rename_all = "camelCase")]
+pub enum Status {
     Pending,
     Mined,
 }
 
 #[derive(Debug, Error)]
-#[error("unknown validity scope")]
-pub struct UnknownValidityScope;
+#[error("unknown status")]
+pub struct UnknownStatus;
 
-impl FromStr for ValidityScope {
-    type Err = UnknownValidityScope;
+impl FromStr for Status {
+    type Err = UnknownStatus;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "pending" => Ok(Self::Pending),
             "mined" => Ok(Self::Mined),
-            _ => Err(UnknownValidityScope),
+            _ => Err(UnknownStatus),
         }
     }
 }
 
-impl From<ValidityScope> for &str {
-    fn from(scope: ValidityScope) -> Self {
+impl From<Status> for &str {
+    fn from(scope: Status) -> Self {
         match scope {
-            ValidityScope::Pending => "pending",
-            ValidityScope::Mined => "mined",
+            Status::Pending => "pending",
+            Status::Mined => "mined",
         }
     }
 }
@@ -189,9 +186,9 @@ impl From<ValidityScope> for &str {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProof {
-    pub validity_scope: ValidityScope,
-    pub root:           Field,
-    pub proof:          Proof,
+    pub status: Status,
+    pub root:   Field,
+    pub proof:  Proof,
 }
 
 #[derive(Clone)]
@@ -201,9 +198,7 @@ pub struct TreeState {
 }
 
 impl TreeState {
-    pub async fn new(tree_depth: usize, initial_leaf: Field) -> TreeState {
-        let mined = TreeVersion::new(tree_depth, initial_leaf);
-        let latest = mined.next_version().await;
+    pub fn new(mined: TreeVersion, latest: TreeVersion) -> TreeState {
         TreeState { mined, latest }
     }
 
@@ -216,23 +211,32 @@ impl TreeState {
     }
 
     pub async fn get_proof(&self, item: &TreeItem) -> InclusionProof {
-        let tree = match item.scope {
-            ValidityScope::Pending => &self.latest,
-            ValidityScope::Mined => &self.mined,
+        let tree = match item.status {
+            Status::Pending => &self.latest,
+            Status::Mined => &self.mined,
         };
         let (root, proof) = tree.get_proof(item.leaf_index).await;
         InclusionProof {
-            validity_scope: item.scope,
+            status: item.status,
             root,
             proof,
         }
     }
 }
 
-pub struct TreeVersionBuilder(TreeVersion);
+pub struct CanonicalTreeBuilder(TreeVersionData);
 
-impl TreeVersionBuilder {
+impl CanonicalTreeBuilder {
     pub fn new(tree_depth: usize, initial_leaf: Field) -> Self {
-        Self(TreeVersion::new(tree_depth, initial_leaf))
+        Self(TreeVersionData::empty(tree_depth, initial_leaf))
+    }
+
+    pub fn append(&mut self, update: TreeUpdate) {
+        self.0
+            .update_without_diff(update.leaf_index, update.element);
+    }
+
+    pub fn seal(self) -> TreeVersion {
+        self.0.into()
     }
 }

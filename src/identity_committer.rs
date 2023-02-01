@@ -149,7 +149,7 @@ impl IdentityCommitter {
             })?;
 
         database
-            .mark_identity_submitted_to_contract(&update.element, update.leaf_index)
+            .mark_identity_submitted_to_contract(update.leaf_index)
             .await?;
 
         tree.apply_next_update().await;

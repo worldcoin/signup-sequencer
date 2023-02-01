@@ -28,7 +28,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/IdentityCommitmentWithGroup'
+              $ref: '#/components/schemas/IdentityCommitment'
       responses:
         '200':
           description: 'Identity insert was successfully queued'
@@ -51,7 +51,7 @@ paths:
         content:
           'application/json':
             schema:
-              $ref: '#/components/schemas/IdentityCommitmentWithGroup'
+              $ref: '#/components/schemas/IdentityCommitment'
       responses:
         '200':
           description: 'A Merkle inclusion proof for an already inserted commitment'
@@ -66,47 +66,14 @@ paths:
               schema:
                 description: 'A human-readable explanation of the error condition'
                 type: 'string'
-  /verifyProof:
-    post:
-      summary: 'Verify Semaphore inclusion proof'
-      requestBody:
-        description: 'Public inputs and the proof to verify'
-        content:
-          'application/json':
-            schema:
-              $ref: '#/components/schemas/SemaphoreProof'
-      responses:
-        '200':
-          description: 'Proof verifies successfully, with root last being valid at the returned time'
-          content:
-            'application/json':
-              schema:
-                type: object
-                properties:
-                  rootLastValidAt:
-                    type: integer
-                    format: int64
-                    description: 'The timestamp at which the root was last valid'
-        '400':
-          description: 'Invalid proof, either it is malformed or it does not verify'
-          content:
-            application/json:
-              schema:
-                description: 'A human-readable explanation of the error condition'
-                type: 'string'
 components:
   schemas:
     IdentityCommitment:
-      type: string
-      pattern: '^[A-F0-9]{64}$'
-    IdentityCommitmentWithGroup:
       type: object
       properties:
-        groupId:
-          type: integer
-          format: int64
         identityCommitment:
-          $ref: '#/components/schemas/IdentityCommitment'
+          type: string
+          pattern: '^[A-F0-9]{64}$'
       example:
         groupId: 1
         identityCommitment: '0000F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2'
@@ -116,7 +83,7 @@ components:
     InclusionProof:
       type: object
       properties:
-        validityScope: { $ref: '#/components/schemas/InclusionProofValidityScope' }
+        status: { $ref: '#/components/schemas/InclusionProofStatus' }
         root: { $ref: '#/components/schemas/FieldElement' }
         proof:
           type: array
@@ -128,6 +95,6 @@ components:
               - type: object
                 properties:
                   Right: { $ref: '#/components/schemas/FieldElement' }
-    InclusionProofValidityScope:
+    InclusionProofStatus:
       type: string
-      enum: [ 'sequencer-only', 'fresh-on-chain', 'stable-on-chain' ]
+      enum: [ 'pending', 'mined', 'confirmed' ]

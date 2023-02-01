@@ -54,7 +54,6 @@ const CONTENT_JSON: &str = "application/json";
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct InsertCommitmentRequest {
-    group_id:            usize,
     identity_commitment: Hash,
 }
 
@@ -62,7 +61,6 @@ pub struct InsertCommitmentRequest {
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct InclusionProofRequest {
-    pub group_id:            usize,
     pub identity_commitment: Hash,
 }
 

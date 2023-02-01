@@ -21,7 +21,7 @@ pub struct Options {
     /// Example: `postgres://user:password@localhost:5432/database`
     /// Sqlite file: ``
     /// In memory DB: `sqlite::memory:`
-    #[clap(long, env)]
+    #[clap(long, env, default_value = "sqlite::memory:")]
     pub database: Url,
 
     /// Allow creation or migration of the database schema.
@@ -227,6 +227,6 @@ impl Database {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error(transparent)]
+    #[error("database error")]
     InternalError(#[from] sqlx::Error),
 }

@@ -340,7 +340,6 @@ async fn test_insert_identity(
 fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
     Body::from(
         json!({
-            "groupId": 1,
             "identityCommitment": identity_commitment,
         })
         .to_string(),
@@ -350,9 +349,7 @@ fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
 fn construct_insert_identity_body(identity_commitment: &str) -> Body {
     Body::from(
         json!({
-            "groupId": 1,
             "identityCommitment": identity_commitment,
-
         })
         .to_string(),
     )

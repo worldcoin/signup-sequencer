@@ -127,7 +127,7 @@ impl App {
         let mut mined_builder = CanonicalTreeBuilder::new(tree_depth, initial_leaf_value);
         let mined_items = database.get_commitments_by_status(Status::Mined).await?;
         for update in mined_items {
-            mined_builder.append(update);
+            mined_builder.append(&update);
         }
         let mined = mined_builder.seal();
         let latest = mined.next_version().await;

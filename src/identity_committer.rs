@@ -100,7 +100,7 @@ impl IdentityCommitter {
         let handle = spawn_or_abort(async move {
             select! {
                 result = Self::process_identities(&database, &*identity_manager, &tree, &mut wake_up_receiver) => {
-                    result?
+                    result?;
                 }
                 _ = shutdown_receiver.recv() => {
                     info!("Woke up by shutdown signal, exiting.");

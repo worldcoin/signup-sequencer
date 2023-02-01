@@ -1,3 +1,4 @@
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
 use sqlx::{
@@ -200,7 +201,7 @@ impl Database {
             .parse()
             .expect("Status is unreadable, database is corrupt");
 
-        Ok(Some(TreeItem { leaf_index, status }))
+        Ok(Some(TreeItem { status, leaf_index }))
     }
 
     pub async fn get_commitments_by_status(

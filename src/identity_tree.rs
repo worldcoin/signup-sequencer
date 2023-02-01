@@ -19,7 +19,7 @@ pub struct TreeUpdate {
 
 impl TreeUpdate {
     #[must_use]
-    pub fn new(leaf_index: usize, element: Hash) -> Self {
+    pub const fn new(leaf_index: usize, element: Hash) -> Self {
         Self {
             leaf_index,
             element,
@@ -114,7 +114,7 @@ impl TreeVersion {
         data.update(leaf_index, element);
     }
 
-    pub async fn next_version(&self) -> TreeVersion {
+    pub async fn next_version(&self) -> Self {
         let mut data = self.0.write().await;
         data.next_version()
     }
@@ -198,14 +198,17 @@ pub struct TreeState {
 }
 
 impl TreeState {
-    pub fn new(mined: TreeVersion, latest: TreeVersion) -> TreeState {
-        TreeState { mined, latest }
+    #[must_use]
+    pub const fn new(mined: TreeVersion, latest: TreeVersion) -> Self {
+        Self { mined, latest }
     }
 
+    #[must_use]
     pub fn get_latest_tree(&self) -> TreeVersion {
         self.latest.clone()
     }
 
+    #[must_use]
     pub fn get_mined_tree(&self) -> TreeVersion {
         self.mined.clone()
     }
@@ -227,15 +230,17 @@ impl TreeState {
 pub struct CanonicalTreeBuilder(TreeVersionData);
 
 impl CanonicalTreeBuilder {
+    #[must_use]
     pub fn new(tree_depth: usize, initial_leaf: Field) -> Self {
         Self(TreeVersionData::empty(tree_depth, initial_leaf))
     }
 
-    pub fn append(&mut self, update: TreeUpdate) {
+    pub fn append(&mut self, update: &TreeUpdate) {
         self.0
             .update_without_diff(update.leaf_index, update.element);
     }
 
+    #[must_use]
     pub fn seal(self) -> TreeVersion {
         self.0.into()
     }

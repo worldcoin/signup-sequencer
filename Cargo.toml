@@ -28,7 +28,7 @@ required-features = ["bench", "proptest"]
 [dependencies]
 anyhow = { version = "1.0.68" }
 async-stream = "0.3.3"
-async-trait = "0.1.60"
+async-trait = "0.1.64"
 axum = "0.6.4"
 axum-server = "0.4.4"
 chrono = "0.4.19"

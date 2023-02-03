@@ -1,0 +1,512 @@
+{
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_logic",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes",
+          "name": "_data",
+          "type": "bytes"
+        }
+      ],
+      "stateMutability": "payable",
+      "type": "constructor"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "previousAdmin",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "newAdmin",
+          "type": "address"
+        }
+      ],
+      "name": "AdminChanged",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "beacon",
+          "type": "address"
+        }
+      ],
+      "name": "BeaconUpgraded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "implementation",
+          "type": "address"
+        }
+      ],
+      "name": "Upgraded",
+      "type": "event"
+    },
+    {
+      "stateMutability": "payable",
+      "type": "fallback"
+    },
+    {
+      "stateMutability": "payable",
+      "type": "receive"
+    }
+  ],
+  "bytecode": {
+    "object": "0x608060405260405161073f38038061073f83398101604081905261002291610325565b818161003082826000610039565b50505050610442565b6100428361006f565b60008251118061004f5750805b1561006a5761006883836100af60201b6100291760201c565b505b505050565b610078816100db565b6040516001600160a01b038216907fbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b90600090a250565b60606100d48383604051806060016040528060278152602001610718602791396101ad565b9392505050565b6100ee8161022660201b6100551760201c565b6101555760405162461bcd60e51b815260206004820152602d60248201527f455243313936373a206e657720696d706c656d656e746174696f6e206973206e60448201526c1bdd08184818dbdb9d1c9858dd609a1b60648201526084015b60405180910390fd5b8061018c7f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc60001b61023560201b6100641760201c565b80546001600160a01b0319166001600160a01b039290921691909117905550565b6060600080856001600160a01b0316856040516101ca91906103f3565b600060405180830381855af49150503d8060008114610205576040519150601f19603f3d011682016040523d82523d6000602084013e61020a565b606091505b50909250905061021c86838387610238565b9695505050505050565b6001600160a01b03163b151590565b90565b606083156102a75782516000036102a0576001600160a01b0385163b6102a05760405162461bcd60e51b815260206004820152601d60248201527f416464726573733a2063616c6c20746f206e6f6e2d636f6e7472616374000000604482015260640161014c565b50816102b1565b6102b183836102b9565b949350505050565b8151156102c95781518083602001fd5b8060405162461bcd60e51b815260040161014c919061040f565b634e487b7160e01b600052604160045260246000fd5b60005b838110156103145781810151838201526020016102fc565b838111156100685750506000910152565b6000806040838503121561033857600080fd5b82516001600160a01b038116811461034f57600080fd5b60208401519092506001600160401b038082111561036c57600080fd5b818501915085601f83011261038057600080fd5b815181811115610392576103926102e3565b604051601f8201601f19908116603f011681019083821181831017156103ba576103ba6102e3565b816040528281528860208487010111156103d357600080fd5b6103e48360208301602088016102f9565b80955050505050509250929050565b600082516104058184602087016102f9565b9190910192915050565b602081526000825180602084015261042e8160408501602087016102f9565b601f01601f19169190910160400192915050565b6102c7806104516000396000f3fe60806040523661001357610011610017565b005b6100115b610027610022610067565b61009f565b565b606061004e838360405180606001604052806027815260200161026b602791396100c3565b9392505050565b6001600160a01b03163b151590565b90565b600061009a7f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc546001600160a01b031690565b905090565b3660008037600080366000845af43d6000803e8080156100be573d6000f35b3d6000fd5b6060600080856001600160a01b0316856040516100e0919061021b565b600060405180830381855af49150503d806000811461011b576040519150601f19603f3d011682016040523d82523d6000602084013e610120565b606091505b50915091506101318683838761013b565b9695505050505050565b606083156101af5782516000036101a8576001600160a01b0385163b6101a85760405162461bcd60e51b815260206004820152601d60248201527f416464726573733a2063616c6c20746f206e6f6e2d636f6e747261637400000060448201526064015b60405180910390fd5b50816101b9565b6101b983836101c1565b949350505050565b8151156101d15781518083602001fd5b8060405162461bcd60e51b815260040161019f9190610237565b60005b838110156102065781810151838201526020016101ee565b83811115610215576000848401525b50505050565b6000825161022d8184602087016101eb565b9190910192915050565b60208152600082518060208401526102568160408501602087016101eb565b601f01601f1916919091016040019291505056fe416464726573733a206c6f772d6c6576656c2064656c65676174652063616c6c206661696c6564a26469706673582212203a24ac3bd56c1724e4cf20488813acf880a23980867f0e9c152d5ae1e43d88cf64736f6c634300080f0033416464726573733a206c6f772d6c6576656c2064656c65676174652063616c6c206661696c6564",
+    "sourceMap": "522:1416:24:-:0;;;1716:220;;;;;;;;;;;;;;;;;;:::i;:::-;1785:6;1793:5;1024:39:16;1785:6:24;1793:5;1057::16;1024:17;:39::i;:::-;958:112;;1716:220:24;;522:1416;;2183:295:17;2321:29;2332:17;2321:10;:29::i;:::-;2378:1;2364:4;:11;:15;:28;;;;2383:9;2364:28;2360:112;;;2408:53;2437:17;2456:4;2408:28;;;;;:53;;:::i;:::-;;2360:112;2183:295;;;:::o;1897:152::-;1963:37;1982:17;1963:18;:37::i;:::-;2015:27;;-1:-1:-1;;;;;2015:27:17;;;;;;;;1897:152;:::o;6469:198:20:-;6552:12;6583:77;6604:6;6612:4;6583:77;;;;;;;;;;;;;;;;;:20;:77::i;:::-;6576:84;6469:198;-1:-1:-1;;;6469:198:20:o;1532:259:17:-;1613:37;1632:17;1613:18;;;;;:37;;:::i;:::-;1605:95;;;;-1:-1:-1;;;1605:95:17;;1666:2:37;1605:95:17;;;1648:21:37;1705:2;1685:18;;;1678:30;1744:34;1724:18;;;1717:62;-1:-1:-1;;;1795:18:37;;;1788:43;1848:19;;1605:95:17;;;;;;;;;1767:17;1710:48;1030:66;1737:20;;1710:26;;;;;:48;;:::i;:::-;:74;;-1:-1:-1;;;;;;1710:74:17;-1:-1:-1;;;;;1710:74:17;;;;;;;;;;-1:-1:-1;1532:259:17:o;6853:325:20:-;6994:12;7019;7033:23;7060:6;-1:-1:-1;;;;;7060:19:20;7080:4;7060:25;;;;;;:::i;:::-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;-1:-1:-1;7018:67:20;;-1:-1:-1;7018:67:20;-1:-1:-1;7102:69:20;7129:6;7018:67;;7158:12;7102:26;:69::i;:::-;7095:76;6853:325;-1:-1:-1;;;;;;6853:325:20:o;1175:320::-;-1:-1:-1;;;;;1465:19:20;;:23;;;1175:320::o;1614:190:21:-;1784:4;1614:190::o;7466:628:20:-;7646:12;7674:7;7670:418;;;7701:10;:17;7722:1;7701:22;7697:286;;-1:-1:-1;;;;;1465:19:20;;;7908:60;;;;-1:-1:-1;;;7908:60:20;;2359:2:37;7908:60:20;;;2341:21:37;2398:2;2378:18;;;2371:30;2437:31;2417:18;;;2410:59;2486:18;;7908:60:20;2157:353:37;7908:60:20;-1:-1:-1;8003:10:20;7996:17;;7670:418;8044:33;8052:10;8064:12;8044:7;:33::i;:::-;7466:628;;;;;;:::o;8616:540::-;8775:17;;:21;8771:379;;9003:10;8997:17;9059:15;9046:10;9042:2;9038:19;9031:44;8771:379;9126:12;9119:20;;-1:-1:-1;;;9119:20:20;;;;;;;;:::i;14:127:37:-;75:10;70:3;66:20;63:1;56:31;106:4;103:1;96:15;130:4;127:1;120:15;146:258;218:1;228:113;242:6;239:1;236:13;228:113;;;318:11;;;312:18;299:11;;;292:39;264:2;257:10;228:113;;;359:6;356:1;353:13;350:48;;;-1:-1:-1;;394:1:37;376:16;;369:27;146:258::o;409:1050::-;497:6;505;558:2;546:9;537:7;533:23;529:32;526:52;;;574:1;571;564:12;526:52;600:16;;-1:-1:-1;;;;;645:31:37;;635:42;;625:70;;691:1;688;681:12;625:70;763:2;748:18;;742:25;714:5;;-1:-1:-1;;;;;;816:14:37;;;813:34;;;843:1;840;833:12;813:34;881:6;870:9;866:22;856:32;;926:7;919:4;915:2;911:13;907:27;897:55;;948:1;945;938:12;897:55;977:2;971:9;999:2;995;992:10;989:36;;;1005:18;;:::i;:::-;1080:2;1074:9;1048:2;1134:13;;-1:-1:-1;;1130:22:37;;;1154:2;1126:31;1122:40;1110:53;;;1178:18;;;1198:22;;;1175:46;1172:72;;;1224:18;;:::i;:::-;1264:10;1260:2;1253:22;1299:2;1291:6;1284:18;1339:7;1334:2;1329;1325;1321:11;1317:20;1314:33;1311:53;;;1360:1;1357;1350:12;1311:53;1373:55;1425:2;1420;1412:6;1408:15;1403:2;1399;1395:11;1373:55;:::i;:::-;1447:6;1437:16;;;;;;;409:1050;;;;;:::o;1878:274::-;2007:3;2045:6;2039:13;2061:53;2107:6;2102:3;2095:4;2087:6;2083:17;2061:53;:::i;:::-;2130:16;;;;;1878:274;-1:-1:-1;;1878:274:37:o;2515:383::-;2664:2;2653:9;2646:21;2627:4;2696:6;2690:13;2739:6;2734:2;2723:9;2719:18;2712:34;2755:66;2814:6;2809:2;2798:9;2794:18;2789:2;2781:6;2777:15;2755:66;:::i;:::-;2882:2;2861:15;-1:-1:-1;;2857:29:37;2842:45;;;;2889:2;2838:54;;2515:383;-1:-1:-1;;2515:383:37:o;:::-;522:1416:24;;;;;;",
+    "linkReferences": {}
+  },
+  "deployedBytecode": {
+    "object": "0x60806040523661001357610011610017565b005b6100115b610027610022610067565b61009f565b565b606061004e838360405180606001604052806027815260200161026b602791396100c3565b9392505050565b6001600160a01b03163b151590565b90565b600061009a7f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc546001600160a01b031690565b905090565b3660008037600080366000845af43d6000803e8080156100be573d6000f35b3d6000fd5b6060600080856001600160a01b0316856040516100e0919061021b565b600060405180830381855af49150503d806000811461011b576040519150601f19603f3d011682016040523d82523d6000602084013e610120565b606091505b50915091506101318683838761013b565b9695505050505050565b606083156101af5782516000036101a8576001600160a01b0385163b6101a85760405162461bcd60e51b815260206004820152601d60248201527f416464726573733a2063616c6c20746f206e6f6e2d636f6e747261637400000060448201526064015b60405180910390fd5b50816101b9565b6101b983836101c1565b949350505050565b8151156101d15781518083602001fd5b8060405162461bcd60e51b815260040161019f9190610237565b60005b838110156102065781810151838201526020016101ee565b83811115610215576000848401525b50505050565b6000825161022d8184602087016101eb565b9190910192915050565b60208152600082518060208401526102568160408501602087016101eb565b601f01601f1916919091016040019291505056fe416464726573733a206c6f772d6c6576656c2064656c65676174652063616c6c206661696c6564a26469706673582212203a24ac3bd56c1724e4cf20488813acf880a23980867f0e9c152d5ae1e43d88cf64736f6c634300080f0033",
+    "sourceMap": "522:1416:24:-:0;;;;;;2898:11:18;:9;:11::i;:::-;522:1416:24;;2675:11:18;2322:110;2397:28;2407:17;:15;:17::i;:::-;2397:9;:28::i;:::-;2322:110::o;6469:198:20:-;6552:12;6583:77;6604:6;6612:4;6583:77;;;;;;;;;;;;;;;;;:20;:77::i;:::-;6576:84;6469:198;-1:-1:-1;;;6469:198:20:o;1175:320::-;-1:-1:-1;;;;;1465:19:20;;:23;;;1175:320::o;1614:190:21:-;1784:4;1614:190::o;1148:140:16:-;1215:12;1246:35;1030:66:17;1380:54;-1:-1:-1;;;;;1380:54:17;;1301:140;1246:35:16;1239:42;;1148:140;:::o;948:895:18:-;1286:14;1283:1;1280;1267:34;1500:1;1497;1481:14;1478:1;1462:14;1455:5;1442:60;1576:16;1573:1;1570;1555:38;1614:6;1681:66;;;;1796:16;1793:1;1786:27;1681:66;1716:16;1713:1;1706:27;6853:325:20;6994:12;7019;7033:23;7060:6;-1:-1:-1;;;;;7060:19:20;7080:4;7060:25;;;;;;:::i;:::-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;7018:67;;;;7102:69;7129:6;7137:7;7146:10;7158:12;7102:26;:69::i;:::-;7095:76;6853:325;-1:-1:-1;;;;;;6853:325:20:o;7466:628::-;7646:12;7674:7;7670:418;;;7701:10;:17;7722:1;7701:22;7697:286;;-1:-1:-1;;;;;1465:19:20;;;7908:60;;;;-1:-1:-1;;;7908:60:20;;758:2:37;7908:60:20;;;740:21:37;797:2;777:18;;;770:30;836:31;816:18;;;809:59;885:18;;7908:60:20;;;;;;;;;-1:-1:-1;8003:10:20;7996:17;;7670:418;8044:33;8052:10;8064:12;8044:7;:33::i;:::-;7466:628;;;;;;:::o;8616:540::-;8775:17;;:21;8771:379;;9003:10;8997:17;9059:15;9046:10;9042:2;9038:19;9031:44;8771:379;9126:12;9119:20;;-1:-1:-1;;;9119:20:20;;;;;;;;:::i;14:258:37:-;86:1;96:113;110:6;107:1;104:13;96:113;;;186:11;;;180:18;167:11;;;160:39;132:2;125:10;96:113;;;227:6;224:1;221:13;218:48;;;262:1;253:6;248:3;244:16;237:27;218:48;;14:258;;;:::o;277:274::-;406:3;444:6;438:13;460:53;506:6;501:3;494:4;486:6;482:17;460:53;:::i;:::-;529:16;;;;;277:274;-1:-1:-1;;277:274:37:o;914:383::-;1063:2;1052:9;1045:21;1026:4;1095:6;1089:13;1138:6;1133:2;1122:9;1118:18;1111:34;1154:66;1213:6;1208:2;1197:9;1193:18;1188:2;1180:6;1176:15;1154:66;:::i;:::-;1281:2;1260:15;-1:-1:-1;;1256:29:37;1241:45;;;;1288:2;1237:54;;914:383;-1:-1:-1;;914:383:37:o",
+    "linkReferences": {}
+  },
+  "methodIdentifiers": {},
+  "rawMetadata": "{\"compiler\":{\"version\":\"0.8.15+commit.e14f2714\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_logic\",\"type\":\"address\"},{\"internalType\":\"bytes\",\"name\":\"_data\",\"type\":\"bytes\"}],\"stateMutability\":\"payable\",\"type\":\"constructor\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"previousAdmin\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newAdmin\",\"type\":\"address\"}],\"name\":\"AdminChanged\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"beacon\",\"type\":\"address\"}],\"name\":\"BeaconUpgraded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"implementation\",\"type\":\"address\"}],\"name\":\"Upgraded\",\"type\":\"event\"},{\"stateMutability\":\"payable\",\"type\":\"fallback\"},{\"stateMutability\":\"payable\",\"type\":\"receive\"}],\"devdoc\":{\"author\":\"Worldcoin\",\"details\":\"The manager is based on the principle of verifying externally-created Zero Knowledge Proofs      to perform the insertions. This contract is a proxy contract that delegates actual logic to      the implementation.\",\"kind\":\"dev\",\"methods\":{\"constructor\":{\"details\":\"This constructor is only called once, and can be called with the encoded call necessary      to initialize the logic contract.\",\"params\":{\"_data\":\"If this is non-empty, it is used as the data for a `delegatecall` to `_logic`.        This is usually an encoded function call, and allows for initialising the storage of        the proxy in a way similar to a traditional solidity constructor.\",\"_logic\":\"The initial implementation (delegate) of the contract that this acts as a proxy        for.\"}}},\"title\":\"WorldID Identity Manager\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"constructor\":{\"notice\":\"Constructs a new instance of the WorldID identity manager.\"}},\"notice\":\"An implementation of a batch-based identity manager for the WorldID protocol.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"src/WorldIDIdentityManager.sol\":\"WorldIDIdentityManager\"},\"evmVersion\":\"london\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[\":@zk-kit/=lib/zk-kit/packages/\",\":contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/\",\":ds-test/=lib/ds-test/src/\",\":forge-std/=lib/forge-std/src/\",\":openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/\",\":semaphore/=lib/semaphore/contracts/\",\":solmate/=lib/solmate/src/\",\":zk-kit/=lib/zk-kit/\"]},\"sources\":{\"lib/openzeppelin-contracts/contracts/interfaces/draft-IERC1822.sol\":{\"keccak256\":\"0x1d4afe6cb24200cc4545eed814ecf5847277dfe5d613a1707aad5fceecebcfff\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://383fb7b8181016ac5ccf07bc9cdb7c1b5045ea36e2cc4df52bcbf20396fc7688\",\"dweb:/ipfs/QmYJ7Cg4WmE3rR8KGQxjUCXFfTH6TcwZ2Z1f6tPrq7jHFr\"]},\"lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol\":{\"keccak256\":\"0xa2b22da3032e50b55f95ec1d13336102d675f341167aa76db571ef7f8bb7975d\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://96b6d77a20bebd4eb06b801d3d020c7e82be13bd535cb0d0a6b7181c51dab5d5\",\"dweb:/ipfs/QmPUR9Cv9jNFdQX6PtBfaBW1ZCnKwiu65R2VD5kbdanDyn\"]},\"lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Upgrade.sol\":{\"keccak256\":\"0xabf3f59bc0e5423eae45e459dbe92e7052c6983628d39008590edc852a62f94a\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://89c2a0f70157c13845be5cb49b078a6374fee3a78fa950052a3af26190255da8\",\"dweb:/ipfs/QmUcvMEQH1oMM2pUyMuDiBUKdvvnTz1NRB8bmPHrVq8725\"]},\"lib/openzeppelin-contracts/contracts/proxy/Proxy.sol\":{\"keccak256\":\"0xc130fe33f1b2132158531a87734153293f6d07bc263ff4ac90e85da9c82c0e27\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://8831721b6f4cc26534d190f9f1631c3f59c9ff38efdd911f85e0882b8e360472\",\"dweb:/ipfs/QmQZnLErZNStirSQ13ZNWQgvEYUtGE5tXYwn4QUPaVUfPN\"]},\"lib/openzeppelin-contracts/contracts/proxy/beacon/IBeacon.sol\":{\"keccak256\":\"0xd50a3421ac379ccb1be435fa646d66a65c986b4924f0849839f08692f39dde61\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://ada1e030c0231db8d143b44ce92b4d1158eedb087880cad6d8cc7bd7ebe7b354\",\"dweb:/ipfs/QmWZ2NHZweRpz1U9GF6R1h65ri76dnX7fNxLBeM2t5N5Ce\"]},\"lib/openzeppelin-contracts/contracts/utils/Address.sol\":{\"keccak256\":\"0xf96f969e24029d43d0df89e59d365f277021dac62b48e1c1e3ebe0acdd7f1ca1\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://ec772b45a624be516f1c81970caa8a2e144301e9d0921cbc1a2789fef39a1269\",\"dweb:/ipfs/QmNyjwxCrGhQMyzLD93oUobJXVe9ceJvRvfXwbEtuxPiEj\"]},\"lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol\":{\"keccak256\":\"0xd5c50c54bf02740ebd122ff06832546cb5fa84486d52695a9ccfd11666e0c81d\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://39e096c60a6eb1c6a257122d515496bd92d0c6a693a8f07acb6aa4b1263e95d4\",\"dweb:/ipfs/QmPs5trJBacCiSkezP6tpevapuRYWNY6mqSFzsMCJj7e6B\"]},\"src/WorldIDIdentityManager.sol\":{\"keccak256\":\"0x70eecdf78970ae15a2e1bc5937c106e7d3c661516467b58c98f4b45d93e7de43\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://caa4b9512febb12f6178c8a2d73c84e61e914b08709a7a53d8202e97a6442686\",\"dweb:/ipfs/QmXotS3gBdwPueNzsFKbVh33sNqEmu23E114PbMrNWGQEU\"]}},\"version\":1}",
+  "metadata": {
+    "compiler": {
+      "version": "0.8.15+commit.e14f2714"
+    },
+    "language": "Solidity",
+    "output": {
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_logic",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes",
+              "name": "_data",
+              "type": "bytes"
+            }
+          ],
+          "stateMutability": "payable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "previousAdmin",
+              "type": "address",
+              "indexed": false
+            },
+            {
+              "internalType": "address",
+              "name": "newAdmin",
+              "type": "address",
+              "indexed": false
+            }
+          ],
+          "type": "event",
+          "name": "AdminChanged",
+          "anonymous": false
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "beacon",
+              "type": "address",
+              "indexed": true
+            }
+          ],
+          "type": "event",
+          "name": "BeaconUpgraded",
+          "anonymous": false
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "implementation",
+              "type": "address",
+              "indexed": true
+            }
+          ],
+          "type": "event",
+          "name": "Upgraded",
+          "anonymous": false
+        },
+        {
+          "inputs": [],
+          "stateMutability": "payable",
+          "type": "fallback"
+        },
+        {
+          "inputs": [],
+          "stateMutability": "payable",
+          "type": "receive"
+        }
+      ],
+      "devdoc": {
+        "kind": "dev",
+        "methods": {
+          "constructor": {
+            "details": "This constructor is only called once, and can be called with the encoded call necessary      to initialize the logic contract.",
+            "params": {
+              "_data": "If this is non-empty, it is used as the data for a `delegatecall` to `_logic`.        This is usually an encoded function call, and allows for initialising the storage of        the proxy in a way similar to a traditional solidity constructor.",
+              "_logic": "The initial implementation (delegate) of the contract that this acts as a proxy        for."
+            }
+          }
+        },
+        "version": 1
+      },
+      "userdoc": {
+        "kind": "user",
+        "methods": {
+          "constructor": {
+            "notice": "Constructs a new instance of the WorldID identity manager."
+          }
+        },
+        "version": 1
+      }
+    },
+    "settings": {
+      "remappings": [
+        ":@zk-kit/=lib/zk-kit/packages/",
+        ":contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+        ":ds-test/=lib/ds-test/src/",
+        ":forge-std/=lib/forge-std/src/",
+        ":openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/",
+        ":semaphore/=lib/semaphore/contracts/",
+        ":solmate/=lib/solmate/src/",
+        ":zk-kit/=lib/zk-kit/"
+      ],
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "metadata": {
+        "bytecodeHash": "ipfs"
+      },
+      "compilationTarget": {
+        "src/WorldIDIdentityManager.sol": "WorldIDIdentityManager"
+      },
+      "libraries": {}
+    },
+    "sources": {
+      "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC1822.sol": {
+        "keccak256": "0x1d4afe6cb24200cc4545eed814ecf5847277dfe5d613a1707aad5fceecebcfff",
+        "urls": [
+          "bzz-raw://383fb7b8181016ac5ccf07bc9cdb7c1b5045ea36e2cc4df52bcbf20396fc7688",
+          "dweb:/ipfs/QmYJ7Cg4WmE3rR8KGQxjUCXFfTH6TcwZ2Z1f6tPrq7jHFr"
+        ],
+        "license": "MIT"
+      },
+      "lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol": {
+        "keccak256": "0xa2b22da3032e50b55f95ec1d13336102d675f341167aa76db571ef7f8bb7975d",
+        "urls": [
+          "bzz-raw://96b6d77a20bebd4eb06b801d3d020c7e82be13bd535cb0d0a6b7181c51dab5d5",
+          "dweb:/ipfs/QmPUR9Cv9jNFdQX6PtBfaBW1ZCnKwiu65R2VD5kbdanDyn"
+        ],
+        "license": "MIT"
+      },
+      "lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Upgrade.sol": {
+        "keccak256": "0xabf3f59bc0e5423eae45e459dbe92e7052c6983628d39008590edc852a62f94a",
+        "urls": [
+          "bzz-raw://89c2a0f70157c13845be5cb49b078a6374fee3a78fa950052a3af26190255da8",
+          "dweb:/ipfs/QmUcvMEQH1oMM2pUyMuDiBUKdvvnTz1NRB8bmPHrVq8725"
+        ],
+        "license": "MIT"
+      },
+      "lib/openzeppelin-contracts/contracts/proxy/Proxy.sol": {
+        "keccak256": "0xc130fe33f1b2132158531a87734153293f6d07bc263ff4ac90e85da9c82c0e27",
+        "urls": [
+          "bzz-raw://8831721b6f4cc26534d190f9f1631c3f59c9ff38efdd911f85e0882b8e360472",
+          "dweb:/ipfs/QmQZnLErZNStirSQ13ZNWQgvEYUtGE5tXYwn4QUPaVUfPN"
+        ],
+        "license": "MIT"
+      },
+      "lib/openzeppelin-contracts/contracts/proxy/beacon/IBeacon.sol": {
+        "keccak256": "0xd50a3421ac379ccb1be435fa646d66a65c986b4924f0849839f08692f39dde61",
+        "urls": [
+          "bzz-raw://ada1e030c0231db8d143b44ce92b4d1158eedb087880cad6d8cc7bd7ebe7b354",
+          "dweb:/ipfs/QmWZ2NHZweRpz1U9GF6R1h65ri76dnX7fNxLBeM2t5N5Ce"
+        ],
+        "license": "MIT"
+      },
+      "lib/openzeppelin-contracts/contracts/utils/Address.sol": {
+        "keccak256": "0xf96f969e24029d43d0df89e59d365f277021dac62b48e1c1e3ebe0acdd7f1ca1",
+        "urls": [
+          "bzz-raw://ec772b45a624be516f1c81970caa8a2e144301e9d0921cbc1a2789fef39a1269",
+          "dweb:/ipfs/QmNyjwxCrGhQMyzLD93oUobJXVe9ceJvRvfXwbEtuxPiEj"
+        ],
+        "license": "MIT"
+      },
+      "lib/openzeppelin-contracts/contracts/utils/StorageSlot.sol": {
+        "keccak256": "0xd5c50c54bf02740ebd122ff06832546cb5fa84486d52695a9ccfd11666e0c81d",
+        "urls": [
+          "bzz-raw://39e096c60a6eb1c6a257122d515496bd92d0c6a693a8f07acb6aa4b1263e95d4",
+          "dweb:/ipfs/QmPs5trJBacCiSkezP6tpevapuRYWNY6mqSFzsMCJj7e6B"
+        ],
+        "license": "MIT"
+      },
+      "src/WorldIDIdentityManager.sol": {
+        "keccak256": "0x70eecdf78970ae15a2e1bc5937c106e7d3c661516467b58c98f4b45d93e7de43",
+        "urls": [
+          "bzz-raw://caa4b9512febb12f6178c8a2d73c84e61e914b08709a7a53d8202e97a6442686",
+          "dweb:/ipfs/QmXotS3gBdwPueNzsFKbVh33sNqEmu23E114PbMrNWGQEU"
+        ],
+        "license": "MIT"
+      }
+    },
+    "version": 1
+  },
+  "ast": {
+    "absolutePath": "src/WorldIDIdentityManager.sol",
+    "id": 24082,
+    "exportedSymbols": {
+      "ERC1967Proxy": [
+        22084
+      ],
+      "WorldIDIdentityManager": [
+        24081
+      ]
+    },
+    "nodeType": "SourceUnit",
+    "src": "32:1907:24",
+    "nodes": [
+      {
+        "id": 24062,
+        "nodeType": "PragmaDirective",
+        "src": "32:24:24",
+        "nodes": [],
+        "literals": [
+          "solidity",
+          "^",
+          "0.8",
+          ".10"
+        ]
+      },
+      {
+        "id": 24064,
+        "nodeType": "ImportDirective",
+        "src": "58:83:24",
+        "nodes": [],
+        "absolutePath": "lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol",
+        "file": "openzeppelin-contracts/proxy/ERC1967/ERC1967Proxy.sol",
+        "nameLocation": "-1:-1:-1",
+        "scope": 24082,
+        "sourceUnit": 22085,
+        "symbolAliases": [
+          {
+            "foreign": {
+              "id": 24063,
+              "name": "ERC1967Proxy",
+              "nodeType": "Identifier",
+              "overloadedDeclarations": [],
+              "referencedDeclaration": 22084,
+              "src": "66:12:24",
+              "typeDescriptions": {}
+            },
+            "nameLocation": "-1:-1:-1"
+          }
+        ],
+        "unitAlias": ""
+      },
+      {
+        "id": 24081,
+        "nodeType": "ContractDefinition",
+        "src": "522:1416:24",
+        "nodes": [
+          {
+            "id": 24080,
+            "nodeType": "FunctionDefinition",
+            "src": "1716:220:24",
+            "nodes": [],
+            "body": {
+              "id": 24079,
+              "nodeType": "Block",
+              "src": "1800:136:24",
+              "nodes": [],
+              "statements": []
+            },
+            "documentation": {
+              "id": 24068,
+              "nodeType": "StructuredDocumentation",
+              "src": "1082:629:24",
+              "text": "@notice Constructs a new instance of the WorldID identity manager.\n @dev This constructor is only called once, and can be called with the encoded call necessary\n      to initialize the logic contract.\n @param _logic The initial implementation (delegate) of the contract that this acts as a proxy\n        for.\n @param _data If this is non-empty, it is used as the data for a `delegatecall` to `_logic`.\n        This is usually an encoded function call, and allows for initialising the storage of\n        the proxy in a way similar to a traditional solidity constructor."
+            },
+            "implemented": true,
+            "kind": "constructor",
+            "modifiers": [
+              {
+                "arguments": [
+                  {
+                    "id": 24075,
+                    "name": "_logic",
+                    "nodeType": "Identifier",
+                    "overloadedDeclarations": [],
+                    "referencedDeclaration": 24070,
+                    "src": "1785:6:24",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  {
+                    "id": 24076,
+                    "name": "_data",
+                    "nodeType": "Identifier",
+                    "overloadedDeclarations": [],
+                    "referencedDeclaration": 24072,
+                    "src": "1793:5:24",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_memory_ptr",
+                      "typeString": "bytes memory"
+                    }
+                  }
+                ],
+                "id": 24077,
+                "kind": "baseConstructorSpecifier",
+                "modifierName": {
+                  "id": 24074,
+                  "name": "ERC1967Proxy",
+                  "nodeType": "IdentifierPath",
+                  "referencedDeclaration": 22084,
+                  "src": "1772:12:24"
+                },
+                "nodeType": "ModifierInvocation",
+                "src": "1772:27:24"
+              }
+            ],
+            "name": "",
+            "nameLocation": "-1:-1:-1",
+            "parameters": {
+              "id": 24073,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 24070,
+                  "mutability": "mutable",
+                  "name": "_logic",
+                  "nameLocation": "1736:6:24",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 24080,
+                  "src": "1728:14:24",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 24069,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1728:7:24",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 24072,
+                  "mutability": "mutable",
+                  "name": "_data",
+                  "nameLocation": "1757:5:24",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 24080,
+                  "src": "1744:18:24",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 24071,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1744:5:24",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "1727:36:24"
+            },
+            "returnParameters": {
+              "id": 24078,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "1800:0:24"
+            },
+            "scope": 24081,
+            "stateMutability": "payable",
+            "virtual": false,
+            "visibility": "public"
+          }
+        ],
+        "abstract": false,
+        "baseContracts": [
+          {
+            "baseName": {
+              "id": 24066,
+              "name": "ERC1967Proxy",
+              "nodeType": "IdentifierPath",
+              "referencedDeclaration": 22084,
+              "src": "557:12:24"
+            },
+            "id": 24067,
+            "nodeType": "InheritanceSpecifier",
+            "src": "557:12:24"
+          }
+        ],
+        "canonicalName": "WorldIDIdentityManager",
+        "contractDependencies": [],
+        "contractKind": "contract",
+        "documentation": {
+          "id": 24065,
+          "nodeType": "StructuredDocumentation",
+          "src": "143:379:24",
+          "text": "@title WorldID Identity Manager\n @author Worldcoin\n @notice An implementation of a batch-based identity manager for the WorldID protocol.\n @dev The manager is based on the principle of verifying externally-created Zero Knowledge Proofs\n      to perform the insertions. This contract is a proxy contract that delegates actual logic to\n      the implementation."
+        },
+        "fullyImplemented": true,
+        "linearizedBaseContracts": [
+          24081,
+          22084,
+          22402,
+          22454
+        ],
+        "name": "WorldIDIdentityManager",
+        "nameLocation": "531:22:24",
+        "scope": 24082,
+        "usedErrors": []
+      }
+    ],
+    "license": "MIT"
+  },
+  "id": 24
+}

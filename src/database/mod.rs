@@ -142,18 +142,34 @@ impl Database {
         Ok(row.map(|row| row.get::<i64, _>(0) as usize))
     }
 
-    pub async fn mark_identity_submitted_to_contract(
+    /// Marks the identities at the provided `leaf_indices` as being submitted
+    /// to the contract on chain.
+    ///
+    /// # Note
+    /// All updates are performed as part of a single transaction. If any
+    /// failure occurs, the entire batch will be rolled back.
+    pub async fn mark_identities_submitted_to_contract(
         &self,
-        leaf_index: usize,
+        leaf_indices: &[usize],
     ) -> Result<(), Error> {
-        let query = sqlx::query(
-            r#"UPDATE identities
-                       SET status = $2
-                       WHERE leaf_index = $1;"#,
-        )
-        .bind(leaf_index as i64)
-        .bind(<&str>::from(Status::Mined));
-        self.pool.execute(query).await?;
+        let mut tx = self.pool.begin().await?;
+
+        // Note that there are more efficient ways to do this in certain dialects of
+        // SQL. Postgres has the `VALUES` embedding, for example. Using a transaction as
+        // done here is backend agnostic, and hence works in production and for the
+        // tests.
+        for index in leaf_indices {
+            let query = sqlx::query(
+                r#"UPDATE identities
+                           SET status = $2
+                           WHERE leaf_index = $1;"#,
+            )
+            .bind(*index as i64)
+            .bind(<&str>::from(Status::Mined));
+            tx.execute(query).await?;
+        }
+
+        tx.commit().await?;
         Ok(())
     }
 

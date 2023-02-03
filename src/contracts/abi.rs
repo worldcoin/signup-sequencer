@@ -15,7 +15,7 @@ abigen!(
         error NonExistentRoot()
         error ImplementationNotInitalized()
         constructor(address _logic, bytes memory data) payable
-        function initialize(uint256 initialRoot, address merkleTreeVerifier_) public virtual
+        function initialize(uint256 initialRoot, address merkleTreeVerifier_, bool _enableStateBridge, address initialStateBridgeProxyAddress) public virtual
         function registerIdentities(uint256[8] calldata insertionProof, uint256 preRoot, uint32 startIndex, uint256[] calldata identityCommitments, uint256 postRoot) public virtual
         function calculateTreeVerifierInputHash(uint32 startIndex, uint256 preRoot, uint256 postRoot, uint256[] identityCommitments) public view virtual returns (bytes32 hash)
         function latestRoot() public view virtual returns (uint256 root)

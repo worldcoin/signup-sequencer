@@ -90,6 +90,8 @@ pub enum Error {
     IdentityCommitmentNotFound,
     #[error("provided identity commitment is invalid")]
     InvalidCommitment,
+    #[error("provided identity commitment is not in reduced form")]
+    UnreducedCommitment,
     #[error("provided identity commitment is already included")]
     DuplicateCommitment,
     #[error("Root mismatch between tree and contract.")]

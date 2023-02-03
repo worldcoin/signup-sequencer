@@ -16,7 +16,6 @@ license-file = "mit-license.md"
 
 [features]
 default = [ ]
-batching-contract = [ ]
 oz-provider = [ ]
 bench = ["criterion", "proptest"]
 mimalloc = ["cli-batteries/mimalloc"]
@@ -54,7 +53,7 @@ serde_json = "1.0"
 sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "any", "sqlite", "postgres"] }
 tempfile = "3.3.0"
 thiserror = "1.0"
-tokio = { version = "1.17", features = ["signal", "macros", "rt", "sync", "time", "rt-multi-thread", "tracing"] }
+tokio = { version = "1.17", features = ["signal", "macros", "rt", "sync", "time", "rt-multi-thread", "tracing", "test-util"] }
 tracing = "0.1"
 tracing-futures = "0.2"
 url = "2.2"
@@ -67,6 +66,7 @@ cli-batteries = { version = "0.4.0", features = ["mock-shutdown"] }
 hex = "0.4.3"
 hex-literal = "0.3"
 proptest = { version = "1.0" }
+regex = { version = "1.7.1", features = ["std"] }
 serial_test = { version = "1.0.0" }
 tracing-subscriber = "0.3.11"
 tracing-test = "0.2"

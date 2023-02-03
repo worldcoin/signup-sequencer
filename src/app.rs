@@ -10,15 +10,14 @@ use tracing::{info, instrument, warn};
 
 use crate::{
     contracts,
-    contracts::{
-        batching::Contract as BatchingContract, legacy::Contract as LegacyContract,
-        IdentityManager, SharedIdentityManager,
-    },
+    contracts::{IdentityManager, SharedIdentityManager},
     database::{self, Database},
     ethereum::{self, Ethereum},
+    identity_committer,
     identity_committer::IdentityCommitter,
     identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, Status, TreeItem, TreeState},
     prover,
+    prover::batch_insertion::Prover as BatchInsertionProver,
     server::{Error as ServerError, ToResponseCode},
 };
 
@@ -53,6 +52,9 @@ pub struct Options {
     #[clap(flatten)]
     pub prover: prover::Options,
 
+    #[clap(flatten)]
+    pub committer: identity_committer::Options,
+
     /// Block number to start syncing from
     #[clap(long, env, default_value = "0")]
     pub starting_block: u64,
@@ -69,6 +71,7 @@ pub struct App {
     identity_manager:   SharedIdentityManager,
     identity_committer: Arc<IdentityCommitter>,
     tree_state:         TreeState,
+    snark_scalar_field: Hash,
 }
 
 impl App {
@@ -82,14 +85,11 @@ impl App {
         // Connect to Ethereum and Database
         let (database, (ethereum, identity_manager)) = {
             let db = Database::new(options.database);
+            let prover = BatchInsertionProver::new(&options.prover.batch_insertion)?;
 
             let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
-                let identity_manager = if cfg!(feature = "batching-contract") {
-                    BatchingContract::new(options.contracts, ethereum.clone()).await?;
-                    panic!("The batching contract does not yet exist but was requested.");
-                } else {
-                    LegacyContract::new(options.contracts, ethereum.clone()).await?
-                };
+                let identity_manager =
+                    IdentityManager::new(options.contracts, ethereum.clone(), prover).await?;
                 Ok((ethereum, Arc::new(identity_manager)))
             });
 
@@ -110,7 +110,16 @@ impl App {
             database.clone(),
             identity_manager.clone(),
             tree_state.clone(),
+            &options.committer,
         ));
+
+        // TODO Export the reduced-ness check that this is enabling from the
+        //  `semaphore-rs` library when we bump the version.
+        let snark_scalar_field = Hash::from_str_radix(
+            "21888242871839275222246405745257275088548364400416034343698204186575808495617",
+            10,
+        )
+        .expect("This should just parse.");
 
         // Sync with chain on start up
         let app = Self {
@@ -119,6 +128,7 @@ impl App {
             identity_manager,
             identity_committer,
             tree_state,
+            snark_scalar_field,
         };
 
         // Process to push new identities to Ethereum
@@ -138,10 +148,11 @@ impl App {
             mined_builder.append(&update);
         }
         let mined = mined_builder.seal();
-        let latest = mined.next_version().await;
+        let batching = mined.next_version().await;
+        let latest = batching.next_version().await;
         let pending_items = database.get_commitments_by_status(Status::Pending).await?;
         latest.append_many_fresh(&pending_items).await;
-        Ok(TreeState::new(mined, latest))
+        Ok(TreeState::new(mined, batching, latest))
     }
 
     /// Queues an insert into the merkle tree.
@@ -158,6 +169,14 @@ impl App {
         if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
+        }
+
+        if !self.identity_is_reduced(commitment) {
+            warn!(
+                ?commitment,
+                "The provided commitment is not an element of the field."
+            );
+            return Err(ServerError::UnreducedCommitment);
         }
 
         let insertion_result = self
@@ -183,6 +202,10 @@ impl App {
                 })
                 .await,
         ))
+    }
+
+    fn identity_is_reduced(&self, commitment: Hash) -> bool {
+        commitment.lt(&self.snark_scalar_field)
     }
 
     async fn sync_tree_to(&self, leaf_idx: usize) -> Result<(), ServerError> {

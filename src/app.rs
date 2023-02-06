@@ -17,7 +17,7 @@ use crate::{
     database::{self, Database},
     ethereum::{self, Ethereum},
     identity_committer::IdentityCommitter,
-    identity_tree::{Hash, InclusionProof, TreeState, CanonicalTreeBuilder, Status, TreeItem},
+    identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, Status, TreeItem, TreeState},
     prover,
     server::{Error as ServerError, ToResponseCode},
 };

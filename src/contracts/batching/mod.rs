@@ -3,7 +3,7 @@ mod abi;
 use self::abi::BatchingContract as ContractAbi;
 use crate::{
     contracts::{IdentityManager, Options},
-    ethereum::{Ethereum, TxError, write::TransactionId, ReadProvider},
+    ethereum::{write::TransactionId, Ethereum, ReadProvider, TxError},
 };
 use async_trait::async_trait;
 use ethers::{providers::Middleware, types::U256};

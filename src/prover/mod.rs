@@ -5,7 +5,6 @@ mod proof;
 use crate::prover::{identity::Identity, proof::Proof};
 use clap::Parser;
 use ethers::{types::U256, utils::keccak256};
-use reqwest;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},

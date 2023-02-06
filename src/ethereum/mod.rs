@@ -5,7 +5,7 @@ use clap::Parser;
 use ethers::types::{transaction::eip2718::TypedTransaction, Address};
 use tracing::instrument;
 
-pub use read::{EventError, Log, ReadProvider};
+pub use read::{EventError, ReadProvider};
 pub use write::TxError;
 
 use self::write::{TransactionId, WriteProvider};

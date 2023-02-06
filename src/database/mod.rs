@@ -126,7 +126,7 @@ impl Database {
         Ok(Self { pool })
     }
 
-    pub async fn insert_identity_if_not_duplicate(
+    pub async fn insert_identity_if_does_not_exist(
         &self,
         identity: &Hash,
     ) -> Result<Option<usize>, Error> {
@@ -157,7 +157,7 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_updates_range(
+    pub async fn get_updates_in_range(
         &self,
         from_index: usize,
         to_index: usize,
@@ -183,7 +183,10 @@ impl Database {
             .collect::<Result<Vec<_>, _>>()
     }
 
-    pub async fn get_identity_index(&self, identity: &Hash) -> Result<Option<TreeItem>, Error> {
+    pub async fn get_identity_leaf_index(
+        &self,
+        identity: &Hash,
+    ) -> Result<Option<TreeItem>, Error> {
         let query = sqlx::query(
             r#"SELECT leaf_index, status
                        FROM identities

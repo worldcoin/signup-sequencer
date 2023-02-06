@@ -96,10 +96,10 @@ impl IdentityCommitter {
         let (wake_up_sender, mut wake_up_receiver) = mpsc::channel(1);
         let database = self.database.clone();
         let identity_manager = self.identity_manager.clone();
-        let tree = self.tree_state.get_mined_tree();
+        let mined_tree = self.tree_state.get_mined_tree();
         let handle = spawn_or_abort(async move {
             select! {
-                result = Self::process_identities(&database, &*identity_manager, &tree, &mut wake_up_receiver) => {
+                result = Self::process_identities(&database, &*identity_manager, &mined_tree, &mut wake_up_receiver) => {
                     result?;
                 }
                 _ = shutdown_receiver.recv() => {
@@ -119,12 +119,12 @@ impl IdentityCommitter {
     async fn process_identities(
         database: &Database,
         identity_manager: &(dyn IdentityManager + Send + Sync),
-        tree: &TreeVersion,
+        mined_tree: &TreeVersion,
         wake_up_receiver: &mut Receiver<()>,
     ) -> AnyhowResult<()> {
         loop {
-            while let Some(update) = tree.peek_next_update().await {
-                Self::commit_identity(database, identity_manager, tree, &update).await?;
+            while let Some(update) = mined_tree.peek_next_update().await {
+                Self::commit_identity(database, identity_manager, mined_tree, &update).await?;
             }
 
             wake_up_receiver.recv().await;
@@ -136,7 +136,7 @@ impl IdentityCommitter {
     async fn commit_identity(
         database: &Database,
         identity_manager: &(dyn IdentityManager + Send + Sync),
-        tree: &TreeVersion,
+        mined_tree: &TreeVersion,
         update: &TreeUpdate,
     ) -> AnyhowResult<()> {
         // Send Semaphore transaction
@@ -152,7 +152,7 @@ impl IdentityCommitter {
             .mark_identity_submitted_to_contract(update.leaf_index)
             .await?;
 
-        tree.apply_next_update().await;
+        mined_tree.apply_next_update().await;
 
         Ok(())
     }

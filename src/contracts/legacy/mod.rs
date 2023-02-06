@@ -1,19 +1,17 @@
-mod abi;
-
-use self::abi::{LegacyContract as ContractAbi, MemberAddedFilter};
-use crate::{
-    contracts::{EventStream, IdentityManager, Options},
-    ethereum::{write::TransactionId, Ethereum, EventError, ReadProvider, TxError},
-};
 use anyhow::anyhow;
 use async_trait::async_trait;
-use core::future;
 use ethers::{providers::Middleware, types::U256};
-use futures::TryStreamExt;
 use semaphore::Field;
 use tracing::{error, info, instrument};
 
-pub type MemberAddedEvent = MemberAddedFilter;
+use crate::{
+    contracts::{IdentityManager, Options},
+    ethereum::{Ethereum, ReadProvider, TxError, write::TransactionId},
+};
+
+use self::abi::{LegacyContract as ContractAbi};
+
+mod abi;
 
 /// A structure representing the interface to the legacy identity manager
 /// contract.
@@ -103,14 +101,6 @@ impl IdentityManager for Contract {
         self.group_id
     }
 
-    async fn confirmed_block_number(&self) -> Result<u64, EventError> {
-        self.ethereum
-            .provider()
-            .confirmed_block_number()
-            .await
-            .map(|num| num.as_u64())
-    }
-
     #[instrument(level = "debug", skip_all)]
     async fn is_owner(&self) -> anyhow::Result<bool> {
         info!(address = ?self.ethereum.address(), "My address");
@@ -179,19 +169,5 @@ impl IdentityManager for Contract {
             return Err(anyhow!("Invalid root"));
         }
         Err(anyhow!("Error verifiying root: {}", result))
-    }
-
-    fn fetch_events(&self, starting_block: u64, end_block: Option<u64>) -> Option<EventStream<'_>> {
-        // Start the MemberAdded event stream.
-        let mut filter = self.abi.member_added_filter().from_block(starting_block);
-        if let Some(end_block) = end_block {
-            filter = filter.to_block(end_block);
-        }
-        let stream = self
-            .ethereum
-            .provider()
-            .fetch_events::<MemberAddedEvent>(&filter.filter)
-            .try_filter(|event| future::ready(event.event.group_id == self.group_id));
-        Some(Box::pin(stream))
     }
 }

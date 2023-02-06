@@ -93,6 +93,7 @@ impl App {
 
         let tree_state = Self::initialize_tree(
             &database,
+            // Poseidon tree depth is one more than the contract's tree depth
             identity_manager.tree_depth() + 1,
             identity_manager.initial_leaf_value(),
         )
@@ -154,7 +155,7 @@ impl App {
 
         let insertion_result = self
             .database
-            .insert_identity_if_not_duplicate(&commitment)
+            .insert_identity_if_does_not_exist(&commitment)
             .await?;
 
         let Some(leaf_idx) = insertion_result else {
@@ -169,7 +170,7 @@ impl App {
 
         Ok(InclusionProofResponse::from(
             self.tree_state
-                .get_proof(&TreeItem {
+                .get_proof_for(&TreeItem {
                     leaf_index: leaf_idx,
                     status:     Status::Pending,
                 })
@@ -185,7 +186,7 @@ impl App {
         }
         let identities = self
             .database
-            .get_updates_range(next_index, leaf_idx)
+            .get_updates_in_range(next_index, leaf_idx)
             .await?;
         tree.append_many_fresh(&identities).await;
         Ok(())
@@ -205,11 +206,11 @@ impl App {
 
         let item = self
             .database
-            .get_identity_index(commitment)
+            .get_identity_leaf_index(commitment)
             .await?
             .ok_or(ServerError::InvalidCommitment)?;
 
-        let proof = self.tree_state.get_proof(&item).await;
+        let proof = self.tree_state.get_proof_for(&item).await;
 
         Ok(InclusionProofResponse(proof))
     }

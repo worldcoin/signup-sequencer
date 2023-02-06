@@ -1,14 +1,16 @@
-mod abi;
-
-use self::abi::BatchingContract as ContractAbi;
-use crate::{
-    contracts::{EventStream, IdentityManager, Options},
-    ethereum::{write::TransactionId, Ethereum, EventError, ReadProvider, TxError},
-};
 use async_trait::async_trait;
 use ethers::{providers::Middleware, types::U256};
 use semaphore::Field;
 use tracing::{error, info, instrument};
+
+use crate::{
+    contracts::{IdentityManager, Options},
+    ethereum::{Ethereum, ReadProvider, TxError, write::TransactionId},
+};
+
+use self::abi::BatchingContract as ContractAbi;
+
+mod abi;
 
 // TODO [Ara] Remove the allows.
 /// A structure representing the interface to the batch-based identity manager
@@ -68,14 +70,6 @@ impl IdentityManager for Contract {
         todo!()
     }
 
-    async fn confirmed_block_number(&self) -> Result<u64, EventError> {
-        self.ethereum
-            .provider()
-            .confirmed_block_number()
-            .await
-            .map(|num| num.as_u64())
-    }
-
     #[instrument(level = "debug", skip_all)]
     async fn is_owner(&self) -> anyhow::Result<bool> {
         info!(address = ?self.ethereum.address(), "My address");
@@ -105,9 +99,5 @@ impl IdentityManager for Contract {
     #[instrument(level = "debug", skip_all)]
     async fn assert_valid_root(&self, _root: Field) -> anyhow::Result<()> {
         todo!()
-    }
-
-    fn fetch_events(&self, _: u64, _: Option<u64>) -> Option<EventStream<'_>> {
-        None
     }
 }

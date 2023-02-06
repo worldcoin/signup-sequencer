@@ -146,12 +146,13 @@ impl TreeVersion {
     }
 }
 
+#[derive(Debug)]
 pub struct TreeItem {
     pub status:     Status,
     pub leaf_index: usize,
 }
 
-#[derive(Clone, Copy, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Pending,
@@ -183,7 +184,7 @@ impl From<Status> for &str {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProof {
     pub status: Status,
@@ -213,7 +214,7 @@ impl TreeState {
         self.mined.clone()
     }
 
-    pub async fn get_proof(&self, item: &TreeItem) -> InclusionProof {
+    pub async fn get_proof_for(&self, item: &TreeItem) -> InclusionProof {
         let tree = match item.status {
             Status::Pending => &self.latest,
             Status::Mined => &self.mined,

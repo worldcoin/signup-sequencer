@@ -1,19 +1,19 @@
-use self::{rpc_logger::RpcLogger, transport::Transport};
-use crate::contracts::confirmed_log_query::{ConfirmedLogQuery, Error as CachingLogQueryError};
+use std::{num::ParseIntError, str::FromStr, time::Duration};
+
 use anyhow::{anyhow, Result as AnyhowResult};
 use chrono::{Duration as ChronoDuration, Utc};
 use clap::Parser;
 use ethers::{
-    abi::{Error as AbiError, RawLog},
-    contract::EthEvent,
-    providers::{Middleware, Provider, ProviderError},
-    types::{BlockId, BlockNumber, Chain, Filter, Log as EthLog, U256, U64},
+    abi::Error as AbiError,
+    providers::{Middleware, Provider},
+    types::{BlockId, BlockNumber, Chain, U256},
 };
-use futures::{try_join, FutureExt, Stream, StreamExt, TryStreamExt};
-use std::{num::ParseIntError, str::FromStr, time::Duration};
+use futures::{try_join, FutureExt};
 use thiserror::Error;
 use tracing::{error, info};
 use url::Url;
+
+use self::{rpc_logger::RpcLogger, transport::Transport};
 
 pub mod rpc_logger;
 pub mod transport;
@@ -55,10 +55,6 @@ pub struct ReadProvider {
     inner:                     InnerProvider,
     pub chain_id:              U256,
     pub legacy:                bool,
-    max_log_blocks:            usize,
-    min_log_blocks:            usize,
-    max_backoff_time:          Duration,
-    confirmation_blocks_delay: usize,
 }
 
 impl ReadProvider {
@@ -124,57 +120,6 @@ impl ReadProvider {
             inner: provider,
             chain_id,
             legacy: !eip1559,
-            max_log_blocks: options.max_log_blocks,
-            min_log_blocks: options.min_log_blocks,
-            max_backoff_time: options.max_backoff_time,
-            confirmation_blocks_delay: options.confirmation_blocks_delay,
-        })
-    }
-
-    pub async fn confirmed_block_number(&self) -> Result<U64, EventError> {
-        self.inner
-            .provider()
-            .get_block_number()
-            .await
-            .map(|num| num.saturating_sub(U64::from(self.confirmation_blocks_delay)))
-            .map_err(|e| EventError::Fetching(CachingLogQueryError::LoadLastBlock(e)))
-    }
-
-    pub fn fetch_events_raw(
-        &self,
-        filter: &Filter,
-    ) -> impl Stream<Item = Result<EthLog, EventError>> + '_ {
-        ConfirmedLogQuery::new(self.clone(), filter)
-            .with_start_page_size(self.max_log_blocks as u64)
-            .with_min_page_size(self.min_log_blocks as u64)
-            .with_max_backoff_time(self.max_backoff_time)
-            .with_blocks_delay(self.confirmation_blocks_delay as u64)
-            .into_stream()
-            .map_err(Into::into)
-    }
-
-    pub fn fetch_events<T: EthEvent>(
-        &self,
-        filter: &Filter,
-    ) -> impl Stream<Item = Result<Log<T>, EventError>> + '_ {
-        self.fetch_events_raw(filter).map(|res| {
-            res.and_then(|log| {
-                let event = T::decode_log(&RawLog {
-                    topics: log.topics.clone(),
-                    data:   log.data.to_vec(),
-                })
-                .map_err(EventError::from)?;
-
-                Ok(Log {
-                    block_index: log.block_number.ok_or(EventError::EmptyBlockIndex)?,
-                    transaction_index: log
-                        .transaction_index
-                        .ok_or(EventError::EmptyTransactionIndex)?,
-                    log_index: log.log_index.ok_or(EventError::EmptyLogIndex)?,
-                    raw_log: serde_json::to_string(&log).map_err(EventError::Serialize)?,
-                    event,
-                })
-            })
         })
     }
 }
@@ -189,26 +134,8 @@ impl Middleware for ReadProvider {
     }
 }
 
-pub struct Log<Event: EthEvent> {
-    pub block_index:       U64,
-    pub transaction_index: U64,
-    pub log_index:         U256,
-    pub raw_log:           String,
-    pub event:             Event,
-}
-
 #[derive(Debug, Error)]
 pub enum EventError {
-    #[error("Error fetching log event: {0}")]
-    Fetching(#[from] CachingLogQueryError<ProviderError>),
     #[error("Error parsing log event: {0}")]
     Parsing(#[from] AbiError),
-    #[error("couldn't serialize log to json: {0}")]
-    Serialize(#[source] serde_json::Error),
-    #[error("empty block index")]
-    EmptyBlockIndex,
-    #[error("empty transaction index")]
-    EmptyTransactionIndex,
-    #[error("empty log index")]
-    EmptyLogIndex,
 }

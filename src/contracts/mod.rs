@@ -1,18 +1,15 @@
 //! Functionality for interacting with smart contracts deployed on chain.
-pub mod batching;
-pub mod confirmed_log_query;
-pub mod legacy;
+use std::sync::Arc;
 
-use crate::{
-    contracts::legacy::MemberAddedEvent,
-    ethereum::{write::TransactionId, Ethereum, EventError, Log, TxError},
-};
 use async_trait::async_trait;
 use clap::Parser;
 use ethers::prelude::{Address, U256};
-use futures::Stream;
 use semaphore::Field;
-use std::{pin::Pin, sync::Arc};
+
+use crate::ethereum::{write::TransactionId, Ethereum, TxError};
+
+pub mod batching;
+pub mod legacy;
 
 /// Configuration options for the component responsible for interacting with the
 /// contract.
@@ -67,10 +64,6 @@ pub trait IdentityManager {
     /// Returns the group identifier associated with the identity manager.
     fn group_id(&self) -> U256;
 
-    /// Returns the number of the latest block that is confirmed to have been
-    /// mined.
-    async fn confirmed_block_number(&self) -> Result<u64, EventError>;
-
     /// Returns `true` if this `IdentityManager` acts via the manager address of
     /// the on-chain contract it manages.
     async fn is_owner(&self) -> anyhow::Result<bool>;
@@ -91,20 +84,7 @@ pub trait IdentityManager {
     /// A valid root is one that has not expired based on the time since it was
     /// inserted into the history of roots on chain.
     async fn assert_valid_root(&self, root: Field) -> anyhow::Result<()>;
-
-    // TODO [Ara] Remove this once the OZ relay work is integrated.
-    /// Fetches member added events from the blockchain from a starting block to
-    /// an optionally specified end block.
-    ///
-    /// Such functionality need not be supported by all identity managers, and
-    /// these may return `None` to signify such a situation.
-    fn fetch_events(&self, starting_block: u64, end_block: Option<u64>) -> Option<EventStream>;
 }
-
-/// The type of the event stream used by the contracts to receive events from on
-/// chain.
-type EventStream<'a> =
-    Pin<Box<dyn Stream<Item = Result<Log<MemberAddedEvent>, EventError>> + Send + 'a>>;
 
 /// A type for an identity manager object that can be sent across threads.
 pub type SharedIdentityManager = Arc<dyn IdentityManager + Send + Sync>;

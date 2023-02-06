@@ -1,11 +1,6 @@
-use crate::{
-    contracts::{IdentityManager, SharedIdentityManager},
-    database::Database,
-    identity_tree::{Hash, SharedTreeState},
-    utils::spawn_or_abort,
-};
-use anyhow::{anyhow, Result as AnyhowResult};
 use std::sync::Arc;
+
+use anyhow::{anyhow, Result as AnyhowResult};
 use tokio::{
     select,
     sync::{
@@ -15,6 +10,13 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::{debug, error, info, instrument, warn};
+
+use crate::{
+    contracts::{IdentityManager, SharedIdentityManager},
+    database::Database,
+    identity_tree::{TreeState, TreeUpdate, TreeVersion},
+    utils::spawn_or_abort,
+};
 
 struct RunningInstance {
     #[allow(dead_code)]
@@ -66,14 +68,14 @@ pub struct IdentityCommitter {
     instance:         RwLock<Option<RunningInstance>>,
     database:         Arc<Database>,
     identity_manager: SharedIdentityManager,
-    tree_state:       SharedTreeState,
+    tree_state:       TreeState,
 }
 
 impl IdentityCommitter {
     pub fn new(
         database: Arc<Database>,
         contracts: SharedIdentityManager,
-        tree_state: SharedTreeState,
+        tree_state: TreeState,
     ) -> Self {
         Self {
             instance: RwLock::new(None),
@@ -94,12 +96,11 @@ impl IdentityCommitter {
         let (wake_up_sender, mut wake_up_receiver) = mpsc::channel(1);
         let database = self.database.clone();
         let identity_manager = self.identity_manager.clone();
-        let tree_state = self.tree_state.clone();
+        let mined_tree = self.tree_state.get_mined_tree();
         let handle = spawn_or_abort(async move {
             select! {
-                result = Self::process_identities(&database, &*identity_manager, &tree_state, &mut wake_up_receiver) => {
+                result = Self::process_identities(&database, &*identity_manager, &mined_tree, &mut wake_up_receiver) => {
                     result?;
-
                 }
                 _ = shutdown_receiver.recv() => {
                     info!("Woke up by shutdown signal, exiting.");
@@ -118,15 +119,12 @@ impl IdentityCommitter {
     async fn process_identities(
         database: &Database,
         identity_manager: &(dyn IdentityManager + Send + Sync),
-        tree_state: &SharedTreeState,
+        mined_tree: &TreeVersion,
         wake_up_receiver: &mut Receiver<()>,
     ) -> AnyhowResult<()> {
         loop {
-            while let Some((group_id, commitment)) =
-                database.get_oldest_unprocessed_identity().await?
-            {
-                Self::commit_identity(database, identity_manager, tree_state, group_id, commitment)
-                    .await?;
+            while let Some(update) = mined_tree.peek_next_update().await {
+                Self::commit_identity(database, identity_manager, mined_tree, &update).await?;
             }
 
             wake_up_receiver.recv().await;
@@ -138,49 +136,23 @@ impl IdentityCommitter {
     async fn commit_identity(
         database: &Database,
         identity_manager: &(dyn IdentityManager + Send + Sync),
-        tree_state: &SharedTreeState,
-        group_id: usize,
-        commitment: Hash,
+        mined_tree: &TreeVersion,
+        update: &TreeUpdate,
     ) -> AnyhowResult<()> {
-        {
-            let tree = tree_state.read().await.unwrap_or_else(|e| {
-                error!(?e, "Failed to obtain tree lock in check_leaves.");
-                panic!("Sequencer potentially deadlocked, terminating.");
-            });
-            let is_duplicate = tree.merkle_tree.leaves()[..tree.next_leaf].contains(&commitment);
-            if is_duplicate {
-                warn!(
-                    ?commitment,
-                    "Attempted to insert duplicate identity, skipping"
-                );
-                database
-                    .delete_pending_identity(group_id, &commitment)
-                    .await?;
-                return Ok(());
-            }
-        }
-
-        database
-            .start_identity_insertion(group_id, &commitment)
-            .await?;
-
         // Send Semaphore transaction
-        let transaction_id = identity_manager
-            .register_identities(vec![commitment])
+        identity_manager
+            .register_identities(vec![update.element])
             .await
             .map_err(|e| {
                 error!(?e, "Failed to insert identity to contract.");
                 e
             })?;
 
-        info!("Identity submitted in transaction {:?}.", transaction_id);
         database
-            .mark_identity_inserted(group_id, &commitment)
+            .mark_identity_submitted_to_contract(update.leaf_index)
             .await?;
 
-        // ethereum_subscriber module takes over from now. Once identity is found in a
-        // confirmed block, it'll update the merkle tree and remove job from
-        // pending_identities queue.
+        mined_tree.apply_next_update().await;
 
         Ok(())
     }

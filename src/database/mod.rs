@@ -1,8 +1,6 @@
-use crate::identity_tree::Hash;
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
-use ruint::{aliases::U256, uint};
-use semaphore::Field;
 use sqlx::{
     any::AnyKind,
     migrate::{Migrate, MigrateDatabase, Migrator},
@@ -13,12 +11,10 @@ use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;
 
+use crate::identity_tree::{Hash, Status, TreeItem, TreeUpdate};
+
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
-
-static IDENTITY_PENDING: &str = "pending";
-static IDENTITY_SUBMITTING: &str = "submission_attempt";
-static IDENTITY_MINED: &str = "mined";
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 pub struct Options {
@@ -130,229 +126,106 @@ impl Database {
         Ok(Self { pool })
     }
 
-    pub async fn insert_pending_identity(
+    pub async fn insert_identity_if_does_not_exist(
         &self,
-        group_id: usize,
         identity: &Hash,
-    ) -> Result<(), Error> {
+    ) -> Result<Option<usize>, Error> {
         let query = sqlx::query(
-            r#"INSERT INTO pending_identities (group_id, commitment, status)
-                   VALUES ($1, $2, $3);"#,
+            r#"INSERT INTO identities (commitment, leaf_index, status)
+                       VALUES ($1, (SELECT COALESCE(MAX(leaf_index) + 1, 0) FROM identities), $2)
+                       ON CONFLICT DO NOTHING
+                       RETURNING leaf_index;"#,
         )
-        .bind(group_id as i64)
         .bind(identity)
-        .bind(IDENTITY_PENDING);
-        self.pool.execute(query).await?;
-        Ok(())
+        .bind(<&str>::from(Status::Pending));
+        let row = self.pool.fetch_optional(query).await?;
+        Ok(row.map(|row| row.get::<i64, _>(0) as usize))
     }
 
-    pub async fn start_identity_insertion(
+    pub async fn mark_identity_submitted_to_contract(
         &self,
-        group_id: usize,
-        commitment: &Hash,
+        leaf_index: usize,
     ) -> Result<(), Error> {
         let query = sqlx::query(
-            r#"UPDATE pending_identities
-                   SET status = $4
-                   WHERE group_id = $1 AND commitment = $2 AND status = $3;"#,
+            r#"UPDATE identities
+                       SET status = $2
+                       WHERE leaf_index = $1;"#,
         )
-        .bind(group_id as i64)
-        .bind(commitment)
-        .bind(IDENTITY_PENDING) // previous status
-        .bind(IDENTITY_SUBMITTING); // new status
-
+        .bind(leaf_index as i64)
+        .bind(<&str>::from(Status::Mined));
         self.pool.execute(query).await?;
         Ok(())
     }
 
-    pub async fn mark_identity_inserted(
+    pub async fn get_updates_in_range(
         &self,
-        group_id: usize,
-        commitment: &Hash,
-    ) -> Result<(), Error> {
+        from_index: usize,
+        to_index: usize,
+    ) -> Result<Vec<TreeUpdate>, Error> {
         let query = sqlx::query(
-            r#"UPDATE pending_identities
-                   SET status = $3
-                   WHERE group_id = $1 AND commitment = $2;"#,
+            r#"SELECT commitment, leaf_index, status
+                       FROM identities
+                       WHERE leaf_index >= $1 AND leaf_index <= $2
+                       ORDER BY leaf_index ASC;"#,
         )
-        .bind(group_id as i64)
-        .bind(commitment)
-        .bind(IDENTITY_MINED);
-
-        self.pool.execute(query).await?;
-        Ok(())
+        .bind(from_index as i64)
+        .bind(to_index as i64);
+        let rows = self.pool.fetch_all(query).await?;
+        rows.iter()
+            .map(|row| {
+                let element = row.get::<Hash, _>(0);
+                let leaf_index = row.get::<i64, _>(1) as usize;
+                Ok(TreeUpdate {
+                    leaf_index,
+                    element,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
     }
 
-    pub async fn delete_pending_identity(
+    pub async fn get_identity_leaf_index(
         &self,
-        group_id: usize,
-        commitment: &Hash,
-    ) -> Result<(), Error> {
-        let query = sqlx::query(
-            r#"DELETE FROM pending_identities
-                WHERE group_id = $1 AND commitment = $2;"#,
-        )
-        .bind(group_id as i64)
-        .bind(commitment);
-
-        self.pool.execute(query).await?;
-        Ok(())
-    }
-
-    pub async fn confirm_identity(&self, commitment: &Hash) -> Result<(), Error> {
-        let cleanup_query = sqlx::query(
-            r#"DELETE FROM pending_identities
-                WHERE commitment = $1;"#,
-        )
-        .bind(commitment);
-
-        self.pool.execute(cleanup_query).await?;
-        Ok(())
-    }
-
-    pub async fn pending_identity_exists(
-        &self,
-        group_id: usize,
         identity: &Hash,
-    ) -> Result<bool, Error> {
+    ) -> Result<Option<TreeItem>, Error> {
         let query = sqlx::query(
-            r#"SELECT 1
-                   FROM pending_identities
-                   WHERE group_id = $1 AND commitment = $2
-                   LIMIT 1;"#,
+            r#"SELECT leaf_index, status
+                       FROM identities
+                       WHERE commitment = $1
+                       LIMIT 1;"#,
         )
-        .bind(group_id as i64)
         .bind(identity);
-        let row = self.pool.fetch_optional(query).await?;
-        Ok(row.is_some())
+        let Some(row) = self.pool.fetch_optional(query).await? else {
+            return Ok(None);
+        };
+
+        let leaf_index = row.get::<i64, _>(0) as usize;
+        let status = row
+            .get::<&str, _>(1)
+            .parse()
+            .expect("Status is unreadable, database is corrupt");
+
+        Ok(Some(TreeItem { status, leaf_index }))
     }
 
-    pub async fn get_oldest_unprocessed_identity(&self) -> Result<Option<(usize, Hash)>, Error> {
-        let queue_size = sqlx::query("SELECT COUNT(1) FROM pending_identities");
-        let size: i64 = self.pool.fetch_one(queue_size).await?.get(0);
-        info!(size, "pending identity queue size fetched");
-
+    pub async fn get_commitments_by_status(
+        &self,
+        status: Status,
+    ) -> Result<Vec<TreeUpdate>, Error> {
         let query = sqlx::query(
-            r#"SELECT group_id, commitment
-                   FROM pending_identities
-                   WHERE status <> $1
-                   ORDER BY created_at ASC
-                   LIMIT 1;"#,
+            r#"SELECT leaf_index, commitment
+                       FROM identities
+                       WHERE status = $1
+                       ORDER BY leaf_index ASC;"#,
         )
-        .bind(IDENTITY_MINED);
-        let row = self.pool.fetch_optional(query).await?;
-        Ok(row.map(|row| (row.get::<i64, _>(0).try_into().unwrap(), row.get(1))))
-    }
-
-    #[allow(unused)]
-    pub async fn read(&self, _index: usize) -> Result<Hash, Error> {
-        self.pool
-            .execute(sqlx::query(
-                r#"CREATE TABLE IF NOT EXISTS hashes (
-                id SERIAL PRIMARY KEY,
-                hash TEXT NOT NULL
-            );"#,
-            ))
-            .await?;
-
-        let value = uint!(0x12356_U256);
-
-        self.pool
-            .execute(sqlx::query(r#"INSERT INTO hashes ( hash ) VALUES ( $1 );"#).bind(value))
-            .await?;
-
-        let rows = self
-            .pool
-            .fetch_all(sqlx::query(r#"SELECT hash FROM hashes;"#))
-            .await?;
-        for row in rows {
-            let hash = row.get::<U256, _>(0);
-            info!(hash = ?hash, "Read hash");
-        }
-
-        Ok(Hash::default())
-    }
-
-    pub async fn get_block_number(&self) -> Result<u64, Error> {
-        let row = self
-            .pool
-            .fetch_optional(sqlx::query(
-                r#"SELECT block_index FROM logs ORDER BY block_index DESC LIMIT 1;"#,
-            ))
-            .await?;
-
-        if let Some(row) = row {
-            let block_number: i64 = row.try_get(0)?;
-            Ok(u64::try_from(block_number).unwrap_or(0))
-        } else {
-            Ok(0)
-        }
-    }
-
-    pub async fn load_logs(
-        &self,
-        from_block: i64,
-        to_block: Option<i64>,
-    ) -> Result<Vec<(Field, Field)>, Error> {
-        let rows = self
-            .pool
-            .fetch_all(
-                sqlx::query(
-                r#"SELECT leaf, root FROM logs WHERE block_index >= $1 AND block_index <= $2 ORDER BY block_index, transaction_index, log_index;"#,
-                )
-                .bind(from_block)
-                .bind(to_block.unwrap_or(i64::MAX))
-            )
-            .await?
-            .iter()
-            .map(|row| (row.try_get(0).unwrap_or_default(), row.try_get(1).unwrap_or_default()))
-            .collect();
-
-        Ok(rows)
-    }
-
-    pub async fn save_log(&self, identity: &ConfirmedIdentityEvent) -> Result<(), Error> {
-        self.pool
-            .execute(
-                sqlx::query(
-                    r#"INSERT INTO logs (block_index, transaction_index, log_index, raw, leaf, root)
-                    VALUES ($1, $2, $3, $4, $5, $6);"#,
-                )
-                .bind(identity.block_index)
-                .bind(identity.transaction_index)
-                .bind(identity.log_index)
-                .bind(identity.raw_log.clone())
-                .bind(identity.leaf)
-                .bind(identity.root),
-            )
-            .await
-            .map_err(Error::InternalError)?;
-
-        Ok(())
-    }
-
-    pub async fn delete_most_recent_cached_events(
-        &self,
-        recovery_step_size: i64,
-    ) -> Result<(), Error> {
-        let max_block_number =
-            i64::try_from(self.get_block_number().await?).expect("block number must be i64");
-        self.pool
-            .execute(
-                sqlx::query("DELETE FROM logs WHERE block_index >= $1;")
-                    .bind(max_block_number - recovery_step_size),
-            )
-            .await
-            .map_err(Error::InternalError)?;
-        Ok(())
-    }
-
-    pub async fn wipe_cache(&self) -> Result<(), Error> {
-        self.pool
-            .execute(sqlx::query("DELETE FROM logs;"))
-            .await
-            .map_err(Error::InternalError)?;
-        Ok(())
+        .bind(<&str>::from(status));
+        let rows = self.pool.fetch_all(query).await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| TreeUpdate {
+                leaf_index: row.get::<i64, _>(0) as usize,
+                element:    row.get::<Hash, _>(1),
+            })
+            .collect::<Vec<_>>())
     }
 }
 
@@ -360,13 +233,4 @@ impl Database {
 pub enum Error {
     #[error("database error")]
     InternalError(#[from] sqlx::Error),
-}
-
-pub struct ConfirmedIdentityEvent {
-    pub block_index:       i64,
-    pub transaction_index: i32,
-    pub log_index:         i32,
-    pub raw_log:           String,
-    pub leaf:              Field,
-    pub root:              Field,
 }

@@ -1,3 +1,11 @@
+use std::{
+    fs::File,
+    io::BufReader,
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
+    sync::Arc,
+    time::Duration,
+};
+
 use clap::Parser;
 use cli_batteries::{reset_shutdown, shutdown};
 use ethers::{
@@ -12,22 +20,17 @@ use ethers::{
     utils::{Anvil, AnvilInstance},
 };
 use eyre::{bail, Result as AnyhowResult};
-use hyper::{client::HttpConnector, Body, Client, Request, StatusCode};
+use hyper::{client::HttpConnector, Body, Client, Request};
 use semaphore::{merkle_tree::Branch, poseidon_tree::PoseidonTree};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use signup_sequencer::{app::App, identity_tree::Hash, server, Options};
-use std::{
-    fs::File,
-    io::BufReader,
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    sync::Arc,
-    time::Duration,
-};
+use tempfile::tempdir;
 use tokio::{spawn, task::JoinHandle};
 use tracing::{error, info, instrument};
 use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
 use url::{Host, Url};
+
+use signup_sequencer::{app::App, identity_tree::Hash, server, Options};
 
 const TEST_LEAFS: &[&str] = &[
     "0000F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0",
@@ -42,7 +45,17 @@ async fn insert_identity_and_proofs() {
     init_tracing_subscriber();
     info!("Starting integration test");
 
-    let mut options = Options::try_parse_from([""]).expect("Failed to create options");
+    let db_dir = tempdir().unwrap();
+    let db = db_dir.path().join("test.db");
+
+    let mut options = Options::try_parse_from([
+        "signup-sequencer",
+        "--database",
+        &format!("sqlite://{}", db.to_str().unwrap()),
+        "--database-max-connections",
+        "1",
+    ])
+    .expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
     let (chain, private_key, semaphore_address) = spawn_mock_chain()
@@ -50,7 +63,6 @@ async fn insert_identity_and_proofs() {
         .expect("Failed to spawn ganache chain");
 
     options.app.contracts.semaphore_address = semaphore_address;
-    options.app.ethereum.refresh_rate = Duration::from_secs(1);
     options.app.ethereum.read_options.confirmation_blocks_delay = 2;
     options.app.ethereum.read_options.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
@@ -81,7 +93,7 @@ async fn insert_identity_and_proofs() {
         true,
     )
     .await;
-    test_insert_identity(&uri, &client, TEST_LEAFS[0]).await;
+    test_insert_identity(&uri, &client, &mut ref_tree, 0).await;
     test_inclusion_proof(
         &uri,
         &client,
@@ -91,7 +103,7 @@ async fn insert_identity_and_proofs() {
         false,
     )
     .await;
-    test_insert_identity(&uri, &client, TEST_LEAFS[1]).await;
+    test_insert_identity(&uri, &client, &mut ref_tree, 1).await;
     test_inclusion_proof(
         &uri,
         &client,
@@ -235,7 +247,7 @@ async fn test_inclusion_proof(
     leaf: &Hash,
     expect_failure: bool,
 ) {
-    let mut success_response = None;
+    let mut mined_json = None;
     for i in 1..21 {
         let body = construct_inclusion_proof_body(leaf);
         info!(?uri, "Contacting");
@@ -261,32 +273,27 @@ async fn test_inclusion_proof(
             .expect("Failed to convert response body to bytes");
         let result = String::from_utf8(bytes.into_iter().collect())
             .expect("Could not parse response bytes to utf-8");
+        let result_json = serde_json::from_str::<serde_json::Value>(&result)
+            .expect("Failed to parse response as json");
+        let status = result_json["status"]
+            .as_str()
+            .expect("Failed to get status");
 
-        if result == "\"pending\"" {
-            assert_eq!(response.status(), StatusCode::ACCEPTED);
+        if status == "pending" {
+            assert_eq!(
+                result_json,
+                generate_reference_proof_json(ref_tree, leaf_index, "pending")
+            );
             info!("Got pending, waiting 1 second, iteration {}", i);
             tokio::time::sleep(Duration::from_secs(1)).await;
         } else {
-            success_response = Some(result);
+            mined_json = Some(result_json);
             break;
         }
     }
 
-    let result = success_response.expect("Failed to get success response");
-    let result_json = serde_json::from_str::<serde_json::Value>(&result)
-        .expect("Failed to parse response as json");
-
-    ref_tree.set(leaf_index, *leaf);
-    let proof = ref_tree.proof(leaf_index).expect("Ref tree malfunctioning");
-
-    let proof_json = json!({
-        "root": ref_tree.root(),
-        "proof": proof.0.iter().map(|branch| match branch {
-            Branch::Left(hash) => json!({"Left": hash}),
-            Branch::Right(hash) => json!({"Right": hash}),
-        }).collect::<Vec<_>>(),
-    });
-
+    let result_json = mined_json.expect("Failed to get mined response");
+    let proof_json = generate_reference_proof_json(ref_tree, leaf_index, "mined");
     assert_eq!(result_json, proof_json);
 }
 
@@ -294,9 +301,10 @@ async fn test_inclusion_proof(
 async fn test_insert_identity(
     uri: &str,
     client: &Client<HttpConnector>,
-    identity_commitment: &str,
+    ref_tree: &mut PoseidonTree,
+    leaf_index: usize,
 ) {
-    let body = construct_insert_identity_body(identity_commitment);
+    let body = construct_insert_identity_body(TEST_LEAFS[leaf_index]);
     let req = Request::builder()
         .method("POST")
         .uri(uri.to_owned() + "/insertIdentity")
@@ -316,20 +324,22 @@ async fn test_insert_identity(
     if !response.status().is_success() {
         panic!("Failed to insert identity: {}", result);
     }
+    let result_json = serde_json::from_str::<serde_json::Value>(&result)
+        .expect("Failed to parse response as json");
 
-    assert_eq!(result, "null");
-}
+    ref_tree.set(
+        leaf_index,
+        Hash::from_str_radix(TEST_LEAFS[leaf_index], 16).unwrap(),
+    );
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct InsertIdentityResponse {
-    identity_index: usize,
+    let expected_json = generate_reference_proof_json(ref_tree, leaf_index, "pending");
+
+    assert_eq!(result_json, expected_json);
 }
 
 fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
     Body::from(
         json!({
-            "groupId": 1,
             "identityCommitment": identity_commitment,
         })
         .to_string(),
@@ -339,9 +349,7 @@ fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
 fn construct_insert_identity_body(identity_commitment: &str) -> Body {
     Body::from(
         json!({
-            "groupId": 1,
             "identityCommitment": identity_commitment,
-
         })
         .to_string(),
     )
@@ -494,4 +502,27 @@ fn init_tracing_subscriber() {
     if let Err(error) = result {
         error!(error, "Failed to initialize tracing_subscriber");
     }
+}
+
+fn generate_reference_proof_json(
+    ref_tree: &PoseidonTree,
+    leaf_idx: usize,
+    status: &str,
+) -> serde_json::Value {
+    let proof = ref_tree
+        .proof(leaf_idx)
+        .unwrap()
+        .0
+        .iter()
+        .map(|branch| match branch {
+            Branch::Left(hash) => json!({ "Left": hash }),
+            Branch::Right(hash) => json!({ "Right": hash }),
+        })
+        .collect::<Vec<_>>();
+    let root = ref_tree.root();
+    json!({
+        "status": status,
+        "root": root,
+        "proof": proof,
+    })
 }

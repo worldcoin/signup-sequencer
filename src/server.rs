@@ -54,7 +54,6 @@ const CONTENT_JSON: &str = "application/json";
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct InsertCommitmentRequest {
-    group_id:            usize,
     identity_commitment: Hash,
 }
 
@@ -62,7 +61,6 @@ pub struct InsertCommitmentRequest {
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct InclusionProofRequest {
-    pub group_id:            usize,
     pub identity_commitment: Hash,
 }
 
@@ -108,8 +106,6 @@ pub enum Error {
     NotManager,
     #[error(transparent)]
     Elapsed(#[from] tokio::time::error::Elapsed),
-    #[error(transparent)]
-    LockTimeout(#[from] crate::timed_rw_lock::Error),
     #[error(transparent)]
     Other(#[from] EyreError),
 }
@@ -182,20 +178,14 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
         (&Method::POST, "/inclusionProof") => {
             json_middleware(request, |request: InclusionProofRequest| {
                 let app = app.clone();
-                async move {
-                    app.inclusion_proof(request.group_id, &request.identity_commitment)
-                        .await
-                }
+                async move { app.inclusion_proof(&request.identity_commitment).await }
             })
             .await
         }
         (&Method::POST, "/insertIdentity") => {
             json_middleware(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
-                async move {
-                    app.insert_identity(request.group_id, request.identity_commitment)
-                        .await
-                }
+                async move { app.insert_identity(request.identity_commitment).await }
             })
             .await
         }

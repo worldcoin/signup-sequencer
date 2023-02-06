@@ -1,54 +1,36 @@
+use std::sync::Arc;
+
+use anyhow::Result as AnyhowResult;
+use clap::Parser;
+use futures::TryFutureExt;
+use hyper::StatusCode;
+use serde::Serialize;
+use tokio::try_join;
+use tracing::{info, instrument, warn};
+
 use crate::{
     contracts,
     contracts::{legacy::Contract as LegacyContract, IdentityManager, SharedIdentityManager},
     database::{self, Database},
     ethereum::{self, Ethereum},
-    ethereum_subscriber::{Error as SubscriberError, EthereumSubscriber},
     identity_committer::IdentityCommitter,
-    identity_tree::{Hash, SharedTreeState, TreeState},
+    identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, Status, TreeItem, TreeState},
     server::{Error as ServerError, ToResponseCode},
-    timed_rw_lock::TimedRwLock,
 };
-use anyhow::{anyhow, Result as AnyhowResult};
-use clap::Parser;
-use cli_batteries::await_shutdown;
-use ethers::types::U256;
-use futures::TryFutureExt;
-use hyper::StatusCode;
-use semaphore::{poseidon_tree::Proof, Field};
-use serde::{ser::SerializeStruct, Serialize, Serializer};
-use std::{sync::Arc, time::Duration};
-use tokio::{select, try_join};
-use tracing::{error, info, instrument, warn};
 
-pub enum InclusionProofResponse {
-    Proof { root: Field, proof: Proof },
-    Pending,
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct InclusionProofResponse(InclusionProof);
+
+impl From<InclusionProof> for InclusionProofResponse {
+    fn from(value: InclusionProof) -> Self {
+        Self(value)
+    }
 }
 
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
-        match self {
-            Self::Proof { .. } => StatusCode::OK,
-            Self::Pending => StatusCode::ACCEPTED,
-        }
-    }
-}
-
-impl Serialize for InclusionProofResponse {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Self::Proof { root, proof } => {
-                let mut state = serializer.serialize_struct("InclusionProof", 2)?;
-                state.serialize_field("root", root)?;
-                state.serialize_field("proof", proof)?;
-                state.end()
-            }
-            Self::Pending => serializer.serialize_str("pending"),
-        }
+        StatusCode::OK
     }
 }
 
@@ -79,9 +61,7 @@ pub struct App {
     ethereum:           Ethereum,
     identity_manager:   SharedIdentityManager,
     identity_committer: Arc<IdentityCommitter>,
-    #[allow(dead_code)]
-    chain_subscriber:   EthereumSubscriber,
-    tree_state:         SharedTreeState,
+    tree_state:         TreeState,
 }
 
 impl App {
@@ -92,9 +72,6 @@ impl App {
     #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
-        let refresh_rate = options.ethereum.refresh_rate;
-        let cache_recovery_step_size = options.ethereum.cache_recovery_step_size;
-
         // Connect to Ethereum and Database
         let (database, (ethereum, identity_manager)) = {
             let db = Database::new(options.database);
@@ -114,47 +91,28 @@ impl App {
 
         let database = Arc::new(database);
 
-        // Poseidon tree depth is one more than the contract's tree depth
-        let tree_state = Arc::new(TimedRwLock::new(
-            Duration::from_secs(options.lock_timeout),
-            TreeState::new(
-                identity_manager.tree_depth() + 1,
-                identity_manager.initial_leaf_value(),
-            ),
-        ));
+        let tree_state = Self::initialize_tree(
+            &database,
+            // Poseidon tree depth is one more than the contract's tree depth
+            identity_manager.tree_depth() + 1,
+            identity_manager.initial_leaf_value(),
+        )
+        .await?;
 
         let identity_committer = Arc::new(IdentityCommitter::new(
             database.clone(),
             identity_manager.clone(),
             tree_state.clone(),
         ));
-        let chain_subscriber = EthereumSubscriber::new(
-            options.starting_block,
-            database.clone(),
-            identity_manager.clone(),
-            tree_state.clone(),
-        );
 
         // Sync with chain on start up
-        let mut app = Self {
+        let app = Self {
             database,
             ethereum,
             identity_manager,
             identity_committer,
-            chain_subscriber,
             tree_state,
         };
-
-        select! {
-            _ = app.load_initial_events(options.lock_timeout, options.starting_block, cache_recovery_step_size) => {},
-            _ = await_shutdown() => return Err(anyhow!("Interrupted"))
-        }
-
-        // Basic sanity checks on the merkle tree
-        app.chain_subscriber.check_health().await;
-
-        // Listen to Ethereum events
-        app.chain_subscriber.start(refresh_rate).await;
 
         // Process to push new identities to Ethereum
         app.identity_committer.start().await;
@@ -162,52 +120,21 @@ impl App {
         Ok(app)
     }
 
-    async fn load_initial_events(
-        &mut self,
-        lock_timeout: u64,
-        starting_block: u64,
-        cache_recovery_step_size: usize,
-    ) -> AnyhowResult<()> {
-        let mut root_mismatch_count = 0;
-        loop {
-            if root_mismatch_count == 1 {
-                error!(cache_recovery_step_size, "Removing most recent cache.");
-                self.database
-                    .delete_most_recent_cached_events(cache_recovery_step_size as i64)
-                    .await?;
-            } else if root_mismatch_count == 2 {
-                error!("Wiping out the entire cache.");
-                self.database.wipe_cache().await?;
-            } else if root_mismatch_count >= 3 {
-                return Err(SubscriberError::RootMismatch.into());
-            }
-
-            match self.chain_subscriber.process_initial_events().await {
-                Err(SubscriberError::RootMismatch) => {
-                    error!("Error when rebuilding tree from cache.");
-                    root_mismatch_count += 1;
-
-                    // Create a new empty MerkleTree
-                    self.tree_state = Arc::new(TimedRwLock::new(
-                        Duration::from_secs(lock_timeout),
-                        TreeState::new(
-                            self.identity_manager.tree_depth() + 1,
-                            self.identity_manager.initial_leaf_value(),
-                        ),
-                    ));
-
-                    // Retry
-                    self.chain_subscriber = EthereumSubscriber::new(
-                        starting_block,
-                        self.database.clone(),
-                        self.identity_manager.clone(),
-                        self.tree_state.clone(),
-                    );
-                }
-                Err(e) => return Err(e.into()),
-                Ok(_) => return Ok(()),
-            }
+    async fn initialize_tree(
+        database: &Database,
+        tree_depth: usize,
+        initial_leaf_value: Hash,
+    ) -> AnyhowResult<TreeState> {
+        let mut mined_builder = CanonicalTreeBuilder::new(tree_depth, initial_leaf_value);
+        let mined_items = database.get_commitments_by_status(Status::Mined).await?;
+        for update in mined_items {
+            mined_builder.append(&update);
         }
+        let mined = mined_builder.seal();
+        let latest = mined.next_version().await;
+        let pending_items = database.get_commitments_by_status(Status::Pending).await?;
+        latest.append_many_fresh(&pending_items).await;
+        Ok(TreeState::new(mined, latest))
     }
 
     /// Queues an insert into the merkle tree.
@@ -219,50 +146,49 @@ impl App {
     #[instrument(level = "debug", skip_all)]
     pub async fn insert_identity(
         &self,
-        group_id: usize,
         commitment: Hash,
-    ) -> Result<(), ServerError> {
-        if U256::from(group_id) != self.identity_manager.group_id() {
-            return Err(ServerError::InvalidGroupId);
-        }
-
+    ) -> Result<InclusionProofResponse, ServerError> {
         if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
         }
 
-        // Note the ordering of duplicate checks: since we never want to lose data,
-        // pending identities are removed from the DB _after_ they are inserted into the
-        // tree. Therefore this order of checks guarantees we will not insert a
-        // duplicate.
-        if self
+        let insertion_result = self
             .database
-            .pending_identity_exists(group_id, &commitment)
-            .await?
-        {
-            warn!(?commitment, "Pending identity already exists.");
-            return Err(ServerError::DuplicateCommitment);
-        }
-
-        {
-            let tree = self.tree_state.read().await?;
-            if let Some(existing) = tree
-                .merkle_tree
-                .leaves()
-                .iter()
-                .position(|&x| x == commitment)
-            {
-                warn!(?existing, ?commitment, next = %tree.next_leaf, "Commitment already exists in tree.");
-                return Err(ServerError::DuplicateCommitment);
-            }
-        }
-
-        self.database
-            .insert_pending_identity(group_id, &commitment)
+            .insert_identity_if_does_not_exist(&commitment)
             .await?;
+
+        let Some(leaf_idx) = insertion_result else {
+            warn!(?commitment, "Pending identity already exists.");
+
+            return Err(ServerError::DuplicateCommitment);
+        };
+
+        self.sync_tree_to(leaf_idx).await?;
 
         self.identity_committer.notify_queued().await;
 
+        Ok(InclusionProofResponse::from(
+            self.tree_state
+                .get_proof_for(&TreeItem {
+                    leaf_index: leaf_idx,
+                    status:     Status::Pending,
+                })
+                .await,
+        ))
+    }
+
+    async fn sync_tree_to(&self, leaf_idx: usize) -> Result<(), ServerError> {
+        let tree = self.tree_state.get_latest_tree();
+        let next_index = tree.next_leaf().await;
+        if leaf_idx < next_index {
+            return Ok(()); // Someone sync'd first, we're up to date
+        }
+        let identities = self
+            .database
+            .get_updates_in_range(next_index, leaf_idx)
+            .await?;
+        tree.append_many_fresh(&identities).await;
         Ok(())
     }
 
@@ -272,73 +198,21 @@ impl App {
     #[instrument(level = "debug", skip_all)]
     pub async fn inclusion_proof(
         &self,
-        group_id: usize,
         commitment: &Hash,
     ) -> Result<InclusionProofResponse, ServerError> {
-        if U256::from(group_id) != self.identity_manager.group_id() {
-            return Err(ServerError::InvalidGroupId);
-        }
-
         if commitment == &self.identity_manager.initial_leaf_value() {
             return Err(ServerError::InvalidCommitment);
         }
 
-        {
-            let tree = self.tree_state.read().await.map_err(|e| {
-                error!(?e, "Failed to obtain tree lock in inclusion_proof.");
-                panic!("Sequencer potentially deadlocked, terminating.");
-                #[allow(unreachable_code)]
-                e
-            })?;
-
-            if let Some(identity_index) = tree
-                .merkle_tree
-                .leaves()
-                .iter()
-                .position(|&x| x == *commitment)
-            {
-                let proof = tree
-                    .merkle_tree
-                    .proof(identity_index)
-                    .ok_or(ServerError::IndexOutOfBounds)?;
-                let root = tree.merkle_tree.root();
-
-                // Locally check the proof
-                // TODO: Check the leaf index / path
-                if !tree.merkle_tree.verify(*commitment, &proof) {
-                    error!(
-                        ?commitment,
-                        ?identity_index,
-                        ?root,
-                        "Proof does not verify locally."
-                    );
-                    panic!("Proof does not verify locally.");
-                }
-
-                drop(tree);
-
-                // Verify the root on chain
-                if let Err(error) = self.identity_manager.assert_valid_root(root).await {
-                    error!(
-                        computed_root = ?root,
-                        ?error,
-                        "Root mismatch between tree and contract."
-                    );
-                    return Err(ServerError::RootMismatch);
-                }
-                return Ok(InclusionProofResponse::Proof { root, proof });
-            }
-        }
-
-        if self
+        let item = self
             .database
-            .pending_identity_exists(group_id, commitment)
+            .get_identity_leaf_index(commitment)
             .await?
-        {
-            Ok(InclusionProofResponse::Pending)
-        } else {
-            Err(ServerError::IdentityCommitmentNotFound)
-        }
+            .ok_or(ServerError::InvalidCommitment)?;
+
+        let proof = self.tree_state.get_proof_for(&item).await;
+
+        Ok(InclusionProofResponse(proof))
     }
 
     /// # Errors
@@ -346,8 +220,7 @@ impl App {
     /// Will return an Error if any of the components cannot be shut down
     /// gracefully.
     pub async fn shutdown(&self) -> AnyhowResult<()> {
-        info!("Shutting down identity committer and chain subscriber.");
-        self.chain_subscriber.shutdown().await;
+        info!("Shutting down identity committer.");
         self.identity_committer.shutdown().await
     }
 }

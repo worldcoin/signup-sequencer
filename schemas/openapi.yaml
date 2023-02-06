@@ -28,14 +28,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/IdentityCommitmentWithGroup'
+              $ref: '#/components/schemas/IdentityCommitment'
       responses:
         '200':
           description: 'Identity insert was successfully queued'
           content:
             application/json:
               schema:
-                type: 'null'
+                $ref: '#/components/schemas/InclusionProof'
         '400':
           description: 'Invalid request'
           content:
@@ -51,7 +51,7 @@ paths:
         content:
           'application/json':
             schema:
-              $ref: '#/components/schemas/IdentityCommitmentWithGroup'
+              $ref: '#/components/schemas/IdentityCommitment'
       responses:
         '200':
           description: 'A Merkle inclusion proof for an already inserted commitment'
@@ -59,13 +59,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/InclusionProof'
-        '202':
-          description: 'The commitment has been queued but it is not yet included in the tree'
-          content:
-            'application/json':
-              schema:
-                type: string
-                enum: [ 'pending' ]
         '400':
           description: 'Invalid request'
           content:
@@ -76,16 +69,11 @@ paths:
 components:
   schemas:
     IdentityCommitment:
-      type: string
-      pattern: '^[A-F0-9]{64}$'
-    IdentityCommitmentWithGroup:
       type: object
       properties:
-        groupId:
-          type: integer
-          format: int64
         identityCommitment:
-          $ref: '#/components/schemas/IdentityCommitment'
+          type: string
+          pattern: '^[A-F0-9]{64}$'
       example:
         groupId: 1
         identityCommitment: '0000F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2'
@@ -95,6 +83,7 @@ components:
     InclusionProof:
       type: object
       properties:
+        status: { $ref: '#/components/schemas/InclusionProofStatus' }
         root: { $ref: '#/components/schemas/FieldElement' }
         proof:
           type: array
@@ -106,3 +95,6 @@ components:
               - type: object
                 properties:
                   Right: { $ref: '#/components/schemas/FieldElement' }
+    InclusionProofStatus:
+      type: string
+      enum: [ 'pending', 'mined', 'confirmed' ]

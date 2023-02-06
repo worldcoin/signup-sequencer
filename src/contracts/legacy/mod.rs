@@ -6,10 +6,10 @@ use tracing::{error, info, instrument};
 
 use crate::{
     contracts::{IdentityManager, Options},
-    ethereum::{Ethereum, ReadProvider, TxError, write::TransactionId},
+    ethereum::{write::TransactionId, Ethereum, ReadProvider, TxError},
 };
 
-use self::abi::{LegacyContract as ContractAbi};
+use self::abi::LegacyContract as ContractAbi;
 
 mod abi;
 

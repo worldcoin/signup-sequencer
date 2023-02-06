@@ -5,7 +5,7 @@ use tracing::{error, info, instrument};
 
 use crate::{
     contracts::{IdentityManager, Options},
-    ethereum::{Ethereum, ReadProvider, TxError, write::TransactionId},
+    ethereum::{write::TransactionId, Ethereum, ReadProvider, TxError},
 };
 
 use self::abi::BatchingContract as ContractAbi;

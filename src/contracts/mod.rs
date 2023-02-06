@@ -6,9 +6,7 @@ use clap::Parser;
 use ethers::prelude::{Address, U256};
 use semaphore::Field;
 
-use crate::{
-    ethereum::{Ethereum, TxError, write::TransactionId},
-};
+use crate::ethereum::{write::TransactionId, Ethereum, TxError};
 
 pub mod batching;
 pub mod legacy;

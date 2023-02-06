@@ -52,9 +52,9 @@ pub fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug)]
 pub struct ReadProvider {
-    inner:                     InnerProvider,
-    pub chain_id:              U256,
-    pub legacy:                bool,
+    inner:        InnerProvider,
+    pub chain_id: U256,
+    pub legacy:   bool,
 }
 
 impl ReadProvider {

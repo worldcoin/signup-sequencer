@@ -32,7 +32,7 @@ use url::{Host, Url};
 
 use signup_sequencer::{app::App, identity_tree::Hash, server, Options};
 
-const TEST_LEAFS: &[&str] = &[
+const TEST_LEAVES: &[&str] = &[
     "0000F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0",
     "0000F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1",
     "0000F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2",
@@ -99,7 +99,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        &Hash::from_str_radix(TEST_LEAVES[0], 16).expect("Failed to parse Hash from test leaf 0"),
         false,
     )
     .await;
@@ -109,7 +109,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        &Hash::from_str_radix(TEST_LEAVES[1], 16).expect("Failed to parse Hash from test leaf 1"),
         false,
     )
     .await;
@@ -142,7 +142,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        &Hash::from_str_radix(TEST_LEAVES[0], 16).expect("Failed to parse Hash from test leaf 0"),
         false,
     )
     .await;
@@ -151,7 +151,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        &Hash::from_str_radix(TEST_LEAVES[1], 16).expect("Failed to parse Hash from test leaf 1"),
         false,
     )
     .await;
@@ -175,7 +175,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        &Hash::from_str_radix(TEST_LEAVES[0], 16).expect("Failed to parse Hash from test leaf 0"),
         false,
     )
     .await;
@@ -184,7 +184,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        &Hash::from_str_radix(TEST_LEAVES[1], 16).expect("Failed to parse Hash from test leaf 1"),
         false,
     )
     .await;
@@ -235,7 +235,7 @@ async fn wait_for_log_count(
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
-    panic!("Failed waiting for {} log events", expected_count);
+    panic!("Failed waiting for {expected_count} log events");
 }
 
 #[instrument(skip_all)]
@@ -304,7 +304,7 @@ async fn test_insert_identity(
     ref_tree: &mut PoseidonTree,
     leaf_index: usize,
 ) {
-    let body = construct_insert_identity_body(TEST_LEAFS[leaf_index]);
+    let body = construct_insert_identity_body(TEST_LEAVES[leaf_index]);
     let req = Request::builder()
         .method("POST")
         .uri(uri.to_owned() + "/insertIdentity")
@@ -322,14 +322,14 @@ async fn test_insert_identity(
     let result = String::from_utf8(bytes.into_iter().collect())
         .expect("Could not parse response bytes to utf-8");
     if !response.status().is_success() {
-        panic!("Failed to insert identity: {}", result);
+        panic!("Failed to insert identity: {result}");
     }
     let result_json = serde_json::from_str::<serde_json::Value>(&result)
         .expect("Failed to parse response as json");
 
     ref_tree.set(
         leaf_index,
-        Hash::from_str_radix(TEST_LEAFS[leaf_index], 16).unwrap(),
+        Hash::from_str_radix(TEST_LEAVES[leaf_index], 16).unwrap(),
     );
 
     let expected_json = generate_reference_proof_json(ref_tree, leaf_index, "pending");

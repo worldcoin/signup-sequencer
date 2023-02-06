@@ -10,11 +10,15 @@ use tracing::{info, instrument, warn};
 
 use crate::{
     contracts,
-    contracts::{legacy::Contract as LegacyContract, IdentityManager, SharedIdentityManager},
+    contracts::{
+        batching::Contract as BatchingContract, legacy::Contract as LegacyContract,
+        IdentityManager, SharedIdentityManager,
+    },
     database::{self, Database},
     ethereum::{self, Ethereum},
     identity_committer::IdentityCommitter,
-    identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, Status, TreeItem, TreeState},
+    identity_tree::{Hash, InclusionProof, TreeState, CanonicalTreeBuilder, Status, TreeItem},
+    prover,
     server::{Error as ServerError, ToResponseCode},
 };
 
@@ -45,6 +49,9 @@ pub struct Options {
 
     #[clap(flatten)]
     pub database: database::Options,
+
+    #[clap(flatten)]
+    pub prover: prover::Options,
 
     /// Block number to start syncing from
     #[clap(long, env, default_value = "0")]
@@ -78,6 +85,7 @@ impl App {
 
             let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
                 let identity_manager = if cfg!(feature = "batching-contract") {
+                    BatchingContract::new(options.contracts, ethereum.clone()).await?;
                     panic!("The batching contract does not yet exist but was requested.");
                 } else {
                     LegacyContract::new(options.contracts, ethereum.clone()).await?
@@ -88,7 +96,6 @@ impl App {
             // Connect to both in parallel
             try_join!(db, eth)?
         };
-
         let database = Arc::new(database);
 
         let tree_state = Self::initialize_tree(

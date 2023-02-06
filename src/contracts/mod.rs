@@ -31,6 +31,12 @@ pub struct Options {
     #[clap(long, env)]
     pub create_group_depth: Option<usize>,
 
+    /// The depth of the tree that the contract is working with. This needs to
+    /// agree with the verifier in the deployed contract, and also with
+    /// `semaphore-mtb`.
+    #[clap(long, env, default_value = "10")]
+    pub tree_depth: usize,
+
     /// Initial value of the Merkle tree leaves. Defaults to the initial value
     /// in the identity manager contract.
     #[clap(

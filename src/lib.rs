@@ -7,6 +7,7 @@ mod database;
 mod ethereum;
 mod identity_committer;
 pub mod identity_tree;
+mod prover;
 pub mod server;
 mod utils;
 

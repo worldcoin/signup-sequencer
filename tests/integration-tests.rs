@@ -21,7 +21,13 @@ use ethers::{
 };
 use eyre::{bail, Result as AnyhowResult};
 use hyper::{client::HttpConnector, Body, Client, Request};
-use semaphore::{merkle_tree::Branch, poseidon_tree::PoseidonTree};
+use semaphore::{
+    hash_to_field,
+    identity::Identity,
+    merkle_tree::Branch,
+    poseidon_tree::PoseidonTree,
+    protocol::{generate_nullifier_hash, generate_proof, verify_proof},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tempfile::tempdir;
@@ -37,6 +43,75 @@ const TEST_LEAVES: &[&str] = &[
     "0000F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1",
     "0000F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2",
 ];
+
+#[tokio::test]
+#[serial_test::serial]
+async fn validate_proofs() {
+    // Initialize logging for the test.
+    init_tracing_subscriber();
+    info!("Starting integration test");
+
+    let db_dir = tempdir().unwrap();
+    let db = db_dir.path().join("test.db");
+
+    let mut options = Options::try_parse_from([
+        "signup-sequencer",
+        "--database",
+        &format!("sqlite://{}", db.to_str().unwrap()),
+        "--database-max-connections",
+        "1",
+    ])
+    .expect("Failed to create options");
+    options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
+
+    let (chain, private_key, semaphore_address) = spawn_mock_chain()
+        .await
+        .expect("Failed to spawn ganache chain");
+
+    options.app.contracts.semaphore_address = semaphore_address;
+    options.app.ethereum.read_options.confirmation_blocks_delay = 2;
+    options.app.ethereum.read_options.ethereum_provider =
+        Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
+    options.app.ethereum.write_options.signing_key = private_key;
+
+    let (app, local_addr) = spawn_app(options.clone())
+        .await
+        .expect("Failed to spawn app.");
+
+    let uri = "http://".to_owned() + &local_addr.to_string();
+    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf_value);
+    let client = Client::new();
+
+    test_insert_identity(&uri, &client, &mut ref_tree, 0).await;
+    test_insert_identity(&uri, &client, &mut ref_tree, 1).await;
+    test_insert_identity(&uri, &client, &mut ref_tree, 2).await;
+
+    let id = Identity::from_seed(b"secret");
+
+    let merkle_proof = ref_tree.proof(2).unwrap();
+    info!(?merkle_proof, "merkle proof");
+    let root = ref_tree.root();
+
+    // change signal and external_nullifier here
+    let signal_hash = hash_to_field(b"aaa");
+    let external_nullifier_hash = hash_to_field(b"bbb");
+
+    let nullifier_hash = generate_nullifier_hash(&id, external_nullifier_hash);
+
+    let proof = generate_proof(&id, &merkle_proof, external_nullifier_hash, signal_hash).unwrap();
+    info!(?proof, "zk proof");
+
+    let result = verify_proof(
+        root,
+        nullifier_hash,
+        signal_hash,
+        external_nullifier_hash,
+        &proof,
+    )
+    .unwrap();
+
+    info!(result, "verify proof");
+}
 
 #[tokio::test]
 #[serial_test::serial]
@@ -493,11 +568,11 @@ async fn spawn_mock_chain() -> AnyhowResult<(AnvilInstance, H256, Address)> {
 
 fn init_tracing_subscriber() {
     let result = tracing_subscriber::fmt()
-        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-        .with_line_number(true)
-        .with_env_filter("info,signup_sequencer=debug")
+        //.with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        //.with_line_number(true)
+        //.with_env_filter("info,signup_sequencer=debug")
         .with_timer(Uptime::default())
-        .pretty()
+        //.pretty()
         .try_init();
     if let Err(error) = result {
         error!(error, "Failed to initialize tracing_subscriber");

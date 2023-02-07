@@ -12,6 +12,7 @@ use hyper::{
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
+use semaphore::{protocol::Proof, Field};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
@@ -62,6 +63,17 @@ pub struct InsertCommitmentRequest {
 #[serde(deny_unknown_fields)]
 pub struct InclusionProofRequest {
     pub identity_commitment: Hash,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct VerifyProofRequest {
+    pub root:                    Field,
+    pub signal_hash:             Field,
+    pub nullfier_hash:           Field,
+    pub external_nullifier_hash: Field,
+    pub proof:                   Proof,
 }
 
 pub trait ToResponseCode {
@@ -175,6 +187,13 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
 
     // Route requests
     let result = match (request.method(), request.uri().path()) {
+        (&Method::POST, "/verifyProof") => {
+            json_middleware(request, |request: VerifyProofRequest| {
+                let app = app.clone();
+                async move { app.verify_proof(&request).await }
+            })
+            .await
+        }
         (&Method::POST, "/inclusionProof") => {
             json_middleware(request, |request: InclusionProofRequest| {
                 let app = app.clone();

@@ -4,6 +4,7 @@ use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use futures::TryFutureExt;
 use hyper::StatusCode;
+use semaphore::protocol::verify_proof;
 use serde::Serialize;
 use tokio::try_join;
 use tracing::{info, instrument, warn};
@@ -19,7 +20,7 @@ use crate::{
     identity_committer::IdentityCommitter,
     identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, Status, TreeItem, TreeState},
     prover,
-    server::{Error as ServerError, ToResponseCode},
+    server::{Error as ServerError, ToResponseCode, VerifyProofRequest},
 };
 
 #[derive(Serialize)]
@@ -35,6 +36,23 @@ impl From<InclusionProof> for InclusionProofResponse {
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
         StatusCode::OK
+    }
+}
+
+#[derive(Serialize)]
+pub enum VerifyProofResponse {
+    Ok,
+    Invalid,
+    ProofError,
+}
+
+impl ToResponseCode for VerifyProofResponse {
+    fn to_response_code(&self) -> StatusCode {
+        match self {
+            VerifyProofResponse::Ok => StatusCode::OK,
+            VerifyProofResponse::Invalid => StatusCode::BAD_REQUEST,
+            VerifyProofResponse::ProofError => StatusCode::BAD_REQUEST,
+        }
     }
 }
 
@@ -220,6 +238,28 @@ impl App {
         let proof = self.tree_state.get_proof_for(&item).await;
 
         Ok(InclusionProofResponse(proof))
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the provided proof is invalid.
+    #[instrument(level = "debug", skip_all)]
+    pub async fn verify_proof(
+        &self,
+        request: &VerifyProofRequest,
+    ) -> Result<VerifyProofResponse, ServerError> {
+        let checked = verify_proof(
+            request.root,
+            request.nullfier_hash,
+            request.signal_hash,
+            request.external_nullifier_hash,
+            &request.proof,
+        );
+        match checked {
+            Ok(true) => Ok(VerifyProofResponse::Ok),
+            Ok(false) => Ok(VerifyProofResponse::Invalid),
+            Err(_) => Ok(VerifyProofResponse::ProofError),
+        }
     }
 
     /// # Errors

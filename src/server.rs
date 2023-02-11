@@ -71,7 +71,7 @@ pub struct InclusionProofRequest {
 pub struct VerifyProofRequest {
     pub root:                    Field,
     pub signal_hash:             Field,
-    pub nullfier_hash:           Field,
+    pub nullifier_hash:           Field,
     pub external_nullifier_hash: Field,
     pub proof:                   Proof,
 }

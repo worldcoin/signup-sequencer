@@ -21,28 +21,38 @@ use ethers::{
 };
 use eyre::{bail, Result as AnyhowResult};
 use hyper::{client::HttpConnector, Body, Client, Request};
+use once_cell::sync::Lazy;
 use semaphore::{
     hash_to_field,
     identity::Identity,
-    merkle_tree::Branch,
-    poseidon_tree::PoseidonTree,
-    protocol::{generate_nullifier_hash, generate_proof, verify_proof},
+    merkle_tree::{self, Branch},
+    poseidon_tree::{PoseidonTree, PoseidonHash},
+    protocol::{self, generate_nullifier_hash, generate_proof, verify_proof}, Field,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tempfile::tempdir;
 use tokio::{spawn, task::JoinHandle};
 use tracing::{error, info, instrument};
-use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
+use tracing_subscriber::fmt::time::Uptime;
 use url::{Host, Url};
 
 use signup_sequencer::{app::App, identity_tree::Hash, server, Options};
 
-const TEST_LEAVES: &[&str] = &[
-    "0000F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0",
-    "0000F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1",
-    "0000F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2",
-];
+static IDENTITIES: Lazy<Vec<Identity>> = Lazy::new(|| {
+    vec![
+        Identity::from_seed(b"test_f0f0"),
+        Identity::from_seed(b"test_f1f1"),
+        Identity::from_seed(b"test_f2f2"),
+    ]
+});
+
+const TEST_LEAVES: Lazy<Vec<Field>> = Lazy::new(|| {
+    IDENTITIES.iter().map(|id| {
+        id.commitment()
+    })
+    .collect()
+});
 
 #[tokio::test]
 #[serial_test::serial]
@@ -79,38 +89,30 @@ async fn validate_proofs() {
         .expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
-    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf_value);
+    let mut ref_tree = PoseidonTree::new(21, options.app.contracts.initial_leaf_value);
     let client = Client::new();
 
-    test_insert_identity(&uri, &client, &mut ref_tree, 0).await;
-    test_insert_identity(&uri, &client, &mut ref_tree, 1).await;
-    test_insert_identity(&uri, &client, &mut ref_tree, 2).await;
+    // generate identity
+    let (merkle_proof, root) = test_insert_identity(&uri, &client, &mut ref_tree, 0).await;
 
-    let id = Identity::from_seed(b"secret");
+    // simulate client generating a proof
+    let signal_hash = hash_to_field(b"signal_hash");
+    let external_nullifier_hash = hash_to_field(b"external_hash");
+    let nullifier_hash = generate_nullifier_hash(&IDENTITIES[0], external_nullifier_hash);
 
-    let merkle_proof = ref_tree.proof(2).unwrap();
-    info!(?merkle_proof, "merkle proof");
-    let root = ref_tree.root();
+    let proof =
+        generate_proof(&IDENTITIES[0], &merkle_proof, external_nullifier_hash, signal_hash).unwrap();
 
-    // change signal and external_nullifier here
-    let signal_hash = hash_to_field(b"aaa");
-    let external_nullifier_hash = hash_to_field(b"bbb");
-
-    let nullifier_hash = generate_nullifier_hash(&id, external_nullifier_hash);
-
-    let proof = generate_proof(&id, &merkle_proof, external_nullifier_hash, signal_hash).unwrap();
-    info!(?proof, "zk proof");
-
-    let result = verify_proof(
+    test_verify_proof(
+        &uri,
+        &client,
         root,
-        nullifier_hash,
         signal_hash,
+        nullifier_hash,
         external_nullifier_hash,
-        &proof,
-    )
-    .unwrap();
-
-    info!(result, "verify proof");
+        proof,
+        false,
+    ).await;
 }
 
 #[tokio::test]
@@ -148,7 +150,7 @@ async fn insert_identity_and_proofs() {
         .expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
-    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf_value);
+    let mut ref_tree = PoseidonTree::new(21, options.app.contracts.initial_leaf_value);
     let client = Client::new();
     test_inclusion_proof(
         &uri,
@@ -174,7 +176,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        &TEST_LEAVES[0],
         false,
     )
     .await;
@@ -184,7 +186,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        &TEST_LEAVES[1],
         false,
     )
     .await;
@@ -217,7 +219,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        &TEST_LEAVES[0],
         false,
     )
     .await;
@@ -226,7 +228,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        &TEST_LEAVES[1],
         false,
     )
     .await;
@@ -250,7 +252,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        &TEST_LEAVES[0],
         false,
     )
     .await;
@@ -259,7 +261,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        &TEST_LEAVES[1],
         false,
     )
     .await;
@@ -311,6 +313,42 @@ async fn wait_for_log_count(
     }
 
     panic!("Failed waiting for {expected_count} log events");
+}
+
+#[instrument(skip_all)]
+async fn test_verify_proof(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    root: Field,
+    signal_hash: Field,
+    nullifer_hash: Field,
+    external_nullifier_hash: Field,
+    proof: protocol::Proof,
+    expect_failure: bool,
+) {
+    let body = construct_verify_proof_body(
+        root,
+        signal_hash,
+        nullifer_hash,
+        external_nullifier_hash,
+        proof,
+    );
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri.to_owned() + "/verifyProof")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create verify proof hyper::Body");
+    let mut response = client
+        .request(req)
+        .await
+        .expect("Failed to execute request.");
+    if expect_failure {
+        assert!(!response.status().is_success());
+        return;
+    } else {
+        assert!(response.status().is_success());
+    }
 }
 
 #[instrument(skip_all)]
@@ -378,8 +416,8 @@ async fn test_insert_identity(
     client: &Client<HttpConnector>,
     ref_tree: &mut PoseidonTree,
     leaf_index: usize,
-) {
-    let body = construct_insert_identity_body(TEST_LEAVES[leaf_index]);
+) -> (merkle_tree::Proof<PoseidonHash>, Field) {
+    let body = construct_insert_identity_body(&TEST_LEAVES[leaf_index]);
     let req = Request::builder()
         .method("POST")
         .uri(uri.to_owned() + "/insertIdentity")
@@ -404,12 +442,14 @@ async fn test_insert_identity(
 
     ref_tree.set(
         leaf_index,
-        Hash::from_str_radix(TEST_LEAVES[leaf_index], 16).unwrap(),
+        TEST_LEAVES[leaf_index],
     );
 
     let expected_json = generate_reference_proof_json(ref_tree, leaf_index, "pending");
 
     assert_eq!(result_json, expected_json);
+
+    (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())
 }
 
 fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
@@ -421,10 +461,31 @@ fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
     )
 }
 
-fn construct_insert_identity_body(identity_commitment: &str) -> Body {
-    Body::from(
+fn construct_insert_identity_body(identity_commitment: &Field) -> Body {
+    let body = Body::from(
         json!({
             "identityCommitment": identity_commitment,
+        })
+        .to_string(),
+    );
+    println!("body {:?}", body);
+    body
+}
+
+fn construct_verify_proof_body(
+    root: Field,
+    signal_hash: Field,
+    nullifer_hash: Field,
+    external_nullifier_hash: Field,
+    proof: protocol::Proof,
+) -> Body {
+    Body::from(
+        json!({
+            "root": root,
+            "signalHash": signal_hash,
+            "nullifierHash": nullifer_hash,
+            "externalNullifierHash": external_nullifier_hash,
+            "proof": proof,
         })
         .to_string(),
     )
@@ -554,7 +615,7 @@ async fn spawn_mock_chain() -> AnyhowResult<(AnvilInstance, H256, Address)> {
 
     // Create a group with id 1
     let group_id = U256::from(1_u64);
-    let depth = 21_u8;
+    let depth = 20_u8;
     let initial_leaf = U256::from(0_u64);
     semaphore_contract
         .method::<_, ()>("createGroup", (group_id, depth, initial_leaf))?

@@ -250,7 +250,7 @@ impl App {
     ) -> Result<VerifyProofResponse, ServerError> {
         let checked = verify_proof(
             request.root,
-            request.nullfier_hash,
+            request.nullifier_hash,
             request.signal_hash,
             request.external_nullifier_hash,
             &request.proof,

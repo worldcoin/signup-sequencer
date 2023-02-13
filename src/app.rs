@@ -1,15 +1,11 @@
 use crate::{
     contracts,
-    contracts::{
-        batching::Contract as BatchingContract, legacy::Contract as LegacyContract,
-        IdentityManager, SharedIdentityManager,
-    },
+    contracts::{legacy::Contract as LegacyContract, IdentityManager, SharedIdentityManager},
     database::{self, Database},
     ethereum::{self, Ethereum},
     ethereum_subscriber::{Error as SubscriberError, EthereumSubscriber},
     identity_committer::IdentityCommitter,
     identity_tree::{Hash, SharedTreeState, TreeState},
-    prover,
     server::{Error as ServerError, ToResponseCode},
     timed_rw_lock::TimedRwLock,
 };
@@ -68,9 +64,6 @@ pub struct Options {
     #[clap(flatten)]
     pub database: database::Options,
 
-    #[clap(flatten)]
-    pub prover: prover::Options,
-
     /// Block number to start syncing from
     #[clap(long, env, default_value = "0")]
     pub starting_block: u64,
@@ -108,7 +101,6 @@ impl App {
 
             let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
                 let identity_manager = if cfg!(feature = "batching-contract") {
-                    BatchingContract::new(options.contracts, ethereum.clone()).await?;
                     panic!("The batching contract does not yet exist but was requested.");
                 } else {
                     LegacyContract::new(options.contracts, ethereum.clone()).await?
@@ -119,6 +111,7 @@ impl App {
             // Connect to both in parallel
             try_join!(db, eth)?
         };
+
         let database = Arc::new(database);
 
         // Poseidon tree depth is one more than the contract's tree depth

@@ -29,7 +29,7 @@ use tracing::{debug, error, info, instrument};
 use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
 use url::{Host, Url};
 
-const TEST_LEAVES: &[&str] = &[
+const TEST_LEAFS: &[&str] = &[
     "0000F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0",
     "0000F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1F1",
     "0000F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2",
@@ -68,13 +68,13 @@ async fn simulate_eth_reorg() {
         .expect("Failed to initialize chain endpoint")
         .interval(Duration::from_millis(500u64));
 
-    test_insert_identity(&uri, &client, TEST_LEAVES[0]).await;
+    test_insert_identity(&uri, &client, TEST_LEAFS[0]).await;
     test_inclusion_proof(
         &uri,
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
         false,
     )
     .await;
@@ -86,7 +86,7 @@ async fn simulate_eth_reorg() {
         .expect("Failed to create EVM snapshot");
     info!("Created EVM snapshot with ID {}", snapshot_id);
 
-    test_insert_identity(&uri, &client, TEST_LEAVES[1]).await;
+    test_insert_identity(&uri, &client, TEST_LEAFS[1]).await;
 
     // after 2 identites were mined, we should have 3 log events on the chain
     wait_for_log_count(&provider, semaphore_address, 3).await;
@@ -98,28 +98,28 @@ async fn simulate_eth_reorg() {
 
     info!("Reverted EVM snapshot to simulate re-org: {}", result);
 
-    test_insert_identity(&uri, &client, TEST_LEAVES[2]).await;
+    test_insert_identity(&uri, &client, TEST_LEAFS[2]).await;
 
-    debug!(leaf = TEST_LEAVES[2], "TEST INCLUSION");
+    debug!(leaf = TEST_LEAFS[2], "TEST INCLUSION");
 
     test_inclusion_proof(
         &uri,
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[2], 16).expect("Failed to parse Hash from test leaf 1"),
+        &Hash::from_str_radix(TEST_LEAFS[2], 16).expect("Failed to parse Hash from test leaf 1"),
         false,
     )
     .await;
 
-    debug!(leaf = TEST_LEAVES[1], "TEST INCLUSION");
+    debug!(leaf = TEST_LEAFS[1], "TEST INCLUSION");
 
     test_inclusion_proof(
         &uri,
         &client,
         2,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
         false,
     )
     .await;
@@ -176,23 +176,23 @@ async fn insert_identity_and_proofs() {
         true,
     )
     .await;
-    test_insert_identity(&uri, &client, TEST_LEAVES[0]).await;
+    test_insert_identity(&uri, &client, TEST_LEAFS[0]).await;
     test_inclusion_proof(
         &uri,
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
         false,
     )
     .await;
-    test_insert_identity(&uri, &client, TEST_LEAVES[1]).await;
+    test_insert_identity(&uri, &client, TEST_LEAFS[1]).await;
     test_inclusion_proof(
         &uri,
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
         false,
     )
     .await;
@@ -225,7 +225,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
         false,
     )
     .await;
@@ -234,7 +234,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
         false,
     )
     .await;
@@ -258,7 +258,7 @@ async fn insert_identity_and_proofs() {
         &client,
         0,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[0], 16).expect("Failed to parse Hash from test leaf 0"),
+        &Hash::from_str_radix(TEST_LEAFS[0], 16).expect("Failed to parse Hash from test leaf 0"),
         false,
     )
     .await;
@@ -267,7 +267,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &Hash::from_str_radix(TEST_LEAVES[1], 16).expect("Failed to parse Hash from test leaf 1"),
+        &Hash::from_str_radix(TEST_LEAFS[1], 16).expect("Failed to parse Hash from test leaf 1"),
         false,
     )
     .await;
@@ -318,7 +318,7 @@ async fn wait_for_log_count(
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
-    panic!("Failed waiting for {expected_count} log events");
+    panic!("Failed waiting for {} log events", expected_count);
 }
 
 #[instrument(skip_all)]
@@ -409,7 +409,7 @@ async fn test_insert_identity(
     let result = String::from_utf8(bytes.into_iter().collect())
         .expect("Could not parse response bytes to utf-8");
     if !response.status().is_success() {
-        panic!("Failed to insert identity: {result}");
+        panic!("Failed to insert identity: {}", result);
     }
 
     assert_eq!(result, "null");

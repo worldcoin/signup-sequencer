@@ -8,7 +8,6 @@ mod ethereum;
 mod ethereum_subscriber;
 mod identity_committer;
 pub mod identity_tree;
-mod prover;
 pub mod server;
 mod timed_rw_lock;
 mod tx_sitter;

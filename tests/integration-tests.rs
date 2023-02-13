@@ -61,7 +61,7 @@ async fn simulate_eth_reorg() {
         .expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
-    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf_value);
+    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
     let client = Client::new();
 
     let provider = Provider::<Http>::try_from(chain.endpoint())
@@ -156,14 +156,14 @@ async fn insert_identity_and_proofs() {
         .expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
-    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf_value);
+    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf);
     let client = Client::new();
     test_inclusion_proof(
         &uri,
         &client,
         0,
         &mut ref_tree,
-        &options.app.contracts.initial_leaf_value,
+        &options.app.contracts.initial_leaf,
         true,
     )
     .await;
@@ -172,7 +172,7 @@ async fn insert_identity_and_proofs() {
         &client,
         1,
         &mut ref_tree,
-        &options.app.contracts.initial_leaf_value,
+        &options.app.contracts.initial_leaf,
         true,
     )
     .await;
@@ -201,7 +201,7 @@ async fn insert_identity_and_proofs() {
         &client,
         2,
         &mut ref_tree,
-        &options.app.contracts.initial_leaf_value,
+        &options.app.contracts.initial_leaf,
         true,
     )
     .await;

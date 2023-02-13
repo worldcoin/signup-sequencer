@@ -1,5 +1,5 @@
 use crate::{
-    contracts::{legacy::MemberAddedEvent, SharedIdentityManager},
+    contracts::{Contracts, MemberAddedEvent},
     database::{
         ConfirmedIdentityEvent, Database, Error as DatabaseError, IdentityConfirmationResult,
     },
@@ -7,7 +7,7 @@ use crate::{
     identity_committer::IdentityCommitter,
     identity_tree::{SharedTreeState, TreeState},
 };
-use futures::TryStreamExt;
+use futures::{StreamExt, TryStreamExt};
 use semaphore::Field;
 use std::{cmp::min, sync::Arc, time::Duration};
 use thiserror::Error;
@@ -30,7 +30,7 @@ pub struct EthereumSubscriber {
     instance:           RwLock<Option<RunningInstance>>,
     starting_block:     u64,
     database:           Arc<Database>,
-    identity_manager:   SharedIdentityManager,
+    contracts:          Arc<Contracts>,
     tree_state:         SharedTreeState,
     identity_committer: Arc<IdentityCommitter>,
 }
@@ -39,7 +39,7 @@ impl EthereumSubscriber {
     pub fn new(
         starting_block: u64,
         database: Arc<Database>,
-        identity_manager: SharedIdentityManager,
+        contracts: Arc<Contracts>,
         tree_state: SharedTreeState,
         identity_committer: Arc<IdentityCommitter>,
     ) -> Self {
@@ -47,7 +47,7 @@ impl EthereumSubscriber {
             instance: RwLock::new(None),
             starting_block,
             database,
-            identity_manager,
+            contracts,
             tree_state,
             identity_committer,
         }
@@ -64,7 +64,7 @@ impl EthereumSubscriber {
         let mut starting_block = self.starting_block;
         let database = self.database.clone();
         let tree_state = self.tree_state.clone();
-        let identity_manager = self.identity_manager.clone();
+        let contracts = self.contracts.clone();
         let identity_committer = self.identity_committer.clone();
 
         let handle = tokio::spawn(async move {
@@ -74,7 +74,7 @@ impl EthereumSubscriber {
                 let processed_block = Self::process_events_internal(
                     starting_block,
                     tree_state.clone(),
-                    identity_manager.clone(),
+                    contracts.clone(),
                     database.clone(),
                     identity_committer.clone(),
                 )
@@ -93,7 +93,7 @@ impl EthereumSubscriber {
     #[instrument(level = "info", skip_all)]
     pub async fn process_initial_events(&mut self) -> Result<(), Error> {
         let end_block = self
-            .identity_manager
+            .contracts
             .confirmed_block_number()
             .await
             .map_err(Error::Event)?;
@@ -109,7 +109,7 @@ impl EthereumSubscriber {
             last_db_block + 1,
             end_block,
             self.tree_state.clone(),
-            self.identity_manager.clone(),
+            self.contracts.clone(),
             self.database.clone(),
             self.identity_committer.clone(),
         )
@@ -121,11 +121,11 @@ impl EthereumSubscriber {
     async fn process_events_internal(
         start_block: u64,
         tree_state: SharedTreeState,
-        identity_manager: SharedIdentityManager,
+        contracts: Arc<Contracts>,
         database: Arc<Database>,
         identity_committer: Arc<IdentityCommitter>,
     ) -> Result<u64, Error> {
-        let end_block = identity_manager
+        let end_block = contracts
             .confirmed_block_number()
             .await
             .map_err(Error::Event)?;
@@ -134,7 +134,7 @@ impl EthereumSubscriber {
             start_block,
             end_block,
             tree_state,
-            identity_manager,
+            contracts,
             database,
             identity_committer,
         )
@@ -194,7 +194,7 @@ impl EthereumSubscriber {
         start_block: u64,
         end_block: u64,
         tree_state: SharedTreeState,
-        identity_manager: SharedIdentityManager,
+        contracts: Arc<Contracts>,
         database: Arc<Database>,
         identity_committer: Arc<IdentityCommitter>,
     ) -> Result<u64, Error> {
@@ -207,9 +207,7 @@ impl EthereumSubscriber {
             end_block, "processing blockchain events in ethereum subscriber"
         );
 
-        let mut events = identity_manager
-            .fetch_events(start_block, Some(end_block))
-            .unwrap();
+        let mut events = contracts.fetch_events(start_block, Some(end_block)).boxed();
 
         let mut tree = tree_state.write().await.unwrap_or_else(|e| {
             error!(?e, "Failed to obtain tree lock in process_events.");
@@ -228,7 +226,7 @@ impl EthereumSubscriber {
 
             Self::log_event_errors(
                 &tree,
-                &identity_manager.initial_leaf_value(),
+                &contracts.initial_leaf(),
                 tree.next_leaf,
                 &identity.leaf,
             )?;
@@ -255,10 +253,7 @@ impl EthereumSubscriber {
                 .confirm_identity_and_retrigger_stale_recods(&identity.leaf)
                 .await
                 .map_err(Error::Database)?;
-            if matches!(
-                queue_status,
-                IdentityConfirmationResult::RetriggerProcessing
-            ) {
+            if let IdentityConfirmationResult::RetriggerProcessing = queue_status {
                 wake_up_committer = true;
             }
         }
@@ -315,11 +310,11 @@ impl EthereumSubscriber {
             error!(?e, "Failed to obtain tree lock in check_leaves.");
             panic!("Sequencer potentially deadlocked, terminating.");
         });
-        let initial_leaf = self.identity_manager.initial_leaf_value();
+        let initial_leaf = self.contracts.initial_leaf();
 
         if tree.next_leaf > 0 {
             if let Err(error) = self
-                .identity_manager
+                .contracts
                 .assert_valid_root(tree.merkle_tree.root())
                 .await
             {

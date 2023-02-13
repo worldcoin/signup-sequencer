@@ -20,3 +20,18 @@ impl From<[U256; 8]> for Proof {
         }
     }
 }
+
+impl From<Proof> for [U256; 8] {
+    fn from(value: Proof) -> Self {
+        [
+            value.ar[0],
+            value.ar[1],
+            value.bs[0][0],
+            value.bs[0][1],
+            value.bs[1][0],
+            value.bs[1][1],
+            value.krs[0],
+            value.krs[1],
+        ]
+    }
+}

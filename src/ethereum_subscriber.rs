@@ -217,9 +217,8 @@ impl EthereumSubscriber {
         let mut wake_up_committer = false;
 
         loop {
-            let event = match events.try_next().await.map_err(Error::Event)? {
-                Some(a) => a,
-                None => break,
+            let Some(event) = events.try_next().await.map_err(Error::Event)? else {
+                break;
             };
 
             let identity = ConfirmedIdentityEvent::try_from(event)?;
@@ -253,7 +252,10 @@ impl EthereumSubscriber {
                 .confirm_identity_and_retrigger_stale_recods(&identity.leaf)
                 .await
                 .map_err(Error::Database)?;
-            if let IdentityConfirmationResult::RetriggerProcessing = queue_status {
+            if matches!(
+                queue_status,
+                IdentityConfirmationResult::RetriggerProcessing
+            ) {
                 wake_up_committer = true;
             }
         }

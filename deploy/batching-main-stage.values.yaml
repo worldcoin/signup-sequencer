@@ -15,3 +15,4 @@ env:
   BATCH_SIZE: 10
   TREE_DEPTH: 20
   BATCH_INSERTION_PROVER_URL: "https://semaphore-mtb.internal.stage-crypto.worldcoin.dev"
+  IDENTITY_MANAGER_ADDRESS: "0x8C6c81b8153BFd8632fb45e3E1d01347727b67E6"

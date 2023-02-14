@@ -336,5 +336,4 @@ jobs:
           --set image.tag="${{ github.sha }}"
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
-          --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
           -f deploy/batching-main-stage.values.yaml

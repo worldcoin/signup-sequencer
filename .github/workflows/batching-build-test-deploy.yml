@@ -6,7 +6,7 @@ name: Build, Test & Deploy
 
 on:
   push:
-    branches-ignore:
+    branches:
       - 'batching/**'
 
 env:
@@ -193,7 +193,7 @@ jobs:
       matrix:
         platform: [amd64, arm64]
     env:
-      FEATURES: mimalloc
+      FEATURES: mimalloc,oz-provider
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -307,10 +307,10 @@ jobs:
       - name: Check if Chart.yaml is up to date
         run: ./deploy/generate.py | diff ./deploy/Chart.yaml -
 
-  deploy-main-stage:
-    name: Deploy main to staging
+  deploy-batching-main-stage:
+    name: Deploy batching/main to staging
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/batching/main'
     needs: [accept]
     environment: stage
     permissions:
@@ -330,74 +330,11 @@ jobs:
           --region ${{ secrets.AWS_STAGE_REGION }}
           --name ${{ secrets.AWS_STAGE_CLUSTER }}
       - name: Helm install
-        run: helm upgrade "${{ github.event.repository.name }}" ./deploy
+        run: helm upgrade "${{ github.event.repository.name }}-v2" ./deploy
           --install --timeout 60s
-          --namespace "${{ github.event.repository.name }}"
+          --namespace "${{ github.event.repository.name }}-v2"
           --set image.tag="${{ github.sha }}"
           --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
           --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
           --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
-          -f deploy/main-stage.values.yaml
-
-  deploy-stage-manual:
-    name: Manual deploy to staging
-    runs-on: ubuntu-latest
-    needs: [image_manifest]
-    environment: stage-manual
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-region: ${{ secrets.AWS_STAGE_REGION }}
-          role-to-assume: ${{ secrets.AWS_STAGE_ROLE }}
-          role-duration-seconds: 900
-      - name: Connect to EKS cluster
-        run: aws eks update-kubeconfig
-          --region ${{ secrets.AWS_STAGE_REGION }}
-          --name ${{ secrets.AWS_STAGE_CLUSTER }}
-      - name: Helm install
-        run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --timeout 120s
-          --namespace "${{ github.event.repository.name }}"
-          --set image.tag="${{ github.sha }}"
-          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
-          --set env.SIGNING_KEY="${{ secrets.ACCOUNT_PRIVATE_KEY }}"
-          --set env.SEMAPHORE_ADDRESS="${{ secrets.SEMAPHORE_CONTRACT_ADDRESS }}"
-          -f deploy/stage-manual.values.yaml
-
-  deploy-prod:
-    name: Deploy main to production
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: [ accept ]
-    environment: prod
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-region: ${{ secrets.AWS_PROD_REGION }}
-          role-to-assume: ${{ secrets.AWS_PROD_ROLE }}
-          role-duration-seconds: 900
-      - name: Connect to EKS cluster
-        run: aws eks update-kubeconfig
-          --region ${{ secrets.AWS_PROD_REGION }}
-          --name ${{ secrets.AWS_PROD_CLUSTER }}
-      - name: Helm install
-        run: helm upgrade "${{ github.event.repository.name }}" ./deploy
-          --install --timeout 60s
-          --namespace "${{ github.event.repository.name }}"
-          --set image.tag="${{ github.sha }}"
-          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_POLYGON_MAINNET_RPC_ENDPOINT }}"
-          --set env.SIGNING_KEY="${{ secrets.MAINNET_ACCOUNT_PRIVATE_KEY }}"
-          --set env.SEMAPHORE_ADDRESS="${{ secrets.MAINNET_SEMAPHORE_CONTRACT_ADDRESS }}"
-          -f deploy/prod.values.yaml
+          -f deploy/batching-main-stage.values.yaml

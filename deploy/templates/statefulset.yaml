@@ -63,6 +63,9 @@ spec:
             - name: metrics
               containerPort: 9998
               protocol: TCP
+          envFrom:
+            - secretRef:
+                name: application
           env:
             - name: LOG_FORMAT
               value: otlp
@@ -72,11 +75,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
-            - name: DATABASE
-              valueFrom:
-                secretKeyRef:
-                  name: application
-                  key: DATABASE_URL
             - name: TRACE_OTLP
               value: "grpc://$(HOST_IP):4317"
             - name: TRACE_RESOURCE_ENV

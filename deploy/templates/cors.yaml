@@ -3,7 +3,7 @@ apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
   name: cors
-  namespace: signup-sequencer
+  namespace: {{ .Release.Namespace }}
 spec:
   headers:
     accessControlAllowMethods:

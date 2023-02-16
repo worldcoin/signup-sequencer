@@ -63,6 +63,9 @@ spec:
             - name: metrics
               containerPort: 9998
               protocol: TCP
+          envFrom:
+            - secretRef:
+                name: application
           env:
             - name: LOG_FORMAT
               value: otlp

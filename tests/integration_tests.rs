@@ -63,9 +63,10 @@ async fn insert_identity_and_proofs() {
 
     let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf_value);
     let initial_root: U256 = ref_tree.root().into();
-    let (chain, private_key, identity_manager_address, prover_mock) = spawn_mock_chain(initial_root)
-        .await
-        .expect("Failed to spawn mock chain");
+    let (chain, private_key, identity_manager_address, prover_mock) =
+        spawn_mock_chain(initial_root)
+            .await
+            .expect("Failed to spawn mock chain");
 
     options.app.contracts.identity_manager_address = identity_manager_address;
     options.app.ethereum.read_options.confirmation_blocks_delay = 2;

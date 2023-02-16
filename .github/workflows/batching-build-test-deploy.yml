@@ -310,6 +310,7 @@ jobs:
   deploy-batching-main-stage:
     name: Deploy batching/main to staging
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/batching/main'
     needs: [accept]
     environment: stage
     permissions:

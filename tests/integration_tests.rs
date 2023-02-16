@@ -47,6 +47,8 @@ async fn insert_identity_and_proofs() {
 
     let mut options = Options::try_parse_from([
         "signup-sequencer",
+        "--identity-manager-address",
+        "0x0000000000000000000000000000000000000000", // placeholder, updated below
         "--database",
         &format!("sqlite://{}", db.to_str().unwrap()),
         "--database-max-connections",

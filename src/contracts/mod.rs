@@ -26,8 +26,8 @@ use tracing::{error, info, instrument};
 #[group(skip)]
 pub struct Options {
     /// The address of the identity manager contract.
-    #[clap(long, env, default_value = "174ee9b5fBb5Eb68B6C61032946486dD9c2Dc4b6")]
-    pub semaphore_address: Address,
+    #[clap(long, env)]
+    pub identity_manager_address: Address,
 
     /// The depth of the tree that the contract is working with. This needs to
     /// agree with the verifier in the deployed contract, and also with
@@ -67,7 +67,7 @@ impl IdentityManager {
         Self: Sized,
     {
         // Check that there is code deployed at the target address.
-        let address = options.semaphore_address;
+        let address = options.identity_manager_address;
         let code = ethereum.provider().get_code(address, None).await?;
         if code.as_ref().is_empty() {
             error!(
@@ -77,7 +77,10 @@ impl IdentityManager {
         }
 
         // Connect to the running batching contract.
-        let abi = ContractAbi::new(options.semaphore_address, ethereum.provider().clone());
+        let abi = ContractAbi::new(
+            options.identity_manager_address,
+            ethereum.provider().clone(),
+        );
 
         let owner = abi.owner().call().await?;
         if owner != ethereum.address() {

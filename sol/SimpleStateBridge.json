@@ -1,408 +1,408 @@
 {
-  "abi": [
-    {
-      "anonymous": false,
-      "inputs": [
+    "abi": [
         {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "root",
-          "type": "uint256"
-        }
-      ],
-      "name": "StateRootSentMultichain",
-      "type": "event"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "root",
-          "type": "uint256"
-        }
-      ],
-      "name": "sendRootMultichain",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    }
-  ],
-  "bytecode": {
-    "object": "0x608060405234801561001057600080fd5b5060ba8061001f6000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c8063393170cf14602d575b600080fd5b603c6038366004606c565b603e565b005b60405181907f118a5978e509351fb120eb558e2dc9bd6db3cf57cf66ec9744ef8acabf3b0aec90600090a250565b600060208284031215607d57600080fd5b503591905056fea2646970667358221220b298c980fff5a8f9b2750579e4adb8666e82cad7d265969e7149422f0aafdc9164736f6c634300080f0033",
-    "sourceMap": "336:223:31:-:0;;;;;;;;;;;;;;;;;;;",
-    "linkReferences": {}
-  },
-  "deployedBytecode": {
-    "object": "0x6080604052348015600f57600080fd5b506004361060285760003560e01c8063393170cf14602d575b600080fd5b603c6038366004606c565b603e565b005b60405181907f118a5978e509351fb120eb558e2dc9bd6db3cf57cf66ec9744ef8acabf3b0aec90600090a250565b600060208284031215607d57600080fd5b503591905056fea2646970667358221220b298c980fff5a8f9b2750579e4adb8666e82cad7d265969e7149422f0aafdc9164736f6c634300080f0033",
-    "sourceMap": "336:223:31:-:0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;438:119;;;;;;:::i;:::-;;:::i;:::-;;;521:29;;545:4;;521:29;;;;;438:119;:::o;14:180:37:-;73:6;126:2;114:9;105:7;101:23;97:32;94:52;;;142:1;139;132:12;94:52;-1:-1:-1;165:23:37;;14:180;-1:-1:-1;14:180:37:o",
-    "linkReferences": {}
-  },
-  "methodIdentifiers": {
-    "sendRootMultichain(uint256)": "393170cf"
-  },
-  "rawMetadata": "{\"compiler\":{\"version\":\"0.8.15+commit.e14f2714\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"root\",\"type\":\"uint256\"}],\"name\":\"StateRootSentMultichain\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"root\",\"type\":\"uint256\"}],\"name\":\"sendRootMultichain\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"author\":\"Worldcoin\",\"kind\":\"dev\",\"methods\":{\"sendRootMultichain(uint256)\":{\"details\":\"Calls this method on the L1 Proxy contract to relay the latest root to all supported networks\",\"params\":{\"root\":\"The latest Semaphore root.\"}}},\"title\":\"State Bridge Mock\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"sendRootMultichain(uint256)\":{\"notice\":\"Sends the latest Semaphore root to Optimism.\"}},\"notice\":\"This purely exists to allow tests to compile and does not have any functionality.A dumb bridge to make it easy to fuzz test successes and failures.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"src/test/mock/SimpleStateBridge.sol\":\"SimpleStateBridge\"},\"evmVersion\":\"london\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[\":@zk-kit/=lib/zk-kit/packages/\",\":contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/\",\":ds-test/=lib/ds-test/src/\",\":forge-std/=lib/forge-std/src/\",\":openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/\",\":semaphore/=lib/semaphore/contracts/\",\":solmate/=lib/solmate/src/\",\":zk-kit/=lib/zk-kit/\"]},\"sources\":{\"src/interfaces/IBridge.sol\":{\"keccak256\":\"0xde097ea1a08f97f189ea1c018c2fbdca9e4a2b06ad3396ad3e2e455f66f51939\",\"urls\":[\"bzz-raw://78aecdcfc04e940a9352b06297881fe2654bd2ac8cd7df10873209ce71f2093c\",\"dweb:/ipfs/QmWAniZUknPv9HRVvTQPBAT4iSYFMXVhccdrBRtuQqSwFp\"]},\"src/test/mock/SimpleStateBridge.sol\":{\"keccak256\":\"0xb8459c21ab0dd7f69d96e3ca9253f7df856b4a2e4544e85fe95ac386cbcfb800\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://d2fc819d042d43bfdf41c5e57630ef84882c1dc8e2b5647b796946c8150b72b5\",\"dweb:/ipfs/QmQ6xbUg52TMeiAKRe5FYomMT9HY9Th6DfLKXYRXAPpdB9\"]}},\"version\":1}",
-  "metadata": {
-    "compiler": {
-      "version": "0.8.15+commit.e14f2714"
-    },
-    "language": "Solidity",
-    "output": {
-      "abi": [
-        {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "root",
-              "type": "uint256",
-              "indexed": true
-            }
-          ],
-          "type": "event",
-          "name": "StateRootSentMultichain",
-          "anonymous": false
+            "anonymous": false,
+            "inputs": [
+                {
+                    "indexed": true,
+                    "internalType": "uint256",
+                    "name": "root",
+                    "type": "uint256"
+                }
+            ],
+            "name": "StateRootSentMultichain",
+            "type": "event"
         },
         {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "root",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "nonpayable",
-          "type": "function",
-          "name": "sendRootMultichain"
+            "inputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "root",
+                    "type": "uint256"
+                }
+            ],
+            "name": "sendRootMultichain",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
         }
-      ],
-      "devdoc": {
-        "kind": "dev",
-        "methods": {
-          "sendRootMultichain(uint256)": {
-            "details": "Calls this method on the L1 Proxy contract to relay the latest root to all supported networks",
-            "params": {
-              "root": "The latest Semaphore root."
+    ],
+    "bytecode": {
+        "object": "0x608060405234801561001057600080fd5b5060ba8061001f6000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c8063393170cf14602d575b600080fd5b603c6038366004606c565b603e565b005b60405181907f118a5978e509351fb120eb558e2dc9bd6db3cf57cf66ec9744ef8acabf3b0aec90600090a250565b600060208284031215607d57600080fd5b503591905056fea2646970667358221220b298c980fff5a8f9b2750579e4adb8666e82cad7d265969e7149422f0aafdc9164736f6c634300080f0033",
+        "sourceMap": "336:223:31:-:0;;;;;;;;;;;;;;;;;;;",
+        "linkReferences": {}
+    },
+    "deployedBytecode": {
+        "object": "0x6080604052348015600f57600080fd5b506004361060285760003560e01c8063393170cf14602d575b600080fd5b603c6038366004606c565b603e565b005b60405181907f118a5978e509351fb120eb558e2dc9bd6db3cf57cf66ec9744ef8acabf3b0aec90600090a250565b600060208284031215607d57600080fd5b503591905056fea2646970667358221220b298c980fff5a8f9b2750579e4adb8666e82cad7d265969e7149422f0aafdc9164736f6c634300080f0033",
+        "sourceMap": "336:223:31:-:0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;438:119;;;;;;:::i;:::-;;:::i;:::-;;;521:29;;545:4;;521:29;;;;;438:119;:::o;14:180:37:-;73:6;126:2;114:9;105:7;101:23;97:32;94:52;;;142:1;139;132:12;94:52;-1:-1:-1;165:23:37;;14:180;-1:-1:-1;14:180:37:o",
+        "linkReferences": {}
+    },
+    "methodIdentifiers": {
+        "sendRootMultichain(uint256)": "393170cf"
+    },
+    "rawMetadata": "{\"compiler\":{\"version\":\"0.8.15+commit.e14f2714\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"root\",\"type\":\"uint256\"}],\"name\":\"StateRootSentMultichain\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"root\",\"type\":\"uint256\"}],\"name\":\"sendRootMultichain\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"author\":\"Worldcoin\",\"kind\":\"dev\",\"methods\":{\"sendRootMultichain(uint256)\":{\"details\":\"Calls this method on the L1 Proxy contract to relay the latest root to all supported networks\",\"params\":{\"root\":\"The latest Semaphore root.\"}}},\"title\":\"State Bridge Mock\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"sendRootMultichain(uint256)\":{\"notice\":\"Sends the latest Semaphore root to Optimism.\"}},\"notice\":\"This purely exists to allow tests to compile and does not have any functionality.A dumb bridge to make it easy to fuzz test successes and failures.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"src/test/mock/SimpleStateBridge.sol\":\"SimpleStateBridge\"},\"evmVersion\":\"london\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[\":@zk-kit/=lib/zk-kit/packages/\",\":contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/\",\":ds-test/=lib/ds-test/src/\",\":forge-std/=lib/forge-std/src/\",\":openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/\",\":semaphore/=lib/semaphore/contracts/\",\":solmate/=lib/solmate/src/\",\":zk-kit/=lib/zk-kit/\"]},\"sources\":{\"src/interfaces/IBridge.sol\":{\"keccak256\":\"0xde097ea1a08f97f189ea1c018c2fbdca9e4a2b06ad3396ad3e2e455f66f51939\",\"urls\":[\"bzz-raw://78aecdcfc04e940a9352b06297881fe2654bd2ac8cd7df10873209ce71f2093c\",\"dweb:/ipfs/QmWAniZUknPv9HRVvTQPBAT4iSYFMXVhccdrBRtuQqSwFp\"]},\"src/test/mock/SimpleStateBridge.sol\":{\"keccak256\":\"0xb8459c21ab0dd7f69d96e3ca9253f7df856b4a2e4544e85fe95ac386cbcfb800\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://d2fc819d042d43bfdf41c5e57630ef84882c1dc8e2b5647b796946c8150b72b5\",\"dweb:/ipfs/QmQ6xbUg52TMeiAKRe5FYomMT9HY9Th6DfLKXYRXAPpdB9\"]}},\"version\":1}",
+    "metadata": {
+        "compiler": {
+            "version": "0.8.15+commit.e14f2714"
+        },
+        "language": "Solidity",
+        "output": {
+            "abi": [
+                {
+                    "inputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "root",
+                            "type": "uint256",
+                            "indexed": true
+                        }
+                    ],
+                    "type": "event",
+                    "name": "StateRootSentMultichain",
+                    "anonymous": false
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "root",
+                            "type": "uint256"
+                        }
+                    ],
+                    "stateMutability": "nonpayable",
+                    "type": "function",
+                    "name": "sendRootMultichain"
+                }
+            ],
+            "devdoc": {
+                "kind": "dev",
+                "methods": {
+                    "sendRootMultichain(uint256)": {
+                        "details": "Calls this method on the L1 Proxy contract to relay the latest root to all supported networks",
+                        "params": {
+                            "root": "The latest Semaphore root."
+                        }
+                    }
+                },
+                "version": 1
+            },
+            "userdoc": {
+                "kind": "user",
+                "methods": {
+                    "sendRootMultichain(uint256)": {
+                        "notice": "Sends the latest Semaphore root to Optimism."
+                    }
+                },
+                "version": 1
             }
-          }
+        },
+        "settings": {
+            "remappings": [
+                ":@zk-kit/=lib/zk-kit/packages/",
+                ":contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+                ":ds-test/=lib/ds-test/src/",
+                ":forge-std/=lib/forge-std/src/",
+                ":openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/",
+                ":semaphore/=lib/semaphore/contracts/",
+                ":solmate/=lib/solmate/src/",
+                ":zk-kit/=lib/zk-kit/"
+            ],
+            "optimizer": {
+                "enabled": true,
+                "runs": 200
+            },
+            "metadata": {
+                "bytecodeHash": "ipfs"
+            },
+            "compilationTarget": {
+                "src/test/mock/SimpleStateBridge.sol": "SimpleStateBridge"
+            },
+            "libraries": {}
+        },
+        "sources": {
+            "src/interfaces/IBridge.sol": {
+                "keccak256": "0xde097ea1a08f97f189ea1c018c2fbdca9e4a2b06ad3396ad3e2e455f66f51939",
+                "urls": [
+                    "bzz-raw://78aecdcfc04e940a9352b06297881fe2654bd2ac8cd7df10873209ce71f2093c",
+                    "dweb:/ipfs/QmWAniZUknPv9HRVvTQPBAT4iSYFMXVhccdrBRtuQqSwFp"
+                ],
+                "license": null
+            },
+            "src/test/mock/SimpleStateBridge.sol": {
+                "keccak256": "0xb8459c21ab0dd7f69d96e3ca9253f7df856b4a2e4544e85fe95ac386cbcfb800",
+                "urls": [
+                    "bzz-raw://d2fc819d042d43bfdf41c5e57630ef84882c1dc8e2b5647b796946c8150b72b5",
+                    "dweb:/ipfs/QmQ6xbUg52TMeiAKRe5FYomMT9HY9Th6DfLKXYRXAPpdB9"
+                ],
+                "license": "MIT"
+            }
         },
         "version": 1
-      },
-      "userdoc": {
-        "kind": "user",
-        "methods": {
-          "sendRootMultichain(uint256)": {
-            "notice": "Sends the latest Semaphore root to Optimism."
-          }
+    },
+    "ast": {
+        "absolutePath": "src/test/mock/SimpleStateBridge.sol",
+        "id": 28363,
+        "exportedSymbols": {
+            "IBridge": [
+                24917
+            ],
+            "SimpleStateBridge": [
+                28362
+            ]
         },
-        "version": 1
-      }
-    },
-    "settings": {
-      "remappings": [
-        ":@zk-kit/=lib/zk-kit/packages/",
-        ":contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
-        ":ds-test/=lib/ds-test/src/",
-        ":forge-std/=lib/forge-std/src/",
-        ":openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/",
-        ":semaphore/=lib/semaphore/contracts/",
-        ":solmate/=lib/solmate/src/",
-        ":zk-kit/=lib/zk-kit/"
-      ],
-      "optimizer": {
-        "enabled": true,
-        "runs": 200
-      },
-      "metadata": {
-        "bytecodeHash": "ipfs"
-      },
-      "compilationTarget": {
-        "src/test/mock/SimpleStateBridge.sol": "SimpleStateBridge"
-      },
-      "libraries": {}
-    },
-    "sources": {
-      "src/interfaces/IBridge.sol": {
-        "keccak256": "0xde097ea1a08f97f189ea1c018c2fbdca9e4a2b06ad3396ad3e2e455f66f51939",
-        "urls": [
-          "bzz-raw://78aecdcfc04e940a9352b06297881fe2654bd2ac8cd7df10873209ce71f2093c",
-          "dweb:/ipfs/QmWAniZUknPv9HRVvTQPBAT4iSYFMXVhccdrBRtuQqSwFp"
-        ],
-        "license": null
-      },
-      "src/test/mock/SimpleStateBridge.sol": {
-        "keccak256": "0xb8459c21ab0dd7f69d96e3ca9253f7df856b4a2e4544e85fe95ac386cbcfb800",
-        "urls": [
-          "bzz-raw://d2fc819d042d43bfdf41c5e57630ef84882c1dc8e2b5647b796946c8150b72b5",
-          "dweb:/ipfs/QmQ6xbUg52TMeiAKRe5FYomMT9HY9Th6DfLKXYRXAPpdB9"
+        "nodeType": "SourceUnit",
+        "src": "32:528:31",
+        "nodes": [
+            {
+                "id": 28341,
+                "nodeType": "PragmaDirective",
+                "src": "32:23:31",
+                "nodes": [],
+                "literals": [
+                    "solidity",
+                    "0.8",
+                    ".15"
+                ]
+            },
+            {
+                "id": 28343,
+                "nodeType": "ImportDirective",
+                "src": "57:53:31",
+                "nodes": [],
+                "absolutePath": "src/interfaces/IBridge.sol",
+                "file": "../../interfaces/IBridge.sol",
+                "nameLocation": "-1:-1:-1",
+                "scope": 28363,
+                "sourceUnit": 24918,
+                "symbolAliases": [
+                    {
+                        "foreign": {
+                            "id": 28342,
+                            "name": "IBridge",
+                            "nodeType": "Identifier",
+                            "overloadedDeclarations": [],
+                            "referencedDeclaration": 24917,
+                            "src": "65:7:31",
+                            "typeDescriptions": {}
+                        },
+                        "nameLocation": "-1:-1:-1"
+                    }
+                ],
+                "unitAlias": ""
+            },
+            {
+                "id": 28362,
+                "nodeType": "ContractDefinition",
+                "src": "336:223:31",
+                "nodes": [
+                    {
+                        "id": 28350,
+                        "nodeType": "EventDefinition",
+                        "src": "380:52:31",
+                        "nodes": [],
+                        "anonymous": false,
+                        "eventSelector": "118a5978e509351fb120eb558e2dc9bd6db3cf57cf66ec9744ef8acabf3b0aec",
+                        "name": "StateRootSentMultichain",
+                        "nameLocation": "386:23:31",
+                        "parameters": {
+                            "id": 28349,
+                            "nodeType": "ParameterList",
+                            "parameters": [
+                                {
+                                    "constant": false,
+                                    "id": 28348,
+                                    "indexed": true,
+                                    "mutability": "mutable",
+                                    "name": "root",
+                                    "nameLocation": "426:4:31",
+                                    "nodeType": "VariableDeclaration",
+                                    "scope": 28350,
+                                    "src": "410:20:31",
+                                    "stateVariable": false,
+                                    "storageLocation": "default",
+                                    "typeDescriptions": {
+                                        "typeIdentifier": "t_uint256",
+                                        "typeString": "uint256"
+                                    },
+                                    "typeName": {
+                                        "id": 28347,
+                                        "name": "uint256",
+                                        "nodeType": "ElementaryTypeName",
+                                        "src": "410:7:31",
+                                        "typeDescriptions": {
+                                            "typeIdentifier": "t_uint256",
+                                            "typeString": "uint256"
+                                        }
+                                    },
+                                    "visibility": "internal"
+                                }
+                            ],
+                            "src": "409:22:31"
+                        }
+                    },
+                    {
+                        "id": 28361,
+                        "nodeType": "FunctionDefinition",
+                        "src": "438:119:31",
+                        "nodes": [],
+                        "body": {
+                            "id": 28360,
+                            "nodeType": "Block",
+                            "src": "506:51:31",
+                            "nodes": [],
+                            "statements": [
+                                {
+                                    "eventCall": {
+                                        "arguments": [
+                                            {
+                                                "id": 28357,
+                                                "name": "root",
+                                                "nodeType": "Identifier",
+                                                "overloadedDeclarations": [],
+                                                "referencedDeclaration": 28352,
+                                                "src": "545:4:31",
+                                                "typeDescriptions": {
+                                                    "typeIdentifier": "t_uint256",
+                                                    "typeString": "uint256"
+                                                }
+                                            }
+                                        ],
+                                        "expression": {
+                                            "argumentTypes": [
+                                                {
+                                                    "typeIdentifier": "t_uint256",
+                                                    "typeString": "uint256"
+                                                }
+                                            ],
+                                            "id": 28356,
+                                            "name": "StateRootSentMultichain",
+                                            "nodeType": "Identifier",
+                                            "overloadedDeclarations": [],
+                                            "referencedDeclaration": 28350,
+                                            "src": "521:23:31",
+                                            "typeDescriptions": {
+                                                "typeIdentifier": "t_function_event_nonpayable$_t_uint256_$returns$__$",
+                                                "typeString": "function (uint256)"
+                                            }
+                                        },
+                                        "id": 28358,
+                                        "isConstant": false,
+                                        "isLValue": false,
+                                        "isPure": false,
+                                        "kind": "functionCall",
+                                        "lValueRequested": false,
+                                        "names": [],
+                                        "nodeType": "FunctionCall",
+                                        "src": "521:29:31",
+                                        "tryCall": false,
+                                        "typeDescriptions": {
+                                            "typeIdentifier": "t_tuple$__$",
+                                            "typeString": "tuple()"
+                                        }
+                                    },
+                                    "id": 28359,
+                                    "nodeType": "EmitStatement",
+                                    "src": "516:34:31"
+                                }
+                            ]
+                        },
+                        "baseFunctions": [
+                            24916
+                        ],
+                        "functionSelector": "393170cf",
+                        "implemented": true,
+                        "kind": "function",
+                        "modifiers": [],
+                        "name": "sendRootMultichain",
+                        "nameLocation": "447:18:31",
+                        "overrides": {
+                            "id": 28354,
+                            "nodeType": "OverrideSpecifier",
+                            "overrides": [],
+                            "src": "497:8:31"
+                        },
+                        "parameters": {
+                            "id": 28353,
+                            "nodeType": "ParameterList",
+                            "parameters": [
+                                {
+                                    "constant": false,
+                                    "id": 28352,
+                                    "mutability": "mutable",
+                                    "name": "root",
+                                    "nameLocation": "474:4:31",
+                                    "nodeType": "VariableDeclaration",
+                                    "scope": 28361,
+                                    "src": "466:12:31",
+                                    "stateVariable": false,
+                                    "storageLocation": "default",
+                                    "typeDescriptions": {
+                                        "typeIdentifier": "t_uint256",
+                                        "typeString": "uint256"
+                                    },
+                                    "typeName": {
+                                        "id": 28351,
+                                        "name": "uint256",
+                                        "nodeType": "ElementaryTypeName",
+                                        "src": "466:7:31",
+                                        "typeDescriptions": {
+                                            "typeIdentifier": "t_uint256",
+                                            "typeString": "uint256"
+                                        }
+                                    },
+                                    "visibility": "internal"
+                                }
+                            ],
+                            "src": "465:14:31"
+                        },
+                        "returnParameters": {
+                            "id": 28355,
+                            "nodeType": "ParameterList",
+                            "parameters": [],
+                            "src": "506:0:31"
+                        },
+                        "scope": 28362,
+                        "stateMutability": "nonpayable",
+                        "virtual": true,
+                        "visibility": "external"
+                    }
+                ],
+                "abstract": false,
+                "baseContracts": [
+                    {
+                        "baseName": {
+                            "id": 28345,
+                            "name": "IBridge",
+                            "nodeType": "IdentifierPath",
+                            "referencedDeclaration": 24917,
+                            "src": "366:7:31"
+                        },
+                        "id": 28346,
+                        "nodeType": "InheritanceSpecifier",
+                        "src": "366:7:31"
+                    }
+                ],
+                "canonicalName": "SimpleStateBridge",
+                "contractDependencies": [],
+                "contractKind": "contract",
+                "documentation": {
+                    "id": 28344,
+                    "nodeType": "StructuredDocumentation",
+                    "src": "112:224:31",
+                    "text": "@title State Bridge Mock\n @notice This purely exists to allow tests to compile and does not have any functionality.\n @author Worldcoin\n @notice A dumb bridge to make it easy to fuzz test successes and failures."
+                },
+                "fullyImplemented": true,
+                "linearizedBaseContracts": [
+                    28362,
+                    24917
+                ],
+                "name": "SimpleStateBridge",
+                "nameLocation": "345:17:31",
+                "scope": 28363,
+                "usedErrors": []
+            }
         ],
         "license": "MIT"
-      }
     },
-    "version": 1
-  },
-  "ast": {
-    "absolutePath": "src/test/mock/SimpleStateBridge.sol",
-    "id": 28363,
-    "exportedSymbols": {
-      "IBridge": [
-        24917
-      ],
-      "SimpleStateBridge": [
-        28362
-      ]
-    },
-    "nodeType": "SourceUnit",
-    "src": "32:528:31",
-    "nodes": [
-      {
-        "id": 28341,
-        "nodeType": "PragmaDirective",
-        "src": "32:23:31",
-        "nodes": [],
-        "literals": [
-          "solidity",
-          "0.8",
-          ".15"
-        ]
-      },
-      {
-        "id": 28343,
-        "nodeType": "ImportDirective",
-        "src": "57:53:31",
-        "nodes": [],
-        "absolutePath": "src/interfaces/IBridge.sol",
-        "file": "../../interfaces/IBridge.sol",
-        "nameLocation": "-1:-1:-1",
-        "scope": 28363,
-        "sourceUnit": 24918,
-        "symbolAliases": [
-          {
-            "foreign": {
-              "id": 28342,
-              "name": "IBridge",
-              "nodeType": "Identifier",
-              "overloadedDeclarations": [],
-              "referencedDeclaration": 24917,
-              "src": "65:7:31",
-              "typeDescriptions": {}
-            },
-            "nameLocation": "-1:-1:-1"
-          }
-        ],
-        "unitAlias": ""
-      },
-      {
-        "id": 28362,
-        "nodeType": "ContractDefinition",
-        "src": "336:223:31",
-        "nodes": [
-          {
-            "id": 28350,
-            "nodeType": "EventDefinition",
-            "src": "380:52:31",
-            "nodes": [],
-            "anonymous": false,
-            "eventSelector": "118a5978e509351fb120eb558e2dc9bd6db3cf57cf66ec9744ef8acabf3b0aec",
-            "name": "StateRootSentMultichain",
-            "nameLocation": "386:23:31",
-            "parameters": {
-              "id": 28349,
-              "nodeType": "ParameterList",
-              "parameters": [
-                {
-                  "constant": false,
-                  "id": 28348,
-                  "indexed": true,
-                  "mutability": "mutable",
-                  "name": "root",
-                  "nameLocation": "426:4:31",
-                  "nodeType": "VariableDeclaration",
-                  "scope": 28350,
-                  "src": "410:20:31",
-                  "stateVariable": false,
-                  "storageLocation": "default",
-                  "typeDescriptions": {
-                    "typeIdentifier": "t_uint256",
-                    "typeString": "uint256"
-                  },
-                  "typeName": {
-                    "id": 28347,
-                    "name": "uint256",
-                    "nodeType": "ElementaryTypeName",
-                    "src": "410:7:31",
-                    "typeDescriptions": {
-                      "typeIdentifier": "t_uint256",
-                      "typeString": "uint256"
-                    }
-                  },
-                  "visibility": "internal"
-                }
-              ],
-              "src": "409:22:31"
-            }
-          },
-          {
-            "id": 28361,
-            "nodeType": "FunctionDefinition",
-            "src": "438:119:31",
-            "nodes": [],
-            "body": {
-              "id": 28360,
-              "nodeType": "Block",
-              "src": "506:51:31",
-              "nodes": [],
-              "statements": [
-                {
-                  "eventCall": {
-                    "arguments": [
-                      {
-                        "id": 28357,
-                        "name": "root",
-                        "nodeType": "Identifier",
-                        "overloadedDeclarations": [],
-                        "referencedDeclaration": 28352,
-                        "src": "545:4:31",
-                        "typeDescriptions": {
-                          "typeIdentifier": "t_uint256",
-                          "typeString": "uint256"
-                        }
-                      }
-                    ],
-                    "expression": {
-                      "argumentTypes": [
-                        {
-                          "typeIdentifier": "t_uint256",
-                          "typeString": "uint256"
-                        }
-                      ],
-                      "id": 28356,
-                      "name": "StateRootSentMultichain",
-                      "nodeType": "Identifier",
-                      "overloadedDeclarations": [],
-                      "referencedDeclaration": 28350,
-                      "src": "521:23:31",
-                      "typeDescriptions": {
-                        "typeIdentifier": "t_function_event_nonpayable$_t_uint256_$returns$__$",
-                        "typeString": "function (uint256)"
-                      }
-                    },
-                    "id": 28358,
-                    "isConstant": false,
-                    "isLValue": false,
-                    "isPure": false,
-                    "kind": "functionCall",
-                    "lValueRequested": false,
-                    "names": [],
-                    "nodeType": "FunctionCall",
-                    "src": "521:29:31",
-                    "tryCall": false,
-                    "typeDescriptions": {
-                      "typeIdentifier": "t_tuple$__$",
-                      "typeString": "tuple()"
-                    }
-                  },
-                  "id": 28359,
-                  "nodeType": "EmitStatement",
-                  "src": "516:34:31"
-                }
-              ]
-            },
-            "baseFunctions": [
-              24916
-            ],
-            "functionSelector": "393170cf",
-            "implemented": true,
-            "kind": "function",
-            "modifiers": [],
-            "name": "sendRootMultichain",
-            "nameLocation": "447:18:31",
-            "overrides": {
-              "id": 28354,
-              "nodeType": "OverrideSpecifier",
-              "overrides": [],
-              "src": "497:8:31"
-            },
-            "parameters": {
-              "id": 28353,
-              "nodeType": "ParameterList",
-              "parameters": [
-                {
-                  "constant": false,
-                  "id": 28352,
-                  "mutability": "mutable",
-                  "name": "root",
-                  "nameLocation": "474:4:31",
-                  "nodeType": "VariableDeclaration",
-                  "scope": 28361,
-                  "src": "466:12:31",
-                  "stateVariable": false,
-                  "storageLocation": "default",
-                  "typeDescriptions": {
-                    "typeIdentifier": "t_uint256",
-                    "typeString": "uint256"
-                  },
-                  "typeName": {
-                    "id": 28351,
-                    "name": "uint256",
-                    "nodeType": "ElementaryTypeName",
-                    "src": "466:7:31",
-                    "typeDescriptions": {
-                      "typeIdentifier": "t_uint256",
-                      "typeString": "uint256"
-                    }
-                  },
-                  "visibility": "internal"
-                }
-              ],
-              "src": "465:14:31"
-            },
-            "returnParameters": {
-              "id": 28355,
-              "nodeType": "ParameterList",
-              "parameters": [],
-              "src": "506:0:31"
-            },
-            "scope": 28362,
-            "stateMutability": "nonpayable",
-            "virtual": true,
-            "visibility": "external"
-          }
-        ],
-        "abstract": false,
-        "baseContracts": [
-          {
-            "baseName": {
-              "id": 28345,
-              "name": "IBridge",
-              "nodeType": "IdentifierPath",
-              "referencedDeclaration": 24917,
-              "src": "366:7:31"
-            },
-            "id": 28346,
-            "nodeType": "InheritanceSpecifier",
-            "src": "366:7:31"
-          }
-        ],
-        "canonicalName": "SimpleStateBridge",
-        "contractDependencies": [],
-        "contractKind": "contract",
-        "documentation": {
-          "id": 28344,
-          "nodeType": "StructuredDocumentation",
-          "src": "112:224:31",
-          "text": "@title State Bridge Mock\n @notice This purely exists to allow tests to compile and does not have any functionality.\n @author Worldcoin\n @notice A dumb bridge to make it easy to fuzz test successes and failures."
-        },
-        "fullyImplemented": true,
-        "linearizedBaseContracts": [
-          28362,
-          24917
-        ],
-        "name": "SimpleStateBridge",
-        "nameLocation": "345:17:31",
-        "scope": 28363,
-        "usedErrors": []
-      }
-    ],
-    "license": "MIT"
-  },
-  "id": 31
+    "id": 31
 }

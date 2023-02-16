@@ -63,11 +63,11 @@ async fn insert_identity_and_proofs() {
 
     let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf_value);
     let initial_root: U256 = ref_tree.root().into();
-    let (chain, private_key, semaphore_address, prover_mock) = spawn_mock_chain(initial_root)
+    let (chain, private_key, identity_manager_address, prover_mock) = spawn_mock_chain(initial_root)
         .await
         .expect("Failed to spawn mock chain");
 
-    options.app.contracts.semaphore_address = semaphore_address;
+    options.app.contracts.identity_manager_address = identity_manager_address;
     options.app.ethereum.read_options.confirmation_blocks_delay = 2;
     options.app.ethereum.read_options.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
@@ -253,12 +253,12 @@ async fn insert_identity_and_proofs() {
 #[instrument(skip_all)]
 async fn wait_for_log_count(
     provider: &Provider<Http>,
-    semaphore_address: H160,
+    identity_manager_address: H160,
     expected_count: usize,
 ) {
     for i in 1..21 {
         let filter = Filter::new()
-            .address(semaphore_address)
+            .address(identity_manager_address)
             .from_block(BlockNumber::Earliest)
             .to_block(BlockNumber::Latest);
         let result: Vec<Log> = provider.request("eth_getLogs", [filter]).await.unwrap();

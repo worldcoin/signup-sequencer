@@ -319,7 +319,8 @@ impl IdentityCommitter {
             let start_index = updates
                 .last()
                 .expect("Already confirmed to exist.")
-                .leaf_index;
+                .leaf_index
+                + 1;
             let padding = batch_size - commitment_count;
             commitments.append(&mut vec![U256::zero(); padding]);
 

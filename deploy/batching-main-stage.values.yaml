@@ -1,0 +1,18 @@
+# main-stage helm env values override
+environment: stage
+ingress:
+  host: signup-v2.stage-crypto.worldcoin.dev
+persistentStorage:
+  volumeID: aws://us-east-1a/vol-079e4d29069fba502
+#wipeDisk: true
+# Env values can be strings (to be prefixed with `value:`) or objects
+env:
+  LOG_FILTER: "ethers_providers::provider=debug"
+#  WIPE_STORAGE: "true"
+  MAX_LOG_BLOCKS: "1000000"
+  STARTING_BLOCK: "0"
+  CREATE_GROUP_DEPTH: "20"
+  BATCH_SIZE: 10
+  TREE_DEPTH: 20
+  BATCH_INSERTION_PROVER_URL: "https://semaphore-mtb.internal.stage-crypto.worldcoin.dev"
+  IDENTITY_MANAGER_ADDRESS: "0x8C6c81b8153BFd8632fb45e3E1d01347727b67E6"

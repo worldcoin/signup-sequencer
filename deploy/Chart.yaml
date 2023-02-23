@@ -3,7 +3,7 @@ apiVersion: v2
 version: "0.1.0"
 name: signup-sequencer
 appVersion: "0.1.0"
-description: "A tool that processes WorldID signups on-chain."
+description: "Template for a Rust CLI tool"
 home: https://github.com/worldcoin/signup-sequencer
 sources:
   - https://github.com/worldcoin/signup-sequencer

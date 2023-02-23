@@ -332,7 +332,7 @@ jobs:
           --install --timeout 60s
           --namespace "${{ github.event.repository.name }}-phone"
           --set image.tag="${{ github.sha }}"
-          --set env.ETHEREUM_PROVIDER="${{ secrets.PHONE_ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
           -f deploy/phone-main-stage.values.yaml
 
   deploy-stage-manual:
@@ -361,5 +361,5 @@ jobs:
           --install --timeout 120s
           --namespace "${{ github.event.repository.name }}-phone"
           --set image.tag="${{ github.sha }}"
-          --set env.ETHEREUM_PROVIDER="${{ secrets._PHONE_ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
           -f deploy/phone-main-stage.values.yaml

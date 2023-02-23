@@ -333,8 +333,6 @@ jobs:
           --namespace "${{ github.event.repository.name }}-phone"
           --set image.tag="${{ github.sha }}"
           --set env.ETHEREUM_PROVIDER="${{ secrets.PHONE_ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
-          --set env.SIGNING_KEY="${{ secrets.PHONE_ACCOUNT_PRIVATE_KEY }}"
-          --set env.SEMAPHORE_ADDRESS="${{ secrets.PHONE_SEMAPHORE_CONTRACT_ADDRESS }}"
           -f deploy/phone-main-stage.values.yaml
 
   deploy-stage-manual:
@@ -364,6 +362,4 @@ jobs:
           --namespace "${{ github.event.repository.name }}-phone"
           --set image.tag="${{ github.sha }}"
           --set env.ETHEREUM_PROVIDER="${{ secrets._PHONE_ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
-          --set env.SIGNING_KEY="${{ secrets.PHONE_ACCOUNT_PRIVATE_KEY }}"
-          --set env.SEMAPHORE_ADDRESS="${{ secrets.PHONE_SEMAPHORE_CONTRACT_ADDRESS }}"
           -f deploy/phone-main-stage.values.yaml

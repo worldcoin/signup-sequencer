@@ -7,7 +7,7 @@ name: Build, Test & Deploy
 on:
   push:
     branches-ignore:
-      'phone/**'
+      - 'phone/**'
 
 env:
   RUST_VERSION: "1.65"

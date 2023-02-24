@@ -94,6 +94,8 @@ pub enum Error {
     InvalidCommitment,
     #[error("provided identity commitment is already included")]
     DuplicateCommitment,
+    #[error("provided identity commitment is not reduced into SNARK_SCALAR_FIELD")]
+    UnreducedCommitment,
     #[error("Root mismatch between tree and contract.")]
     RootMismatch,
     #[error("invalid JSON request: {0}")]

@@ -89,6 +89,7 @@ pub struct App {
     #[allow(dead_code)]
     chain_subscriber:   EthereumSubscriber,
     tree_state:         SharedTreeState,
+    snark_scalar_field: Hash,
 }
 
 impl App {
@@ -143,6 +144,12 @@ impl App {
             identity_committer.clone(),
         );
 
+        let snark_scalar_field = Hash::from_str_radix(
+            "21888242871839275222246405745257275088548364400416034343698204186575808495617",
+            10,
+        )
+        .expect("This should just parse.");
+
         // Sync with chain on start up
         let mut app = Self {
             database,
@@ -151,6 +158,7 @@ impl App {
             identity_committer,
             chain_subscriber,
             tree_state,
+            snark_scalar_field,
         };
 
         select! {
@@ -219,6 +227,10 @@ impl App {
         }
     }
 
+    fn identity_is_reduced(&self, commitment: Hash) -> bool {
+        commitment.lt(&self.snark_scalar_field)
+    }
+
     /// Queues an insert into the merkle tree.
     ///
     /// # Errors
@@ -238,6 +250,14 @@ impl App {
         if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
+        }
+
+        if !self.identity_is_reduced(commitment) {
+            warn!(
+                ?commitment,
+                "The provided commitment is not an element of the field."
+            );
+            return Err(ServerError::UnreducedCommitment);
         }
 
         // Note the ordering of duplicate checks: since we never want to lose data,

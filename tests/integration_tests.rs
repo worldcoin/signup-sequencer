@@ -29,13 +29,13 @@ use semaphore::{
     merkle_tree::{self, Branch},
     poseidon_tree::{PoseidonHash, PoseidonTree},
     protocol::{self, generate_nullifier_hash, generate_proof, verify_proof},
-    Field,
+    Field, SUPPORTED_DEPTH,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tempfile::tempdir;
 use tokio::{spawn, task::JoinHandle};
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
 use url::{Host, Url};
 
@@ -66,7 +66,7 @@ async fn validate_proofs() {
     .expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
-    let mut ref_tree = PoseidonTree::new(21, options.app.contracts.initial_leaf_value);
+    let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, options.app.contracts.initial_leaf_value);
     let initial_root: U256 = ref_tree.root().into();
     let (chain, private_key, identity_manager_address, prover_mock) =
         spawn_mock_chain(initial_root)
@@ -88,9 +88,9 @@ async fn validate_proofs() {
 
     static IDENTITIES: Lazy<Vec<Identity>> = Lazy::new(|| {
         vec![
-            Identity::from_seed(b"test_f0f0"),
-            Identity::from_seed(b"test_f1f1"),
-            Identity::from_seed(b"test_f2f2"),
+            Identity::from_secret(b"test_f0f0", None),
+            Identity::from_secret(b"test_f1f1", None),
+            Identity::from_secret(b"test_f2f2", None),
         ]
     });
 
@@ -113,6 +113,9 @@ async fn validate_proofs() {
         signal_hash,
     )
     .unwrap();
+
+    let result = verify_proof(root, nullifier_hash, signal_hash, external_nullifier_hash, &proof);
+    warn!("PROOF RESULT {result:?}");
 
     test_verify_proof(
         &uri,
@@ -722,7 +725,7 @@ fn init_tracing_subscriber() {
     let quiet_mode = std::env::var("QUIET_MODE").is_ok();
     let result = if quiet_mode {
         tracing_subscriber::fmt()
-            .with_env_filter("warn,signup_sequencer=debug")
+            .with_env_filter("info,signup_sequencer=debug")
             .with_timer(Uptime::default())
             .try_init()
     } else {

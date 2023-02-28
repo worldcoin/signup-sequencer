@@ -93,11 +93,10 @@ async fn validate_proofs() {
             Identity::from_seed(b"test_f2f2"),
         ]
     });
-    
+
     const TEST_LEAVES: Lazy<Vec<Field>> =
         Lazy::new(|| IDENTITIES.iter().map(|id| id.commitment()).collect());
-    
-    
+
     // generate identity
     let (merkle_proof, root) =
         test_insert_identity(&uri, &client, &mut ref_tree, &TEST_LEAVES, 0).await;

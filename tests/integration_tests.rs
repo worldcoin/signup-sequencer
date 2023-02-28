@@ -42,17 +42,6 @@ use url::{Host, Url};
 use abi as ContractAbi;
 use signup_sequencer::{app::App, identity_tree::Hash, server, Options};
 
-static IDENTITIES: Lazy<Vec<Identity>> = Lazy::new(|| {
-    vec![
-        Identity::from_seed(b"test_f0f0"),
-        Identity::from_seed(b"test_f1f1"),
-        Identity::from_seed(b"test_f2f2"),
-    ]
-});
-
-const TEST_LEAVES: Lazy<Vec<Field>> =
-    Lazy::new(|| IDENTITIES.iter().map(|id| id.commitment()).collect());
-
 #[tokio::test]
 #[serial_test::serial]
 async fn validate_proofs() {
@@ -97,6 +86,18 @@ async fn validate_proofs() {
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
 
+    static IDENTITIES: Lazy<Vec<Identity>> = Lazy::new(|| {
+        vec![
+            Identity::from_seed(b"test_f0f0"),
+            Identity::from_seed(b"test_f1f1"),
+            Identity::from_seed(b"test_f2f2"),
+        ]
+    });
+    
+    const TEST_LEAVES: Lazy<Vec<Field>> =
+        Lazy::new(|| IDENTITIES.iter().map(|id| id.commitment()).collect());
+    
+    
     // generate identity
     let (merkle_proof, root) =
         test_insert_identity(&uri, &client, &mut ref_tree, &TEST_LEAVES, 0).await;
@@ -130,6 +131,7 @@ async fn validate_proofs() {
     shutdown();
     app.await.unwrap();
     prover_mock.stop();
+    reset_shutdown();
 }
 
 #[tokio::test]
@@ -352,6 +354,7 @@ async fn insert_identity_and_proofs() {
     shutdown();
     app.await.unwrap();
     prover_mock.stop();
+    reset_shutdown();
 }
 
 #[instrument(skip_all)]
@@ -720,7 +723,7 @@ fn init_tracing_subscriber() {
     let quiet_mode = std::env::var("QUIET_MODE").is_ok();
     let result = if quiet_mode {
         tracing_subscriber::fmt()
-            .with_env_filter("warn")
+            .with_env_filter("warn,signup_sequencer=debug")
             .with_timer(Uptime::default())
             .try_init()
     } else {

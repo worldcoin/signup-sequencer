@@ -44,6 +44,10 @@ impl TreeVersionData {
         }
     }
 
+    fn get_root(&self) -> Hash {
+        self.tree.root()
+    }
+
     fn next_version(&mut self) -> TreeVersion {
         let next = TreeVersion::from(Self {
             tree:      self.tree.clone(),
@@ -65,6 +69,22 @@ impl TreeVersionData {
         }
     }
 
+    /// Returns _up to_ `maximum_update_count` updates that are to be applied to
+    /// the tree.
+    async fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<TreeUpdate> {
+        match &self.next {
+            Some(next) => {
+                let next = next.0.read().await;
+                next.diff
+                    .iter()
+                    .take(maximum_update_count)
+                    .cloned()
+                    .collect()
+            }
+            None => vec![],
+        }
+    }
+
     async fn apply_next_update(&mut self) {
         if let Some(next) = self.next.clone() {
             let mut next = next.0.write().await;
@@ -73,6 +93,36 @@ impl TreeVersionData {
                 next.diff.remove(0);
             }
         }
+    }
+
+    /// Applies the next _up to_ `update_count` updates, returning the merkle
+    /// tree proofs obtained after each apply.
+    async fn apply_next_updates(&mut self, update_count: usize) -> Vec<Proof> {
+        let mut proofs: Vec<Proof> = vec![];
+        if let Some(next) = self.next.clone() {
+            // Acquire the exclusive write lock on the next version.
+            let mut next = next.0.write().await;
+
+            // Get the updates to be applied and apply them sequentially. It is very
+            // important that we record the merkle proof after each step as they depend on
+            // each other.
+            let updates: Vec<&TreeUpdate> = next.diff.iter().take(update_count).collect();
+            for update in &updates {
+                self.update(update.leaf_index, update.element);
+                let proof = self.tree.proof(update.leaf_index).unwrap_or_else(|| {
+                    panic!("No proof exists at leaf index {}.", update.leaf_index);
+                });
+                proofs.push(proof);
+            }
+
+            // Remove only the updates that have been consumed, which may be all of them.
+            next.diff = if next.diff.len() > updates.len() {
+                Vec::from(&next.diff[updates.len()..])
+            } else {
+                vec![]
+            }
+        }
+        proofs
     }
 
     fn update(&mut self, leaf_index: usize, element: Hash) {
@@ -99,14 +149,29 @@ impl From<TreeVersionData> for TreeVersion {
 }
 
 impl TreeVersion {
+    pub async fn get_root(&self) -> Hash {
+        let data = self.0.read().await;
+        data.get_root()
+    }
+
     pub async fn peek_next_update(&self) -> Option<TreeUpdate> {
         let data = self.0.read().await;
         data.peek_next_update().await
     }
 
+    pub async fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<TreeUpdate> {
+        let data = self.0.read().await;
+        data.peek_next_updates(maximum_update_count).await
+    }
+
     pub async fn apply_next_update(&self) {
         let mut data = self.0.write().await;
         data.apply_next_update().await;
+    }
+
+    pub async fn apply_next_updates(&self, update_count: usize) -> Vec<Proof> {
+        let mut data = self.0.write().await;
+        data.apply_next_updates(update_count).await
     }
 
     pub async fn update(&self, leaf_index: usize, element: Hash) {
@@ -135,7 +200,7 @@ impl TreeVersion {
         data.next_leaf
     }
 
-    async fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
+    pub async fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
         let tree = self.0.read().await;
         (
             tree.tree.root(),
@@ -194,14 +259,19 @@ pub struct InclusionProof {
 
 #[derive(Clone)]
 pub struct TreeState {
-    mined:  TreeVersion,
-    latest: TreeVersion,
+    mined:    TreeVersion,
+    batching: TreeVersion,
+    latest:   TreeVersion,
 }
 
 impl TreeState {
     #[must_use]
-    pub const fn new(mined: TreeVersion, latest: TreeVersion) -> Self {
-        Self { mined, latest }
+    pub const fn new(mined: TreeVersion, batching: TreeVersion, latest: TreeVersion) -> Self {
+        Self {
+            mined,
+            batching,
+            latest,
+        }
     }
 
     #[must_use]
@@ -212,6 +282,11 @@ impl TreeState {
     #[must_use]
     pub fn get_mined_tree(&self) -> TreeVersion {
         self.mined.clone()
+    }
+
+    #[must_use]
+    pub fn get_batching_tree(&self) -> TreeVersion {
+        self.batching.clone()
     }
 
     pub async fn get_proof_for(&self, item: &TreeItem) -> InclusionProof {

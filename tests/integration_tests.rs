@@ -22,7 +22,7 @@ use ethers::{
     utils::{Anvil, AnvilInstance},
 };
 use hyper::{client::HttpConnector, Body, Client, Request};
-use semaphore::{merkle_tree::Branch, poseidon_tree::PoseidonTree};
+use semaphore::{merkle_tree::Branch, poseidon_tree::PoseidonTree, SUPPORTED_DEPTH};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tempfile::tempdir;
@@ -54,7 +54,7 @@ async fn insert_identity_and_proofs() {
         "--database-max-connections",
         "1",
         "--tree-depth",
-        "21",
+        "20",
         "--batch-size",
         &format!("{batch_size}"),
         "--batch-timeout-seconds",
@@ -63,7 +63,10 @@ async fn insert_identity_and_proofs() {
     .expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
-    let mut ref_tree = PoseidonTree::new(22, options.app.contracts.initial_leaf_value);
+    let mut ref_tree = PoseidonTree::new(
+        SUPPORTED_DEPTH + 1,
+        options.app.contracts.initial_leaf_value,
+    );
     let initial_root: U256 = ref_tree.root().into();
     let (chain, private_key, identity_manager_address, prover_mock) =
         spawn_mock_chain(initial_root)

@@ -165,7 +165,10 @@ async fn insert_identity_and_proofs() {
     .expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
-    let mut ref_tree = PoseidonTree::new(21, options.app.contracts.initial_leaf_value);
+    let mut ref_tree = PoseidonTree::new(
+        SUPPORTED_DEPTH + 1,
+        options.app.contracts.initial_leaf_value,
+    );
     let initial_root: U256 = ref_tree.root().into();
     let (chain, private_key, identity_manager_address, prover_mock) =
         spawn_mock_chain(initial_root)

@@ -1,5 +1,6 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 use anyhow::{anyhow, Context, Error as ErrReport};
+use chrono::Utc;
 use clap::Parser;
 use sqlx::{
     any::AnyKind,
@@ -242,6 +243,29 @@ impl Database {
                 element:    row.get::<Hash, _>(1),
             })
             .collect::<Vec<_>>())
+    }
+
+    pub async fn get_root_timestamp(
+        &self,
+        root: &Hash,
+    ) -> Result<Option<chrono::DateTime<Utc>>, Error> {
+        let query =
+            sqlx::query(r#"SELECT seen_at FROM root_history WHERE root = $1 LIMIT 1;"#).bind(root);
+        let row = self.pool.fetch_optional(query).await?;
+        Ok(row.map(|r| r.get::<_, _>(0)))
+    }
+
+    pub async fn store_root_state(&self, root: &Hash) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"INSERT INTO root_history(root, seen_at)
+                    VALUES ($1,  CURRENT_TIMESTAMP)
+                    ON CONFLICT (root)
+                    DO
+                        UPDATE SET seen_at = CURRENT_TIMESTAMP;"#,
+        )
+        .bind(root);
+        self.pool.execute(query).await?;
+        Ok(())
     }
 }
 

@@ -120,6 +120,8 @@ pub enum Error {
     NotManager,
     #[error(transparent)]
     Elapsed(#[from] tokio::time::error::Elapsed),
+    #[error("prover error")]
+    ProverError,
     #[error(transparent)]
     Other(#[from] EyreError),
 }

@@ -1,11 +1,11 @@
-use std::sync::Arc;
-
 use anyhow::Result as AnyhowResult;
+use chrono::{Duration, Utc};
 use clap::Parser;
 use futures::TryFutureExt;
 use hyper::StatusCode;
 use semaphore::protocol::verify_proof;
 use serde::Serialize;
+use std::{num::ParseIntError, str::FromStr, sync::Arc};
 use tokio::try_join;
 use tracing::{info, instrument, warn};
 
@@ -41,16 +41,20 @@ impl ToResponseCode for InclusionProofResponse {
 #[derive(Serialize)]
 pub enum VerifyProofResponse {
     Ok,
-    Invalid,
-    ProofError,
+    InvalidRoot,
+    ExpiredRoot,
+    InvalidProof,
+    ProverError,
 }
 
 impl ToResponseCode for VerifyProofResponse {
     fn to_response_code(&self) -> StatusCode {
         match self {
             VerifyProofResponse::Ok => StatusCode::OK,
-            VerifyProofResponse::Invalid => StatusCode::BAD_REQUEST,
-            VerifyProofResponse::ProofError => StatusCode::BAD_REQUEST,
+            VerifyProofResponse::InvalidRoot
+            | VerifyProofResponse::ExpiredRoot
+            | VerifyProofResponse::InvalidProof => StatusCode::BAD_REQUEST,
+            VerifyProofResponse::ProverError => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -80,16 +84,21 @@ pub struct Options {
     /// Timeout for the tree lock (seconds).
     #[clap(long, env, default_value = "120")]
     pub lock_timeout: u64,
+
+    /// Timeout for root validity (seconds).
+    #[clap(long, env, value_parser=duration_from_str, default_value="3600")]
+    pub root_validity_timeout: Duration,
 }
 
 pub struct App {
-    database:           Arc<Database>,
+    database:              Arc<Database>,
     #[allow(dead_code)]
-    ethereum:           Ethereum,
-    identity_manager:   SharedIdentityManager,
-    identity_committer: Arc<IdentityCommitter>,
-    tree_state:         TreeState,
-    snark_scalar_field: Hash,
+    ethereum:              Ethereum,
+    identity_manager:      SharedIdentityManager,
+    identity_committer:    Arc<IdentityCommitter>,
+    tree_state:            TreeState,
+    snark_scalar_field:    Hash,
+    root_validity_timeout: Duration,
 }
 
 impl App {
@@ -147,6 +156,7 @@ impl App {
             identity_committer,
             tree_state,
             snark_scalar_field,
+            root_validity_timeout: options.root_validity_timeout,
         };
 
         // Process to push new identities to Ethereum
@@ -237,6 +247,9 @@ impl App {
             .get_updates_in_range(next_index, leaf_idx)
             .await?;
         tree.append_many_fresh(&identities).await;
+        self.database
+            .store_root_state(&tree.get_root().await)
+            .await?;
         Ok(())
     }
 
@@ -271,6 +284,14 @@ impl App {
         &self,
         request: &VerifyProofRequest,
     ) -> Result<VerifyProofResponse, ServerError> {
+        let Some(root_timestamp) = self.database.get_root_timestamp(&request.root).await? else {
+            return Ok(VerifyProofResponse::InvalidRoot)
+        };
+
+        if root_timestamp + self.root_validity_timeout < Utc::now() {
+            return Ok(VerifyProofResponse::ExpiredRoot);
+        }
+
         let checked = verify_proof(
             request.root,
             request.nullifier_hash,
@@ -280,8 +301,8 @@ impl App {
         );
         match checked {
             Ok(true) => Ok(VerifyProofResponse::Ok),
-            Ok(false) => Ok(VerifyProofResponse::Invalid),
-            Err(_) => Ok(VerifyProofResponse::ProofError),
+            Ok(false) => Ok(VerifyProofResponse::InvalidProof),
+            Err(_) => Err(ServerError::ProverError),
         }
     }
 
@@ -293,4 +314,8 @@ impl App {
         info!("Shutting down identity committer.");
         self.identity_committer.shutdown().await
     }
+}
+
+pub fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
+    Ok(Duration::seconds(i64::from_str(value)?))
 }

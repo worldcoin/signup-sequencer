@@ -18,7 +18,7 @@ use ethers::{
         Signer, SignerMiddleware, Wallet,
     },
     providers::Middleware,
-    types::{BlockNumber, Bytes, Filter, Log, H160, H256, U256},
+    types::{Bytes, H256, U256},
     utils::{Anvil, AnvilInstance},
 };
 use hyper::{client::HttpConnector, Body, Client, Request};
@@ -28,14 +28,14 @@ use semaphore::{
     identity::Identity,
     merkle_tree::{self, Branch},
     poseidon_tree::{PoseidonHash, PoseidonTree},
-    protocol::{self, generate_nullifier_hash, generate_proof, verify_proof},
+    protocol::{self, generate_nullifier_hash, generate_proof},
     Field, SUPPORTED_DEPTH,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tempfile::tempdir;
 use tokio::{spawn, task::JoinHandle};
-use tracing::{error, info, instrument, warn};
+use tracing::{error, info, instrument};
 use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
 use url::{Host, Url};
 
@@ -76,11 +76,14 @@ async fn validate_proofs() {
             .await
             .expect("Failed to spawn mock chain");
 
+    let root_expiration_seconds = 2;
+
     options.app.contracts.identity_manager_address = identity_manager_address;
     options.app.ethereum.read_options.confirmation_blocks_delay = 2;
     options.app.ethereum.read_options.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.ethereum.write_options.signing_key = private_key;
+    options.app.root_validity_timeout = chrono::Duration::seconds(root_expiration_seconds);
 
     let (app, local_addr) = spawn_app(options.clone())
         .await
@@ -100,13 +103,16 @@ async fn validate_proofs() {
     const TEST_LEAVES: Lazy<Vec<Field>> =
         Lazy::new(|| IDENTITIES.iter().map(|id| id.commitment()).collect());
 
+    let signal_hash = hash_to_field(b"signal_hash");
+    let external_nullifier_hash = hash_to_field(b"external_hash");
+
+    // HAPPY PATH
+
     // generate identity
     let (merkle_proof, root) =
         test_insert_identity(&uri, &client, &mut ref_tree, &TEST_LEAVES, 0).await;
 
     // simulate client generating a proof
-    let signal_hash = hash_to_field(b"signal_hash");
-    let external_nullifier_hash = hash_to_field(b"external_hash");
     let nullifier_hash = generate_nullifier_hash(&IDENTITIES[0], external_nullifier_hash);
 
     let proof = generate_proof(
@@ -117,14 +123,80 @@ async fn validate_proofs() {
     )
     .unwrap();
 
-    let result = verify_proof(
+    test_verify_proof(
+        &uri,
+        &client,
         root,
-        nullifier_hash,
         signal_hash,
+        nullifier_hash,
         external_nullifier_hash,
-        &proof,
-    );
-    warn!("PROOF RESULT {result:?}");
+        proof,
+        None,
+    )
+    .await;
+
+    // INVALID PROOF
+
+    let invalid_nullifier_hash = generate_nullifier_hash(&IDENTITIES[1], external_nullifier_hash);
+
+    test_verify_proof(
+        &uri,
+        &client,
+        root,
+        signal_hash,
+        invalid_nullifier_hash,
+        external_nullifier_hash,
+        proof,
+        Some(&"InvalidProof"),
+    )
+    .await;
+
+    // IDENTITY NOT IN TREE
+
+    ref_tree.set(1, TEST_LEAVES[1]);
+
+    // simulate client generating a proof
+    let new_nullifier_hash = generate_nullifier_hash(&IDENTITIES[1], external_nullifier_hash);
+
+    let new_proof = generate_proof(
+        &IDENTITIES[1],
+        &merkle_proof,
+        external_nullifier_hash,
+        signal_hash,
+    )
+    .unwrap();
+
+    test_verify_proof(
+        &uri,
+        &client,
+        root,
+        signal_hash,
+        new_nullifier_hash,
+        external_nullifier_hash,
+        new_proof,
+        Some(&"InvalidProof"),
+    )
+    .await;
+
+    // UNKNOWN ROOT
+
+    let new_root = ref_tree.root();
+
+    test_verify_proof(
+        &uri,
+        &client,
+        new_root,
+        signal_hash,
+        new_nullifier_hash,
+        external_nullifier_hash,
+        new_proof,
+        Some(&"InvalidRoot"),
+    )
+    .await;
+
+    // EXPIRED ROOT
+
+    tokio::time::sleep(Duration::from_secs(root_expiration_seconds as u64)).await;
 
     test_verify_proof(
         &uri,
@@ -134,7 +206,7 @@ async fn validate_proofs() {
         nullifier_hash,
         external_nullifier_hash,
         proof,
-        false,
+        Some(&"ExpiredRoot"),
     )
     .await;
 
@@ -372,49 +444,6 @@ async fn insert_identity_and_proofs() {
 }
 
 #[instrument(skip_all)]
-async fn wait_for_log_count(
-    provider: &Provider<Http>,
-    identity_manager_address: H160,
-    expected_count: usize,
-) {
-    for i in 1..21 {
-        let filter = Filter::new()
-            .address(identity_manager_address)
-            .from_block(BlockNumber::Earliest)
-            .to_block(BlockNumber::Latest);
-        let result: Vec<Log> = provider.request("eth_getLogs", [filter]).await.unwrap();
-
-        if result.len() >= expected_count {
-            info!(
-                "Got {} logs (vs expected {}), done in iteration {}: {:?}",
-                result.len(),
-                expected_count,
-                i,
-                result
-            );
-
-            // TODO: Figure out a better way to do this.
-            // Getting a log event is not enough. The app waits for 1 transaction
-            // confirmation. It will arrive only after the first poll interval.
-            // The DEFAULT_POLL_INTERVAL in ethers-providers is 7 seconds.
-            tokio::time::sleep(Duration::from_secs(8)).await;
-
-            return;
-        }
-
-        info!(
-            "Got {} logs (vs expected {}), waiting 1 second, iteration {}",
-            result.len(),
-            expected_count,
-            i
-        );
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    }
-
-    panic!("Failed waiting for {expected_count} log events");
-}
-
-#[instrument(skip_all)]
 async fn test_verify_proof(
     uri: &str,
     client: &Client<HttpConnector>,
@@ -423,7 +452,7 @@ async fn test_verify_proof(
     nullifer_hash: Field,
     external_nullifier_hash: Field,
     proof: protocol::Proof,
-    expect_failure: bool,
+    expected_failure: Option<&str>,
 ) {
     let body = construct_verify_proof_body(
         root,
@@ -442,9 +471,16 @@ async fn test_verify_proof(
         .request(req)
         .await
         .expect("Failed to execute request.");
-    if expect_failure {
+
+    let bytes = hyper::body::to_bytes(response.body_mut())
+        .await
+        .expect("Failed to convert response body to bytes");
+    let result = String::from_utf8(bytes.into_iter().collect())
+        .expect("Could not parse response bytes to utf-8");
+
+    if let Some(expected_failure) = expected_failure {
         assert!(!response.status().is_success());
-        return;
+        assert!(result.contains(expected_failure));
     } else {
         assert!(response.status().is_success());
     }

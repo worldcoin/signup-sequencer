@@ -3,11 +3,11 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use ::prometheus::{register_gauge, Gauge};
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
 use ethers::types::U256;
 use once_cell::sync::Lazy;
+use prometheus::{register_gauge, Gauge};
 use semaphore::merkle_tree::Branch;
 use tokio::{
     select,

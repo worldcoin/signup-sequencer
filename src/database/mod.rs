@@ -150,6 +150,7 @@ impl Database {
     /// failure occurs, the entire batch will be rolled back.
     pub async fn mark_identities_submitted_to_contract(
         &self,
+        root: &Hash,
         leaf_indices: &[usize],
     ) -> Result<(), Error> {
         let mut tx = self.pool.begin().await?;
@@ -168,6 +169,15 @@ impl Database {
             .bind(<&str>::from(Status::Mined));
             tx.execute(query).await?;
         }
+
+        let query = sqlx::query(
+            r#"UPDATE root_history
+            SET status = $2, mined_at = CURRENT_TIMESTAMP
+            WHERE root = $1;"#,
+        )
+        .bind(root)
+        .bind(<&str>::from(Status::Mined));
+        tx.execute(query).await?;
 
         tx.commit().await?;
         Ok(())
@@ -245,25 +255,41 @@ impl Database {
     }
 
     pub async fn get_root_state(&self, root: &Hash) -> Result<Option<RootItem>, Error> {
+        // This tries really hard to do everything in one query to prevent race
+        // conditions.
         let query = sqlx::query(
             r#"SELECT
                 status,
-                LEAD(updated_at, 1, CURRENT_TIMESTAMP) OVER (ORDER BY updated_at) as pending_valid_as_of,
-                MIN(updated_at)
-                    FILTER (WHERE status <> $2)
-                    OVER (
-                        ORDER BY updated_at
-                        ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING
+                COALESCE(
+                    (SELECT r2.created_at
+                    FROM root_history r2
+                    WHERE r2.identity_count > r.identity_count
+                    ORDER BY r2.identity_count
+                    LIMIT 1),
+                    CURRENT_TIMESTAMP
+                ) as pending_valid_as_of,
+                (
+                    SELECT COALESCE(
+                        r2.mined_at,
+                        CASE WHEN r.status <> $2 THEN CURRENT_TIMESTAMP END
                     )
-                    as mined_valid_as_of
-            FROM root_history
-            WHERE root = $1
-            LIMIT 1;"#,
+                    FROM root_history r2
+                    WHERE r2.identity_count > r.identity_count AND status = $2
+                    ORDER BY r2.identity_count
+                    LIMIT 1
+                ) as mined_valid_as_of
+                FROM root_history r
+                WHERE r.root = $1;
+            "#,
         )
         .bind(root)
         .bind(<&str>::from(Status::Pending));
 
-        let row = self.pool.fetch_optional(query).await?;
+        let row = self.pool.fetch_optional(query).await;
+        if let Err(e) = &row {
+            warn!("query error {e:?}");
+        }
+        let row = row?;
 
         Ok(row.map(|r| {
             let status = r
@@ -281,15 +307,19 @@ impl Database {
         }))
     }
 
-    pub async fn store_root_state(&self, root: &Hash, status: Status) -> Result<(), Error> {
+    pub async fn insert_pending_root(
+        &self,
+        root: &Hash,
+        identity_count: usize,
+    ) -> Result<(), Error> {
         let query = sqlx::query(
-            r#"INSERT INTO root_history(root, status, updated_at)
-            VALUES($1, $2, CURRENT_TIMESTAMP)
-            ON CONFLICT (root)
-            DO UPDATE SET status = $2, updated_at = CURRENT_TIMESTAMP;"#,
+            r#"INSERT INTO root_history(root, identity_count, status, created_at)
+            VALUES($1, $2, $3, CURRENT_TIMESTAMP)
+            ON CONFLICT (root) DO NOTHING;"#,
         )
         .bind(root)
-        .bind(<&str>::from(status));
+        .bind(identity_count as i64)
+        .bind(<&str>::from(Status::Pending));
         self.pool.execute(query).await?;
 
         Ok(())

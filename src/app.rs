@@ -240,7 +240,7 @@ impl App {
             .await?;
         tree.append_many_fresh(&identities).await;
         self.database
-            .store_root_state(&tree.get_root().await, Status::Pending)
+            .insert_pending_root(&tree.get_root().await, leaf_idx)
             .await?;
         Ok(())
     }

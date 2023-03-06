@@ -360,6 +360,8 @@ impl IdentityCommitter {
             })
             .collect();
 
+        info!(start_index, ?pre_root, ?post_root, "Submitting batch");
+
         // With all the data prepared we can submit the identities to the on-chain
         // identity manager and wait for that transaction to be mined.
         identity_manager
@@ -378,7 +380,7 @@ impl IdentityCommitter {
             .mark_identities_submitted_to_contract(&post_root.into(), identity_keys.as_slice())
             .await?;
 
-        info!("Successfully mined root {post_root:}");
+        info!(start_index, ?pre_root, ?post_root, "Batch mined");
 
         mined_tree.apply_next_updates(updates.len()).await;
 

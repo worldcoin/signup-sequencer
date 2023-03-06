@@ -595,14 +595,12 @@ fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
 }
 
 fn construct_insert_identity_body(identity_commitment: &Field) -> Body {
-    let body = Body::from(
+    Body::from(
         json!({
             "identityCommitment": identity_commitment,
         })
         .to_string(),
-    );
-    println!("body {:?}", body);
-    body
+    )
 }
 
 fn construct_verify_proof_body(

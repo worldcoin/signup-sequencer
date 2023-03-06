@@ -248,16 +248,14 @@ impl Database {
         let query = sqlx::query(
             r#"SELECT
                 status,
-                COALESCE(
-                    lead(updated_at) OVER (ORDER BY updated_at),
-                    CURRENT_TIMESTAMP
-                ) as pending_valid_as_of,
-                CASE WHEN status <> $2
-                    THEN COALESCE(
-                        lead(updated_at) OVER (PARTITION BY status ORDER BY updated_at),
-                        CURRENT_TIMESTAMP
+                LEAD(updated_at, 1, CURRENT_TIMESTAMP) OVER (ORDER BY updated_at) as pending_valid_as_of,
+                MIN(updated_at)
+                    FILTER (WHERE status <> $2)
+                    OVER (
+                        ORDER BY updated_at
+                        ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING
                     )
-                END as mined_valid_as_of
+                    as mined_valid_as_of
             FROM root_history
             WHERE root = $1
             LIMIT 1;"#,

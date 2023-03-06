@@ -1,8 +1,6 @@
-# Exclude everything
-*
+# Exclude most of target directory
+target/*/build/
+target/*/deps/
+target/*/incremental/
+target/*/.fingerprint/
 
-# Include the minimum for building the container image
-!target/x86_64-unknown-linux-musl/release/
-!target/aarch64-unknown-linux-musl/release/
-target/x86_64-unknown-linux-musl/release/*/*
-target/aarch64-unknown-linux-musl/release/*/*

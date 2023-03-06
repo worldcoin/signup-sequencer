@@ -5,16 +5,21 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use clap::Parser;
-use ethers::providers::Middleware;
-use ethers::types::{Address, U256};
+use ethers::{
+    providers::Middleware,
+    types::{Address, U256},
+};
 use semaphore::Field;
 use tracing::{error, info, instrument};
 
 use self::abi::BatchingContract as ContractAbi;
-use crate::ethereum::write::TransactionId;
-use crate::ethereum::{Ethereum, ReadProvider};
-use crate::prover::batch_insertion::{Identity, Prover as BatchInsertionProver};
-use crate::prover::proof::Proof;
+use crate::{
+    ethereum::{write::TransactionId, Ethereum, ReadProvider},
+    prover::{
+        batch_insertion::{Identity, Prover as BatchInsertionProver},
+        proof::Proof,
+    },
+};
 
 /// Configuration options for the component responsible for interacting with the
 /// contract.

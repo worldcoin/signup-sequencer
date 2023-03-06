@@ -3,13 +3,14 @@ use std::time::Duration;
 use anyhow::Result as AnyhowResult;
 use async_trait::async_trait;
 use clap::Parser;
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::{Address, H160};
+use ethers::types::{transaction::eip2718::TypedTransaction, Address, H160};
 
 use self::openzeppelin::OzRelay;
-use super::read::duration_from_str;
-use super::write::{TransactionId, WriteProvider};
-use super::TxError;
+use super::{
+    read::duration_from_str,
+    write::{TransactionId, WriteProvider},
+    TxError,
+};
 
 mod openzeppelin;
 

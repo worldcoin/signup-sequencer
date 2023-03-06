@@ -1,27 +1,27 @@
-use std::fmt::Debug;
-use std::time::Duration;
+use std::{fmt::Debug, time::Duration};
 
 use anyhow::{Context, Result as AnyhowResult};
 use chrono::{DateTime, Utc};
 use cognitoauth::cognito_srp_auth::{auth, CognitoAuthInput};
-use ethers::providers::ProviderError;
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::{Bytes, NameOrAddress, TxHash, U256};
+use ethers::{
+    providers::ProviderError,
+    types::{transaction::eip2718::TypedTransaction, Bytes, NameOrAddress, TxHash, U256},
+};
 use hyper::StatusCode;
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use reqwest::header::HeaderValue;
-use reqwest::Client;
+use reqwest::{header::HeaderValue, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
-use tokio::sync::{Mutex, MutexGuard};
-use tokio::time::timeout;
+use tokio::{
+    sync::{Mutex, MutexGuard},
+    time::timeout,
+};
 use tracing::{error, info, info_span, Instrument};
 
 use super::Options;
-use crate::ethereum::write::TransactionId;
-use crate::ethereum::TxError;
+use crate::ethereum::{write::TransactionId, TxError};
 
 // Same for every project, taken from here: https://docs.openzeppelin.com/defender/api-auth
 const RELAY_TXS_URL: &str = "https://api.defender.openzeppelin.com/txs";

@@ -239,8 +239,10 @@ impl App {
             .get_updates_in_range(next_index, leaf_idx)
             .await?;
         tree.append_many_fresh(&identities).await;
+
+        let last_identity = tree.get_leaf(leaf_idx).await;
         self.database
-            .insert_pending_root(&tree.get_root().await, leaf_idx)
+            .insert_pending_root(&tree.get_root().await, &last_identity, leaf_idx)
             .await?;
         Ok(())
     }

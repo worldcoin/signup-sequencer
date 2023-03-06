@@ -200,6 +200,11 @@ impl TreeVersion {
         data.next_leaf
     }
 
+    pub async fn get_leaf(&self, leaf: usize) -> Hash {
+        let tree = self.0.read().await;
+        tree.tree.leaves()[leaf]
+    }
+
     pub async fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
         let tree = self.0.read().await;
         (

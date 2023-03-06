@@ -285,11 +285,7 @@ impl Database {
         .bind(root)
         .bind(<&str>::from(Status::Pending));
 
-        let row = self.pool.fetch_optional(query).await;
-        if let Err(e) = &row {
-            warn!("query error {e:?}");
-        }
-        let row = row?;
+        let row = self.pool.fetch_optional(query).await?;
 
         Ok(row.map(|r| {
             let status = r
@@ -310,14 +306,17 @@ impl Database {
     pub async fn insert_pending_root(
         &self,
         root: &Hash,
+        last_identity: &Hash,
         identity_count: usize,
     ) -> Result<(), Error> {
         let query = sqlx::query(
-            r#"INSERT INTO root_history(root, identity_count, status, created_at)
-            VALUES($1, $2, $3, CURRENT_TIMESTAMP)
+            r#"INSERT INTO
+            root_history(root, last_identity, identity_count, status, created_at)
+            VALUES($1, $2, $3, $4, CURRENT_TIMESTAMP)
             ON CONFLICT (root) DO NOTHING;"#,
         )
         .bind(root)
+        .bind(last_identity)
         .bind(identity_count as i64)
         .bind(<&str>::from(Status::Pending));
         self.pool.execute(query).await?;
@@ -328,6 +327,6 @@ impl Database {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("database error")]
+    #[error("database error: {0}")]
     InternalError(#[from] sqlx::Error),
 }

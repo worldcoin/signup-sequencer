@@ -68,7 +68,7 @@ pub struct InclusionProofRequest {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
-pub struct VerifyProofRequest {
+pub struct VerifySemaphoreProofRequest {
     pub root:                    Field,
     pub signal_hash:             Field,
     pub nullifier_hash:          Field,
@@ -191,10 +191,10 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
 
     // Route requests
     let result = match (request.method(), request.uri().path()) {
-        (&Method::POST, "/verifyProof") => {
-            json_middleware(request, |request: VerifyProofRequest| {
+        (&Method::POST, "/verifySemaphoreProof") => {
+            json_middleware(request, |request: VerifySemaphoreProofRequest| {
                 let app = app.clone();
-                async move { app.verify_proof(&request).await }
+                async move { app.verify_semaphore_proof(&request).await }
             })
             .await
         }

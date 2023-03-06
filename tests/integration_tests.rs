@@ -444,7 +444,7 @@ async fn test_verify_proof(
     );
     let req = Request::builder()
         .method("POST")
-        .uri(uri.to_owned() + "/verifyProof")
+        .uri(uri.to_owned() + "/verifySemaphoreProof")
         .header("Content-Type", "application/json")
         .body(body)
         .expect("Failed to create verify proof hyper::Body");

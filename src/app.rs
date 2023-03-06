@@ -20,7 +20,7 @@ use crate::{
     },
     prover,
     prover::batch_insertion::Prover as BatchInsertionProver,
-    server::{Error as ServerError, ToResponseCode, VerifyProofRequest},
+    server::{Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
 };
 
 #[derive(Serialize)]
@@ -40,14 +40,14 @@ impl ToResponseCode for InclusionProofResponse {
 }
 
 #[derive(Serialize)]
-pub enum VerifyProofResponse {
+pub enum VerifySemaphoreProofResponse {
     Ok(RootItem),
     InvalidRoot,
     InvalidProof,
     ProverError,
 }
 
-impl ToResponseCode for VerifyProofResponse {
+impl ToResponseCode for VerifySemaphoreProofResponse {
     fn to_response_code(&self) -> StatusCode {
         match self {
             Self::Ok(_) => StatusCode::OK,
@@ -274,12 +274,12 @@ impl App {
     ///
     /// Will return `Err` if the provided proof is invalid.
     #[instrument(level = "debug", skip_all)]
-    pub async fn verify_proof(
+    pub async fn verify_semaphore_proof(
         &self,
-        request: &VerifyProofRequest,
-    ) -> Result<VerifyProofResponse, ServerError> {
+        request: &VerifySemaphoreProofRequest,
+    ) -> Result<VerifySemaphoreProofResponse, ServerError> {
         let Some(root_state) = self.database.get_root_state(&request.root).await? else {
-            return Ok(VerifyProofResponse::InvalidRoot)
+            return Ok(VerifySemaphoreProofResponse::InvalidRoot)
         };
 
         let checked = verify_proof(
@@ -290,8 +290,8 @@ impl App {
             &request.proof,
         );
         match checked {
-            Ok(true) => Ok(VerifyProofResponse::Ok(root_state)),
-            Ok(false) => Ok(VerifyProofResponse::InvalidProof),
+            Ok(true) => Ok(VerifySemaphoreProofResponse::Ok(root_state)),
+            Ok(false) => Ok(VerifySemaphoreProofResponse::InvalidProof),
             Err(_) => Err(ServerError::ProverError),
         }
     }

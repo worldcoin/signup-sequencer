@@ -119,7 +119,7 @@ impl IdentityManager {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn is_owner(&self) -> anyhow::Result<bool> {
+    pub async fn _is_owner(&self) -> anyhow::Result<bool> {
         info!(address = ?self.ethereum.address(), "Signer address");
         let owner = self.abi.owner().call().await?;
         info!(?owner, "Fetched owner address");
@@ -201,7 +201,7 @@ impl IdentityManager {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn assert_valid_root(&self, root: Field) -> anyhow::Result<()> {
+    pub async fn _assert_valid_root(&self, root: Field) -> anyhow::Result<()> {
         if self.abi.check_valid_root(root.into()).call().await? {
             Ok(())
         } else {

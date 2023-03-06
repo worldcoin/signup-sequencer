@@ -76,14 +76,11 @@ async fn validate_proofs() {
             .await
             .expect("Failed to spawn mock chain");
 
-    let root_expiration_seconds = 2;
-
     options.app.contracts.identity_manager_address = identity_manager_address;
     options.app.ethereum.read_options.confirmation_blocks_delay = 2;
     options.app.ethereum.read_options.ethereum_provider =
         Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.ethereum.write_options.signing_key = private_key;
-    options.app.root_validity_timeout = chrono::Duration::seconds(root_expiration_seconds);
 
     let (app, local_addr) = spawn_app(options.clone())
         .await
@@ -191,22 +188,6 @@ async fn validate_proofs() {
         external_nullifier_hash,
         new_proof,
         Some(&"InvalidRoot"),
-    )
-    .await;
-
-    // EXPIRED ROOT
-
-    tokio::time::sleep(Duration::from_secs(root_expiration_seconds as u64)).await;
-
-    test_verify_proof(
-        &uri,
-        &client,
-        root,
-        signal_hash,
-        nullifier_hash,
-        external_nullifier_hash,
-        proof,
-        Some(&"ExpiredRoot"),
     )
     .await;
 

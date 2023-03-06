@@ -1,6 +1,5 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 use anyhow::{anyhow, Context, Error as ErrReport};
-use chrono::Utc;
 use clap::Parser;
 use sqlx::{
     any::AnyKind,
@@ -12,7 +11,7 @@ use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;
 
-use crate::identity_tree::{Hash, Status, TreeItem, TreeUpdate};
+use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
@@ -245,26 +244,56 @@ impl Database {
             .collect::<Vec<_>>())
     }
 
-    pub async fn get_root_timestamp(
-        &self,
-        root: &Hash,
-    ) -> Result<Option<chrono::DateTime<Utc>>, Error> {
-        let query =
-            sqlx::query(r#"SELECT seen_at FROM root_history WHERE root = $1 LIMIT 1;"#).bind(root);
+    pub async fn get_root_state(&self, root: &Hash) -> Result<Option<RootItem>, Error> {
+        let query = sqlx::query(
+            r#"SELECT
+                status,
+                COALESCE(
+                    lead(updated_at) OVER (ORDER BY updated_at),
+                    CURRENT_TIMESTAMP
+                ) as pending_valid_as_of,
+                CASE WHEN status <> $2
+                    THEN COALESCE(
+                        lead(updated_at) OVER (PARTITION BY status ORDER BY updated_at),
+                        CURRENT_TIMESTAMP
+                    )
+                END as mined_valid_as_of
+            FROM root_history
+            WHERE root = $1
+            LIMIT 1;"#,
+        )
+        .bind(root)
+        .bind(<&str>::from(Status::Pending));
+
         let row = self.pool.fetch_optional(query).await?;
-        Ok(row.map(|r| r.get::<_, _>(0)))
+
+        Ok(row.map(|r| {
+            let status = r
+                .get::<&str, _>(0)
+                .parse()
+                .expect("Status is unreadable, database is corrupt");
+            let pending_valid_as_of = r.get::<_, _>(1);
+            let mined_valid_as_of = r.get::<_, _>(2);
+            RootItem {
+                root: *root,
+                status,
+                pending_valid_as_of,
+                mined_valid_as_of,
+            }
+        }))
     }
 
-    pub async fn store_root_state(&self, root: &Hash) -> Result<(), Error> {
+    pub async fn store_root_state(&self, root: &Hash, status: Status) -> Result<(), Error> {
         let query = sqlx::query(
-            r#"INSERT INTO root_history(root, seen_at)
-                    VALUES ($1,  CURRENT_TIMESTAMP)
-                    ON CONFLICT (root)
-                    DO
-                        UPDATE SET seen_at = CURRENT_TIMESTAMP;"#,
+            r#"INSERT INTO root_history(root, status, updated_at)
+            VALUES($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (root)
+            DO UPDATE SET status = $2, updated_at = CURRENT_TIMESTAMP;"#,
         )
-        .bind(root);
+        .bind(root)
+        .bind(<&str>::from(status));
         self.pool.execute(query).await?;
+
         Ok(())
     }
 }

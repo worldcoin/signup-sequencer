@@ -1,11 +1,10 @@
 use anyhow::Result as AnyhowResult;
-use chrono::{Duration, Utc};
 use clap::Parser;
 use futures::TryFutureExt;
 use hyper::StatusCode;
 use semaphore::protocol::verify_proof;
 use serde::Serialize;
-use std::{num::ParseIntError, str::FromStr, sync::Arc};
+use std::sync::Arc;
 use tokio::try_join;
 use tracing::{info, instrument, warn};
 
@@ -16,7 +15,9 @@ use crate::{
     ethereum::{self, Ethereum},
     identity_committer,
     identity_committer::IdentityCommitter,
-    identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, Status, TreeItem, TreeState},
+    identity_tree::{
+        CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeItem, TreeState,
+    },
     prover,
     prover::batch_insertion::Prover as BatchInsertionProver,
     server::{Error as ServerError, ToResponseCode, VerifyProofRequest},
@@ -40,9 +41,8 @@ impl ToResponseCode for InclusionProofResponse {
 
 #[derive(Serialize)]
 pub enum VerifyProofResponse {
-    Ok,
+    Ok(RootItem),
     InvalidRoot,
-    ExpiredRoot,
     InvalidProof,
     ProverError,
 }
@@ -50,11 +50,9 @@ pub enum VerifyProofResponse {
 impl ToResponseCode for VerifyProofResponse {
     fn to_response_code(&self) -> StatusCode {
         match self {
-            VerifyProofResponse::Ok => StatusCode::OK,
-            VerifyProofResponse::InvalidRoot
-            | VerifyProofResponse::ExpiredRoot
-            | VerifyProofResponse::InvalidProof => StatusCode::BAD_REQUEST,
-            VerifyProofResponse::ProverError => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::Ok(_) => StatusCode::OK,
+            Self::InvalidRoot | Self::InvalidProof => StatusCode::BAD_REQUEST,
+            Self::ProverError => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -84,21 +82,16 @@ pub struct Options {
     /// Timeout for the tree lock (seconds).
     #[clap(long, env, default_value = "120")]
     pub lock_timeout: u64,
-
-    /// Timeout for root validity (seconds).
-    #[clap(long, env, value_parser=duration_from_str, default_value="3600")]
-    pub root_validity_timeout: Duration,
 }
 
 pub struct App {
-    database:              Arc<Database>,
+    database:           Arc<Database>,
     #[allow(dead_code)]
-    ethereum:              Ethereum,
-    identity_manager:      SharedIdentityManager,
-    identity_committer:    Arc<IdentityCommitter>,
-    tree_state:            TreeState,
-    snark_scalar_field:    Hash,
-    root_validity_timeout: Duration,
+    ethereum:           Ethereum,
+    identity_manager:   SharedIdentityManager,
+    identity_committer: Arc<IdentityCommitter>,
+    tree_state:         TreeState,
+    snark_scalar_field: Hash,
 }
 
 impl App {
@@ -156,7 +149,6 @@ impl App {
             identity_committer,
             tree_state,
             snark_scalar_field,
-            root_validity_timeout: options.root_validity_timeout,
         };
 
         // Process to push new identities to Ethereum
@@ -248,7 +240,7 @@ impl App {
             .await?;
         tree.append_many_fresh(&identities).await;
         self.database
-            .store_root_state(&tree.get_root().await)
+            .store_root_state(&tree.get_root().await, Status::Pending)
             .await?;
         Ok(())
     }
@@ -284,13 +276,9 @@ impl App {
         &self,
         request: &VerifyProofRequest,
     ) -> Result<VerifyProofResponse, ServerError> {
-        let Some(root_timestamp) = self.database.get_root_timestamp(&request.root).await? else {
+        let Some(root_state) = self.database.get_root_state(&request.root).await? else {
             return Ok(VerifyProofResponse::InvalidRoot)
         };
-
-        if root_timestamp + self.root_validity_timeout < Utc::now() {
-            return Ok(VerifyProofResponse::ExpiredRoot);
-        }
 
         let checked = verify_proof(
             request.root,
@@ -300,7 +288,7 @@ impl App {
             &request.proof,
         );
         match checked {
-            Ok(true) => Ok(VerifyProofResponse::Ok),
+            Ok(true) => Ok(VerifyProofResponse::Ok(root_state)),
             Ok(false) => Ok(VerifyProofResponse::InvalidProof),
             Err(_) => Err(ServerError::ProverError),
         }
@@ -314,8 +302,4 @@ impl App {
         info!("Shutting down identity committer.");
         self.identity_committer.shutdown().await
     }
-}
-
-pub fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
-    Ok(Duration::seconds(i64::from_str(value)?))
 }

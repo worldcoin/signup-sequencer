@@ -667,7 +667,7 @@ async fn spawn_mock_chain(
         .await?;
 
     let mock_verifier_factory =
-        load_and_build_contract("./sol/SimpleVerifier.json", client.clone())?;
+        load_and_build_contract("./sol/SequencerVerifier.json", client.clone())?;
     let mock_verifier = mock_verifier_factory
         .deploy(())?
         .confirmations(0usize)

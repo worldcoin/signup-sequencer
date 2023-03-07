@@ -1,9 +1,10 @@
+use std::{error::Error, fmt::Debug};
+
 use async_trait::async_trait;
 use ethers::{
     providers::ProviderError,
     types::{transaction::eip2718::TypedTransaction, Address, TransactionReceipt, H256},
 };
-use std::{error::Error, fmt::Debug};
 use thiserror::Error;
 
 #[derive(Clone, Debug)]
@@ -47,6 +48,8 @@ pub trait WriteProvider: Sync + Send + Debug {
         tx: TypedTransaction,
         only_once: bool,
     ) -> Result<TransactionId, TxError>;
+
+    async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError>;
 
     fn address(&self) -> Address;
 }

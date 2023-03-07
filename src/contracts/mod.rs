@@ -186,6 +186,11 @@ impl IdentityManager {
             .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
     }
 
+    pub async fn mine_identities(&self, transaction_id: TransactionId) -> anyhow::Result<()> {
+        self.ethereum.mine_transaction(transaction_id).await?;
+        Ok(())
+    }
+
     #[instrument(level = "debug", skip_all)]
     pub async fn assert_latest_root(&self, root: Field) -> anyhow::Result<()> {
         let latest_root = self.abi.latest_root().call().await?;

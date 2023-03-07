@@ -73,4 +73,8 @@ impl Ethereum {
     ) -> Result<TransactionId, TxError> {
         self.write_provider.send_transaction(tx, only_once).await
     }
+
+    pub async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
+        self.write_provider.mine_transaction(tx).await
+    }
 }

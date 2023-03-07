@@ -9,10 +9,7 @@ use ethers::types::U256;
 use semaphore::merkle_tree::Branch;
 use tokio::{
     select,
-    sync::{
-        mpsc::{self, error::TrySendError, Receiver},
-        RwLock,
-    },
+    sync::{broadcast, mpsc, mpsc::error::TrySendError, RwLock},
     task::JoinHandle,
     time,
 };
@@ -21,6 +18,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::{
     contracts::{IdentityManager, SharedIdentityManager},
     database::Database,
+    ethereum::write::TransactionId,
     identity_tree::{TreeState, TreeUpdate, TreeVersion},
     prover::batch_insertion::Identity,
     utils::spawn_or_abort,
@@ -31,10 +29,16 @@ use crate::{
 const DEBOUNCE_THRESHOLD_SECS: u64 = 1;
 
 struct RunningInstance {
-    #[allow(dead_code)]
-    handle:          JoinHandle<()>,
-    wake_up_sender:  mpsc::Sender<()>,
-    shutdown_sender: mpsc::Sender<()>,
+    process_identities_handle: JoinHandle<()>,
+    mine_identities_handle:    JoinHandle<()>,
+    wake_up_sender:            mpsc::Sender<()>,
+    shutdown_sender:           broadcast::Sender<()>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingIdentities {
+    identity_keys:  Vec<usize>,
+    transaction_id: TransactionId,
 }
 
 impl RunningInstance {
@@ -63,9 +67,10 @@ impl RunningInstance {
         // which is impossible, since this is the only use, and this method takes
         // ownership, or the channel is closed, which means the committer thread is
         // already dead.
-        let _ = self.shutdown_sender.send(()).await;
+        let _ = self.shutdown_sender.send(())?;
+
         info!("Awaiting committer shutdown.");
-        self.handle.await?;
+        self.process_identities_handle.await?;
         Ok(())
     }
 }
@@ -88,6 +93,10 @@ pub struct Options {
 /// a time. Spawning multiple worker threads will result in undefined behavior,
 /// including data duplication.
 pub struct IdentityCommitter {
+    /// The instance is kept behind an RwLock<Option<...>> because
+    /// when shutdown is called we want to be able to gracefully
+    /// await the join handle - which requires ownership of the handle and by
+    /// extension the instance.
     instance:                  RwLock<Option<RunningInstance>>,
     database:                  Arc<Database>,
     identity_manager:          SharedIdentityManager,
@@ -119,34 +128,64 @@ impl IdentityCommitter {
             warn!("Identity committer already running");
             return;
         }
-        let (shutdown_sender, mut shutdown_receiver) = mpsc::channel(1);
+
+        // We could use the second element of the tuple as `mut shutdown_receiver`,
+        // but for symmetry's sake we create it for every task with `.subscribe()`
+        let (shutdown_sender, _) = broadcast::channel(1);
         let (wake_up_sender, mut wake_up_receiver) = mpsc::channel(1);
-        let database = self.database.clone();
-        let identity_manager = self.identity_manager.clone();
-        let batch_tree = self.tree_state.get_batching_tree();
-        let mined_tree = self.tree_state.get_mined_tree();
-        let timeout = self.batch_insert_timeout_secs;
-        let handle = spawn_or_abort(async move {
-            select! {
-                result = Self::process_identities(
-                    &database,
-                    &identity_manager,
-                    &batch_tree,
-                    &mined_tree,
-                    &mut wake_up_receiver,
-                    timeout
-                ) => {
-                    result?;
+        let (pending_identities_sender, pending_identities_receiver) = mpsc::channel(1);
+
+        let process_identities_handle = {
+            let mut shutdown_receiver = shutdown_sender.subscribe();
+
+            let database = self.database.clone();
+            let identity_manager = self.identity_manager.clone();
+            let batch_tree = self.tree_state.get_batching_tree();
+            let mined_tree = self.tree_state.get_mined_tree();
+            let timeout = self.batch_insert_timeout_secs;
+
+            spawn_or_abort(async move {
+                select! {
+                    result = Self::process_identities(
+                        &database,
+                        &identity_manager,
+                        &batch_tree,
+                        &mined_tree,
+                        &mut wake_up_receiver,
+                        &pending_identities_sender,
+                        timeout
+                    ) => {
+                        result?;
+                    }
+                    _ = shutdown_receiver.recv() => {
+                        info!("Woke up by shutdown signal, exiting.");
+                        return Ok(());
+                    }
                 }
-                _ = shutdown_receiver.recv() => {
-                    info!("Woke up by shutdown signal, exiting.");
-                    return Ok(());
+                Ok(())
+            })
+        };
+
+        let mine_identities_handle = {
+            let mut shutdown_receiver = shutdown_sender.subscribe();
+
+            spawn_or_abort(async move {
+                select! {
+                    result = Self::mine_identities(pending_identities_receiver) => {
+                        result?;
+                    }
+                    _ = shutdown_receiver.recv() => {
+                        info!("Woke up by shutdown signal, exiting.");
+                        return Ok(());
+                    }
                 }
-            }
-            Ok(())
-        });
+                Ok(())
+            })
+        };
+
         *instance = Some(RunningInstance {
-            handle,
+            process_identities_handle,
+            mine_identities_handle,
             wake_up_sender,
             shutdown_sender,
         });
@@ -157,7 +196,8 @@ impl IdentityCommitter {
         identity_manager: &IdentityManager,
         batching_tree: &TreeVersion,
         mined_tree: &TreeVersion,
-        wake_up_receiver: &mut Receiver<()>,
+        wake_up_receiver: &mut mpsc::Receiver<()>,
+        pending_identities_sender: &mpsc::Sender<PendingIdentities>,
         timeout_secs: u64,
     ) -> AnyhowResult<()> {
         info!("Starting identity processor.");
@@ -202,6 +242,7 @@ impl IdentityCommitter {
                         identity_manager,
                         mined_tree,
                         batching_tree,
+                        pending_identities_sender,
                         &updates
                     ).await?;
                     last_batch_time = SystemTime::now();
@@ -249,6 +290,7 @@ impl IdentityCommitter {
                         identity_manager,
                         mined_tree,
                         batching_tree,
+                        pending_identities_sender,
                         &updates
                     ).await?;
 
@@ -270,6 +312,7 @@ impl IdentityCommitter {
         identity_manager: &IdentityManager,
         mined_tree: &TreeVersion,
         batching_tree: &TreeVersion,
+        pending_identities_sender: &mpsc::Sender<PendingIdentities>,
         updates: &[TreeUpdate],
     ) -> AnyhowResult<()> {
         if updates.is_empty() {
@@ -362,13 +405,22 @@ impl IdentityCommitter {
 
         // With all the data prepared we can submit the identities to the on-chain
         // identity manager and wait for that transaction to be mined.
-        identity_manager
+        let transaction_id = identity_manager
             .register_identities(start_index, pre_root, post_root, identity_commitments)
             .await
             .map_err(|e| {
                 error!(?e, "Failed to insert identity to contract.");
                 e
             })?;
+
+        let identity_keys: Vec<usize> = updates.iter().map(|update| update.leaf_index).collect();
+
+        pending_identities_sender
+            .send(PendingIdentities {
+                transaction_id,
+                identity_keys,
+            })
+            .await?;
 
         // With this done, all that remains is to mark them as submitted to the
         // blockchain in the source-of-truth database, and also update the mined tree to
@@ -379,6 +431,18 @@ impl IdentityCommitter {
             .await?;
         mined_tree.apply_next_updates(updates.len()).await;
 
+        Ok(())
+    }
+
+    pub async fn mine_identities(
+        mut pending_identities_receiver: mpsc::Receiver<PendingIdentities>,
+    ) -> AnyhowResult<()> {
+        loop {
+            let Some(pending_identities) = pending_identities_receiver.recv().await else {
+                warn!("Pending identities channel closed, terminating.");
+                break;
+            };
+        }
         Ok(())
     }
 

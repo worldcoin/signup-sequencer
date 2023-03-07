@@ -1,8 +1,5 @@
-use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
-use super::{
-    read::ReadProvider,
-    write::{TransactionId, TxError, WriteProvider},
-};
+use std::{sync::Arc, time::Duration};
+
 use anyhow::{anyhow, Result as AnyhowResult};
 use async_trait::async_trait;
 use clap::Parser;
@@ -29,9 +26,14 @@ use prometheus::{
     register_int_counter_vec, Counter, Gauge, Histogram, IntCounterVec,
 };
 use reqwest::Client as ReqwestClient;
-use std::{sync::Arc, time::Duration};
 use tokio::time::timeout;
 use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
+
+use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
+use super::{
+    read::ReadProvider,
+    write::{TransactionId, TxError, WriteProvider},
+};
 
 mod estimator;
 mod gas_oracle_logger;
@@ -136,6 +138,10 @@ impl WriteProvider for Provider {
         _only_once: bool,
     ) -> Result<TransactionId, TxError> {
         self.send_transaction(tx).await
+    }
+
+    async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
+        todo!()
     }
 
     fn address(&self) -> Address {
@@ -329,10 +335,12 @@ impl Provider {
             TxError::Send(Box::new(error))
         })?;
         let tx_hash: H256 = *pending;
+
         info!(?nonce, ?tx_hash, "Transaction in mempool");
 
         // Wait for TX to be mined
         let timer = TX_LATENCY.start_timer();
+
         let receipt = timeout(self.mine_timeout, pending)
             .instrument(info_span!("Wait for TX to be mined"))
             .await
@@ -391,9 +399,8 @@ impl Provider {
             return Err(TxError::Failed(Some(receipt)));
         }
 
-        let transaction_id = receipt
-            .block_number
-            .map_or(String::new(), |b| b.to_string());
+        let transaction_id = receipt.transaction_hash.to_string();
+
         Ok(TransactionId(transaction_id))
     }
 }

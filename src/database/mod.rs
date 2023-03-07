@@ -172,7 +172,7 @@ impl Database {
 
         let query = sqlx::query(
             r#"UPDATE root_history
-            SET status = $2, mined_at = CURRENT_TIMESTAMP
+            SET status = $2, mined_at = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')
             WHERE root = $1;"#,
         )
         .bind(root)
@@ -263,27 +263,25 @@ impl Database {
                 COALESCE(
                     (SELECT r2.created_at
                     FROM root_history r2
-                    WHERE r2.identity_count > r.identity_count
-                    ORDER BY r2.identity_count
+                    WHERE r2.last_index > r.last_index
+                    ORDER BY r2.last_index
                     LIMIT 1),
-                    CURRENT_TIMESTAMP
+                    STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')
                 ) as pending_valid_as_of,
-                (
-                    SELECT COALESCE(
-                        r2.mined_at,
-                        CASE WHEN r.status <> $2 THEN CURRENT_TIMESTAMP END
-                    )
+                COALESCE(
+                    (SELECT r2.mined_at
                     FROM root_history r2
-                    WHERE r2.identity_count > r.identity_count AND status = $2
-                    ORDER BY r2.identity_count
-                    LIMIT 1
+                    WHERE r2.last_index > r.last_index AND r2.status = $2
+                    ORDER BY r2.last_index
+                    LIMIT 1),
+                    CASE WHEN r.status = $2 THEN STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW') END
                 ) as mined_valid_as_of
                 FROM root_history r
                 WHERE r.root = $1;
             "#,
         )
         .bind(root)
-        .bind(<&str>::from(Status::Pending));
+        .bind(<&str>::from(Status::Mined));
 
         let row = self.pool.fetch_optional(query).await?;
 
@@ -307,17 +305,17 @@ impl Database {
         &self,
         root: &Hash,
         last_identity: &Hash,
-        identity_count: usize,
+        last_index: usize,
     ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"INSERT INTO
-            root_history(root, last_identity, identity_count, status, created_at)
-            VALUES($1, $2, $3, $4, CURRENT_TIMESTAMP)
+            root_history(root, last_identity, last_index, status, created_at)
+            VALUES($1, $2, $3, $4, STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))
             ON CONFLICT (root) DO NOTHING;"#,
         )
         .bind(root)
         .bind(last_identity)
-        .bind(identity_count as i64)
+        .bind(last_index as i64)
         .bind(<&str>::from(Status::Pending));
         self.pool.execute(query).await?;
 
@@ -329,4 +327,93 @@ impl Database {
 pub enum Error {
     #[error("database error: {0}")]
     InternalError(#[from] sqlx::Error),
+}
+
+#[cfg(test)]
+#[allow(unused_imports)]
+mod test {
+    use std::time::Duration;
+
+    use chrono::Utc;
+    use clap::Parser;
+    use semaphore::Field;
+
+    use crate::identity_tree::Status;
+
+    use super::{Database, Options};
+
+    #[tokio::test]
+    async fn test_root_invalidation() {
+        let db = Database::new(Options::try_parse_from([""]).unwrap())
+            .await
+            .unwrap();
+
+        let identities = (1..5).map(|x| Field::from(x)).collect::<Vec<_>>();
+        let roots = (1..5).map(|x| Field::from(x)).collect::<Vec<_>>();
+        db.insert_identity_if_does_not_exist(&identities[0])
+            .await
+            .unwrap();
+        db.insert_pending_root(&roots[0], &identities[0], 0)
+            .await
+            .unwrap();
+
+        // Invalid root returns None
+        assert!(db.get_root_state(&roots[1]).await.unwrap().is_none());
+
+        // Basic scenario, latest pending root
+        let root_item = db.get_root_state(&roots[0]).await.unwrap().unwrap();
+        assert_eq!(roots[0], root_item.root);
+        assert!(matches!(root_item.status, Status::Pending));
+        assert!(root_item.mined_valid_as_of.is_none());
+
+        // Inserting a new pending root sets invalidation time for the previous root
+        db.insert_identity_if_does_not_exist(&identities[1])
+            .await
+            .unwrap();
+        db.insert_identity_if_does_not_exist(&identities[2])
+            .await
+            .unwrap();
+        db.insert_pending_root(&roots[1], &identities[2], 2)
+            .await
+            .unwrap();
+        let root_1_inserted_at = Utc::now();
+
+        tokio::time::sleep(Duration::from_millis(2)).await; // sleep enough for SQLite time resolution
+
+        let root_item_0 = db.get_root_state(&roots[0]).await.unwrap().unwrap();
+        let root_item_1 = db.get_root_state(&roots[1]).await.unwrap().unwrap();
+
+        assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
+        assert!(root_item_1.pending_valid_as_of > root_1_inserted_at);
+
+        // Test mined roots
+        db.insert_identity_if_does_not_exist(&identities[3])
+            .await
+            .unwrap();
+        db.insert_pending_root(&roots[2], &identities[3], 3)
+            .await
+            .unwrap();
+        db.mark_identities_submitted_to_contract(&roots[2], &[0, 1, 2, 3])
+            .await
+            .unwrap();
+        let root_2_mined_at = Utc::now();
+
+        tokio::time::sleep(Duration::from_millis(2)).await; // sleep enough for SQLite time resolution
+
+        let root_item_2 = db.get_root_state(&roots[2]).await.unwrap().unwrap();
+        assert!(matches!(root_item_2.status, Status::Mined));
+        assert!(root_item_2.mined_valid_as_of.is_some());
+
+        let root_item_1 = db.get_root_state(&roots[1]).await.unwrap().unwrap();
+        assert!(matches!(root_item_1.status, Status::Pending));
+        assert!(root_item_1.mined_valid_as_of.unwrap() < root_2_mined_at);
+        assert!(root_item_1.pending_valid_as_of < root_2_mined_at);
+
+        let root_item_0 = db.get_root_state(&roots[0]).await.unwrap().unwrap();
+        assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
+        assert!(matches!(root_item_0.status, Status::Pending));
+        assert!(root_item_0.mined_valid_as_of.unwrap() < root_2_mined_at);
+        assert!(root_item_0.mined_valid_as_of.unwrap() > root_1_inserted_at);
+        assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
+    }
 }

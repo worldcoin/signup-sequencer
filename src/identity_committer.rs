@@ -416,6 +416,9 @@ impl IdentityCommitter {
 
         let identity_keys: Vec<usize> = updates.iter().map(|update| update.leaf_index).collect();
 
+        // This channel's capacity provides us with a natural back-pressure mechanism
+        // to ensure that we don't overwhelm the identity manager with too many
+        // identities to mine.
         pending_identities_sender
             .send(PendingIdentities {
                 transaction_id,

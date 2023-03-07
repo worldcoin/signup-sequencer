@@ -1,21 +1,44 @@
-FROM rust:1.67 as build-env
+# Prepares the layer with `cargo-chef` installed
+FROM rust:1.67 AS chef
+# We only pay the installation cost once,
+# it will be cached from the second build onwards
+RUN cargo install cargo-chef
+
 WORKDIR /src
 
-RUN apt-get update &&\
-    apt-get install -y libssl-dev texinfo libcap2-bin &&\
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+# Prepares the dependencies list to build
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
 
-# Which directory under target to fetch the binary from
-ARG PROFILE=debug
+# Builds the project
+FROM chef AS builder
+WORKDIR /src
+
+# Various deps
+RUN apt-get update &&\
+    apt-get install -y protobuf-compiler libssl-dev texinfo libcap2-bin &&\
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Name of the binary
 ARG BIN=signup-sequencer
 
-# Copy target
-COPY ./target ./target
+COPY --from=planner /src/recipe.json recipe.json
+
+# Build dependencies - this is the caching Docker layer!
+RUN cargo chef cook --recipe-path recipe.json
+
+# Build application
+COPY . .
+RUN cargo build
+
+# FROM debian:buster-slim AS runtime
+# WORKDIR /src
+# COPY --from=builder /app/target/release/app /usr/local/bin
+# ENTRYPOINT ["/usr/local/bin/app"]
 
 # Copy the binary
-RUN cp ./target/${PROFILE}/${BIN} ./bin
+RUN cp ./target/debug/${BIN} ./bin
 
 # Set capabilities
 RUN setcap cap_net_bind_service=+ep ./bin

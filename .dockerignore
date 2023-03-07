@@ -1,6 +1,2 @@
-# Exclude most of target directory
-target/*/build/
-target/*/deps/
-target/*/incremental/
-target/*/.fingerprint/
-
+# the target directory
+target/

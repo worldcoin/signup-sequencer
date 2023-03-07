@@ -27,7 +27,7 @@ use prometheus::{
 };
 use reqwest::Client as ReqwestClient;
 use tokio::time::timeout;
-use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
+use tracing::{debug_span, error, info, info_span, instrument, Instrument};
 
 use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
 use super::{

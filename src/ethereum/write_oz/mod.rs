@@ -69,7 +69,7 @@ impl WriteProvider for Provider {
     }
 
     async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
-        todo!()
+        self.inner.mine_transaction(tx).await
     }
 
     fn address(&self) -> Address {

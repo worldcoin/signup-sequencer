@@ -71,6 +71,10 @@ impl RunningInstance {
 
         info!("Awaiting committer shutdown.");
         self.process_identities_handle.await?;
+
+        info!("Awaiting miner shutdown.");
+        self.mine_identities_handle.await?;
+
         Ok(())
     }
 }

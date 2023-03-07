@@ -416,6 +416,8 @@ impl IdentityCommitter {
         // This channel's capacity provides us with a natural back-pressure mechanism
         // to ensure that we don't overwhelm the identity manager with too many
         // identities to mine.
+        //
+        // Additionally if the receiver is dropped this reserve call will also fail.
         let permit = pending_identities_sender.reserve().await?;
 
         // With all the data prepared we can submit the identities to the on-chain

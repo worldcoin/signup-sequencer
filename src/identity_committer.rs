@@ -440,8 +440,8 @@ impl IdentityCommitter {
 
         // The transaction will be awaited on asynchronously
         permit.send(PendingIdentities {
-            transaction_id,
             identity_keys,
+            transaction_id,
         });
 
         Ok(())

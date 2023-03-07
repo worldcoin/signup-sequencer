@@ -426,6 +426,7 @@ impl IdentityCommitter {
         Ok(())
     }
 
+    #[instrument(level = "info", skip_all)]
     pub async fn mine_identities(
         database: &Database,
         identity_manager: &IdentityManager,

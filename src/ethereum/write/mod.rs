@@ -21,6 +21,9 @@ pub enum TxError {
     #[error("Error filling transaction: {0}")]
     Fill(Box<dyn Error + Send + Sync + 'static>),
 
+    #[error("Error fetching transaction from the blockchain: {0}")]
+    Fetch(Box<dyn Error + Send + Sync + 'static>),
+
     #[error("Timeout while sending transaction")]
     SendTimeout,
 

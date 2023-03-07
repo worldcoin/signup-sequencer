@@ -138,19 +138,15 @@ impl IdentityCommitter {
         let process_identities_handle = {
             let mut shutdown_receiver = shutdown_sender.subscribe();
 
-            let database = self.database.clone();
             let identity_manager = self.identity_manager.clone();
             let batch_tree = self.tree_state.get_batching_tree();
-            let mined_tree = self.tree_state.get_mined_tree();
             let timeout = self.batch_insert_timeout_secs;
 
             spawn_or_abort(async move {
                 select! {
                     result = Self::process_identities(
-                        &database,
                         &identity_manager,
                         &batch_tree,
-                        &mined_tree,
                         &mut wake_up_receiver,
                         &pending_identities_sender,
                         timeout
@@ -169,9 +165,18 @@ impl IdentityCommitter {
         let mine_identities_handle = {
             let mut shutdown_receiver = shutdown_sender.subscribe();
 
+            let database = self.database.clone();
+            let identity_manager = self.identity_manager.clone();
+            let mined_tree = self.tree_state.get_mined_tree();
+
             spawn_or_abort(async move {
                 select! {
-                    result = Self::mine_identities(pending_identities_receiver) => {
+                    result = Self::mine_identities(
+                        &database,
+                        &identity_manager,
+                        &mined_tree,
+                        pending_identities_receiver,
+                    ) => {
                         result?;
                     }
                     _ = shutdown_receiver.recv() => {
@@ -192,10 +197,8 @@ impl IdentityCommitter {
     }
 
     async fn process_identities(
-        database: &Database,
         identity_manager: &IdentityManager,
         batching_tree: &TreeVersion,
-        mined_tree: &TreeVersion,
         wake_up_receiver: &mut mpsc::Receiver<()>,
         pending_identities_sender: &mpsc::Sender<PendingIdentities>,
         timeout_secs: u64,
@@ -238,9 +241,7 @@ impl IdentityCommitter {
                     info!("Sending non-full batch with {}/{} updates.", updates.len(), batch_size);
 
                     Self::commit_identities(
-                        database,
                         identity_manager,
-                        mined_tree,
                         batching_tree,
                         pending_identities_sender,
                         &updates
@@ -286,9 +287,7 @@ impl IdentityCommitter {
                     }
 
                     Self::commit_identities(
-                        database,
                         identity_manager,
-                        mined_tree,
                         batching_tree,
                         pending_identities_sender,
                         &updates
@@ -308,9 +307,7 @@ impl IdentityCommitter {
     //   batches and the second would mine those batches.
     #[instrument(level = "info", skip_all)]
     async fn commit_identities(
-        database: &Database,
         identity_manager: &IdentityManager,
-        mined_tree: &TreeVersion,
         batching_tree: &TreeVersion,
         pending_identities_sender: &mpsc::Sender<PendingIdentities>,
         updates: &[TreeUpdate],
@@ -422,26 +419,31 @@ impl IdentityCommitter {
             })
             .await?;
 
-        // With this done, all that remains is to mark them as submitted to the
-        // blockchain in the source-of-truth database, and also update the mined tree to
-        // agree with the database and chain.
-        let identity_keys: Vec<usize> = updates.iter().map(|update| update.leaf_index).collect();
-        database
-            .mark_identities_submitted_to_contract(identity_keys.as_slice())
-            .await?;
-        mined_tree.apply_next_updates(updates.len()).await;
-
         Ok(())
     }
 
     pub async fn mine_identities(
+        database: &Database,
+        identity_manager: &IdentityManager,
+        mined_tree: &TreeVersion,
         mut pending_identities_receiver: mpsc::Receiver<PendingIdentities>,
     ) -> AnyhowResult<()> {
         loop {
-            let Some(pending_identities) = pending_identities_receiver.recv().await else {
+            let Some(PendingIdentities { identity_keys, transaction_id }) = pending_identities_receiver.recv().await else {
                 warn!("Pending identities channel closed, terminating.");
                 break;
             };
+
+            identity_manager.mine_identities(transaction_id).await?;
+
+            // With this done, all that remains is to mark them as submitted to the
+            // blockchain in the source-of-truth database, and also update the mined tree to
+            // agree with the database and chain.
+            database
+                .mark_identities_submitted_to_contract(identity_keys.as_slice())
+                .await?;
+
+            mined_tree.apply_next_updates(identity_keys.len()).await;
         }
         Ok(())
     }

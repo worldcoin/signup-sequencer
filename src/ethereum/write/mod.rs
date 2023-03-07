@@ -38,6 +38,9 @@ pub enum TxError {
 
     #[error("Transaction failed: {0:?}.")]
     Failed(Option<TransactionReceipt>),
+
+    #[error("Error parsing transaction id: {0}")]
+    Parse(Box<dyn Error + Send + Sync + 'static>),
 }
 
 #[allow(clippy::module_name_repetitions)]

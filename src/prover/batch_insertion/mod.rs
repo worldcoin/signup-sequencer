@@ -9,6 +9,8 @@ use std::{
 
 use clap::Parser;
 use ethers::{types::U256, utils::keccak256};
+use once_cell::sync::Lazy;
+use prometheus::{exponential_buckets, register_histogram, Histogram};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -17,6 +19,24 @@ use crate::prover::proof::Proof;
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";
+
+static TOTAL_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "total_proving_time",
+        "The time to generate a proof in seconds. Includes preparing the data for the prover",
+        exponential_buckets(0.1, 1.5, 25).unwrap()
+    )
+    .unwrap()
+});
+
+static PROVER_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "prover_proving_time",
+        "Only the time between sending a request and receiving the proof",
+        exponential_buckets(0.1, 1.5, 25).unwrap()
+    )
+    .unwrap()
+});
 
 /// Configuration options for the component responsible for interacting with the
 /// prover service.
@@ -94,6 +114,8 @@ impl Prover {
             ));
         }
 
+        let total_proving_time_timer = TOTAL_PROVING_TIME.start_timer();
+
         let identity_commitments: Vec<U256> = identities.iter().map(|id| id.commitment).collect();
         let input_hash =
             compute_input_hash(start_index, pre_root, post_root, &identity_commitments);
@@ -117,13 +139,19 @@ impl Prover {
             .body("OH MY GOD")
             .json(&proof_input)
             .build()?;
+
+        let prover_proving_time_timer = PROVER_PROVING_TIME.start_timer();
         let proof_term = self.client.execute(request).await?;
+        prover_proving_time_timer.observe_duration();
+
         let json = proof_term.text().await?;
 
         let Ok(proof) = serde_json::from_str::<Proof>(&json) else {
             let error: ProverError = serde_json::from_str(&json)?;
             return Err(anyhow::Error::msg(format!("{error}")))
         };
+
+        total_proving_time_timer.observe_duration();
 
         Ok(proof)
     }

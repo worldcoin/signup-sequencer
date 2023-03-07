@@ -123,6 +123,7 @@ impl IdentityManager {
         self.initial_leaf_value
     }
 
+    #[instrument(level = "debug", skip_all)]
     pub async fn prepare_proof(
         &self,
         start_index: usize,
@@ -132,6 +133,18 @@ impl IdentityManager {
     ) -> anyhow::Result<Proof> {
         // Ensure that we are not going to submit based on an out of date root anyway.
         self.assert_latest_root(pre_root.into()).await?;
+
+        // We also can't proceed unless the merkle proofs match the known tree depth.
+        // Things will break if we do.
+        for id in identity_commitments {
+            if id.merkle_proof.len() != self.tree_depth {
+                return Err(anyhow!(format!(
+                    "Length of merkle proof ({len}) did not match tree depth ({depth})",
+                    len = id.merkle_proof.len(),
+                    depth = self.tree_depth
+                )));
+            }
+        }
 
         let actual_start_index: u32 = start_index.try_into()?;
 

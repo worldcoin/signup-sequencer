@@ -123,6 +123,31 @@ impl IdentityManager {
         self.initial_leaf_value
     }
 
+    pub async fn prepare_proof(
+        &self,
+        start_index: usize,
+        pre_root: U256,
+        post_root: U256,
+        identity_commitments: &[Identity],
+    ) -> anyhow::Result<Proof> {
+        // Ensure that we are not going to submit based on an out of date root anyway.
+        self.assert_latest_root(pre_root.into()).await?;
+
+        let actual_start_index: u32 = start_index.try_into()?;
+
+        let proof_data: Proof = self
+            .prover
+            .generate_proof(
+                actual_start_index,
+                pre_root,
+                post_root,
+                identity_commitments,
+            )
+            .await?;
+
+        Ok(proof_data)
+    }
+
     #[instrument(level = "debug", skip_all)]
     pub async fn register_identities(
         &self,
@@ -130,36 +155,10 @@ impl IdentityManager {
         pre_root: U256,
         post_root: U256,
         identity_commitments: Vec<Identity>,
+        proof_data: Proof,
     ) -> anyhow::Result<TransactionId> {
-        // Ensure that we are not going to submit based on an out of date root anyway.
-        self.assert_latest_root(pre_root.into()).await?;
-
-        // We also can't proceed unless the merkle proofs match the known tree depth.
-        // Things will break if we do.
-        let _ = &identity_commitments.iter().try_for_each(|id| {
-            if id.merkle_proof.len() == self.tree_depth {
-                Ok(())
-            } else {
-                Err(anyhow!(format!(
-                    "Length of merkle proof ({len}) did not match tree depth ({depth})",
-                    len = id.merkle_proof.len(),
-                    depth = self.tree_depth
-                )))
-            }
-        })?;
-
-        // Preparing the transaction to send on chain is just a bunch of data
-        // marshalling.
         let actual_start_index: u32 = start_index.try_into()?;
-        let proof_data: Proof = self
-            .prover
-            .generate_proof(
-                actual_start_index,
-                pre_root,
-                post_root,
-                &identity_commitments,
-            )
-            .await?;
+
         let proof_points_array: [U256; 8] = proof_data.into();
         let identities = identity_commitments
             .iter()

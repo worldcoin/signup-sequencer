@@ -1,17 +1,19 @@
 #![allow(unused_variables, dead_code)] // TODO [AA] Remove when this is used outside of tests.
 mod identity;
 
-pub use crate::prover::batch_insertion::identity::Identity;
-use crate::prover::proof::Proof;
-use clap::Parser;
-use ethers::{types::U256, utils::keccak256};
-use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
     mem::size_of,
     time::Duration,
 };
+
+use clap::Parser;
+use ethers::{types::U256, utils::keccak256};
+use serde::{Deserialize, Serialize};
 use url::Url;
+
+pub use crate::prover::batch_insertion::identity::Identity;
+use crate::prover::proof::Proof;
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";
@@ -84,7 +86,7 @@ impl Prover {
         start_index: u32,
         pre_root: U256,
         post_root: U256,
-        identities: &Vec<Identity>,
+        identities: &[Identity],
     ) -> anyhow::Result<Proof> {
         if identities.len() != self.batch_size {
             return Err(anyhow::Error::msg(
@@ -458,10 +460,12 @@ mod test {
 #[allow(clippy::wildcard_imports)]
 #[cfg(test)]
 pub mod mock {
-    use super::*;
+    use std::net::SocketAddr;
+
     use axum::{routing::post, Json, Router};
     use axum_server::Handle;
-    use std::net::SocketAddr;
+
+    use super::*;
 
     pub struct Service {
         server: Handle,

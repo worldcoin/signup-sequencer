@@ -404,10 +404,30 @@ impl IdentityCommitter {
             })
             .collect();
 
+        // We prepare the proof before reserving a slot in the pending identities
+        let proof = identity_manager
+            .prepare_proof(start_index, pre_root, post_root, &identity_commitments)
+            .await
+            .map_err(|e| {
+                error!(?e, "Failed to prepare proof.");
+                e
+            })?;
+
+        // This channel's capacity provides us with a natural back-pressure mechanism
+        // to ensure that we don't overwhelm the identity manager with too many
+        // identities to mine.
+        let permit = pending_identities_sender.reserve().await?;
+
         // With all the data prepared we can submit the identities to the on-chain
         // identity manager and wait for that transaction to be mined.
         let transaction_id = identity_manager
-            .register_identities(start_index, pre_root, post_root, identity_commitments)
+            .register_identities(
+                start_index,
+                pre_root,
+                post_root,
+                identity_commitments,
+                proof,
+            )
             .await
             .map_err(|e| {
                 error!(?e, "Failed to insert identity to contract.");
@@ -416,15 +436,11 @@ impl IdentityCommitter {
 
         let identity_keys: Vec<usize> = updates.iter().map(|update| update.leaf_index).collect();
 
-        // This channel's capacity provides us with a natural back-pressure mechanism
-        // to ensure that we don't overwhelm the identity manager with too many
-        // identities to mine.
-        pending_identities_sender
-            .send(PendingIdentities {
-                transaction_id,
-                identity_keys,
-            })
-            .await?;
+        // The transaction will be awaited on asynchronously
+        permit.send(PendingIdentities {
+            transaction_id,
+            identity_keys,
+        });
 
         Ok(())
     }

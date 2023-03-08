@@ -292,7 +292,10 @@ impl App {
         match checked {
             Ok(true) => Ok(VerifySemaphoreProofResponse::Ok(root_state)),
             Ok(false) => Ok(VerifySemaphoreProofResponse::InvalidProof),
-            Err(_) => Err(ServerError::ProverError),
+            Err(err) => {
+                info!(?err, "verify_proof failed with error");
+                Err(ServerError::ProverError)
+            },
         }
     }
 

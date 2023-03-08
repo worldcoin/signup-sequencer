@@ -309,10 +309,9 @@ pub async fn bind_from_listener(
 }
 
 #[cfg(test)]
-#[allow(unused_imports)]
 mod test {
     use super::*;
-    use hyper::{body::to_bytes, Request, StatusCode};
+    use hyper::{Request, StatusCode};
     use serde_json::json;
 
     // TODO: Fix test

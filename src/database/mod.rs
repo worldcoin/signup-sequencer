@@ -330,7 +330,6 @@ pub enum Error {
 }
 
 #[cfg(test)]
-#[allow(unused_imports)]
 mod test {
     use std::time::Duration;
 
@@ -348,8 +347,8 @@ mod test {
             .await
             .unwrap();
 
-        let identities = (1..5).map(|x| Field::from(x)).collect::<Vec<_>>();
-        let roots = (1..5).map(|x| Field::from(x)).collect::<Vec<_>>();
+        let identities = (1..5).map(Field::from).collect::<Vec<_>>();
+        let roots = (1..5).map(Field::from).collect::<Vec<_>>();
         db.insert_identity_if_does_not_exist(&identities[0])
             .await
             .unwrap();

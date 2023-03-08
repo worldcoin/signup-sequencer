@@ -97,7 +97,7 @@ async fn validate_proofs() {
         ]
     });
 
-    const TEST_LEAVES: Lazy<Vec<Field>> =
+    static TEST_LEAVES: Lazy<Vec<Field>> =
         Lazy::new(|| IDENTITIES.iter().map(|id| id.commitment()).collect());
 
     let signal_hash = hash_to_field(b"signal_hash");
@@ -144,7 +144,7 @@ async fn validate_proofs() {
         invalid_nullifier_hash,
         external_nullifier_hash,
         proof,
-        Some(&"InvalidProof"),
+        Some("InvalidProof"),
     )
     .await;
 
@@ -171,7 +171,7 @@ async fn validate_proofs() {
         new_nullifier_hash,
         external_nullifier_hash,
         new_proof,
-        Some(&"InvalidProof"),
+        Some("InvalidProof"),
     )
     .await;
 
@@ -187,7 +187,7 @@ async fn validate_proofs() {
         new_nullifier_hash,
         external_nullifier_hash,
         new_proof,
-        Some(&"InvalidRoot"),
+        Some("InvalidRoot"),
     )
     .await;
 
@@ -424,6 +424,7 @@ async fn insert_identity_and_proofs() {
     reset_shutdown();
 }
 
+#[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 async fn test_verify_proof(
     uri: &str,

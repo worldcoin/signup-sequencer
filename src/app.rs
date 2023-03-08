@@ -295,7 +295,7 @@ impl App {
             Err(err) => {
                 info!(?err, "verify_proof failed with error");
                 Err(ServerError::ProverError)
-            },
+            }
         }
     }
 

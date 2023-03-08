@@ -369,6 +369,8 @@ impl IdentityCommitter {
             })
             .collect();
 
+        info!(start_index, ?pre_root, ?post_root, "Submitting batch");
+
         // With all the data prepared we can submit the identities to the on-chain
         // identity manager and wait for that transaction to be mined.
         identity_manager
@@ -384,8 +386,11 @@ impl IdentityCommitter {
         // agree with the database and chain.
         let identity_keys: Vec<usize> = updates.iter().map(|update| update.leaf_index).collect();
         database
-            .mark_identities_submitted_to_contract(identity_keys.as_slice())
+            .mark_identities_submitted_to_contract(&post_root.into(), identity_keys.as_slice())
             .await?;
+
+        info!(start_index, ?pre_root, ?post_root, "Batch mined");
+
         mined_tree.apply_next_updates(updates.len()).await;
 
         Self::log_pending_identities_count(database).await?;

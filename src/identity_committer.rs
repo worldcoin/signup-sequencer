@@ -6,6 +6,8 @@ use std::{
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
 use ethers::types::U256;
+use once_cell::sync::Lazy;
+use prometheus::{register_gauge, Gauge};
 use semaphore::merkle_tree::Branch;
 use tokio::{
     select,
@@ -36,6 +38,10 @@ struct RunningInstance {
     wake_up_sender:  mpsc::Sender<()>,
     shutdown_sender: mpsc::Sender<()>,
 }
+
+static PENDING_IDENTITIES: Lazy<Gauge> = Lazy::new(|| {
+    register_gauge!("pending_identities", "Identities not submitted on-chain").unwrap()
+});
 
 impl RunningInstance {
     fn wake_up(&self) -> AnyhowResult<()> {
@@ -204,6 +210,7 @@ impl IdentityCommitter {
                         batching_tree,
                         &updates
                     ).await?;
+
                     last_batch_time = SystemTime::now();
                 }
                 _ = wake_up_receiver.recv() => {
@@ -272,6 +279,8 @@ impl IdentityCommitter {
         batching_tree: &TreeVersion,
         updates: &[TreeUpdate],
     ) -> AnyhowResult<()> {
+        Self::log_pending_identities_count(database).await?;
+
         if updates.is_empty() {
             warn!("Identity commit requested with zero identities. Continuing.");
             return Ok(());
@@ -379,6 +388,14 @@ impl IdentityCommitter {
             .await?;
         mined_tree.apply_next_updates(updates.len()).await;
 
+        Self::log_pending_identities_count(database).await?;
+
+        Ok(())
+    }
+
+    async fn log_pending_identities_count(database: &Database) -> AnyhowResult<()> {
+        let pending_identities = database.count_pending_identities().await?;
+        PENDING_IDENTITIES.set(f64::from(pending_identities));
         Ok(())
     }
 

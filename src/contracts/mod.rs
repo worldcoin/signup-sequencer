@@ -1,8 +1,16 @@
 //! Functionality for interacting with smart contracts deployed on chain.
 mod abi;
 
-use anyhow::anyhow;
 use std::sync::Arc;
+
+use anyhow::anyhow;
+use clap::Parser;
+use ethers::{
+    providers::Middleware,
+    types::{Address, U256},
+};
+use semaphore::Field;
+use tracing::{error, info, instrument};
 
 use self::abi::BatchingContract as ContractAbi;
 use crate::{
@@ -12,13 +20,6 @@ use crate::{
         proof::Proof,
     },
 };
-use clap::Parser;
-use ethers::{
-    providers::Middleware,
-    types::{Address, U256},
-};
-use semaphore::Field;
-use tracing::{error, info, instrument};
 
 /// Configuration options for the component responsible for interacting with the
 /// contract.
@@ -123,14 +124,6 @@ impl IdentityManager {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn is_owner(&self) -> anyhow::Result<bool> {
-        info!(address = ?self.ethereum.address(), "Signer address");
-        let owner = self.abi.owner().call().await?;
-        info!(?owner, "Fetched owner address");
-        Ok(owner == self.ethereum.address())
-    }
-
-    #[instrument(level = "debug", skip_all)]
     pub async fn register_identities(
         &self,
         start_index: usize,
@@ -201,17 +194,6 @@ impl IdentityManager {
             Ok(())
         } else {
             Err(anyhow::Error::msg(format!("{root} is not latest root.",)))
-        }
-    }
-
-    #[instrument(level = "debug", skip_all)]
-    pub async fn assert_valid_root(&self, root: Field) -> anyhow::Result<()> {
-        if self.abi.check_valid_root(root.into()).call().await? {
-            Ok(())
-        } else {
-            Err(anyhow::Error::msg(format!(
-                "The root {root} no longer valid"
-            )))
         }
     }
 }

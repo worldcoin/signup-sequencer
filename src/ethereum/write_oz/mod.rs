@@ -1,10 +1,11 @@
-use self::openzeppelin::OzRelay;
+use std::time::Duration;
+
 use anyhow::Result as AnyhowResult;
 use async_trait::async_trait;
 use clap::Parser;
 use ethers::types::{transaction::eip2718::TypedTransaction, Address, H160};
-use std::{sync::Arc, time::Duration};
 
+use self::openzeppelin::OzRelay;
 use super::{
     read::duration_from_str,
     write::{TransactionId, WriteProvider},
@@ -39,19 +40,19 @@ pub struct Options {
     pub oz_transaction_validity: Duration,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Provider {
-    inner:   Arc<OzRelay>,
+    inner:   OzRelay,
     address: Address,
 }
 
 impl Provider {
     #[allow(dead_code)]
-    pub fn new(options: &Options) -> AnyhowResult<Self> {
-        let relay = OzRelay::new(options)?;
+    pub async fn new(options: &Options) -> AnyhowResult<Self> {
+        let relay = OzRelay::new(options).await?;
 
         Ok(Self {
-            inner:   Arc::new(relay),
+            inner:   relay,
             address: options.oz_address,
         })
     }

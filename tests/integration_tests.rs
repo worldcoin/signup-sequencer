@@ -1,3 +1,5 @@
+#![cfg(not(feature = "oz-provider"))]
+
 mod abi;
 mod prover_mock;
 use std::{

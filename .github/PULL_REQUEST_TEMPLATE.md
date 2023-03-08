@@ -29,6 +29,5 @@ the code change.
 
 - [ ] Added Tests
 - [ ] Added Documentation
-- [ ] Updated the changelog
 
 <!-- This template is based on https://github.com/tokio-rs/tokio/blob/tokio-1.13.0/.github/PULL_REQUEST_TEMPLATE.md and https://github.com/gakonst/ethers-rs/blob/0.5.3/.github/PULL_REQUEST_TEMPLATE.md -->

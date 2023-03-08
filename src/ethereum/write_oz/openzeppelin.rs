@@ -1,4 +1,6 @@
-use anyhow::Result as AnyhowResult;
+use std::{fmt::Debug, time::Duration};
+
+use anyhow::{Context, Result as AnyhowResult};
 use chrono::{DateTime, Utc};
 use cognitoauth::cognito_srp_auth::{auth, CognitoAuthInput};
 use ethers::{
@@ -11,22 +13,20 @@ use prometheus::{register_int_counter_vec, IntCounterVec};
 use reqwest::{header::HeaderValue, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::HashMap, fmt::Debug, time::Duration};
 use thiserror::Error;
-use tokio::{sync::Mutex, time::timeout};
+use tokio::{
+    sync::{Mutex, MutexGuard},
+    time::timeout,
+};
 use tracing::{error, info, info_span, Instrument};
 
-use crate::ethereum::{write::TransactionId, TxError};
-
 use super::Options;
+use crate::ethereum::{write::TransactionId, TxError};
 
 // Same for every project, taken from here: https://docs.openzeppelin.com/defender/api-auth
 const RELAY_TXS_URL: &str = "https://api.defender.openzeppelin.com/txs";
 const CLIENT_ID: &str = "1bpd19lcr33qvg5cr3oi79rdap";
 const POOL_ID: &str = "us-west-2_iLmIggsiy";
-
-static CLIENTS: Lazy<Mutex<HashMap<String, ExpiringClient>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
 
 static TX_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!("eth_tx_count", "The transaction count by bytes4.", &[
@@ -35,8 +35,9 @@ static TX_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
     .unwrap()
 });
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct OzRelay {
+    client:               Mutex<ExpiringClient>,
     api_key:              String,
     api_secret:           String,
     transaction_validity: chrono::Duration,
@@ -45,23 +46,31 @@ pub struct OzRelay {
 }
 
 impl OzRelay {
-    pub fn new(options: &Options) -> AnyhowResult<Self> {
+    pub async fn new(options: &Options) -> AnyhowResult<Self> {
+        let api_key = options.oz_api_key.to_string();
+        let api_secret = options.oz_api_secret.to_string();
+
+        let client = get_client(&api_key, &api_secret).await?;
+        let client = Mutex::new(client);
+
         Ok(Self {
-            api_key:              options.oz_api_key.to_string(),
-            api_secret:           options.oz_api_secret.to_string(),
+            client,
+            api_key,
+            api_secret,
             transaction_validity: chrono::Duration::from_std(options.oz_transaction_validity)?,
-            send_timeout:         Duration::from_secs(60),
-            mine_timeout:         Duration::from_secs(60),
+            send_timeout: Duration::from_secs(60),
+            mine_timeout: Duration::from_secs(60),
         })
     }
 
     async fn query(&self, tx_id: &str) -> Result<SubmittedTransaction, Error> {
         let url = format!("{RELAY_TXS_URL}/{tx_id}");
-        let client = get_client(&self.api_key, &self.api_secret)
-            .await
-            .map_err(|_| Error::Authentication)?;
 
-        let res = client
+        let res = self
+            .client()
+            .await
+            .map_err(|_| Error::Authentication)?
+            .as_ref()
             .get(url)
             .send()
             .await
@@ -77,11 +86,11 @@ impl OzRelay {
     }
 
     async fn list_recent_transactions(&self) -> Result<Vec<SubmittedTransaction>, Error> {
-        let client = get_client(&self.api_key, &self.api_secret)
+        let res = self
+            .client()
             .await
-            .map_err(|_| Error::Authentication)?;
-
-        let res = client
+            .map_err(|_| Error::Authentication)?
+            .as_ref()
             .get(format!("{RELAY_TXS_URL}?limit=10"))
             .send()
             .await
@@ -139,10 +148,6 @@ impl OzRelay {
         &self,
         tx: T,
     ) -> Result<String, Error> {
-        let client = get_client(&self.api_key, &self.api_secret)
-            .await
-            .map_err(|_| Error::Authentication)?;
-
         let tx: TypedTransaction = tx.into();
         let api_tx = Transaction {
             to:          tx.to(),
@@ -152,7 +157,11 @@ impl OzRelay {
             valid_until: Some(chrono::Utc::now() + self.transaction_validity),
         };
 
-        let res = client
+        let res = self
+            .client()
+            .await
+            .map_err(|_| Error::Authentication)?
+            .as_ref()
             .post(RELAY_TXS_URL)
             .body(json!(api_tx).to_string())
             .send()
@@ -248,24 +257,38 @@ impl OzRelay {
         self.mine_transaction_id(&tx_id).await?;
         Ok(TransactionId(tx_id))
     }
+
+    async fn client(&self) -> Result<MutexGuard<ExpiringClient>, Error> {
+        let now = chrono::Utc::now().timestamp();
+
+        let mut client = self.client.lock().await;
+
+        if client.expiration_time < now {
+            let new_client = get_client(&self.api_key, &self.api_secret)
+                .await
+                .map_err(|_| Error::Authentication)?;
+            *client = new_client;
+        }
+
+        Ok(client)
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ExpiringClient {
     client:          Client,
     expiration_time: i64,
 }
 
-/// Refreshes or creates a new access token for Defender API and returns it.
-async fn get_client(api_key: &str, api_secret: &str) -> eyre::Result<Client> {
-    let now = chrono::Utc::now().timestamp();
-    let mut clients = CLIENTS.lock().await;
-    if let Some(client) = clients.get(api_key) {
-        if now < client.expiration_time {
-            // token still valid
-            return Ok(client.client.clone());
-        }
+impl AsRef<Client> for ExpiringClient {
+    fn as_ref(&self) -> &Client {
+        &self.client
     }
+}
+
+/// Refreshes or creates a new access token for Defender API and returns it.
+async fn get_client(api_key: &str, api_secret: &str) -> AnyhowResult<ExpiringClient> {
+    let now = chrono::Utc::now().timestamp();
 
     let input = CognitoAuthInput {
         client_id:     CLIENT_ID.to_string(),
@@ -278,12 +301,10 @@ async fn get_client(api_key: &str, api_secret: &str) -> eyre::Result<Client> {
 
     let res = auth(input)
         .await
-        .map_err(|_| eyre::eyre!("Authentication failed"))?
-        .ok_or(eyre::eyre!("Authentication failed"))?;
+        .context("Auth request failed")?
+        .context("Authentication failed")?;
 
-    let access_token = res
-        .access_token()
-        .ok_or(eyre::eyre!("Authentication failed"))?;
+    let access_token = res.access_token().context("Authentication failed")?;
 
     let mut auth_value = HeaderValue::from_str(&format!("Bearer {access_token}"))?;
     auth_value.set_sensitive(true);
@@ -294,11 +315,10 @@ async fn get_client(api_key: &str, api_secret: &str) -> eyre::Result<Client> {
 
     let client = Client::builder().default_headers(headers).build()?;
 
-    clients.insert(api_key.to_string(), ExpiringClient {
-        client:          client.clone(),
+    Ok(ExpiringClient {
+        client,
         expiration_time: now + i64::from(res.expires_in()),
-    });
-    Ok(client)
+    })
 }
 
 #[derive(Error, Debug)]

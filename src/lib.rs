@@ -11,11 +11,13 @@ mod prover;
 pub mod server;
 mod utils;
 
-use crate::app::App;
+use std::sync::Arc;
+
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
-use std::sync::Arc;
 use tracing::info;
+
+use crate::app::App;
 
 #[derive(Clone, Debug, PartialEq, Parser)]
 #[group(skip)]
@@ -46,18 +48,10 @@ pub async fn main(options: Options) -> AnyhowResult<()> {
 
 #[cfg(test)]
 pub mod test {
-    use super::*;
-    use proptest::proptest;
     use tracing::{error, warn};
     use tracing_test::traced_test;
 
-    #[test]
-    #[allow(clippy::eq_op)]
-    fn test_with_proptest() {
-        proptest!(|(a in 0..5, b in 0..5)| {
-            assert_eq!(a + b, b + a);
-        });
-    }
+    use super::*;
 
     #[test]
     #[allow(clippy::disallowed_methods)] // False positive from macro
@@ -91,12 +85,13 @@ pub mod test {
 #[cfg(feature = "bench")]
 #[doc(hidden)]
 pub mod bench {
+    use std::time::Duration;
+
     use criterion::{black_box, BatchSize, Criterion};
     use proptest::{
         strategy::{Strategy, ValueTree},
         test_runner::TestRunner,
     };
-    use std::time::Duration;
     use tokio::runtime;
 
     pub fn group(criterion: &mut Criterion) {

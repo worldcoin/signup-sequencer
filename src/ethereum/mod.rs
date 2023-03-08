@@ -12,7 +12,11 @@ use self::write::{TransactionId, WriteProvider};
 
 mod read;
 pub mod write;
+
+#[cfg(not(feature = "oz-provider"))]
 mod write_dev;
+
+#[cfg(feature = "oz-provider")]
 mod write_oz;
 
 // TODO: Log and metrics for signer / nonces.

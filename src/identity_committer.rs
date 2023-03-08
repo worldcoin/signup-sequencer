@@ -31,7 +31,6 @@ use crate::{
 const DEBOUNCE_THRESHOLD_SECS: u64 = 1;
 
 struct RunningInstance {
-    #[allow(dead_code)]
     handle:          JoinHandle<()>,
     wake_up_sender:  mpsc::Sender<()>,
     shutdown_sender: mpsc::Sender<()>,

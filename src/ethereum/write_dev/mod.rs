@@ -273,8 +273,6 @@ impl Provider {
     }
 
     #[instrument(level = "info", skip(self))]
-    #[allow(clippy::option_if_let_else)] // Less readable
-    #[allow(clippy::cast_precision_loss)]
     async fn send_transaction_unlogged(
         &self,
         tx: TypedTransaction,

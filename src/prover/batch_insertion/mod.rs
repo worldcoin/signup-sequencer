@@ -455,7 +455,6 @@ mod test {
 "#;
 }
 
-#[allow(clippy::wildcard_imports)]
 #[cfg(test)]
 pub mod mock {
     use super::*;

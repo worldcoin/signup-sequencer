@@ -114,8 +114,8 @@ pub enum Error {
 
 impl Error {
     fn to_response(&self) -> hyper::Response<Body> {
-        #[allow(clippy::enum_glob_use)]
         use Error::*;
+
         let status_code = match self {
             InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
             InvalidPath => StatusCode::NOT_FOUND,
@@ -319,7 +319,7 @@ mod test {
 }
 
 #[cfg(feature = "bench")]
-#[allow(clippy::wildcard_imports, unused_imports)]
+#[allow(unused_imports)]
 #[doc(hidden)]
 pub mod bench {
     use super::*;

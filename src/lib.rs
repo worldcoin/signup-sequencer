@@ -1,5 +1,5 @@
 #![doc = include_str!("../Readme.md")]
-#![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
+#![warn(clippy::all, clippy::cargo)]
 
 pub mod app;
 mod contracts;
@@ -30,7 +30,6 @@ pub struct Options {
 /// ```
 /// assert!(true);
 /// ```
-#[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 pub async fn main(options: Options) -> AnyhowResult<()> {
     // Create App struct
     let app = Arc::new(App::new(options.app).await?);
@@ -71,7 +70,6 @@ pub mod test {
     #[tokio::test]
     #[allow(clippy::disallowed_methods)] // False positive from macro
     #[traced_test]
-    #[allow(clippy::semicolon_if_nothing_returned)] // False positive
     async fn async_test_with_log() {
         // Local log
         info!("This is being logged on the info level");

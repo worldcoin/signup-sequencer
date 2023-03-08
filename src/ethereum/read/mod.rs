@@ -49,7 +49,6 @@ pub fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
     Ok(Duration::from_secs(u64::from_str(value)?))
 }
 
-#[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug)]
 pub struct ReadProvider {
     inner:        InnerProvider,

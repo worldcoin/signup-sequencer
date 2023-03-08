@@ -79,7 +79,6 @@ impl App {
     ///
     /// Will return `Err` if the internal Ethereum handler errors or if the
     /// `options.storage_file` is not accessible.
-    #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         // Connect to Ethereum and Database

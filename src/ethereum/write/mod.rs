@@ -39,7 +39,6 @@ pub enum TxError {
     Failed(Option<TransactionReceipt>),
 }
 
-#[allow(clippy::module_name_repetitions)]
 #[async_trait]
 pub trait WriteProvider: Sync + Send + Debug {
     async fn send_transaction(

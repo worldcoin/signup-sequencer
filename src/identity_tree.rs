@@ -255,6 +255,7 @@ impl From<Status> for &str {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RootItem {
     pub root:                Field,
     pub status:              Status,

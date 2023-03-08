@@ -144,7 +144,7 @@ async fn validate_proofs() {
         invalid_nullifier_hash,
         external_nullifier_hash,
         proof,
-        Some("InvalidProof"),
+        Some("invalid semaphore proof"),
     )
     .await;
 
@@ -171,7 +171,7 @@ async fn validate_proofs() {
         new_nullifier_hash,
         external_nullifier_hash,
         new_proof,
-        Some("InvalidProof"),
+        Some("invalid semaphore proof"),
     )
     .await;
 
@@ -187,7 +187,7 @@ async fn validate_proofs() {
         new_nullifier_hash,
         external_nullifier_hash,
         new_proof,
-        Some("InvalidRoot"),
+        Some("invalid root"),
     )
     .await;
 

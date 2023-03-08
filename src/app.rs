@@ -40,20 +40,12 @@ impl ToResponseCode for InclusionProofResponse {
 }
 
 #[derive(Serialize)]
-pub enum VerifySemaphoreProofResponse {
-    Ok(RootItem),
-    InvalidRoot,
-    InvalidProof,
-    ProverError,
-}
+#[serde(transparent)]
+pub struct VerifySemaphoreProofResponse(RootItem);
 
 impl ToResponseCode for VerifySemaphoreProofResponse {
     fn to_response_code(&self) -> StatusCode {
-        match self {
-            Self::Ok(_) => StatusCode::OK,
-            Self::InvalidRoot | Self::InvalidProof => StatusCode::BAD_REQUEST,
-            Self::ProverError => StatusCode::INTERNAL_SERVER_ERROR,
-        }
+        StatusCode::OK
     }
 }
 
@@ -279,7 +271,7 @@ impl App {
         request: &VerifySemaphoreProofRequest,
     ) -> Result<VerifySemaphoreProofResponse, ServerError> {
         let Some(root_state) = self.database.get_root_state(&request.root).await? else {
-            return Ok(VerifySemaphoreProofResponse::InvalidRoot)
+            return Err(ServerError::InvalidRoot)
         };
 
         let checked = verify_proof(
@@ -290,8 +282,8 @@ impl App {
             &request.proof,
         );
         match checked {
-            Ok(true) => Ok(VerifySemaphoreProofResponse::Ok(root_state)),
-            Ok(false) => Ok(VerifySemaphoreProofResponse::InvalidProof),
+            Ok(true) => Ok(VerifySemaphoreProofResponse(root_state)),
+            Ok(false) => Err(ServerError::InvalidProof),
             Err(err) => {
                 info!(?err, "verify_proof failed with error");
                 Err(ServerError::ProverError)

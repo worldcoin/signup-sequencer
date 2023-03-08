@@ -96,6 +96,10 @@ pub enum Error {
     InvalidContentType,
     #[error("invalid group id")]
     InvalidGroupId,
+    #[error("invalid root")]
+    InvalidRoot,
+    #[error("invalid semaphore proof")]
+    InvalidProof,
     #[error("provided identity index out of bounds")]
     IndexOutOfBounds,
     #[error("provided identity commitment not found")]

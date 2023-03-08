@@ -6,6 +6,8 @@ use std::{
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
 use ethers::types::U256;
+use once_cell::sync::Lazy;
+use prometheus::{register_gauge, Gauge};
 use semaphore::merkle_tree::Branch;
 use tokio::{
     select,
@@ -40,6 +42,10 @@ pub struct PendingIdentities {
     identity_keys:  Vec<usize>,
     transaction_id: TransactionId,
 }
+
+static PENDING_IDENTITIES: Lazy<Gauge> = Lazy::new(|| {
+    register_gauge!("pending_identities", "Identities not submitted on-chain").unwrap()
+});
 
 impl RunningInstance {
     fn wake_up(&self) -> AnyhowResult<()> {
@@ -142,6 +148,7 @@ impl IdentityCommitter {
         let process_identities_handle = {
             let mut shutdown_receiver = shutdown_sender.subscribe();
 
+            let database = self.database.clone();
             let identity_manager = self.identity_manager.clone();
             let batch_tree = self.tree_state.get_batching_tree();
             let timeout = self.batch_insert_timeout_secs;
@@ -149,6 +156,7 @@ impl IdentityCommitter {
             spawn_or_abort(async move {
                 select! {
                     result = Self::process_identities(
+                        &database,
                         &identity_manager,
                         &batch_tree,
                         &mut wake_up_receiver,
@@ -201,6 +209,7 @@ impl IdentityCommitter {
     }
 
     async fn process_identities(
+        database: &Database,
         identity_manager: &IdentityManager,
         batching_tree: &TreeVersion,
         wake_up_receiver: &mut mpsc::Receiver<()>,
@@ -245,11 +254,13 @@ impl IdentityCommitter {
                     info!("Sending non-full batch with {}/{} updates.", updates.len(), batch_size);
 
                     Self::commit_identities(
+                        database,
                         identity_manager,
                         batching_tree,
                         pending_identities_sender,
                         &updates
                     ).await?;
+
                     last_batch_time = SystemTime::now();
                 }
                 _ = wake_up_receiver.recv() => {
@@ -291,6 +302,7 @@ impl IdentityCommitter {
                     }
 
                     Self::commit_identities(
+                        database,
                         identity_manager,
                         batching_tree,
                         pending_identities_sender,
@@ -311,11 +323,14 @@ impl IdentityCommitter {
     //   batches and the second would mine those batches.
     #[instrument(level = "info", skip_all)]
     async fn commit_identities(
+        database: &Database,
         identity_manager: &IdentityManager,
         batching_tree: &TreeVersion,
         pending_identities_sender: &mpsc::Sender<PendingIdentities>,
         updates: &[TreeUpdate],
     ) -> AnyhowResult<()> {
+        Self::log_pending_identities_count(database).await?;
+
         if updates.is_empty() {
             warn!("Identity commit requested with zero identities. Continuing.");
             return Ok(());
@@ -470,7 +485,15 @@ impl IdentityCommitter {
                 .await?;
 
             mined_tree.apply_next_updates(identity_keys.len()).await;
+
+            Self::log_pending_identities_count(database).await?;
         }
+        Ok(())
+    }
+
+    async fn log_pending_identities_count(database: &Database) -> AnyhowResult<()> {
+        let pending_identities = database.count_pending_identities().await?;
+        PENDING_IDENTITIES.set(f64::from(pending_identities));
         Ok(())
     }
 

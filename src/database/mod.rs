@@ -243,6 +243,14 @@ impl Database {
             })
             .collect::<Vec<_>>())
     }
+
+    pub async fn count_pending_identities(&self) -> Result<i32, Error> {
+        let query =
+            sqlx::query(r#"SELECT COUNT(leaf_index) as pending FROM identities WHERE status = $1"#)
+                .bind(<&str>::from(Status::Pending));
+        let result = self.pool.fetch_one(query).await?;
+        Ok(result.get::<i32, _>(0))
+    }
 }
 
 #[derive(Debug, Error)]

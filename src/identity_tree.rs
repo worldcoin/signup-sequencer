@@ -1,11 +1,11 @@
-use std::{str::FromStr, sync::Arc};
-
+use chrono::Utc;
 use semaphore::{
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, PoseidonTree, Proof},
     Field,
 };
 use serde::Serialize;
+use std::{str::FromStr, sync::Arc};
 use thiserror::Error;
 use tokio::sync::RwLock;
 
@@ -200,6 +200,11 @@ impl TreeVersion {
         data.next_leaf
     }
 
+    pub async fn get_leaf(&self, leaf: usize) -> Hash {
+        let tree = self.0.read().await;
+        tree.tree.leaves()[leaf]
+    }
+
     pub async fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
         let tree = self.0.read().await;
         (
@@ -247,6 +252,15 @@ impl From<Status> for &str {
             Status::Mined => "mined",
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RootItem {
+    pub root:                Field,
+    pub status:              Status,
+    pub pending_valid_as_of: chrono::DateTime<Utc>,
+    pub mined_valid_as_of:   Option<chrono::DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize)]

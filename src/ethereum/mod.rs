@@ -10,7 +10,7 @@ pub use write::TxError;
 
 use self::write::{TransactionId, WriteProvider};
 
-mod read;
+pub mod read;
 pub mod write;
 mod write_dev;
 mod write_oz;

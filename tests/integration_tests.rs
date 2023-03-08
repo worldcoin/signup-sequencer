@@ -20,11 +20,19 @@ use ethers::{
         Signer, SignerMiddleware, Wallet,
     },
     providers::Middleware,
-    types::{BlockNumber, Bytes, Filter, Log, H160, H256, U256},
+    types::{Bytes, H256, U256},
     utils::{Anvil, AnvilInstance},
 };
 use hyper::{client::HttpConnector, Body, Client, Request};
-use semaphore::{merkle_tree::Branch, poseidon_tree::PoseidonTree, SUPPORTED_DEPTH};
+use once_cell::sync::Lazy;
+use semaphore::{
+    hash_to_field,
+    identity::Identity,
+    merkle_tree::{self, Branch},
+    poseidon_tree::{PoseidonHash, PoseidonTree},
+    protocol::{self, generate_nullifier_hash, generate_proof},
+    Field, SUPPORTED_DEPTH,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tempfile::tempdir;
@@ -35,6 +43,162 @@ use url::{Host, Url};
 
 use abi as ContractAbi;
 use signup_sequencer::{app::App, identity_tree::Hash, server, Options};
+
+#[tokio::test]
+#[serial_test::serial]
+async fn validate_proofs() {
+    // Initialize logging for the test.
+    init_tracing_subscriber();
+    info!("Starting integration test");
+
+    let db_dir = tempdir().unwrap();
+    let db = db_dir.path().join("test.db");
+
+    let mut options = Options::try_parse_from([
+        "signup-sequencer",
+        "--identity-manager-address",
+        "0x0000000000000000000000000000000000000000", // placeholder, updated below
+        "--database",
+        &format!("sqlite://{}", db.to_str().unwrap()),
+        "--database-max-connections",
+        "1",
+        "--tree-depth",
+        "20",
+    ])
+    .expect("Failed to create options");
+    options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
+
+    let mut ref_tree = PoseidonTree::new(
+        SUPPORTED_DEPTH + 1,
+        options.app.contracts.initial_leaf_value,
+    );
+    let initial_root: U256 = ref_tree.root().into();
+    let (chain, private_key, identity_manager_address, prover_mock) =
+        spawn_mock_chain(initial_root)
+            .await
+            .expect("Failed to spawn mock chain");
+
+    options.app.contracts.identity_manager_address = identity_manager_address;
+    options.app.ethereum.read_options.confirmation_blocks_delay = 2;
+    options.app.ethereum.read_options.ethereum_provider =
+        Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
+    options.app.ethereum.write_options.signing_key = private_key;
+
+    let (app, local_addr) = spawn_app(options.clone())
+        .await
+        .expect("Failed to spawn app.");
+
+    let uri = "http://".to_owned() + &local_addr.to_string();
+    let client = Client::new();
+
+    static IDENTITIES: Lazy<Vec<Identity>> = Lazy::new(|| {
+        vec![
+            Identity::from_secret(b"test_f0f0", None),
+            Identity::from_secret(b"test_f1f1", None),
+            Identity::from_secret(b"test_f2f2", None),
+        ]
+    });
+
+    static TEST_LEAVES: Lazy<Vec<Field>> =
+        Lazy::new(|| IDENTITIES.iter().map(|id| id.commitment()).collect());
+
+    let signal_hash = hash_to_field(b"signal_hash");
+    let external_nullifier_hash = hash_to_field(b"external_hash");
+
+    // HAPPY PATH
+
+    // generate identity
+    let (merkle_proof, root) =
+        test_insert_identity(&uri, &client, &mut ref_tree, &TEST_LEAVES, 0).await;
+
+    // simulate client generating a proof
+    let nullifier_hash = generate_nullifier_hash(&IDENTITIES[0], external_nullifier_hash);
+
+    let proof = generate_proof(
+        &IDENTITIES[0],
+        &merkle_proof,
+        external_nullifier_hash,
+        signal_hash,
+    )
+    .unwrap();
+
+    test_verify_proof(
+        &uri,
+        &client,
+        root,
+        signal_hash,
+        nullifier_hash,
+        external_nullifier_hash,
+        proof,
+        None,
+    )
+    .await;
+
+    // INVALID PROOF
+
+    let invalid_nullifier_hash = generate_nullifier_hash(&IDENTITIES[1], external_nullifier_hash);
+
+    test_verify_proof(
+        &uri,
+        &client,
+        root,
+        signal_hash,
+        invalid_nullifier_hash,
+        external_nullifier_hash,
+        proof,
+        Some("invalid semaphore proof"),
+    )
+    .await;
+
+    // IDENTITY NOT IN TREE
+
+    ref_tree.set(1, TEST_LEAVES[1]);
+
+    // simulate client generating a proof
+    let new_nullifier_hash = generate_nullifier_hash(&IDENTITIES[1], external_nullifier_hash);
+
+    let new_proof = generate_proof(
+        &IDENTITIES[1],
+        &merkle_proof,
+        external_nullifier_hash,
+        signal_hash,
+    )
+    .unwrap();
+
+    test_verify_proof(
+        &uri,
+        &client,
+        root,
+        signal_hash,
+        new_nullifier_hash,
+        external_nullifier_hash,
+        new_proof,
+        Some("invalid semaphore proof"),
+    )
+    .await;
+
+    // UNKNOWN ROOT
+
+    let new_root = ref_tree.root();
+
+    test_verify_proof(
+        &uri,
+        &client,
+        new_root,
+        signal_hash,
+        new_nullifier_hash,
+        external_nullifier_hash,
+        new_proof,
+        Some("invalid root"),
+    )
+    .await;
+
+    // Shutdown the app properly for the final time
+    shutdown();
+    app.await.unwrap();
+    prover_mock.stop();
+    reset_shutdown();
+}
 
 #[tokio::test]
 #[serial_test::serial]
@@ -86,7 +250,10 @@ async fn insert_identity_and_proofs() {
         .expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(batch_size * 3);
-    let identities_ref: Vec<&str> = test_identities.iter().map(|i| i.as_ref()).collect();
+    let identities_ref: Vec<Field> = test_identities
+        .iter()
+        .map(|i| Hash::from_str_radix(i, 16).unwrap())
+        .collect();
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
@@ -256,49 +423,51 @@ async fn insert_identity_and_proofs() {
     shutdown();
     app.await.unwrap();
     prover_mock.stop();
+    reset_shutdown();
 }
 
+#[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
-async fn wait_for_log_count(
-    provider: &Provider<Http>,
-    identity_manager_address: H160,
-    expected_count: usize,
+async fn test_verify_proof(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    root: Field,
+    signal_hash: Field,
+    nullifer_hash: Field,
+    external_nullifier_hash: Field,
+    proof: protocol::Proof,
+    expected_failure: Option<&str>,
 ) {
-    for i in 1..21 {
-        let filter = Filter::new()
-            .address(identity_manager_address)
-            .from_block(BlockNumber::Earliest)
-            .to_block(BlockNumber::Latest);
-        let result: Vec<Log> = provider.request("eth_getLogs", [filter]).await.unwrap();
+    let body = construct_verify_proof_body(
+        root,
+        signal_hash,
+        nullifer_hash,
+        external_nullifier_hash,
+        proof,
+    );
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri.to_owned() + "/verifySemaphoreProof")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create verify proof hyper::Body");
+    let mut response = client
+        .request(req)
+        .await
+        .expect("Failed to execute request.");
 
-        if result.len() >= expected_count {
-            info!(
-                "Got {} logs (vs expected {}), done in iteration {}: {:?}",
-                result.len(),
-                expected_count,
-                i,
-                result
-            );
+    let bytes = hyper::body::to_bytes(response.body_mut())
+        .await
+        .expect("Failed to convert response body to bytes");
+    let result = String::from_utf8(bytes.into_iter().collect())
+        .expect("Could not parse response bytes to utf-8");
 
-            // TODO: Figure out a better way to do this.
-            // Getting a log event is not enough. The app waits for 1 transaction
-            // confirmation. It will arrive only after the first poll interval.
-            // The DEFAULT_POLL_INTERVAL in ethers-providers is 7 seconds.
-            tokio::time::sleep(Duration::from_secs(8)).await;
-
-            return;
-        }
-
-        info!(
-            "Got {} logs (vs expected {}), waiting 1 second, iteration {}",
-            result.len(),
-            expected_count,
-            i
-        );
-        tokio::time::sleep(Duration::from_secs(1)).await;
+    if let Some(expected_failure) = expected_failure {
+        assert!(!response.status().is_success());
+        assert!(result.contains(expected_failure));
+    } else {
+        assert!(response.status().is_success());
     }
-
-    panic!("Failed waiting for {expected_count} log events");
 }
 
 #[instrument(skip_all)]
@@ -365,10 +534,10 @@ async fn test_insert_identity(
     uri: &str,
     client: &Client<HttpConnector>,
     ref_tree: &mut PoseidonTree,
-    test_leaves: &[&str],
+    test_leaves: &[Field],
     leaf_index: usize,
-) {
-    let body = construct_insert_identity_body(test_leaves[leaf_index]);
+) -> (merkle_tree::Proof<PoseidonHash>, Field) {
+    let body = construct_insert_identity_body(&test_leaves[leaf_index]);
     let req = Request::builder()
         .method("POST")
         .uri(uri.to_owned() + "/insertIdentity")
@@ -391,14 +560,13 @@ async fn test_insert_identity(
     let result_json = serde_json::from_str::<serde_json::Value>(&result)
         .expect("Failed to parse response as json");
 
-    ref_tree.set(
-        leaf_index,
-        Hash::from_str_radix(test_leaves[leaf_index], 16).unwrap(),
-    );
+    ref_tree.set(leaf_index, test_leaves[leaf_index]);
 
     let expected_json = generate_reference_proof_json(ref_tree, leaf_index, "pending");
 
     assert_eq!(result_json, expected_json);
+
+    (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())
 }
 
 fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
@@ -410,10 +578,29 @@ fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
     )
 }
 
-fn construct_insert_identity_body(identity_commitment: &str) -> Body {
+fn construct_insert_identity_body(identity_commitment: &Field) -> Body {
     Body::from(
         json!({
             "identityCommitment": identity_commitment,
+        })
+        .to_string(),
+    )
+}
+
+fn construct_verify_proof_body(
+    root: Field,
+    signal_hash: Field,
+    nullifer_hash: Field,
+    external_nullifier_hash: Field,
+    proof: protocol::Proof,
+) -> Body {
+    Body::from(
+        json!({
+            "root": root,
+            "signalHash": signal_hash,
+            "nullifierHash": nullifer_hash,
+            "externalNullifierHash": external_nullifier_hash,
+            "proof": proof,
         })
         .to_string(),
     )
@@ -568,7 +755,7 @@ fn init_tracing_subscriber() {
     let quiet_mode = std::env::var("QUIET_MODE").is_ok();
     let result = if quiet_mode {
         tracing_subscriber::fmt()
-            .with_env_filter("warn")
+            .with_env_filter("info,signup_sequencer=debug")
             .with_timer(Uptime::default())
             .try_init()
     } else {

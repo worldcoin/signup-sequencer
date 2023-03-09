@@ -7,6 +7,8 @@ use ethers::{
 };
 use thiserror::Error;
 
+use crate::contracts::abi::RegisterIdentitiesCall;
+
 #[derive(Clone, Debug)]
 pub struct TransactionId(pub String);
 
@@ -49,6 +51,10 @@ pub enum TxError {
 #[allow(clippy::module_name_repetitions)]
 #[async_trait]
 pub trait WriteProvider: Sync + Send + Debug {
+    async fn fetch_pending_transactions(
+        &self,
+    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError>;
+
     async fn send_transaction(
         &self,
         tx: TypedTransaction,

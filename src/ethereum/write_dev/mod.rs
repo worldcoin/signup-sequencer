@@ -36,6 +36,7 @@ use super::{
     read::ReadProvider,
     write::{TransactionId, TxError, WriteProvider},
 };
+use crate::contracts::abi::RegisterIdentitiesCall;
 
 mod estimator;
 mod gas_oracle_logger;
@@ -134,6 +135,12 @@ pub struct Provider {
 
 #[async_trait]
 impl WriteProvider for Provider {
+    async fn fetch_pending_transactions(
+        &self,
+    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+        self.fetch_pending_transactions().await
+    }
+
     async fn send_transaction(
         &self,
         tx: TypedTransaction,
@@ -270,6 +277,13 @@ impl Provider {
             send_timeout: Duration::from_secs(options.send_timeout),
             mine_timeout: Duration::from_secs(options.mine_timeout),
         })
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    async fn fetch_pending_transactions(
+        &self,
+    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+        todo!()
     }
 
     #[instrument(level = "debug", skip_all)]

@@ -3,13 +3,14 @@ use std::sync::Arc;
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use ethers::types::{transaction::eip2718::TypedTransaction, Address};
-use tracing::instrument;
-
 pub use read::{EventError, ReadProvider};
+use tracing::instrument;
 pub use write::TxError;
 
 use self::write::{TransactionId, WriteProvider};
+use crate::contracts::abi::RegisterIdentitiesCall;
 
+pub mod data;
 pub mod read;
 pub mod write;
 mod write_dev;
@@ -64,6 +65,12 @@ impl Ethereum {
     #[must_use]
     pub fn address(&self) -> Address {
         self.write_provider.address()
+    }
+
+    pub async fn fetch_pending_transactions(
+        &self,
+    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+        self.write_provider.fetch_pending_transactions().await
     }
 
     pub async fn send_transaction(

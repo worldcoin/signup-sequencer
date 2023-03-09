@@ -21,7 +21,10 @@ use tokio::{
 use tracing::{error, info, info_span, Instrument};
 
 use super::Options;
-use crate::ethereum::{write::TransactionId, TxError};
+use crate::{
+    contracts::abi::RegisterIdentitiesCall,
+    ethereum::{write::TransactionId, TxError},
+};
 
 // Same for every project, taken from here: https://docs.openzeppelin.com/defender/api-auth
 const RELAY_TXS_URL: &str = "https://api.defender.openzeppelin.com/txs";
@@ -162,6 +165,13 @@ impl OzRelay {
             .await
             .map_err(|_| Error::Authentication)?
             .as_ref()
+            .post(RELAY_TXS_URL);
+
+        let res = self
+            .client()
+            .await
+            .map_err(|_| Error::Authentication)?
+            .as_ref()
             .post(RELAY_TXS_URL)
             .body(json!(api_tx).to_string())
             .send()
@@ -185,6 +195,12 @@ impl OzRelay {
 
             Err(Error::UnknownResponseFormat)
         }
+    }
+
+    pub async fn fetch_pending_transactions(
+        &self,
+    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+        todo!()
     }
 
     /// When `only_once` is set to true, this method tries to be idempotent.

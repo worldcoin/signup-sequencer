@@ -1,5 +1,5 @@
 //! Functionality for interacting with smart contracts deployed on chain.
-mod abi;
+pub mod abi;
 
 use std::sync::Arc;
 

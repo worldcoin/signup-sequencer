@@ -11,6 +11,7 @@ use super::{
     write::{TransactionId, WriteProvider},
     TxError,
 };
+use crate::contracts::abi::RegisterIdentitiesCall;
 
 mod openzeppelin;
 
@@ -60,6 +61,12 @@ impl Provider {
 
 #[async_trait]
 impl WriteProvider for Provider {
+    async fn fetch_pending_transactions(
+        &self,
+    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+        self.inner.fetch_pending_transactions().await
+    }
+
     async fn send_transaction(
         &self,
         tx: TypedTransaction,

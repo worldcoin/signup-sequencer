@@ -1,25 +1,22 @@
 #![allow(clippy::option_if_let_else, clippy::cast_precision_loss)]
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{anyhow, Result as AnyhowResult};
 use async_trait::async_trait;
 use clap::Parser;
-use ethers::{
-    core::k256::ecdsa::SigningKey,
-    middleware::{
-        gas_oracle::{
-            Cache, EthGasStation, Etherchain, GasNow, GasOracle, GasOracleMiddleware, Median,
-            Polygon, ProviderOracle,
-        },
-        SignerMiddleware,
-    },
-    providers::{Middleware, PendingTransaction},
-    signers::{LocalWallet, Signer, Wallet},
-    types::{
-        transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,
-        BlockNumber, Chain, TxHash, H256, U64,
-    },
+use ethers::core::k256::ecdsa::SigningKey;
+use ethers::middleware::gas_oracle::{
+    Cache, EthGasStation, Etherchain, GasNow, GasOracle, GasOracleMiddleware, Median, Polygon,
+    ProviderOracle,
+};
+use ethers::middleware::SignerMiddleware;
+use ethers::providers::{Middleware, PendingTransaction};
+use ethers::signers::{LocalWallet, Signer, Wallet};
+use ethers::types::transaction::eip2718::TypedTransaction;
+use ethers::types::{
+    u256_from_f64_saturating, Address, BlockId, BlockNumber, Chain, Filter, TxHash, H256, U64,
 };
 use futures::try_join;
 use once_cell::sync::Lazy;
@@ -31,11 +28,11 @@ use reqwest::Client as ReqwestClient;
 use tokio::time::timeout;
 use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
 
-use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
-use super::{
-    read::ReadProvider,
-    write::{TransactionId, TxError, WriteProvider},
-};
+use self::estimator::Estimator;
+use self::gas_oracle_logger::GasOracleLogger;
+use self::min_gas_fees::MinGasFees;
+use super::read::ReadProvider;
+use super::write::{TransactionId, TxError, WriteProvider};
 use crate::contracts::abi::RegisterIdentitiesCall;
 
 mod estimator;
@@ -283,7 +280,8 @@ impl Provider {
     async fn fetch_pending_transactions(
         &self,
     ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
-        todo!()
+        // TODO: This implementation requires changes in the smart contract
+        Ok(vec![])
     }
 
     #[instrument(level = "debug", skip_all)]
@@ -296,9 +294,7 @@ impl Provider {
 
     #[instrument(level = "debug", skip_all)]
     async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
-        let tx_hash = hex::decode(&tx.0).map_err(|err| TxError::Parse(Box::new(err)))?;
-
-        let tx_hash = TxHash::from_slice(&tx_hash);
+        let tx_hash = decode_tx_id(tx)?;
 
         // We're fetching the transaction again to get the nonce and gas limit
         // TODO: We should be able to transfer this data via the input args
@@ -446,4 +442,9 @@ impl Provider {
 
         Ok(TransactionId(transaction_id))
     }
+}
+
+fn decode_tx_id(tx: TransactionId) -> Result<H256, TxError> {
+    let tx_hash = hex::decode(&tx.0).map_err(|err| TxError::Parse(Box::new(err)))?;
+    Ok(TxHash::from_slice(&tx_hash))
 }

@@ -50,7 +50,6 @@ pub struct Provider {
 }
 
 impl Provider {
-    #[allow(dead_code)]
     pub async fn new(options: &Options) -> AnyhowResult<Self> {
         let relay = OzRelay::new(options).await?;
 

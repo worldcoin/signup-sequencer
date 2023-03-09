@@ -1,4 +1,9 @@
-use crate::{app::App, database, identity_tree::Hash};
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
+    sync::Arc,
+    time::Duration,
+};
+
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use anyhow::{bail, ensure, Context, Error as EyreError, Result as AnyhowResult};
 use clap::Parser;
@@ -14,15 +19,12 @@ use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
 use semaphore::{protocol::Proof, Field};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    sync::Arc,
-    time::Duration,
-};
 use thiserror::Error;
 use tokio::time::timeout;
 use tracing::{error, info, instrument, trace};
 use url::{Host, Url};
+
+use crate::{app::App, database, identity_tree::Hash};
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 #[group(skip)]
@@ -131,9 +133,10 @@ pub enum Error {
 }
 
 impl Error {
+    #[allow(clippy::enum_glob_use)]
     fn to_response(&self) -> hyper::Response<Body> {
-        #[allow(clippy::enum_glob_use)]
         use Error::*;
+
         let status_code = match self {
             InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
             InvalidPath => StatusCode::NOT_FOUND,
@@ -282,19 +285,20 @@ pub async fn bind_from_listener(
         // Clone here as `make_service_fn` is called for every connection
         let app = app.clone();
         let serve_timeout = serve_timeout;
+
         async move {
             Ok::<_, hyper::Error>(service_fn(move |req| {
                 // Clone here as `service_fn` is called for every request
                 let app = app.clone();
                 let serve_timeout = serve_timeout;
+
                 async move {
                     timeout(serve_timeout, route(req, app))
                         .await
                         .unwrap_or_else(|err| {
                             error!(?err, timeout = ?serve_timeout, "Timeout while handling request");
-                            panic!("Sequencer may be stalled, terminating.");
-                            #[allow(unreachable_code)]
-                            Ok(Error::Elapsed(err).to_response())
+
+                            panic!("Sequencer may be stalled, terminating.")
                         })
                 }
             }))
@@ -320,8 +324,7 @@ mod test {
 
     // TODO: Fix test
     // #[tokio::test]
-    #[allow(dead_code)]
-    async fn test_inclusion_proof() {
+    async fn _test_inclusion_proof() {
         let options = crate::app::Options::try_parse_from([""]).unwrap();
         let app = Arc::new(App::new(options).await.unwrap());
         let body = Body::from(
@@ -343,13 +346,14 @@ mod test {
 }
 
 #[cfg(feature = "bench")]
-#[allow(clippy::wildcard_imports, unused_imports)]
+#[allow(unused_imports)]
 #[doc(hidden)]
 pub mod bench {
-    use super::*;
-    use crate::bench::runtime;
     use criterion::{black_box, Criterion};
     use hyper::body::to_bytes;
+
+    use super::*;
+    use crate::bench::runtime;
 
     pub fn group(_c: &mut Criterion) {
         //     bench_hello_world(c);

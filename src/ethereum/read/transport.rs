@@ -15,7 +15,6 @@ pub enum Transport {
 }
 
 #[derive(Debug, Error)]
-#[allow(clippy::module_name_repetitions)]
 pub enum TransportError {
     #[error("Http error: {0}")]
     Http(<Http as JsonRpcClient>::Error),

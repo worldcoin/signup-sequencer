@@ -48,7 +48,6 @@ pub enum TxError {
     Parse(Box<dyn Error + Send + Sync + 'static>),
 }
 
-#[allow(clippy::module_name_repetitions)]
 #[async_trait]
 pub trait WriteProvider: Sync + Send + Debug {
     async fn fetch_pending_transactions(

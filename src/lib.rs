@@ -1,5 +1,6 @@
 #![doc = include_str!("../Readme.md")]
-#![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
+#![warn(clippy::all, clippy::pedantic, clippy::cargo)]
+#![allow(clippy::module_name_repetitions, clippy::wildcard_imports)]
 
 pub mod app;
 mod contracts;
@@ -11,11 +12,13 @@ mod prover;
 pub mod server;
 mod utils;
 
-use crate::app::App;
+use std::sync::Arc;
+
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
-use std::sync::Arc;
 use tracing::info;
+
+use crate::app::App;
 
 #[derive(Clone, Debug, PartialEq, Parser)]
 #[group(skip)]
@@ -30,7 +33,7 @@ pub struct Options {
 /// ```
 /// assert!(true);
 /// ```
-#[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#[allow(clippy::missing_errors_doc)]
 pub async fn main(options: Options) -> AnyhowResult<()> {
     // Create App struct
     let app = Arc::new(App::new(options.app).await?);
@@ -47,18 +50,10 @@ pub async fn main(options: Options) -> AnyhowResult<()> {
 
 #[cfg(test)]
 pub mod test {
-    use super::*;
-    use proptest::proptest;
     use tracing::{error, warn};
     use tracing_test::traced_test;
 
-    #[test]
-    #[allow(clippy::eq_op)]
-    fn test_with_proptest() {
-        proptest!(|(a in 0..5, b in 0..5)| {
-            assert_eq!(a + b, b + a);
-        });
-    }
+    use super::*;
 
     #[test]
     #[allow(clippy::disallowed_methods)] // False positive from macro
@@ -71,7 +66,6 @@ pub mod test {
     #[tokio::test]
     #[allow(clippy::disallowed_methods)] // False positive from macro
     #[traced_test]
-    #[allow(clippy::semicolon_if_nothing_returned)] // False positive
     async fn async_test_with_log() {
         // Local log
         info!("This is being logged on the info level");
@@ -93,12 +87,13 @@ pub mod test {
 #[cfg(feature = "bench")]
 #[doc(hidden)]
 pub mod bench {
+    use std::time::Duration;
+
     use criterion::{black_box, BatchSize, Criterion};
     use proptest::{
         strategy::{Strategy, ValueTree},
         test_runner::TestRunner,
     };
-    use std::time::Duration;
     use tokio::runtime;
 
     pub fn group(criterion: &mut Criterion) {

@@ -1,4 +1,8 @@
-#![allow(clippy::option_if_let_else, clippy::cast_precision_loss)]
+#![allow(
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_lossless
+)]
 
 use std::{sync::Arc, time::Duration};
 
@@ -159,7 +163,6 @@ impl WriteProvider for Provider {
 }
 
 impl Provider {
-    #[allow(dead_code)]
     pub async fn new(read_provider: ReadProvider, options: Options) -> AnyhowResult<Self> {
         let legacy = read_provider.legacy;
 

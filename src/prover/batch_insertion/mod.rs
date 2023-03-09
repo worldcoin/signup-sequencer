@@ -1,4 +1,3 @@
-#![allow(unused_variables, dead_code)] // TODO [AA] Remove when this is used outside of tests.
 mod identity;
 
 use std::{
@@ -485,7 +484,6 @@ mod test {
 "#;
 }
 
-#[allow(clippy::wildcard_imports)]
 #[cfg(test)]
 pub mod mock {
     use std::net::SocketAddr;

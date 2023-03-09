@@ -1,6 +1,5 @@
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
-use futures::TryFutureExt;
 use hyper::StatusCode;
 use semaphore::protocol::verify_proof;
 use serde::Serialize;
@@ -78,8 +77,6 @@ pub struct Options {
 
 pub struct App {
     database:           Arc<Database>,
-    #[allow(dead_code)]
-    ethereum:           Ethereum,
     identity_manager:   SharedIdentityManager,
     identity_committer: Arc<IdentityCommitter>,
     tree_state:         TreeState,
@@ -91,23 +88,26 @@ impl App {
     ///
     /// Will return `Err` if the internal Ethereum handler errors or if the
     /// `options.storage_file` is not accessible.
-    #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         // Connect to Ethereum and Database
-        let (database, (ethereum, identity_manager)) = {
+        let (database, identity_manager) = {
             let db = Database::new(options.database);
             let prover = BatchInsertionProver::new(&options.prover.batch_insertion)?;
 
-            let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
+            let eth = async move {
+                let ethereum = Ethereum::new(options.ethereum).await?;
+
                 let identity_manager =
                     IdentityManager::new(options.contracts, ethereum.clone(), prover).await?;
-                Ok((ethereum, Arc::new(identity_manager)))
-            });
+
+                Ok(Arc::new(identity_manager))
+            };
 
             // Connect to both in parallel
             try_join!(db, eth)?
         };
+
         let database = Arc::new(database);
 
         let tree_state = Self::initialize_tree(
@@ -136,7 +136,6 @@ impl App {
         // Sync with chain on start up
         let app = Self {
             database,
-            ethereum,
             identity_manager,
             identity_committer,
             tree_state,

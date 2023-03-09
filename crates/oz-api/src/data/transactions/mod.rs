@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 /// OpenZeppelin Defender transaction status.
 ///
 /// https://docs.openzeppelin.com/defender/relay-api-reference#transaction-status
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Pending,

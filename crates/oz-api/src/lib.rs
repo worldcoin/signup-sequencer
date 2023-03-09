@@ -1,18 +1,29 @@
 use std::{convert::identity, str::FromStr};
 
 use data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status};
-use reqwest::Url;
+use reqwest::{IntoUrl, Url};
 use typed_request_builder::TypedRequestBuilder;
 
 pub mod data;
 pub mod typed_request_builder;
 
+#[derive(Debug)]
 pub struct OzApi {
     client:  reqwest::Client,
     api_url: Url,
 }
 
 impl OzApi {
+    pub fn new<U>(api_url: U) -> reqwest::Result<Self>
+    where
+        U: IntoUrl,
+    {
+        Ok(Self {
+            client:  reqwest::Client::new(),
+            api_url: api_url.into_url()?,
+        })
+    }
+
     pub fn send_transaction(
         &self,
         tx: SendBaseTransactionRequest,

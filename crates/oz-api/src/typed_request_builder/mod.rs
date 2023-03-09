@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use reqwest::RequestBuilder;
+use reqwest::{RequestBuilder, Response};
 use serde::de::DeserializeOwned;
 
 pub struct TypedRequestBuilder<T> {
@@ -29,6 +29,19 @@ impl<T> TypedRequestBuilder<T> {
             _type: PhantomData,
         })
     }
+
+    pub fn map(self, f: impl FnOnce(RequestBuilder) -> RequestBuilder) -> Self {
+        Self {
+            builder: f(self.builder),
+            _type:   PhantomData,
+        }
+    }
+}
+
+impl<T> TypedResponse<T> {
+    pub fn into_untyped(self) -> Response {
+        self.response
+    }
 }
 
 impl<T> TypedResponse<T>
@@ -40,25 +53,25 @@ where
     }
 }
 
-impl AsRef<RequestBuilder> for TypedRequestBuilder<()> {
+impl<T> AsRef<RequestBuilder> for TypedRequestBuilder<T> {
     fn as_ref(&self) -> &RequestBuilder {
         &self.builder
     }
 }
 
-impl AsMut<RequestBuilder> for TypedRequestBuilder<()> {
+impl<T> AsMut<RequestBuilder> for TypedRequestBuilder<T> {
     fn as_mut(&mut self) -> &mut RequestBuilder {
         &mut self.builder
     }
 }
 
-impl AsRef<reqwest::Response> for TypedResponse<()> {
+impl<T> AsRef<reqwest::Response> for TypedResponse<T> {
     fn as_ref(&self) -> &reqwest::Response {
         &self.response
     }
 }
 
-impl AsMut<reqwest::Response> for TypedResponse<()> {
+impl<T> AsMut<reqwest::Response> for TypedResponse<T> {
     fn as_mut(&mut self) -> &mut reqwest::Response {
         &mut self.response
     }

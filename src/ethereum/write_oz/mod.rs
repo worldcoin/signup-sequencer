@@ -13,6 +13,8 @@ use super::{
 };
 use crate::contracts::abi::RegisterIdentitiesCall;
 
+mod error;
+mod expiring_headers;
 mod openzeppelin;
 
 // TODO: Log and metrics for signer / nonces.

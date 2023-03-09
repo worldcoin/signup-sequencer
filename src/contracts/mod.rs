@@ -12,7 +12,7 @@ use ethers::{
 use semaphore::Field;
 use tracing::{error, info, instrument};
 
-use self::abi::BatchingContract as ContractAbi;
+use self::abi::{BatchingContract as ContractAbi, RegisterIdentitiesCall};
 use crate::{
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
     prover::{
@@ -201,6 +201,14 @@ impl IdentityManager {
     pub async fn mine_identities(&self, transaction_id: TransactionId) -> anyhow::Result<()> {
         self.ethereum.mine_transaction(transaction_id).await?;
         Ok(())
+    }
+
+    pub async fn fetch_pending_identities(
+        &self,
+    ) -> anyhow::Result<Vec<(TransactionId, RegisterIdentitiesCall)>> {
+        let pending_identities = self.ethereum.fetch_pending_transactions().await?;
+
+        Ok(pending_identities)
     }
 
     #[instrument(level = "debug", skip_all)]

@@ -1,3 +1,5 @@
+#![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
 use sqlx::{

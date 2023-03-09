@@ -1,5 +1,6 @@
 #![doc = include_str!("../Readme.md")]
-#![warn(clippy::all, clippy::cargo)]
+#![warn(clippy::all, clippy::pedantic, clippy::cargo)]
+#![allow(clippy::module_name_repetitions, clippy::wildcard_imports)]
 
 pub mod app;
 mod contracts;
@@ -32,6 +33,7 @@ pub struct Options {
 /// ```
 /// assert!(true);
 /// ```
+#[allow(clippy::missing_errors_doc)]
 pub async fn main(options: Options) -> AnyhowResult<()> {
     // Create App struct
     let app = Arc::new(App::new(options.app).await?);

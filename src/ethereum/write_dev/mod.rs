@@ -1,8 +1,11 @@
-use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
-use super::{
-    read::ReadProvider,
-    write::{TransactionId, TxError, WriteProvider},
-};
+#![allow(
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_lossless
+)]
+
+use std::{sync::Arc, time::Duration};
+
 use anyhow::{anyhow, Result as AnyhowResult};
 use async_trait::async_trait;
 use clap::Parser;
@@ -29,9 +32,14 @@ use prometheus::{
     register_int_counter_vec, Counter, Gauge, Histogram, IntCounterVec,
 };
 use reqwest::Client as ReqwestClient;
-use std::{sync::Arc, time::Duration};
 use tokio::time::timeout;
 use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
+
+use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
+use super::{
+    read::ReadProvider,
+    write::{TransactionId, TxError, WriteProvider},
+};
 
 mod estimator;
 mod gas_oracle_logger;

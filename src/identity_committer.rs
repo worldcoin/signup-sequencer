@@ -62,7 +62,7 @@ impl RunningInstance {
         // which is impossible, since this is the only use, and this method takes
         // ownership, or the channel is closed, which means the committer thread is
         // already dead.
-        let _ = self.shutdown_sender.send(()).await;
+        let _: Result<_, _> = self.shutdown_sender.send(()).await;
         info!("Awaiting committer shutdown.");
         self.handle.await?;
         Ok(())

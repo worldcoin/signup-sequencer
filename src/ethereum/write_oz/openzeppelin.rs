@@ -1,7 +1,7 @@
 use std::{fmt::Debug, time::Duration};
 
 use anyhow::Result as AnyhowResult;
-use ethers::types::transaction::eip2718::TypedTransaction;
+use ethers::{abi::AbiDecode, types::transaction::eip2718::TypedTransaction};
 use hyper::StatusCode;
 use once_cell::sync::Lazy;
 use oz_api::{
@@ -82,7 +82,7 @@ impl OzRelay {
         Ok(item)
     }
 
-    async fn list_recent_transactions(&self) -> Result<Vec<RelayerTransactionBase>, Error> {
+    async fn list_recent_pending_transactions(&self) -> Result<Vec<RelayerTransactionBase>, Error> {
         let headers = self.headers().await.map_err(|_| Error::Authentication)?;
 
         let res = self
@@ -179,7 +179,30 @@ impl OzRelay {
     pub async fn fetch_pending_transactions(
         &self,
     ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
-        todo!()
+        let recent_pending_txs = self
+            .list_recent_pending_transactions()
+            .await
+            .map_err(|err| TxError::Fetch(Box::new(err)))?;
+
+        let mut pending_txs = Vec::with_capacity(recent_pending_txs.len());
+
+        for tx in recent_pending_txs {
+            let tx_id = tx.transaction_id;
+            let tx_id = TransactionId(tx_id);
+
+            let Some(data) = tx.data else { continue; };
+            let decoded = match RegisterIdentitiesCall::decode(data) {
+                Ok(decoded) => decoded,
+                Err(err) => {
+                    error!(?err, "Failed to decode transaction data");
+                    continue;
+                }
+            };
+
+            pending_txs.push((tx_id, decoded));
+        }
+
+        Ok(pending_txs)
     }
 
     /// When `only_once` is set to true, this method tries to be idempotent.
@@ -203,10 +226,11 @@ impl OzRelay {
         if only_once {
             info!("checking if can resubmit");
 
-            let existing_transactions = self.list_recent_transactions().await.map_err(|e| {
-                error!(?e, "error occurred");
-                TxError::Send(Box::new(e))
-            })?;
+            let existing_transactions =
+                self.list_recent_pending_transactions().await.map_err(|e| {
+                    error!(?e, "error occurred");
+                    TxError::Send(Box::new(e))
+                })?;
 
             let existing_transaction =
                 existing_transactions

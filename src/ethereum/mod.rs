@@ -10,7 +10,6 @@ pub use write::TxError;
 use self::write::{TransactionId, WriteProvider};
 use crate::contracts::abi::RegisterIdentitiesCall;
 
-pub mod data;
 pub mod read;
 pub mod write;
 mod write_dev;

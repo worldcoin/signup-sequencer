@@ -1,9 +1,10 @@
+use std::{error::Error, fmt::Debug};
+
 use async_trait::async_trait;
 use ethers::{
     providers::ProviderError,
     types::{transaction::eip2718::TypedTransaction, Address, TransactionReceipt, H256},
 };
-use std::{error::Error, fmt::Debug};
 use thiserror::Error;
 
 #[derive(Clone, Debug)]
@@ -19,6 +20,9 @@ impl AsRef<str> for TransactionId {
 pub enum TxError {
     #[error("Error filling transaction: {0}")]
     Fill(Box<dyn Error + Send + Sync + 'static>),
+
+    #[error("Error fetching transaction from the blockchain: {0}")]
+    Fetch(Box<dyn Error + Send + Sync + 'static>),
 
     #[error("Timeout while sending transaction")]
     SendTimeout,
@@ -37,6 +41,9 @@ pub enum TxError {
 
     #[error("Transaction failed: {0:?}.")]
     Failed(Option<TransactionReceipt>),
+
+    #[error("Error parsing transaction id: {0}")]
+    Parse(Box<dyn Error + Send + Sync + 'static>),
 }
 
 #[async_trait]
@@ -46,6 +53,8 @@ pub trait WriteProvider: Sync + Send + Debug {
         tx: TypedTransaction,
         only_once: bool,
     ) -> Result<TransactionId, TxError>;
+
+    async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError>;
 
     fn address(&self) -> Address;
 }

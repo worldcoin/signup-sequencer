@@ -254,8 +254,13 @@ impl OzRelay {
 
         info!(?tx_id, "Transaction submitted to OZ Relay");
 
-        self.mine_transaction_id(&tx_id).await?;
         Ok(TransactionId(tx_id))
+    }
+
+    pub async fn mine_transaction(&self, tx_id: TransactionId) -> Result<(), TxError> {
+        self.mine_transaction_id(tx_id.0.as_str()).await?;
+
+        Ok(())
     }
 
     async fn client(&self) -> Result<MutexGuard<ExpiringClient>, Error> {

@@ -1,9 +1,9 @@
-use std::sync::Arc;
-
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use hyper::StatusCode;
+use semaphore::protocol::verify_proof;
 use serde::Serialize;
+use std::sync::Arc;
 use tokio::try_join;
 use tracing::{info, instrument, warn};
 
@@ -14,10 +14,12 @@ use crate::{
     ethereum::{self, Ethereum},
     identity_committer,
     identity_committer::IdentityCommitter,
-    identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, Status, TreeItem, TreeState},
+    identity_tree::{
+        CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeItem, TreeState,
+    },
     prover,
     prover::batch_insertion::Prover as BatchInsertionProver,
-    server::{Error as ServerError, ToResponseCode},
+    server::{Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
 };
 
 #[derive(Serialize)]
@@ -31,6 +33,16 @@ impl From<InclusionProof> for InclusionProofResponse {
 }
 
 impl ToResponseCode for InclusionProofResponse {
+    fn to_response_code(&self) -> StatusCode {
+        StatusCode::OK
+    }
+}
+
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct VerifySemaphoreProofResponse(RootItem);
+
+impl ToResponseCode for VerifySemaphoreProofResponse {
     fn to_response_code(&self) -> StatusCode {
         StatusCode::OK
     }
@@ -218,6 +230,11 @@ impl App {
             .get_updates_in_range(next_index, leaf_idx)
             .await?;
         tree.append_many_fresh(&identities).await;
+
+        let last_identity = tree.get_leaf(leaf_idx).await;
+        self.database
+            .insert_pending_root(&tree.get_root().await, &last_identity, leaf_idx)
+            .await?;
         Ok(())
     }
 
@@ -242,6 +259,35 @@ impl App {
         let proof = self.tree_state.get_proof_for(&item).await;
 
         Ok(InclusionProofResponse(proof))
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the provided proof is invalid.
+    #[instrument(level = "debug", skip_all)]
+    pub async fn verify_semaphore_proof(
+        &self,
+        request: &VerifySemaphoreProofRequest,
+    ) -> Result<VerifySemaphoreProofResponse, ServerError> {
+        let Some(root_state) = self.database.get_root_state(&request.root).await? else {
+            return Err(ServerError::InvalidRoot)
+        };
+
+        let checked = verify_proof(
+            request.root,
+            request.nullifier_hash,
+            request.signal_hash,
+            request.external_nullifier_hash,
+            &request.proof,
+        );
+        match checked {
+            Ok(true) => Ok(VerifySemaphoreProofResponse(root_state)),
+            Ok(false) => Err(ServerError::InvalidProof),
+            Err(err) => {
+                info!(?err, "verify_proof failed with error");
+                Err(ServerError::ProverError)
+            }
+        }
     }
 
     /// # Errors

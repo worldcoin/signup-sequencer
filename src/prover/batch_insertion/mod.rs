@@ -1,19 +1,41 @@
 mod identity;
 
-pub use crate::prover::batch_insertion::identity::Identity;
-use crate::prover::proof::Proof;
-use clap::Parser;
-use ethers::{types::U256, utils::keccak256};
-use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
     mem::size_of,
     time::Duration,
 };
+
+use clap::Parser;
+use ethers::{types::U256, utils::keccak256};
+use once_cell::sync::Lazy;
+use prometheus::{exponential_buckets, register_histogram, Histogram};
+use serde::{Deserialize, Serialize};
 use url::Url;
+
+pub use crate::prover::batch_insertion::identity::Identity;
+use crate::prover::proof::Proof;
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";
+
+static TOTAL_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "total_proving_time",
+        "The time to generate a proof in seconds. Includes preparing the data for the prover",
+        exponential_buckets(0.1, 1.5, 25).unwrap()
+    )
+    .unwrap()
+});
+
+static PROVER_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "prover_proving_time",
+        "Only the time between sending a request and receiving the proof",
+        exponential_buckets(0.1, 1.5, 25).unwrap()
+    )
+    .unwrap()
+});
 
 /// Configuration options for the component responsible for interacting with the
 /// prover service.
@@ -83,13 +105,15 @@ impl Prover {
         start_index: u32,
         pre_root: U256,
         post_root: U256,
-        identities: &Vec<Identity>,
+        identities: &[Identity],
     ) -> anyhow::Result<Proof> {
         if identities.len() != self.batch_size {
             return Err(anyhow::Error::msg(
                 "Provided batch does not match prover batch size.",
             ));
         }
+
+        let total_proving_time_timer = TOTAL_PROVING_TIME.start_timer();
 
         let identity_commitments: Vec<U256> = identities.iter().map(|id| id.commitment).collect();
         let input_hash =
@@ -114,13 +138,19 @@ impl Prover {
             .body("OH MY GOD")
             .json(&proof_input)
             .build()?;
+
+        let prover_proving_time_timer = PROVER_PROVING_TIME.start_timer();
         let proof_term = self.client.execute(request).await?;
+        prover_proving_time_timer.observe_duration();
+
         let json = proof_term.text().await?;
 
         let Ok(proof) = serde_json::from_str::<Proof>(&json) else {
             let error: ProverError = serde_json::from_str(&json)?;
             return Err(anyhow::Error::msg(format!("{error}")))
         };
+
+        total_proving_time_timer.observe_duration();
 
         Ok(proof)
     }
@@ -456,10 +486,12 @@ mod test {
 
 #[cfg(test)]
 pub mod mock {
-    use super::*;
+    use std::net::SocketAddr;
+
     use axum::{routing::post, Json, Router};
     use axum_server::Handle;
-    use std::net::SocketAddr;
+
+    use super::*;
 
     pub struct Service {
         server: Handle,

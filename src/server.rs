@@ -17,6 +17,7 @@ use hyper::{
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
+use semaphore::{protocol::Proof, Field};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 use tokio::time::timeout;
@@ -66,6 +67,17 @@ pub struct InclusionProofRequest {
     pub identity_commitment: Hash,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct VerifySemaphoreProofRequest {
+    pub root:                    Field,
+    pub signal_hash:             Field,
+    pub nullifier_hash:          Field,
+    pub external_nullifier_hash: Field,
+    pub proof:                   Proof,
+}
+
 pub trait ToResponseCode {
     fn to_response_code(&self) -> StatusCode;
 }
@@ -86,6 +98,10 @@ pub enum Error {
     InvalidContentType,
     #[error("invalid group id")]
     InvalidGroupId,
+    #[error("invalid root")]
+    InvalidRoot,
+    #[error("invalid semaphore proof")]
+    InvalidProof,
     #[error("provided identity index out of bounds")]
     IndexOutOfBounds,
     #[error("provided identity commitment not found")]
@@ -110,6 +126,8 @@ pub enum Error {
     NotManager,
     #[error(transparent)]
     Elapsed(#[from] tokio::time::error::Elapsed),
+    #[error("prover error")]
+    ProverError,
     #[error(transparent)]
     Other(#[from] EyreError),
 }
@@ -180,6 +198,13 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
 
     // Route requests
     let result = match (request.method(), request.uri().path()) {
+        (&Method::POST, "/verifySemaphoreProof") => {
+            json_middleware(request, |request: VerifySemaphoreProofRequest| {
+                let app = app.clone();
+                async move { app.verify_semaphore_proof(&request).await }
+            })
+            .await
+        }
         (&Method::POST, "/inclusionProof") => {
             json_middleware(request, |request: InclusionProofRequest| {
                 let app = app.clone();
@@ -292,12 +317,10 @@ pub async fn bind_from_listener(
 }
 
 #[cfg(test)]
-#[allow(unused_imports)]
 mod test {
-    use hyper::{body::to_bytes, Request, StatusCode};
-    use serde_json::json;
-
     use super::*;
+    use hyper::{Request, StatusCode};
+    use serde_json::json;
 
     // TODO: Fix test
     // #[tokio::test]

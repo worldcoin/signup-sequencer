@@ -10,7 +10,7 @@ pub use write::TxError;
 
 use self::write::{TransactionId, WriteProvider};
 
-mod read;
+pub mod read;
 pub mod write;
 
 #[cfg(not(feature = "oz-provider"))]
@@ -76,5 +76,9 @@ impl Ethereum {
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
         self.write_provider.send_transaction(tx, only_once).await
+    }
+
+    pub async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
+        self.write_provider.mine_transaction(tx).await
     }
 }

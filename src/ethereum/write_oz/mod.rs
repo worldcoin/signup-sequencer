@@ -68,6 +68,10 @@ impl WriteProvider for Provider {
         self.inner.send_transaction(tx, only_once).await
     }
 
+    async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
+        self.inner.mine_transaction(tx).await
+    }
+
     fn address(&self) -> Address {
         self.address
     }

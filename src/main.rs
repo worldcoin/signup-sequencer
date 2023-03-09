@@ -1,5 +1,6 @@
 #![doc = include_str!("../Readme.md")]
-#![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
+#![warn(clippy::all, clippy::pedantic, clippy::cargo)]
+#![allow(clippy::module_name_repetitions, clippy::wildcard_imports)]
 
 use cli_batteries::{run, version};
 use signup_sequencer::{main as sequencer_app, Options};

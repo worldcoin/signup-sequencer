@@ -1,69 +1,125 @@
-use std::str::FromStr;
-
+use anyhow::Result as AnyhowResult;
+use auth::ExpiringHeaders;
 use data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status};
 use reqwest::{IntoUrl, Url};
-use typed_request_builder::TypedRequestBuilder;
+use tokio::sync::{Mutex, MutexGuard};
 
+mod auth;
 pub mod data;
-pub mod typed_request_builder;
 
 #[derive(Debug)]
 pub struct OzApi {
-    client:  reqwest::Client,
-    api_url: Url,
+    client:           reqwest::Client,
+    api_url:          Url,
+    expiring_headers: Mutex<ExpiringHeaders>,
+    api_key:          String,
+    api_secret:       String,
 }
 
 impl OzApi {
-    pub fn new<U>(api_url: U) -> reqwest::Result<Self>
+    pub async fn new<U, S>(api_url: U, api_key: S, api_secret: S) -> AnyhowResult<Self>
     where
         U: IntoUrl,
+        S: ToString,
     {
+        let api_key = api_key.to_string();
+        let api_secret = api_secret.to_string();
+
+        let expiring_headers = ExpiringHeaders::refresh(&api_key, &api_secret).await?;
+        let expiring_headers = Mutex::new(expiring_headers);
+
         Ok(Self {
-            client:  reqwest::Client::new(),
+            client: reqwest::Client::new(),
+            expiring_headers,
             api_url: api_url.into_url()?,
+            api_key,
+            api_secret,
         })
     }
 
-    pub fn send_transaction(
+    pub async fn send_transaction(
         &self,
-        tx: SendBaseTransactionRequest,
-    ) -> TypedRequestBuilder<RelayerTransactionBase> {
-        self.client
-            .post(format!("{}/txs", self.api_url))
+        tx: SendBaseTransactionRequest<'_>,
+    ) -> AnyhowResult<RelayerTransactionBase> {
+        let headers = self.headers().await?;
+
+        let res = headers
+            .apply(self.client.post(self.txs_url()))
             .json(&tx)
-            .into()
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(res)
     }
 
-    pub fn list_transactions(
+    pub async fn list_transactions(
         &self,
         status: Option<Status>,
         limit: Option<usize>,
-    ) -> TypedRequestBuilder<Vec<RelayerTransactionBase>> {
-        let url = format!("{}/txs", self.api_url);
-        let mut url = Url::from_str(&url).unwrap();
+    ) -> AnyhowResult<Vec<RelayerTransactionBase>> {
+        let mut url = self.txs_url();
 
-        let query = [opt_to_string(status), opt_to_string(limit)]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>();
-        let query = if query.is_empty() {
-            None
-        } else {
-            Some(query.join("&"))
-        };
+        let mut query_items = vec![];
 
-        url.set_query(query.as_deref());
+        if let Some(status) = status {
+            query_items.push(format!("status={status}"));
+        }
 
-        self.client.get(url).into()
+        if let Some(limit) = limit {
+            query_items.push(format!("limit={limit}"));
+        }
+
+        if !query_items.is_empty() {
+            url.set_query(Some(&query_items.join("&")));
+        }
+
+        let headers = self.headers().await?;
+
+        let res = headers
+            .apply(self.client.get(url))
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(res)
     }
 
-    pub fn query_transaction(&self, tx_id: &str) -> TypedRequestBuilder<RelayerTransactionBase> {
-        self.client
-            .get(format!("{}/txs/{}", self.api_url, tx_id))
-            .into()
-    }
-}
+    pub async fn query_transaction(&self, tx_id: &str) -> AnyhowResult<RelayerTransactionBase> {
+        let url = self.txs_url().join("txs/")?.join(tx_id)?;
 
-fn opt_to_string<S: ToString>(opt: Option<S>) -> Option<String> {
-    opt.map(|s| s.to_string())
+        println!("url = {url}");
+
+        let headers = self.headers().await?;
+
+        let res = headers.apply(self.client.get(url)).send().await?;
+
+        let intermediate: serde_json::Value = res.json().await?;
+
+        println!("intermediate = {intermediate:#?}");
+
+        let concrete = serde_json::from_value(intermediate)?;
+
+        Ok(concrete)
+    }
+
+    fn txs_url(&self) -> Url {
+        self.api_url.join("txs").unwrap()
+    }
+
+    async fn headers(&self) -> AnyhowResult<MutexGuard<ExpiringHeaders>> {
+        let now = chrono::Utc::now().timestamp();
+
+        let mut expiring_headers = self.expiring_headers.lock().await;
+
+        if expiring_headers.expiration_time < now {
+            let new_headers = ExpiringHeaders::refresh(&self.api_key, &self.api_secret).await?;
+
+            *expiring_headers = new_headers;
+        }
+
+        Ok(expiring_headers)
+    }
 }

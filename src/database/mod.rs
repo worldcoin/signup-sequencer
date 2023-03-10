@@ -328,7 +328,7 @@ impl Database {
             sqlx::query(r#"SELECT COUNT(leaf_index) as pending FROM identities WHERE status = $1"#)
                 .bind(<&str>::from(Status::Pending));
         let result = self.pool.fetch_one(query).await?;
-        Ok(result.get::<i32, _>(0))
+        Ok(result.get::<i64, _>(0) as i32)
     }
 }
 

@@ -4061,10 +4061,16 @@ checksum = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"
 name = "oz-api"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
+ "cognitoauth",
  "ethers",
+ "hyper",
  "reqwest",
  "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -5261,9 +5267,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.91"
+version = "1.0.94"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "877c235533714907a8c2464236f5c4b2a17262ef1bd71f38f35ea592c8da6883"
+checksum = "1c533a59c9d8a93a09c6ab31f0fd5e5f4dd1b8fc9434804029839884765d04ea"
 dependencies = [
  "itoa 1.0.4",
  "ryu",

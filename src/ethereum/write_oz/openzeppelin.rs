@@ -1,25 +1,23 @@
-use std::{fmt::Debug, time::Duration};
+use std::fmt::Debug;
+use std::time::Duration;
 
 use anyhow::Result as AnyhowResult;
-use ethers::{abi::AbiDecode, types::transaction::eip2718::TypedTransaction};
+use ethers::abi::AbiDecode;
+use ethers::types::transaction::eip2718::TypedTransaction;
 use hyper::StatusCode;
 use once_cell::sync::Lazy;
-use oz_api::{
-    data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status},
-    OzApi,
-};
+use oz_api::data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status};
+use oz_api::OzApi;
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use tokio::{
-    sync::{Mutex, MutexGuard},
-    time::timeout,
-};
+use tokio::sync::{Mutex, MutexGuard};
+use tokio::time::timeout;
 use tracing::{error, info, info_span, Instrument};
 
-use super::{error::Error, expiring_headers::ExpiringHeaders, Options};
-use crate::{
-    contracts::abi::RegisterIdentitiesCall,
-    ethereum::{write::TransactionId, TxError},
-};
+use super::error::Error;
+use super::Options;
+use crate::contracts::abi::RegisterIdentitiesCall;
+use crate::ethereum::write::TransactionId;
+use crate::ethereum::TxError;
 
 const OZ_DEFENDER_RELAYER_URL: &str = "https://api.defender.openzeppelin.com";
 
@@ -33,7 +31,6 @@ static TX_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
 #[derive(Debug)]
 pub struct OzRelay {
     oz_api:               OzApi,
-    expiring_headers:     Mutex<ExpiringHeaders>,
     api_key:              String,
     api_secret:           String,
     transaction_validity: chrono::Duration,
@@ -43,13 +40,10 @@ pub struct OzRelay {
 
 impl OzRelay {
     pub async fn new(options: &Options) -> AnyhowResult<Self> {
-        let api_key = options.oz_api_key.to_string();
-        let api_secret = options.oz_api_secret.to_string();
+        let api_key = &options.oz_api_key;
+        let api_secret = &options.oz_api_secret;
 
-        let expiring_headers = ExpiringHeaders::refresh(&api_key, &api_secret).await?;
-        let expiring_headers = Mutex::new(expiring_headers);
-
-        let oz_api = OzApi::new(OZ_DEFENDER_RELAYER_URL)?;
+        let oz_api = OzApi::new(OZ_DEFENDER_RELAYER_URL, api_key, api_secret)?;
 
         Ok(Self {
             oz_api,
@@ -158,11 +152,8 @@ impl OzRelay {
 
         let res = self
             .oz_api
-            .send_transaction(api_tx)
-            .map(|builder| headers.apply(builder))
-            .send()
-            .await
-            .map_err(|_| Error::RequestFailed)?;
+            .send_transaction(api_tx).await
+            .map_err(|_| Error::RequestFailed)?
 
         if res.as_ref().status() == StatusCode::OK {
             let tx = res.json().await.map_err(|_| Error::UnknownResponseFormat)?;
@@ -282,21 +273,5 @@ impl OzRelay {
         self.mine_transaction_id(tx_id.0.as_str()).await?;
 
         Ok(())
-    }
-
-    async fn headers(&self) -> Result<MutexGuard<ExpiringHeaders>, Error> {
-        let now = chrono::Utc::now().timestamp();
-
-        let mut expiring_headers = self.expiring_headers.lock().await;
-
-        if expiring_headers.expiration_time < now {
-            let new_headers = ExpiringHeaders::refresh(&self.api_key, &self.api_secret)
-                .await
-                .map_err(|_| Error::Authentication)?;
-
-            *expiring_headers = new_headers;
-        }
-
-        Ok(expiring_headers)
     }
 }

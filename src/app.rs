@@ -161,8 +161,10 @@ impl App {
         let mined = mined_builder.seal();
         let batching = mined.next_version().await;
         let latest = batching.next_version().await;
+
         let pending_items = database.get_commitments_by_status(Status::Pending).await?;
         latest.append_many_fresh(&pending_items).await;
+
         Ok(TreeState::new(mined, batching, latest))
     }
 

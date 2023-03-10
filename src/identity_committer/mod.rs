@@ -148,14 +148,15 @@ impl IdentityCommitter {
         let fetch_pending_identities_handle = {
             let mut shutdown_receiver = shutdown_sender.subscribe();
 
-            let database = self.database.clone();
             let identity_manager = self.identity_manager.clone();
+            let batch_tree = self.tree_state.get_batching_tree();
             let pending_identities_sender = pending_identities_sender.clone();
 
             spawn_or_abort(async move {
                 select! {
                     result = Self::fetch_and_enqueue_pending_identities(
                         start_processing_sender,
+                        &batch_tree,
                         &identity_manager,
                         &pending_identities_sender,
                     ) => {

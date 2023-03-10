@@ -1,4 +1,4 @@
-use std::{convert::identity, str::FromStr};
+use std::str::FromStr;
 
 use data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status};
 use reqwest::{IntoUrl, Url};
@@ -29,7 +29,7 @@ impl OzApi {
         tx: SendBaseTransactionRequest,
     ) -> TypedRequestBuilder<RelayerTransactionBase> {
         self.client
-            .post(&format!("{}/txs", self.api_url))
+            .post(format!("{}/txs", self.api_url))
             .json(&tx)
             .into()
     }
@@ -44,7 +44,7 @@ impl OzApi {
 
         let query = [opt_to_string(status), opt_to_string(limit)]
             .into_iter()
-            .filter_map(identity)
+            .flatten()
             .collect::<Vec<_>>();
         let query = if query.is_empty() {
             None
@@ -59,7 +59,7 @@ impl OzApi {
 
     pub fn query_transaction(&self, tx_id: &str) -> TypedRequestBuilder<RelayerTransactionBase> {
         self.client
-            .get(&format!("{}/txs/{}", self.api_url, tx_id))
+            .get(format!("{}/txs/{}", self.api_url, tx_id))
             .into()
     }
 }

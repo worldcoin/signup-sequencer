@@ -22,7 +22,7 @@ use ethers::{
     signers::{LocalWallet, Signer, Wallet},
     types::{
         transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,
-        BlockNumber, Chain, Filter, TxHash, H256, U64,
+        BlockNumber, Chain, TxHash, H256, U64,
     },
 };
 use futures::try_join;
@@ -300,7 +300,7 @@ impl Provider {
 
     #[instrument(level = "debug", skip_all)]
     async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
-        let tx_hash = decode_tx_id(tx)?;
+        let tx_hash = decode_tx_id(&tx)?;
 
         // We're fetching the transaction again to get the nonce and gas limit
         // TODO: We should be able to transfer this data via the input args
@@ -450,7 +450,7 @@ impl Provider {
     }
 }
 
-fn decode_tx_id(tx: TransactionId) -> Result<H256, TxError> {
+fn decode_tx_id(tx: &TransactionId) -> Result<H256, TxError> {
     let tx_hash = hex::decode(&tx.0).map_err(|err| TxError::Parse(Box::new(err)))?;
     Ok(TxHash::from_slice(&tx_hash))
 }

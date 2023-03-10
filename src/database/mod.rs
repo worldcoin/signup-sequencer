@@ -173,7 +173,7 @@ impl Database {
 
         let query = sqlx::query(
             r#"UPDATE root_history
-            SET status = $2, mined_at = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')
+            SET status = $2, mined_at = CURRENT_TIMESTAMP
             WHERE root = $1;"#,
         )
         .bind(root)
@@ -267,7 +267,7 @@ impl Database {
                     WHERE r2.last_index > r.last_index
                     ORDER BY r2.last_index
                     LIMIT 1),
-                    STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')
+                    CURRENT_TIMESTAMP
                 ) as pending_valid_as_of,
                 COALESCE(
                     (SELECT r2.mined_at
@@ -275,7 +275,7 @@ impl Database {
                     WHERE r2.last_index > r.last_index AND r2.status = $2
                     ORDER BY r2.last_index
                     LIMIT 1),
-                    CASE WHEN r.status = $2 THEN STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW') END
+                    CASE WHEN r.status = $2 THEN CURRENT_TIMESTAMP END
                 ) as mined_valid_as_of
                 FROM root_history r
                 WHERE r.root = $1;
@@ -311,7 +311,7 @@ impl Database {
         let query = sqlx::query(
             r#"INSERT INTO
             root_history(root, last_identity, last_index, status, created_at)
-            VALUES($1, $2, $3, $4, STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))
+            VALUES($1, $2, $3, $4, CURRENT_TIMESTAMP)
             ON CONFLICT (root) DO NOTHING;"#,
         )
         .bind(root)
@@ -328,7 +328,7 @@ impl Database {
             sqlx::query(r#"SELECT COUNT(leaf_index) as pending FROM identities WHERE status = $1"#)
                 .bind(<&str>::from(Status::Pending));
         let result = self.pool.fetch_one(query).await?;
-        Ok(result.get::<i32, _>(0))
+        Ok(result.get::<i64, _>(0) as i32)
     }
 }
 
@@ -386,7 +386,7 @@ mod test {
             .unwrap();
         let root_1_inserted_at = Utc::now();
 
-        tokio::time::sleep(Duration::from_millis(2)).await; // sleep enough for SQLite time resolution
+        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for SQLite time resolution
 
         let root_item_0 = db.get_root_state(&roots[0]).await.unwrap().unwrap();
         let root_item_1 = db.get_root_state(&roots[1]).await.unwrap().unwrap();
@@ -406,7 +406,7 @@ mod test {
             .unwrap();
         let root_2_mined_at = Utc::now();
 
-        tokio::time::sleep(Duration::from_millis(2)).await; // sleep enough for SQLite time resolution
+        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for SQLite time resolution
 
         let root_item_2 = db.get_root_state(&roots[2]).await.unwrap().unwrap();
         assert!(matches!(root_item_2.status, Status::Mined));

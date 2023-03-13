@@ -318,7 +318,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-region: ${{ secrets.AWS_STAGE_REGION }}
           role-to-assume: ${{ secrets.AWS_STAGE_ROLE }}
@@ -349,7 +349,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-region: ${{ secrets.AWS_STAGE_REGION }}
           role-to-assume: ${{ secrets.AWS_STAGE_ROLE }}
@@ -381,7 +381,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-region: ${{ secrets.AWS_PROD_REGION }}
           role-to-assume: ${{ secrets.AWS_PROD_ROLE }}

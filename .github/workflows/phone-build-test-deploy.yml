@@ -391,5 +391,5 @@ jobs:
           --install --timeout 60s
           --namespace "${{ github.event.repository.name }}-phone"
           --set image.tag="${{ github.sha }}"
-          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_MUMBAI_RPC_ENDPOINT }}"
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_POLYGON_MAINNET_RPC_ENDPOINT }}"
           -f deploy/phone-main-prod.values.yaml

@@ -5442,6 +5442,7 @@ dependencies = [
  "hex-literal",
  "hyper",
  "once_cell",
+ "oz-api",
  "prometheus",
  "proptest",
  "regex",

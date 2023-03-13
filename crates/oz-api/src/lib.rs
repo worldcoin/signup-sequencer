@@ -1,6 +1,5 @@
 use auth::ExpiringHeaders;
 use data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status};
-use error::Error;
 use reqwest::{IntoUrl, Url};
 use serde::de::DeserializeOwned;
 use tokio::sync::{Mutex, MutexGuard};
@@ -10,6 +9,7 @@ mod auth;
 pub mod data;
 pub mod error;
 
+pub use error::Error;
 pub type Result<T> = std::result::Result<T, error::Error>;
 
 #[derive(Debug)]

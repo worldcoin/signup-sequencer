@@ -1,6 +1,7 @@
-use anyhow::{Context, Result as AnyhowResult};
 use cognitoauth::cognito_srp_auth::{auth, CognitoAuthInput};
 use hyper::{http::HeaderValue, HeaderMap};
+
+use crate::error::Error;
 
 // Same for every project, taken from here: https://docs.openzeppelin.com/defender/api-auth
 const CLIENT_ID: &str = "1bpd19lcr33qvg5cr3oi79rdap";
@@ -14,7 +15,7 @@ pub struct ExpiringHeaders {
 }
 
 impl ExpiringHeaders {
-    pub async fn refresh(api_key: &str, api_secret: &str) -> AnyhowResult<ExpiringHeaders> {
+    pub async fn refresh(api_key: &str, api_secret: &str) -> Result<ExpiringHeaders, Error> {
         let now = chrono::Utc::now().timestamp();
 
         let input = CognitoAuthInput {
@@ -26,12 +27,9 @@ impl ExpiringHeaders {
             client_secret: None,
         };
 
-        let res = auth(input)
-            .await
-            .context("Auth request failed")?
-            .context("Authentication failed")?;
+        let res = auth(input).await?.ok_or(Error::Unauthorized)?;
 
-        let access_token = res.access_token().context("Authentication failed")?;
+        let access_token = res.access_token().ok_or(Error::Unauthorized)?;
 
         let mut auth_value = HeaderValue::from_str(&format!("Bearer {access_token}"))?;
         auth_value.set_sensitive(true);

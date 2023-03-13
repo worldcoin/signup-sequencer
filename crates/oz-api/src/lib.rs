@@ -1,4 +1,3 @@
-use anyhow::Result as AnyhowResult;
 use auth::ExpiringHeaders;
 use data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status};
 use reqwest::{IntoUrl, Url};
@@ -6,6 +5,9 @@ use tokio::sync::{Mutex, MutexGuard};
 
 mod auth;
 pub mod data;
+pub mod error;
+
+pub type Result<T> = std::result::Result<T, error::Error>;
 
 #[derive(Debug)]
 pub struct OzApi {
@@ -17,7 +19,7 @@ pub struct OzApi {
 }
 
 impl OzApi {
-    pub async fn new<U, S>(api_url: U, api_key: S, api_secret: S) -> AnyhowResult<Self>
+    pub async fn new<U, S>(api_url: U, api_key: S, api_secret: S) -> Result<Self>
     where
         U: IntoUrl,
         S: ToString,
@@ -40,7 +42,7 @@ impl OzApi {
     pub async fn send_transaction(
         &self,
         tx: SendBaseTransactionRequest<'_>,
-    ) -> AnyhowResult<RelayerTransactionBase> {
+    ) -> Result<RelayerTransactionBase> {
         let headers = self.headers().await?;
 
         let res = headers
@@ -58,7 +60,7 @@ impl OzApi {
         &self,
         status: Option<Status>,
         limit: Option<usize>,
-    ) -> AnyhowResult<Vec<RelayerTransactionBase>> {
+    ) -> Result<Vec<RelayerTransactionBase>> {
         let mut url = self.txs_url();
 
         let mut query_items = vec![];
@@ -87,7 +89,7 @@ impl OzApi {
         Ok(res)
     }
 
-    pub async fn query_transaction(&self, tx_id: &str) -> AnyhowResult<RelayerTransactionBase> {
+    pub async fn query_transaction(&self, tx_id: &str) -> Result<RelayerTransactionBase> {
         let url = self.txs_url().join("txs/")?.join(tx_id)?;
 
         let headers = self.headers().await?;
@@ -105,7 +107,7 @@ impl OzApi {
         self.api_url.join("txs").unwrap()
     }
 
-    async fn headers(&self) -> AnyhowResult<MutexGuard<ExpiringHeaders>> {
+    async fn headers(&self) -> Result<MutexGuard<ExpiringHeaders>> {
         let now = chrono::Utc::now().timestamp();
 
         let mut expiring_headers = self.expiring_headers.lock().await;

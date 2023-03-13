@@ -1,7 +1,10 @@
 use auth::ExpiringHeaders;
 use data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status};
+use error::Error;
 use reqwest::{IntoUrl, Url};
+use serde::de::DeserializeOwned;
 use tokio::sync::{Mutex, MutexGuard};
+use tracing::info;
 
 mod auth;
 pub mod data;
@@ -49,11 +52,9 @@ impl OzApi {
             .apply(self.client.post(self.txs_url()))
             .json(&tx)
             .send()
-            .await?
-            .json()
             .await?;
 
-        Ok(res)
+        Self::json_or_error(res).await
     }
 
     pub async fn list_transactions(
@@ -79,14 +80,9 @@ impl OzApi {
 
         let headers = self.headers().await?;
 
-        let res = headers
-            .apply(self.client.get(url))
-            .send()
-            .await?
-            .json()
-            .await?;
+        let res = headers.apply(self.client.get(url)).send().await?;
 
-        Ok(res)
+        Self::json_or_error(res).await
     }
 
     pub async fn query_transaction(&self, tx_id: &str) -> Result<RelayerTransactionBase> {
@@ -96,11 +92,7 @@ impl OzApi {
 
         let res = headers.apply(self.client.get(url)).send().await?;
 
-        let intermediate: serde_json::Value = res.json().await?;
-
-        let concrete = serde_json::from_value(intermediate)?;
-
-        Ok(concrete)
+        Self::json_or_error(res).await
     }
 
     fn txs_url(&self) -> Url {
@@ -119,5 +111,21 @@ impl OzApi {
         }
 
         Ok(expiring_headers)
+    }
+
+    async fn json_or_error<T>(res: reqwest::Response) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
+        let status_code = res.status();
+
+        if !status_code.is_success() {
+            let error_text = res.text().await?;
+            info!(?error_text, "response error");
+
+            Err(Error::InvalidResponse(status_code))
+        } else {
+            Ok(res.json().await?)
+        }
     }
 }

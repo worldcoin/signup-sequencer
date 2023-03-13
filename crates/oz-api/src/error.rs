@@ -1,5 +1,5 @@
 use cognitoauth::error::CognitoSrpAuthError;
-use hyper::header::InvalidHeaderValue;
+use hyper::{header::InvalidHeaderValue, StatusCode};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -21,4 +21,7 @@ pub enum Error {
 
     #[error("Parsing error: {0}")]
     ParseError(#[from] serde_json::Error),
+
+    #[error("Invalid response with status code: {0}")]
+    InvalidResponse(StatusCode),
 }

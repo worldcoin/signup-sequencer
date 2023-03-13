@@ -1,10 +1,15 @@
 use crate::{
-    contracts::{self, Contracts},
+    contracts,
+    contracts::{
+        batching::Contract as BatchingContract, legacy::Contract as LegacyContract,
+        IdentityManager, SharedIdentityManager,
+    },
     database::{self, Database},
     ethereum::{self, Ethereum},
     ethereum_subscriber::{Error as SubscriberError, EthereumSubscriber},
     identity_committer::IdentityCommitter,
     identity_tree::{Hash, SharedTreeState, TreeState},
+    prover,
     server::{Error as ServerError, ToResponseCode},
     timed_rw_lock::TimedRwLock,
 };
@@ -63,6 +68,9 @@ pub struct Options {
     #[clap(flatten)]
     pub database: database::Options,
 
+    #[clap(flatten)]
+    pub prover: prover::Options,
+
     /// Block number to start syncing from
     #[clap(long, env, default_value = "0")]
     pub starting_block: u64,
@@ -76,11 +84,12 @@ pub struct App {
     database:           Arc<Database>,
     #[allow(dead_code)]
     ethereum:           Ethereum,
-    contracts:          Arc<Contracts>,
+    identity_manager:   SharedIdentityManager,
     identity_committer: Arc<IdentityCommitter>,
     #[allow(dead_code)]
     chain_subscriber:   EthereumSubscriber,
     tree_state:         SharedTreeState,
+    snark_scalar_field: Hash,
 }
 
 impl App {
@@ -95,47 +104,61 @@ impl App {
         let cache_recovery_step_size = options.ethereum.cache_recovery_step_size;
 
         // Connect to Ethereum and Database
-        let (database, (ethereum, contracts)) = {
+        let (database, (ethereum, identity_manager)) = {
             let db = Database::new(options.database);
 
             let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
-                let contracts = Contracts::new(options.contracts, ethereum.clone()).await?;
-                Ok((ethereum, Arc::new(contracts)))
+                let identity_manager = if cfg!(feature = "batching-contract") {
+                    BatchingContract::new(options.contracts, ethereum.clone()).await?;
+                    panic!("The batching contract does not yet exist but was requested.");
+                } else {
+                    LegacyContract::new(options.contracts, ethereum.clone()).await?
+                };
+                Ok((ethereum, Arc::new(identity_manager)))
             });
 
             // Connect to both in parallel
             try_join!(db, eth)?
         };
-
         let database = Arc::new(database);
 
         // Poseidon tree depth is one more than the contract's tree depth
         let tree_state = Arc::new(TimedRwLock::new(
             Duration::from_secs(options.lock_timeout),
-            TreeState::new(contracts.tree_depth() + 1, contracts.initial_leaf()),
+            TreeState::new(
+                identity_manager.tree_depth() + 1,
+                identity_manager.initial_leaf_value(),
+            ),
         ));
 
         let identity_committer = Arc::new(IdentityCommitter::new(
             database.clone(),
-            contracts.clone(),
+            identity_manager.clone(),
             tree_state.clone(),
         ));
         let chain_subscriber = EthereumSubscriber::new(
             options.starting_block,
             database.clone(),
-            contracts.clone(),
+            identity_manager.clone(),
             tree_state.clone(),
             identity_committer.clone(),
         );
+
+        let snark_scalar_field = Hash::from_str_radix(
+            "21888242871839275222246405745257275088548364400416034343698204186575808495617",
+            10,
+        )
+        .expect("This should just parse.");
 
         // Sync with chain on start up
         let mut app = Self {
             database,
             ethereum,
-            contracts,
+            identity_manager,
             identity_committer,
             chain_subscriber,
             tree_state,
+            snark_scalar_field,
         };
 
         select! {
@@ -184,8 +207,8 @@ impl App {
                     self.tree_state = Arc::new(TimedRwLock::new(
                         Duration::from_secs(lock_timeout),
                         TreeState::new(
-                            self.contracts.tree_depth() + 1,
-                            self.contracts.initial_leaf(),
+                            self.identity_manager.tree_depth() + 1,
+                            self.identity_manager.initial_leaf_value(),
                         ),
                     ));
 
@@ -193,7 +216,7 @@ impl App {
                     self.chain_subscriber = EthereumSubscriber::new(
                         starting_block,
                         self.database.clone(),
-                        self.contracts.clone(),
+                        self.identity_manager.clone(),
                         self.tree_state.clone(),
                         self.identity_committer.clone(),
                     );
@@ -202,6 +225,10 @@ impl App {
                 Ok(_) => return Ok(()),
             }
         }
+    }
+
+    fn identity_is_reduced(&self, commitment: Hash) -> bool {
+        commitment.lt(&self.snark_scalar_field)
     }
 
     /// Queues an insert into the merkle tree.
@@ -216,13 +243,21 @@ impl App {
         group_id: usize,
         commitment: Hash,
     ) -> Result<(), ServerError> {
-        if U256::from(group_id) != self.contracts.group_id() {
+        if U256::from(group_id) != self.identity_manager.group_id() {
             return Err(ServerError::InvalidGroupId);
         }
 
-        if commitment == self.contracts.initial_leaf() {
+        if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
+        }
+
+        if !self.identity_is_reduced(commitment) {
+            warn!(
+                ?commitment,
+                "The provided commitment is not an element of the field."
+            );
+            return Err(ServerError::UnreducedCommitment);
         }
 
         // Note the ordering of duplicate checks: since we never want to lose data,
@@ -269,11 +304,11 @@ impl App {
         group_id: usize,
         commitment: &Hash,
     ) -> Result<InclusionProofResponse, ServerError> {
-        if U256::from(group_id) != self.contracts.group_id() {
+        if U256::from(group_id) != self.identity_manager.group_id() {
             return Err(ServerError::InvalidGroupId);
         }
 
-        if commitment == &self.contracts.initial_leaf() {
+        if commitment == &self.identity_manager.initial_leaf_value() {
             return Err(ServerError::InvalidCommitment);
         }
 
@@ -312,7 +347,7 @@ impl App {
                 drop(tree);
 
                 // Verify the root on chain
-                if let Err(error) = self.contracts.assert_valid_root(root).await {
+                if let Err(error) = self.identity_manager.assert_valid_root(root).await {
                     error!(
                         computed_root = ?root,
                         ?error,

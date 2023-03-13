@@ -1,0 +1,12 @@
+# main-stage helm env values override
+environment: stage
+ingress:
+  host: phone-signup.stage-crypto.worldcoin.dev
+persistentStorage:
+  volumeID: aws://us-east-1a/vol-0b2f938182ee86848
+# Env values can be strings (to be prefixed with `value:`) or objects
+env:
+  LOG_FILTER: "ethers_providers::provider=debug"
+  MAX_LOG_BLOCKS: "1000000"
+  STARTING_BLOCK: "0"
+  CREATE_GROUP_DEPTH: "20"

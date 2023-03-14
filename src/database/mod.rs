@@ -191,7 +191,7 @@ impl Database {
 
         let root_leaf_index_query = sqlx::query(
             r#"
-            SELECT leaf_index FROM root_history WHERE root = $1
+            SELECT last_index FROM root_history WHERE root = $1
             "#,
         )
         .bind(root);
@@ -207,7 +207,7 @@ impl Database {
             r#"
             UPDATE root_history
             SET status = $1, mined_at = CURRENT_TIMESTAMP
-            WHERE leaf_index <= $2
+            WHERE last_index <= $2
             "#,
         )
         .bind(str_mined_status)

@@ -21,7 +21,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::{
     contracts::{IdentityManager, SharedIdentityManager},
     database::Database,
-    identity_tree::{TreeState, TreeUpdate, TreeVersion},
+    identity_tree::{Canonical, Intermediate, TreeState, TreeUpdate, TreeVersion},
     prover::batch_insertion::Identity,
     utils::spawn_or_abort,
 };
@@ -155,8 +155,8 @@ impl IdentityCommitter {
     async fn process_identities(
         database: &Database,
         identity_manager: &IdentityManager,
-        batching_tree: &TreeVersion,
-        mined_tree: &TreeVersion,
+        batching_tree: &TreeVersion<Intermediate>,
+        mined_tree: &TreeVersion<Canonical>,
         wake_up_receiver: &mut Receiver<()>,
         timeout_secs: u64,
     ) -> AnyhowResult<()> {
@@ -268,8 +268,8 @@ impl IdentityCommitter {
     async fn commit_identities(
         database: &Database,
         identity_manager: &IdentityManager,
-        mined_tree: &TreeVersion,
-        batching_tree: &TreeVersion,
+        mined_tree: &TreeVersion<Canonical>,
+        batching_tree: &TreeVersion<Intermediate>,
         updates: &[TreeUpdate],
     ) -> AnyhowResult<()> {
         if updates.is_empty() {

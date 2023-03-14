@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use cognitoauth::cognito_srp_auth::{auth, CognitoAuthInput};
 use hyper::{http::HeaderValue, HeaderMap};
 
@@ -11,12 +13,12 @@ const POOL_ID: &str = "us-west-2_iLmIggsiy";
 pub struct ExpiringHeaders {
     pub headers:         HeaderMap,
     /// The timestamp at which the headers will expire in seconds
-    pub expiration_time: i64,
+    pub expiration_time: Instant,
 }
 
 impl ExpiringHeaders {
     pub async fn refresh(api_key: &str, api_secret: &str) -> Result<ExpiringHeaders, Error> {
-        let now = chrono::Utc::now().timestamp();
+        let now = Instant::now();
 
         let input = CognitoAuthInput {
             client_id:     CLIENT_ID.to_string(),
@@ -38,9 +40,12 @@ impl ExpiringHeaders {
         headers.insert(reqwest::header::AUTHORIZATION, auth_value);
         headers.insert("X-Api-Key", HeaderValue::from_str(api_key)?);
 
+        let expires_in = Duration::from_secs(res.expires_in() as u64);
+        let expiration_time = now + expires_in;
+
         Ok(Self {
             headers,
-            expiration_time: now + i64::from(res.expires_in()),
+            expiration_time,
         })
     }
 

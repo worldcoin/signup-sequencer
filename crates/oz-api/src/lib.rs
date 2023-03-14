@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use auth::ExpiringHeaders;
 use data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status};
 use reqwest::{IntoUrl, Url};
@@ -100,7 +102,7 @@ impl OzApi {
     }
 
     async fn headers(&self) -> Result<MutexGuard<ExpiringHeaders>> {
-        let now = chrono::Utc::now().timestamp();
+        let now = Instant::now();
 
         let mut expiring_headers = self.expiring_headers.lock().await;
 

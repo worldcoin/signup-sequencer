@@ -1,0 +1,19 @@
+[package]
+name = "oz-api"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+chrono = { version = "0.4.23", features = ["serde"] }
+ethers = { version = "1.0.0", features = [ "ws", "ipc", "openssl", "abigen" ] }
+reqwest = "0.11.14"
+serde = { version = "1.0.154", features = ["derive"] }
+serde_json = "1.0.94"
+tracing = "0.1.37"
+cognitoauth = { git = "https://github.com/lucdew/cognito-srp-auth.git" }
+anyhow = "1.0"
+hyper = { version = "^0.14.17", features = ["server", "tcp", "http1", "http2"] }
+tokio = { version = "1.17", features = ["full"] }
+thiserror = "1.0.39"
+url = "2.3.1"

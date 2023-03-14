@@ -19,9 +19,9 @@ impl IdentityCommitter {
     ) -> AnyhowResult<()> {
         loop {
             let Some(pending_identity) = pending_identities_receiver.recv().await else {
-            warn!("Pending identities channel closed, terminating.");
-            break;
-        };
+                warn!("Pending identities channel closed, terminating.");
+                break;
+            };
 
             let PendingIdentities {
                 identity_keys,

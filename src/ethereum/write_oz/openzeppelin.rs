@@ -1,19 +1,21 @@
 use std::{fmt::Debug, time::Duration};
 
 use anyhow::Result as AnyhowResult;
-use ethers::{providers::ProviderError, types::transaction::eip2718::TypedTransaction};
+use ethers::{abi::AbiDecode, types::transaction::eip2718::TypedTransaction};
 use once_cell::sync::Lazy;
 use oz_api::{
     data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status},
     OzApi,
 };
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use thiserror::Error;
 use tokio::time::timeout;
 use tracing::{error, info, info_span, Instrument};
 
-use super::Options;
-use crate::ethereum::{write::TransactionId, TxError};
+use super::{error::Error, Options};
+use crate::{
+    contracts::abi::RegisterIdentitiesCall,
+    ethereum::{write::TransactionId, TxError},
+};
 
 const DEFENDER_RELAY_URL: &str = "https://api.defender.openzeppelin.com";
 
@@ -187,37 +189,33 @@ impl OzRelay {
 
         Ok(())
     }
-}
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Transport error")]
-    Transport(#[from] ethers::providers::HttpClientError),
-    #[error("Authentication error")]
-    Authentication,
-    #[error("Request failed")]
-    RequestFailed,
-    #[error("Unknown response format")]
-    UnknownResponseFormat,
-    #[error("Missing transaction id")]
-    MissingTransactionId,
-}
+    pub async fn fetch_pending_transactions(
+        &self,
+    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+        let recent_pending_txs = self
+            .list_recent_transactions()
+            .await
+            .map_err(|err| TxError::Fetch(Box::new(err)))?;
 
-impl From<Error> for ProviderError {
-    fn from(error: Error) -> Self {
-        Self::JsonRpcClientError(Box::new(error))
-    }
-}
+        let mut pending_txs = Vec::with_capacity(recent_pending_txs.len());
 
-impl From<oz_api::Error> for Error {
-    fn from(value: oz_api::Error) -> Self {
-        match value {
-            oz_api::Error::AuthFailed(_) | oz_api::Error::Unauthorized => Self::Authentication,
-            oz_api::Error::Reqwest(_) => Self::RequestFailed,
-            oz_api::Error::Headers(_) => Self::RequestFailed,
-            oz_api::Error::UrlParseError(_) => Self::RequestFailed,
-            oz_api::Error::ParseError(_) => Self::UnknownResponseFormat,
-            oz_api::Error::InvalidResponse(_) => Self::RequestFailed,
+        for tx in recent_pending_txs {
+            let tx_id = tx.transaction_id;
+            let tx_id = TransactionId(tx_id);
+
+            let Some(data) = tx.data else { continue; };
+            let decoded = match RegisterIdentitiesCall::decode(data) {
+                Ok(decoded) => decoded,
+                Err(err) => {
+                    error!(?err, "Failed to decode transaction data");
+                    continue;
+                }
+            };
+
+            pending_txs.push((tx_id, decoded));
         }
+
+        Ok(pending_txs)
     }
 }

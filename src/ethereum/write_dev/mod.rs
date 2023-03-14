@@ -35,6 +35,8 @@ use reqwest::Client as ReqwestClient;
 use tokio::time::timeout;
 use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
 
+use crate::contracts::abi::RegisterIdentitiesCall;
+
 use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
 use super::{
     read::ReadProvider,
@@ -144,6 +146,12 @@ impl WriteProvider for Provider {
         _only_once: bool,
     ) -> Result<TransactionId, TxError> {
         self.send_transaction(tx).await
+    }
+
+    async fn fetch_pending_transactions(
+        &self,
+    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+        self.fetch_pending_transactions().await
     }
 
     async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
@@ -284,10 +292,16 @@ impl Provider {
     }
 
     #[instrument(level = "debug", skip_all)]
-    async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
-        let tx_hash = hex::decode(&tx.0).map_err(|err| TxError::Parse(Box::new(err)))?;
+    async fn fetch_pending_transactions(
+        &self,
+    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+        // TODO: This implementation requires changes in the smart contract
+        Ok(vec![])
+    }
 
-        let tx_hash = TxHash::from_slice(&tx_hash);
+    #[instrument(level = "debug", skip_all)]
+    async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
+        let tx_hash = decode_tx_id(&tx)?;
 
         // We're fetching the transaction again to get the nonce and gas limit
         // TODO: We should be able to transfer this data via the input args
@@ -435,4 +449,9 @@ impl Provider {
 
         Ok(TransactionId(transaction_id))
     }
+}
+
+fn decode_tx_id(tx: &TransactionId) -> Result<H256, TxError> {
+    let tx_hash = hex::decode(&tx.0).map_err(|err| TxError::Parse(Box::new(err)))?;
+    Ok(TxHash::from_slice(&tx_hash))
 }

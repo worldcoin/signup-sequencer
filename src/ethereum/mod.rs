@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::contracts::abi::RegisterIdentitiesCall;
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use ethers::types::{transaction::eip2718::TypedTransaction, Address};
@@ -76,6 +77,12 @@ impl Ethereum {
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
         self.write_provider.send_transaction(tx, only_once).await
+    }
+
+    pub async fn fetch_pending_transactions(
+        &self,
+    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+        self.write_provider.fetch_pending_transactions().await
     }
 
     pub async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {

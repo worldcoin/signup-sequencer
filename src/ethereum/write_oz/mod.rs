@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use crate::contracts::abi::RegisterIdentitiesCall;
 use anyhow::Result as AnyhowResult;
 use async_trait::async_trait;
 use clap::Parser;
@@ -12,6 +13,7 @@ use super::{
     TxError,
 };
 
+mod error;
 mod openzeppelin;
 
 // TODO: Log and metrics for signer / nonces.
@@ -65,6 +67,12 @@ impl WriteProvider for Provider {
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
         self.inner.send_transaction(tx, only_once).await
+    }
+
+    async fn fetch_pending_transactions(
+        &self,
+    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+        self.inner.fetch_pending_transactions().await
     }
 
     async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {

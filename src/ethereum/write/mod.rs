@@ -7,6 +7,8 @@ use ethers::{
 };
 use thiserror::Error;
 
+use crate::contracts::abi::RegisterIdentitiesCall;
+
 #[derive(Clone, Debug)]
 pub struct TransactionId(pub String);
 
@@ -53,6 +55,10 @@ pub trait WriteProvider: Sync + Send + Debug {
         tx: TypedTransaction,
         only_once: bool,
     ) -> Result<TransactionId, TxError>;
+
+    async fn fetch_pending_transactions(
+        &self,
+    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError>;
 
     async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError>;
 

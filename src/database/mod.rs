@@ -207,7 +207,7 @@ impl Database {
             r#"
             UPDATE root_history
             SET status = $1, mined_at = CURRENT_TIMESTAMP
-            WHERE leaf_index < $2
+            WHERE leaf_index <= $2
             "#,
         )
         .bind(str_mined_status)
@@ -219,7 +219,7 @@ impl Database {
             r#"
             UPDATE identities
             SET status = $1
-            WHERE leaf_index < $2
+            WHERE leaf_index <= $2
             "#,
         )
         .bind(str_mined_status)

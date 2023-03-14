@@ -365,7 +365,7 @@ jobs:
           -f deploy/phone-main-stage.values.yaml
 
   deploy-main-prod:
-    name: Deploy main to staging
+    name: Deploy main to production
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/phone/main'
     needs: [accept]

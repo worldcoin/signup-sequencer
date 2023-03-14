@@ -184,6 +184,54 @@ impl Database {
         Ok(())
     }
 
+    /// Marks the identities and roots from before a given root hash as mined
+    #[instrument(skip(self), level = "debug")]
+    pub async fn mark_root_submitted_to_contract(&self, root: &Hash) -> Result<(), Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let root_leaf_index_query = sqlx::query(
+            r#"
+            SELECT leaf_index FROM root_history WHERE root = $1
+            "#,
+        )
+        .bind(root);
+
+        let row = tx.fetch_optional(root_leaf_index_query).await?;
+        // If this is the first time the sequencer is starting then we will not have any
+        // roots in the database.
+        let Some(row) = row else { return Ok(()) };
+        let root_leaf_index = row.get::<i64, _>(1);
+
+        let str_mined_status = <&str>::from(Status::Mined);
+        let update_root_history_query = sqlx::query(
+            r#"
+            UPDATE root_history
+            SET status = $1, mined_at = CURRENT_TIMESTAMP
+            WHERE leaf_index < $2
+            "#,
+        )
+        .bind(str_mined_status)
+        .bind(root_leaf_index);
+
+        tx.execute(update_root_history_query).await?;
+
+        let update_identities_query = sqlx::query(
+            r#"
+            UPDATE identities
+            SET status = $1
+            WHERE leaf_index < $2
+            "#,
+        )
+        .bind(str_mined_status)
+        .bind(root_leaf_index);
+
+        tx.execute(update_identities_query).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
     pub async fn get_updates_in_range(
         &self,
         from_index: usize,

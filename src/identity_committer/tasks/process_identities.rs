@@ -141,8 +141,6 @@ impl IdentityCommitter {
         }
     }
 
-    // TODO This can be split into multiple phases. The first would compute the
-    //   batches and the second would mine those batches.
     #[instrument(level = "info", skip_all)]
     async fn commit_identities(
         database: &Database,

@@ -223,6 +223,13 @@ impl IdentityManager {
             Err(anyhow::Error::msg(format!("{root} is not latest root.",)))
         }
     }
+
+    #[instrument(level = "debug", skip_all)]
+    pub async fn latest_root(&self) -> anyhow::Result<U256> {
+        let latest_root = self.abi.latest_root().call().await?;
+
+        Ok(latest_root)
+    }
 }
 
 /// A type for an identity manager object that can be sent across threads.

@@ -110,6 +110,12 @@ impl App {
 
         let database = Arc::new(database);
 
+        // Prefetch latest root & mark it as mined
+        let root_hash = identity_manager.latest_root().await?;
+        let root_hash = root_hash.into();
+
+        database.mark_root_submitted_to_contract(&root_hash).await?;
+
         let tree_state = Self::initialize_tree(
             &database,
             // Poseidon tree depth is one more than the contract's tree depth

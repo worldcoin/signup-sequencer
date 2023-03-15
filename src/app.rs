@@ -110,6 +110,15 @@ impl App {
 
         let database = Arc::new(database);
 
+        // Await for all pending transactions
+        let pending_identities = identity_manager.fetch_pending_identities().await?;
+
+        for pending_identity_tx in pending_identities {
+            identity_manager
+                .mine_identities(pending_identity_tx)
+                .await?;
+        }
+
         // Prefetch latest root & mark it as mined
         let root_hash = identity_manager.latest_root().await?;
         let root_hash = root_hash.into();

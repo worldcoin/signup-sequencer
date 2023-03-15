@@ -79,9 +79,7 @@ impl Ethereum {
         self.write_provider.send_transaction(tx, only_once).await
     }
 
-    pub async fn fetch_pending_transactions(
-        &self,
-    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+    pub async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
         self.write_provider.fetch_pending_transactions().await
     }
 

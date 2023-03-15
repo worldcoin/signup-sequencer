@@ -20,11 +20,10 @@ use crate::{
 mod tasks;
 
 struct RunningInstance {
-    process_identities_handle:       JoinHandle<()>,
-    mine_identities_handle:          JoinHandle<()>,
-    fetch_pending_identities_handle: JoinHandle<()>,
-    wake_up_sender:                  mpsc::Sender<()>,
-    shutdown_sender:                 broadcast::Sender<()>,
+    process_identities_handle: JoinHandle<()>,
+    mine_identities_handle:    JoinHandle<()>,
+    wake_up_sender:            mpsc::Sender<()>,
+    shutdown_sender:           broadcast::Sender<()>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,13 +68,9 @@ impl RunningInstance {
         let _ = self.shutdown_sender.send(());
 
         info!("Awaiting tasks to shutdown.");
-        let (fetch_pending_identities_result, process_identities_result, mine_identities_result) = tokio::join!(
-            self.fetch_pending_identities_handle,
-            self.process_identities_handle,
-            self.mine_identities_handle
-        );
+        let (process_identities_result, mine_identities_result) =
+            tokio::join!(self.process_identities_handle, self.mine_identities_handle);
 
-        fetch_pending_identities_result?;
         process_identities_result?;
         mine_identities_result?;
 
@@ -143,37 +138,6 @@ impl IdentityCommitter {
         let (wake_up_sender, mut wake_up_receiver) = mpsc::channel(1);
         let (pending_identities_sender, pending_identities_receiver) = mpsc::channel(1);
 
-        // This is used to prevent the committer from starting to process identities
-        // before we've submitted all the pending transactions to the channel
-        let (start_processing_sender, start_processing_receiver) = oneshot::channel();
-
-        let fetch_pending_identities_handle = {
-            let mut shutdown_receiver = shutdown_sender.subscribe();
-
-            let identity_manager = self.identity_manager.clone();
-            let batch_tree = self.tree_state.get_batching_tree();
-            let pending_identities_sender = pending_identities_sender.clone();
-
-            spawn_or_abort(async move {
-                select! {
-                    result = Self::fetch_and_enqueue_pending_identities(
-                        start_processing_sender,
-                        &batch_tree,
-                        &identity_manager,
-                        &pending_identities_sender,
-                    ) => {
-                        result?;
-                    }
-                    _ = shutdown_receiver.recv() => {
-                        info!("Woke up by shutdown signal, exiting.");
-                        return Ok(());
-                    }
-                }
-
-                Ok(())
-            })
-        };
-
         let process_identities_handle = {
             let mut shutdown_receiver = shutdown_sender.subscribe();
 
@@ -185,7 +149,6 @@ impl IdentityCommitter {
             spawn_or_abort(async move {
                 select! {
                     result = Self::process_identities(
-                        start_processing_receiver,
                         &database,
                         &identity_manager,
                         &batch_tree,
@@ -233,7 +196,6 @@ impl IdentityCommitter {
         *instance = Some(RunningInstance {
             process_identities_handle,
             mine_identities_handle,
-            fetch_pending_identities_handle,
             wake_up_sender,
             shutdown_sender,
         });

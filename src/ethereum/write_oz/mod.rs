@@ -69,9 +69,7 @@ impl WriteProvider for Provider {
         self.inner.send_transaction(tx, only_once).await
     }
 
-    async fn fetch_pending_transactions(
-        &self,
-    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
         self.inner.fetch_pending_transactions().await
     }
 

@@ -205,9 +205,7 @@ impl IdentityManager {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn fetch_pending_identities(
-        &self,
-    ) -> anyhow::Result<Vec<(TransactionId, RegisterIdentitiesCall)>> {
+    pub async fn fetch_pending_identities(&self) -> anyhow::Result<Vec<TransactionId>> {
         let pending_identities = self.ethereum.fetch_pending_transactions().await?;
 
         Ok(pending_identities)

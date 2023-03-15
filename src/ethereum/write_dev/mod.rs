@@ -148,9 +148,7 @@ impl WriteProvider for Provider {
         self.send_transaction(tx).await
     }
 
-    async fn fetch_pending_transactions(
-        &self,
-    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
         self.fetch_pending_transactions().await
     }
 
@@ -292,9 +290,7 @@ impl Provider {
     }
 
     #[instrument(level = "debug", skip_all)]
-    async fn fetch_pending_transactions(
-        &self,
-    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
         // TODO: This implementation requires changes in the smart contract
         Ok(vec![])
     }

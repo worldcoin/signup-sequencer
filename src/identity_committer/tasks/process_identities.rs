@@ -26,7 +26,6 @@ const DEBOUNCE_THRESHOLD_SECS: u64 = 1;
 
 impl IdentityCommitter {
     pub async fn process_identities(
-        start_processing_receiver: oneshot::Receiver<()>,
         database: &Database,
         identity_manager: &IdentityManager,
         batching_tree: &TreeVersion,
@@ -34,10 +33,6 @@ impl IdentityCommitter {
         pending_identities_sender: &mpsc::Sender<PendingIdentities>,
         timeout_secs: u64,
     ) -> AnyhowResult<()> {
-        // We can ignore the error because it's either going to send us the message or
-        // it gets dropped
-        let _ = start_processing_receiver.await;
-
         info!("Starting identity processor.");
         let batch_size = identity_manager.batch_size();
 

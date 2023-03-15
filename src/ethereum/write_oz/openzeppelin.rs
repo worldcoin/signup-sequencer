@@ -190,31 +190,16 @@ impl OzRelay {
         Ok(())
     }
 
-    pub async fn fetch_pending_transactions(
-        &self,
-    ) -> Result<Vec<(TransactionId, RegisterIdentitiesCall)>, TxError> {
+    pub async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
         let recent_pending_txs = self
             .list_recent_transactions()
             .await
             .map_err(|err| TxError::Fetch(Box::new(err)))?;
 
-        let mut pending_txs = Vec::with_capacity(recent_pending_txs.len());
-
-        for tx in recent_pending_txs {
-            let tx_id = tx.transaction_id;
-            let tx_id = TransactionId(tx_id);
-
-            let Some(data) = tx.data else { continue; };
-            let decoded = match RegisterIdentitiesCall::decode(data) {
-                Ok(decoded) => decoded,
-                Err(err) => {
-                    error!(?err, "Failed to decode transaction data");
-                    continue;
-                }
-            };
-
-            pending_txs.push((tx_id, decoded));
-        }
+        let pending_txs = recent_pending_txs
+            .into_iter()
+            .map(|tx| TransactionId(tx.transaction_id))
+            .collect();
 
         Ok(pending_txs)
     }

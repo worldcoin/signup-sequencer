@@ -131,9 +131,6 @@ impl IdentityManager {
         post_root: U256,
         identity_commitments: &[Identity],
     ) -> anyhow::Result<Proof> {
-        // Ensure that we are not going to submit based on an out of date root anyway.
-        self.assert_latest_root(pre_root.into()).await?;
-
         // We also can't proceed unless the merkle proofs match the known tree depth.
         // Things will break if we do.
         for id in identity_commitments {

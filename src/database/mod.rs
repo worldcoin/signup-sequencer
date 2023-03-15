@@ -200,7 +200,7 @@ impl Database {
         // If this is the first time the sequencer is starting then we will not have any
         // roots in the database.
         let Some(row) = row else { return Ok(()) };
-        let root_leaf_index = row.get::<i64, _>(1);
+        let root_leaf_index = row.get::<i64, _>(0);
 
         let str_mined_status = <&str>::from(Status::Mined);
         let update_root_history_query = sqlx::query(

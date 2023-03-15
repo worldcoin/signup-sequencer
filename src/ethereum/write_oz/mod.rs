@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use crate::contracts::abi::RegisterIdentitiesCall;
 use anyhow::Result as AnyhowResult;
 use async_trait::async_trait;
 use clap::Parser;

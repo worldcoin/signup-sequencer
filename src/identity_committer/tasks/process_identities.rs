@@ -3,11 +3,7 @@ use std::time::{Duration, SystemTime};
 use anyhow::Result as AnyhowResult;
 use ethers::types::U256;
 use semaphore::poseidon_tree::Branch;
-use tokio::{
-    select,
-    sync::{mpsc, oneshot},
-    time,
-};
+use tokio::{select, sync::mpsc, time};
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::{

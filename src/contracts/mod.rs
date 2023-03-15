@@ -1,5 +1,5 @@
 //! Functionality for interacting with smart contracts deployed on chain.
-pub mod abi;
+mod abi;
 
 use std::sync::Arc;
 
@@ -12,7 +12,7 @@ use ethers::{
 use semaphore::Field;
 use tracing::{error, info, instrument};
 
-use self::abi::{BatchingContract as ContractAbi, RegisterIdentitiesCall};
+use self::abi::BatchingContract as ContractAbi;
 use crate::{
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
     prover::{

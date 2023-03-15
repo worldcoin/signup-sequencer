@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::contracts::abi::RegisterIdentitiesCall;
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use ethers::types::{transaction::eip2718::TypedTransaction, Address};

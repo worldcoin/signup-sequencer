@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 use prometheus::{register_gauge, Gauge};
 use tokio::{
     select,
-    sync::{broadcast, mpsc, mpsc::error::TrySendError, oneshot, RwLock},
+    sync::{broadcast, mpsc, mpsc::error::TrySendError, RwLock},
     task::JoinHandle,
 };
 use tracing::{debug, info, instrument, warn};

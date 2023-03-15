@@ -1,7 +1,7 @@
 use std::{fmt::Debug, time::Duration};
 
 use anyhow::Result as AnyhowResult;
-use ethers::{abi::AbiDecode, types::transaction::eip2718::TypedTransaction};
+use ethers::types::transaction::eip2718::TypedTransaction;
 use once_cell::sync::Lazy;
 use oz_api::{
     data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status},
@@ -12,10 +12,7 @@ use tokio::time::timeout;
 use tracing::{error, info, info_span, Instrument};
 
 use super::{error::Error, Options};
-use crate::{
-    contracts::abi::RegisterIdentitiesCall,
-    ethereum::{write::TransactionId, TxError},
-};
+use crate::ethereum::{write::TransactionId, TxError};
 
 const DEFENDER_RELAY_URL: &str = "https://api.defender.openzeppelin.com";
 

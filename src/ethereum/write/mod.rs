@@ -7,8 +7,6 @@ use ethers::{
 };
 use thiserror::Error;
 
-use crate::contracts::abi::RegisterIdentitiesCall;
-
 #[derive(Clone, Debug)]
 pub struct TransactionId(pub String);
 

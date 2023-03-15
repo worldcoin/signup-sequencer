@@ -191,7 +191,7 @@ impl Database {
 
         let root_leaf_index_query = sqlx::query(
             r#"
-            SELECT leaf_index FROM root_history WHERE root = $1
+            SELECT last_index FROM root_history WHERE root = $1
             "#,
         )
         .bind(root);
@@ -200,14 +200,14 @@ impl Database {
         // If this is the first time the sequencer is starting then we will not have any
         // roots in the database.
         let Some(row) = row else { return Ok(()) };
-        let root_leaf_index = row.get::<i64, _>(1);
+        let root_leaf_index = row.get::<i64, _>(0);
 
         let str_mined_status = <&str>::from(Status::Mined);
         let update_root_history_query = sqlx::query(
             r#"
             UPDATE root_history
             SET status = $1, mined_at = CURRENT_TIMESTAMP
-            WHERE leaf_index <= $2
+            WHERE last_index <= $2
             "#,
         )
         .bind(str_mined_status)

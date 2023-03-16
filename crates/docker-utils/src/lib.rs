@@ -69,7 +69,10 @@ fn run_cmd(cmd_str: &str) {
 
 fn parse_exposed_port(s: &str) -> u16 {
     let parts: Vec<_> = s.split(":").collect();
-    parts[1].parse().unwrap()
+
+    parts[1]
+        .parse()
+        .expect(&format!("Failed to parse port from {}", s))
 }
 
 #[cfg(test)]

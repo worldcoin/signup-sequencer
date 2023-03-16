@@ -116,7 +116,7 @@ impl App {
         for pending_identity_tx in pending_identities {
             // Ignores the result of each transaction - we only care about a clean slate in
             // terms of pending transactions
-            let _ = identity_manager.mine_identities(pending_identity_tx).await;
+            drop(identity_manager.mine_identities(pending_identity_tx).await);
         }
 
         // Prefetch latest root & mark it as mined

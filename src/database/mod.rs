@@ -3,10 +3,9 @@
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
 use sqlx::{
-    any::AnyKind,
     migrate::{Migrate, MigrateDatabase, Migrator},
     pool::PoolOptions,
-    Any, Executor, Pool, Row,
+    Executor, Pool, Postgres, Row,
 };
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
@@ -21,9 +20,7 @@ static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 pub struct Options {
     /// Database server connection string.
     /// Example: `postgres://user:password@localhost:5432/database`
-    /// Sqlite file: ``
-    /// In memory DB: `sqlite::memory:`
-    #[clap(long, env, default_value = "sqlite::memory:")]
+    #[clap(long, env)]
     pub database: Url,
 
     /// Allow creation or migration of the database schema.
@@ -36,7 +33,7 @@ pub struct Options {
 }
 
 pub struct Database {
-    pool: Pool<Any>,
+    pool: Pool<Postgres>,
 }
 
 impl Database {
@@ -45,34 +42,26 @@ impl Database {
         info!(url = %&options.database, "Connecting to database");
 
         // Create database if requested and does not exist
-        if options.database_migrate && !Any::database_exists(options.database.as_str()).await? {
-            warn!(url = %&options.database, "Database does not exist, creating
-        database");
-            Any::create_database(options.database.as_str()).await?;
+        if options.database_migrate && !Postgres::database_exists(options.database.as_str()).await?
+        {
+            warn!(url = %&options.database, "Database does not exist, creating database");
+            Postgres::create_database(options.database.as_str()).await?;
         }
 
         // Create a connection pool
-        let pool = PoolOptions::<Any>::new()
+        let pool = PoolOptions::<Postgres>::new()
             .max_connections(options.database_max_connections)
             .connect(options.database.as_str())
             .await
             .context("error connecting to database")?;
 
-        // Log DB version to test connection.
-        let sql = match pool.any_kind() {
-            AnyKind::Sqlite => "sqlite_version() || ' ' || sqlite_source_id()",
-            AnyKind::Postgres => "version()",
-
-            // Depending on compilation flags there may be more patterns.
-            #[allow(unreachable_patterns)]
-            _ => "'unknown'",
-        };
         let version = pool
-            .fetch_one(format!("SELECT {sql};").as_str())
+            .fetch_one(format!("SELECT version();").as_str())
             .await
             .context("error getting database version")?
             .get::<String, _>(0);
-        info!(url = %&options.database, kind = ?pool.any_kind(), ?version, "Connected to database");
+
+        info!(url = %&options.database, ?version, "Connected to database");
 
         // Run migrations if requested.
         let latest = MIGRATOR.migrations.last().unwrap().version;
@@ -391,85 +380,80 @@ mod test {
     use std::time::Duration;
 
     use chrono::Utc;
-    use clap::Parser;
+    use reqwest::Url;
     use semaphore::Field;
 
+    use super::{Database, Options};
     use crate::identity_tree::Status;
 
-    use super::{Database, Options};
-
     #[tokio::test]
-    async fn test_root_invalidation() {
-        let db = Database::new(Options::try_parse_from([""]).unwrap())
-            .await
-            .unwrap();
+    async fn test_root_invalidation() -> anyhow::Result<()> {
+        let db_container = docker_utils::setup().await?;
+        let port = db_container.port();
+
+        let url = format!("postgres://postgres:postgres@localhost:{port}/database");
+
+        let db = Database::new(Options {
+            database:                 Url::parse(&url)?,
+            database_migrate:         true,
+            database_max_connections: 10,
+        })
+        .await?;
 
         let identities = (1..5).map(Field::from).collect::<Vec<_>>();
         let roots = (1..5).map(Field::from).collect::<Vec<_>>();
-        db.insert_identity_if_does_not_exist(&identities[0])
-            .await
-            .unwrap();
-        db.insert_pending_root(&roots[0], &identities[0], 0)
-            .await
-            .unwrap();
+        db.insert_identity_if_does_not_exist(&identities[0]).await?;
+        db.insert_pending_root(&roots[0], &identities[0], 0).await?;
 
         // Invalid root returns None
-        assert!(db.get_root_state(&roots[1]).await.unwrap().is_none());
+        assert!(db.get_root_state(&roots[1]).await?.is_none());
 
         // Basic scenario, latest pending root
-        let root_item = db.get_root_state(&roots[0]).await.unwrap().unwrap();
+        let root_item = db.get_root_state(&roots[0]).await?.unwrap();
         assert_eq!(roots[0], root_item.root);
         assert!(matches!(root_item.status, Status::Pending));
         assert!(root_item.mined_valid_as_of.is_none());
 
         // Inserting a new pending root sets invalidation time for the previous root
-        db.insert_identity_if_does_not_exist(&identities[1])
-            .await
-            .unwrap();
-        db.insert_identity_if_does_not_exist(&identities[2])
-            .await
-            .unwrap();
-        db.insert_pending_root(&roots[1], &identities[2], 2)
-            .await
-            .unwrap();
+        db.insert_identity_if_does_not_exist(&identities[1]).await?;
+        db.insert_identity_if_does_not_exist(&identities[2]).await?;
+        db.insert_pending_root(&roots[1], &identities[2], 2).await?;
         let root_1_inserted_at = Utc::now();
 
-        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for SQLite time resolution
+        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
 
-        let root_item_0 = db.get_root_state(&roots[0]).await.unwrap().unwrap();
-        let root_item_1 = db.get_root_state(&roots[1]).await.unwrap().unwrap();
+        let root_item_0 = db.get_root_state(&roots[0]).await?.unwrap();
+        let root_item_1 = db.get_root_state(&roots[1]).await?.unwrap();
 
         assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
         assert!(root_item_1.pending_valid_as_of > root_1_inserted_at);
 
         // Test mined roots
-        db.insert_identity_if_does_not_exist(&identities[3])
-            .await
-            .unwrap();
-        db.insert_pending_root(&roots[2], &identities[3], 3)
-            .await
-            .unwrap();
+        db.insert_identity_if_does_not_exist(&identities[3]).await?;
+        db.insert_pending_root(&roots[2], &identities[3], 3).await?;
         db.mark_identities_submitted_to_contract(&roots[2], &[0, 1, 2, 3])
-            .await
-            .unwrap();
+            .await?;
+
         let root_2_mined_at = Utc::now();
 
-        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for SQLite time resolution
+        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
 
-        let root_item_2 = db.get_root_state(&roots[2]).await.unwrap().unwrap();
+        let root_item_2 = db.get_root_state(&roots[2]).await?.unwrap();
         assert!(matches!(root_item_2.status, Status::Mined));
         assert!(root_item_2.mined_valid_as_of.is_some());
 
-        let root_item_1 = db.get_root_state(&roots[1]).await.unwrap().unwrap();
+        let root_item_1 = db.get_root_state(&roots[1]).await?.unwrap();
         assert!(matches!(root_item_1.status, Status::Pending));
         assert!(root_item_1.mined_valid_as_of.unwrap() < root_2_mined_at);
         assert!(root_item_1.pending_valid_as_of < root_2_mined_at);
 
-        let root_item_0 = db.get_root_state(&roots[0]).await.unwrap().unwrap();
+        let root_item_0 = db.get_root_state(&roots[0]).await?.unwrap();
         assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
         assert!(matches!(root_item_0.status, Status::Pending));
         assert!(root_item_0.mined_valid_as_of.unwrap() < root_2_mined_at);
         assert!(root_item_0.mined_valid_as_of.unwrap() > root_1_inserted_at);
         assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
+
+        Ok(())
     }
 }

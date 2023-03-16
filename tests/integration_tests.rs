@@ -35,7 +35,6 @@ use semaphore::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tempfile::tempdir;
 use tokio::{spawn, task::JoinHandle};
 use tracing::{error, info, instrument};
 use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
@@ -51,15 +50,16 @@ async fn validate_proofs() {
     init_tracing_subscriber();
     info!("Starting integration test");
 
-    let db_dir = tempdir().unwrap();
-    let db = db_dir.path().join("test.db");
+    let db_container = docker_utils::setup().await.unwrap();
+    let port = db_container.port();
+    let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
     let mut options = Options::try_parse_from([
         "signup-sequencer",
         "--identity-manager-address",
         "0x0000000000000000000000000000000000000000", // placeholder, updated below
         "--database",
-        &format!("sqlite://{}", db.to_str().unwrap()),
+        &db_url,
         "--database-max-connections",
         "1",
         "--tree-depth",
@@ -207,8 +207,10 @@ async fn insert_identity_and_proofs() {
     init_tracing_subscriber();
     info!("Starting integration test");
 
-    let db_dir = tempdir().unwrap();
-    let db = db_dir.path().join("test.db");
+    let db_container = docker_utils::setup().await.unwrap();
+    let port = db_container.port();
+    let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
+
     let batch_size: usize = 3;
 
     let mut options = Options::try_parse_from([
@@ -216,7 +218,7 @@ async fn insert_identity_and_proofs() {
         "--identity-manager-address",
         "0x0000000000000000000000000000000000000000", // placeholder, updated below
         "--database",
-        &format!("sqlite://{}", db.to_str().unwrap()),
+        &db_url,
         "--database-max-connections",
         "1",
         "--tree-depth",

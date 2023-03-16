@@ -71,3 +71,13 @@ fn parse_exposed_port(s: &str) -> u16 {
     let parts: Vec<_> = s.split(":").collect();
     parts[1].parse().unwrap()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_exposed_port() {
+        assert_eq!(parse_exposed_port("0.0.0.0:55837"), 55837);
+    }
+}

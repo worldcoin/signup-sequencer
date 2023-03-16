@@ -56,7 +56,7 @@ impl Database {
             .context("error connecting to database")?;
 
         let version = pool
-            .fetch_one(format!("SELECT version();").as_str())
+            .fetch_one("SELECT version()")
             .await
             .context("error getting database version")?
             .get::<String, _>(0);

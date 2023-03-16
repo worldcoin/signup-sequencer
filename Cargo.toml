@@ -67,6 +67,7 @@ url = "2.2"
 # `cargo update --package primitive-types@0.12.1 --precise 0.11.1`
 
 [dev-dependencies]
+docker-utils = { path = "crates/docker-utils" }
 cli-batteries = { version = "0.4.0", features = ["mock-shutdown"] }
 hex = "0.4.3"
 hex-literal = "0.3"

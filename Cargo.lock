@@ -2038,6 +2038,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "docker-utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tokio",
+]
+
+[[package]]
 name = "dotenvy"
 version = "0.15.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5434,6 +5442,7 @@ dependencies = [
  "cli-batteries",
  "cognitoauth",
  "criterion 0.4.0",
+ "docker-utils",
  "ethers",
  "eyre",
  "futures",

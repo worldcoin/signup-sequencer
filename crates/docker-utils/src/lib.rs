@@ -71,8 +71,9 @@ fn parse_exposed_port(s: &str) -> u16 {
     let parts: Vec<_> = s.split(":").collect();
 
     parts[1]
+        .trim()
         .parse()
-        .expect(&format!("Failed to parse port from {}", s))
+        .expect(&format!("Failed to parse port from `{}`", s))
 }
 
 #[cfg(test)]
@@ -81,6 +82,8 @@ mod tests {
 
     #[test]
     fn test_parse_exposed_port() {
+        assert_eq!(parse_exposed_port("0.0.0.0:55837 "), 55837);
         assert_eq!(parse_exposed_port("0.0.0.0:55837"), 55837);
+        assert_eq!(parse_exposed_port("  0.0.0.0  :   55837   "), 55837);
     }
 }

@@ -1,3 +1,5 @@
+use std::{str::FromStr, sync::Arc};
+
 use chrono::Utc;
 use semaphore::{
     merkle_tree::Hasher,
@@ -5,7 +7,6 @@ use semaphore::{
     Field,
 };
 use serde::Serialize;
-use std::{str::FromStr, sync::Arc};
 use thiserror::Error;
 use tokio::sync::RwLock;
 
@@ -193,6 +194,25 @@ impl TreeVersion {
             .for_each(|update| {
                 data.update(update.leaf_index, update.element);
             });
+    }
+
+    pub async fn append_many_fresh_return_roots<'t>(
+        &self,
+        updates: &'t [TreeUpdate],
+    ) -> Vec<(&'t TreeUpdate, Hash)> {
+        let mut data = self.0.write().await;
+        let next_leaf = data.next_leaf;
+
+        updates
+            .iter()
+            .filter(|update| update.leaf_index >= next_leaf)
+            .map(|update| {
+                data.update(update.leaf_index, update.element);
+                let root = data.get_root();
+
+                (update, root)
+            })
+            .collect()
     }
 
     pub async fn next_leaf(&self) -> usize {

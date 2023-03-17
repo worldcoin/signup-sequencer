@@ -3,6 +3,8 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Context;
+
 pub struct DockerContainerGuard {
     container_id:   String,
     container_port: u16,
@@ -16,10 +18,14 @@ impl DockerContainerGuard {
 
 impl Drop for DockerContainerGuard {
     fn drop(&mut self) {
-        run_cmd(&format!("docker stop {}", &self.container_id));
+        if let Err(err) = run_cmd(&format!("docker stop {}", &self.container_id)) {
+            eprintln!("Failed to stop docker container: {}", err);
+        }
 
         // Redundant, but better safe than sorry
-        run_cmd(&format!("docker rm {}", &self.container_id));
+        if let Err(err) = run_cmd(&format!("docker rm {}", &self.container_id)) {
+            eprintln!("Failed to remove docker container: {}", err);
+        }
     }
 }
 
@@ -32,12 +38,14 @@ impl Drop for DockerContainerGuard {
 pub async fn setup() -> anyhow::Result<DockerContainerGuard> {
     let container_id = run_cmd_to_output(&format!(
         "docker run --rm -d -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432 postgres",
-    ));
+    ))
+    .context("Starting the Postgres container")?;
 
-    let exposed_port = run_cmd_to_output(&format!("docker container port {container_id} 5432"));
-    let container_port = parse_exposed_port(&exposed_port);
+    let exposed_port = run_cmd_to_output(&format!("docker container port {container_id} 5432"))
+        .context("Fetching container exposed port")?;
+    let container_port = parse_exposed_port(&exposed_port)?;
 
-    std::thread::sleep(Duration::from_secs_f32(1.0));
+    std::thread::sleep(Duration::from_secs_f32(2.0));
 
     Ok(DockerContainerGuard {
         container_id,
@@ -45,7 +53,7 @@ pub async fn setup() -> anyhow::Result<DockerContainerGuard> {
     })
 }
 
-fn run_cmd_to_output(cmd_str: &str) -> String {
+fn run_cmd_to_output(cmd_str: &str) -> anyhow::Result<String> {
     let args: Vec<_> = cmd_str.split(" ").collect();
     let mut command = Command::new(args[0]);
 
@@ -57,23 +65,27 @@ fn run_cmd_to_output(cmd_str: &str) -> String {
     command.stderr(Stdio::null());
 
     let Ok(output) = command.output() else {
-        return String::new();
+        return Ok(String::new());
     };
 
-    String::from_utf8(output.stdout).unwrap().trim().to_string()
+    let utf = String::from_utf8(output.stdout)?;
+
+    Ok(utf.trim().to_string())
 }
 
-fn run_cmd(cmd_str: &str) {
-    run_cmd_to_output(cmd_str);
+fn run_cmd(cmd_str: &str) -> anyhow::Result<()> {
+    run_cmd_to_output(cmd_str)?;
+
+    Ok(())
 }
 
-fn parse_exposed_port(s: &str) -> u16 {
+fn parse_exposed_port(s: &str) -> anyhow::Result<u16> {
     let parts: Vec<_> = s.split(":").collect();
 
-    parts[1]
+    Ok(parts[1]
         .trim()
         .parse()
-        .expect(&format!("Failed to parse port from `{}`", s))
+        .with_context(|| format!("Parsing `{s}`"))?)
 }
 
 #[cfg(test)]
@@ -82,8 +94,11 @@ mod tests {
 
     #[test]
     fn test_parse_exposed_port() {
-        assert_eq!(parse_exposed_port("0.0.0.0:55837 "), 55837);
-        assert_eq!(parse_exposed_port("0.0.0.0:55837"), 55837);
-        assert_eq!(parse_exposed_port("  0.0.0.0  :   55837   "), 55837);
+        assert_eq!(parse_exposed_port("0.0.0.0:55837 ").unwrap(), 55837);
+        assert_eq!(parse_exposed_port("0.0.0.0:55837").unwrap(), 55837);
+        assert_eq!(
+            parse_exposed_port("  0.0.0.0  :   55837   ").unwrap(),
+            55837
+        );
     }
 }

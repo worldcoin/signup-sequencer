@@ -196,7 +196,7 @@ impl TreeVersion {
             });
     }
 
-    pub async fn append_many_fresh_return_roots<'t>(
+    pub async fn append_many_fresh_with_intermediate_roots<'t>(
         &self,
         updates: &'t [TreeUpdate],
     ) -> Vec<(&'t TreeUpdate, Hash)> {

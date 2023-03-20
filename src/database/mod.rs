@@ -388,7 +388,7 @@ mod test {
 
     #[tokio::test]
     async fn test_root_invalidation() -> anyhow::Result<()> {
-        let db_container = docker_utils::setup().await?;
+        let db_container = postgres_docker_utils::setup().await?;
         let port = db_container.port();
 
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");

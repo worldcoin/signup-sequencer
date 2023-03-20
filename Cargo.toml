@@ -68,7 +68,7 @@ url = "2.2"
 
 [dev-dependencies]
 cli-batteries = { version = "0.4.0", features = ["mock-shutdown"] }
-docker-utils = { path = "crates/docker-utils" }
+postgres-docker-utils = { path = "crates/postgres-docker-utils" }
 hex = "0.4.3"
 hex-literal = "0.3"
 proptest = { version = "1.0" }

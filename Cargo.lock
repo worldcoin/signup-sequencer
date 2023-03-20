@@ -2038,14 +2038,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "docker-utils"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "tokio",
-]
-
-[[package]]
 name = "dotenvy"
 version = "0.15.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4332,6 +4324,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "postgres-docker-utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tokio",
+]
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5419,7 +5419,6 @@ dependencies = [
  "cli-batteries",
  "cognitoauth",
  "criterion 0.4.0",
- "docker-utils",
  "ethers",
  "eyre",
  "futures",
@@ -5429,6 +5428,7 @@ dependencies = [
  "hyper",
  "once_cell",
  "oz-api",
+ "postgres-docker-utils",
  "prometheus",
  "proptest",
  "regex",

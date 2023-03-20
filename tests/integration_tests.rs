@@ -50,7 +50,7 @@ async fn validate_proofs() {
     init_tracing_subscriber();
     info!("Starting integration test");
 
-    let db_container = docker_utils::setup().await.unwrap();
+    let db_container = postgres_docker_utils::setup().await.unwrap();
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
@@ -207,7 +207,7 @@ async fn insert_identity_and_proofs() {
     init_tracing_subscriber();
     info!("Starting integration test");
 
-    let db_container = docker_utils::setup().await.unwrap();
+    let db_container = postgres_docker_utils::setup().await.unwrap();
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
 

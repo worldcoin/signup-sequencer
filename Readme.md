@@ -17,7 +17,7 @@ Install [Docker](https://docs.docker.com/get-docker/) - Docker is used to setup 
 
 Fetch the [postgres](https://hub.docker.com/_/postgres) docker image before running tests.
 
-```
+```shell
 docker pull postgres
 ```
 

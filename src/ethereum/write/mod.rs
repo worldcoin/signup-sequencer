@@ -17,6 +17,7 @@ impl AsRef<str> for TransactionId {
 }
 
 #[derive(Debug, Error)]
+#[allow(dead_code)] // Unused variants
 pub enum TxError {
     #[error("Error filling transaction: {0}")]
     Fill(Box<dyn Error + Send + Sync + 'static>),

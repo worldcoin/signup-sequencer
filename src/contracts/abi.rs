@@ -16,8 +16,9 @@ abigen!(
         error ExpiredRoot()
         error NonExistentRoot()
         error ImplementationNotInitalized()
+        error NoSuchVerifier()
         constructor(address _logic, bytes memory data) payable
-        function initialize(uint256 initialRoot, address merkleTreeVerifier_, bool _enableStateBridge, address initialStateBridgeProxyAddress) public virtual
+        function initialize(uint256 initialRoot, address _batchInsertionVerifiers, address _batchUpdateVerifiers, address _semaphoreVerifier, bool _enableStateBridge, address initialStateBridgeProxyAddress) public virtual
         function registerIdentities(uint256[8] calldata insertionProof, uint256 preRoot, uint32 startIndex, uint256[] calldata identityCommitments, uint256 postRoot) public virtual
         function removeIdentities(uint256[8] calldata removalProof, uint256 preRoot, IdentityUpdate[] calldata removedIdentities, uint256 postRoot) public virtual
         function updateIdentities(uint256[8] calldata updateProof, uint256 preRoot, IdentityUpdate[] calldata updatedIdentities, uint256 postRoot) public virtual
@@ -27,10 +28,10 @@ abigen!(
         function queryRoot(uint256 root) public view virtual returns (RootInfo memory rootInfo)
         function isInputInReducedForm(uint256 input) public view virtual returns (bool isInReducedForm)
         function checkValidRoot(uint256 root) public view virtual returns (bool)
-        function getRegisterIdentitiesVerifierAddress() public view virtual returns (address addr)
-        function setRegisterIdentitiesVerifier(address newVerifier) public virtual
-        function getIdentityUpdateVerifierAddress() public view virtual returns (address addr)
-        function setIdentityUpdateVerifier(address newVerifier) public virtual
+        function getRegisterIdentitiesVerifierLookupTableAddress() public view virtual returns (address addr)
+        function setRegisterIdentitiesVerifierLookupTable(address newVerifier) public virtual
+        function getIdentityUpdateVerifierLookupTableAddress() public view virtual returns (address addr)
+        function setIdentityUpdateVerifierLookupTable(address newVerifier) public virtual
         function getSemaphoreVerifierAddress() public view virtual returns (address addr)
         function setSemaphoreVerifier(address newVerifier) public virtual
         function getRootHistoryExpiry() public view virtual returns (uint256 expiryTime)

@@ -2,6 +2,7 @@
 
 mod abi;
 mod prover_mock;
+
 use std::{
     fs::File,
     io::BufReader,
@@ -16,8 +17,9 @@ use ethers::{
     abi::{AbiEncode, Address},
     core::{abi::Abi, k256::ecdsa::SigningKey, rand},
     prelude::{
-        artifacts::Bytecode, ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider,
-        Signer, SignerMiddleware, Wallet,
+        artifacts::{Bytecode, BytecodeObject},
+        ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
+        SignerMiddleware, Wallet,
     },
     providers::Middleware,
     types::{Bytes, H256, U256},
@@ -74,7 +76,7 @@ async fn validate_proofs() {
     );
     let initial_root: U256 = ref_tree.root().into();
     let (chain, private_key, identity_manager_address, prover_mock) =
-        spawn_mock_chain(initial_root)
+        spawn_mock_chain(initial_root, 3)
             .await
             .expect("Failed to spawn mock chain");
 
@@ -237,7 +239,7 @@ async fn insert_identity_and_proofs() {
     );
     let initial_root: U256 = ref_tree.root().into();
     let (chain, private_key, identity_manager_address, prover_mock) =
-        spawn_mock_chain(initial_root)
+        spawn_mock_chain(initial_root, batch_size)
             .await
             .expect("Failed to spawn mock chain");
 
@@ -645,6 +647,7 @@ struct CompiledContract {
 #[instrument(skip_all)]
 async fn spawn_mock_chain(
     initial_root: U256,
+    batch_size: usize,
 ) -> anyhow::Result<(AnvilInstance, H256, Address, prover_mock::Service)> {
     let chain = Anvil::new().block_time(2u64).spawn();
     let private_key = H256::from_slice(&chain.keys()[0].to_be_bytes());
@@ -662,7 +665,41 @@ async fn spawn_mock_chain(
     let client = NonceManagerMiddleware::new(client, wallet.address());
     let client = Arc::new(client);
 
-    // Load the contracts to push to the mock chain
+    // Loading the semaphore verifier contract is special as it requires replacing
+    // the address of the Pairing library.
+    let pairing_library_factory = load_and_build_contract("./sol/Pairing.json", client.clone())?;
+    let pairing_library = pairing_library_factory
+        .deploy(())?
+        .confirmations(0usize)
+        .send()
+        .await?;
+
+    let verifier_path = "./sol/Verifier.json";
+    let verifier_file =
+        File::open(verifier_path).unwrap_or_else(|_| panic!("Failed to open `{verifier_path}`"));
+    let verifier_contract_json: CompiledContract =
+        serde_json::from_reader(BufReader::new(verifier_file))
+            .unwrap_or_else(|_| panic!("Could not parse the compiled contract at {verifier_path}"));
+    let mut verifier_bytecode_object: BytecodeObject = verifier_contract_json.bytecode.object;
+    verifier_bytecode_object.link_fully_qualified("Pairing.sol:Pairing", pairing_library.address());
+    if verifier_bytecode_object.is_unlinked() {
+        panic!("Could not link the Pairing library into the Verifier.");
+    }
+    let bytecode_bytes = verifier_bytecode_object.as_bytes().unwrap_or_else(|| {
+        panic!("Could not parse the bytecode for the contract at {verifier_path}")
+    });
+    let verifier_factory = ContractFactory::new(
+        verifier_contract_json.abi,
+        bytecode_bytes.clone(),
+        client.clone(),
+    );
+    let verifier = verifier_factory
+        .deploy(())?
+        .confirmations(0usize)
+        .send()
+        .await?;
+
+    // The rest of the contracts can be deployed to the mock chain normally.
     let mock_state_bridge_factory =
         load_and_build_contract("./sol/SimpleStateBridge.json", client.clone())?;
     let mock_state_bridge = mock_state_bridge_factory
@@ -679,6 +716,28 @@ async fn spawn_mock_chain(
         .send()
         .await?;
 
+    let unimplemented_verifier_factory =
+        load_and_build_contract("./sol/UnimplementedTreeVerifier.json", client.clone())?;
+    let unimplemented_verifier = unimplemented_verifier_factory
+        .deploy(())?
+        .confirmations(0usize)
+        .send()
+        .await?;
+
+    let verifier_lookup_table_factory =
+        load_and_build_contract("./sol/VerifierLookupTable.json", client.clone())?;
+    let insert_verifiers = verifier_lookup_table_factory
+        .clone()
+        .deploy((batch_size as u64, mock_verifier.address()))?
+        .confirmations(0usize)
+        .send()
+        .await?;
+    let update_verifiers = verifier_lookup_table_factory
+        .deploy((batch_size as u64, unimplemented_verifier.address()))?
+        .confirmations(0usize)
+        .send()
+        .await?;
+
     let identity_manager_impl_factory =
         load_and_build_contract("./sol/WorldIDIdentityManagerImplV1.json", client.clone())?;
     let identity_manager_impl = identity_manager_impl_factory
@@ -690,12 +749,13 @@ async fn spawn_mock_chain(
     let identity_manager_factory =
         load_and_build_contract("./sol/WorldIDIdentityManager.json", client.clone())?;
     let state_bridge_address = mock_state_bridge.address();
-    let verifier_address = mock_verifier.address();
     let enable_state_bridge = true;
     let identity_manager_impl_address = identity_manager_impl.address();
     let init_call_data = ContractAbi::InitializeCall {
         initial_root,
-        merkle_tree_verifier: verifier_address,
+        batch_insertion_verifiers: insert_verifiers.address(),
+        batch_update_verifiers: update_verifiers.address(),
+        semaphore_verifier: verifier.address(),
         enable_state_bridge,
         initial_state_bridge_proxy_address: state_bridge_address,
     };

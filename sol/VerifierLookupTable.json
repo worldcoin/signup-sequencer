@@ -1,0 +1,2978 @@
+{
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "initialBatchSize",
+          "type": "uint256"
+        },
+        {
+          "internalType": "contract ITreeVerifier",
+          "name": "initialVerifier",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "requestedBatch",
+          "type": "uint256"
+        }
+      ],
+      "name": "BatchTooLarge",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "NoSuchVerifier",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "VerifierExists",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "batchSize",
+          "type": "uint256"
+        },
+        {
+          "internalType": "contract ITreeVerifier",
+          "name": "verifier",
+          "type": "address"
+        }
+      ],
+      "name": "addVerifier",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "batchSize",
+          "type": "uint256"
+        }
+      ],
+      "name": "disableVerifier",
+      "outputs": [
+        {
+          "internalType": "contract ITreeVerifier",
+          "name": "oldVerifier",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "batchSize",
+          "type": "uint256"
+        }
+      ],
+      "name": "getVerifierFor",
+      "outputs": [
+        {
+          "internalType": "contract ITreeVerifier",
+          "name": "verifier",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "maximumBatchSize",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "batchSize",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "pure",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "batchSize",
+          "type": "uint256"
+        },
+        {
+          "internalType": "contract ITreeVerifier",
+          "name": "verifier",
+          "type": "address"
+        }
+      ],
+      "name": "updateVerifier",
+      "outputs": [
+        {
+          "internalType": "contract ITreeVerifier",
+          "name": "oldVerifier",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": {
+    "object": "0x608060405234801561001057600080fd5b5060405161071638038061071683398101604081905261002f916101f0565b61003833610049565b6100428282610099565b5050610243565b600080546001600160a01b038381166001600160a01b0319831681178455604051919092169283917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09190a35050565b6100a16100f8565b6100aa82610159565b60006001836103e981106100c0576100c061022d565b01546001600160a01b0316146100e957604051630b832ba160e41b815260040160405180910390fd5b6100f38282610182565b505050565b6000546001600160a01b031633146101575760405162461bcd60e51b815260206004820181905260248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e657260448201526064015b60405180910390fd5b565b6103e881111561017f5760405163533dcfcf60e11b81526004810182905260240161014e565b50565b600061018c6100f8565b61019583610159565b6001836103e981106101a9576101a961022d565b01546001600160a01b03169050816001846103e981106101cb576101cb61022d565b0180546001600160a01b0319166001600160a01b039290921691909117905592915050565b6000806040838503121561020357600080fd5b825160208401519092506001600160a01b038116811461022257600080fd5b809150509250929050565b634e487b7160e01b600052603260045260246000fd5b6104c4806102526000396000f3fe608060405234801561001057600080fd5b50600436106100885760003560e01c80638a283fc31161005b5780638a283fc3146100ea5780638da5cb5b146100fd578063b28320961461010e578063f2fde38b1461012157600080fd5b8063245b3ef31461008d578063293de354146100bd578063715018a6146100d05780637aa414cb146100da575b600080fd5b6100a061009b3660046103f6565b610134565b6040516001600160a01b0390911681526020015b60405180910390f35b6100a06100cb366004610424565b61014f565b6100d86101bd565b005b6040516103e881526020016100b4565b6100a06100f83660046103f6565b6101d1565b6000546001600160a01b03166100a0565b6100d861011c366004610424565b610201565b6100d861012f366004610454565b610260565b600061013e6102de565b61014982600061014f565b92915050565b60006101596102de565b61016283610338565b6001836103e9811061017657610176610478565b01546001600160a01b03169050816001846103e9811061019857610198610478565b0180546001600160a01b0319166001600160a01b039290921691909117905592915050565b6101c56102de565b6101cf600061035e565b565b60006101dc826103ae565b6001826103e981106101f0576101f0610478565b01546001600160a01b031692915050565b6102096102de565b61021282610338565b60006001836103e9811061022857610228610478565b01546001600160a01b03161461025157604051630b832ba160e41b815260040160405180910390fd5b61025b828261014f565b505050565b6102686102de565b6001600160a01b0381166102d25760405162461bcd60e51b815260206004820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201526564647265737360d01b60648201526084015b60405180910390fd5b6102db8161035e565b50565b6000546001600160a01b031633146101cf5760405162461bcd60e51b815260206004820181905260248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e657260448201526064016102c9565b6103e88111156102db5760405163533dcfcf60e11b8152600481018290526024016102c9565b600080546001600160a01b038381166001600160a01b0319831681178455604051919092169283917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09190a35050565b6103b781610338565b60006001826103e981106103cd576103cd610478565b01546001600160a01b0316036102db576040516312ea862760e21b815260040160405180910390fd5b60006020828403121561040857600080fd5b5035919050565b6001600160a01b03811681146102db57600080fd5b6000806040838503121561043757600080fd5b8235915060208301356104498161040f565b809150509250929050565b60006020828403121561046657600080fd5b81356104718161040f565b9392505050565b634e487b7160e01b600052603260045260246000fdfea2646970667358221220f6a9ab81b5b064d17e8e605e3dbfda8556a431d27cf04b2a35490df0e3716c8164736f6c63430008130033",
+    "sourceMap": "470:7093:32:-:0;;;2681:142;;;;;;;;;;;;;;;;;;;;;;;;;;;;:::i;:::-;936:32:15;719:10:22;936:18:15;:32::i;:::-;2770:46:32::1;2782:16:::0;2800:15;2770:11:::1;:46::i;:::-;2681:142:::0;;470:7093;;2433:187:15;2506:16;2525:6;;-1:-1:-1;;;;;2541:17:15;;;-1:-1:-1;;;;;;2541:17:15;;;;;;2573:40;;2525:6;;;;;;;2573:40;;2506:16;2573:40;2496:124;2433:187;:::o;4273:421:32:-;1094:13:15;:11;:13::i;:::-;4420:28:32::1;4438:9:::0;4420:17:::1;:28::i;:::-;991:3;4524:12;4537:9:::0;4524:23:::1;::::0;::::1;;;;;:::i;:::-;;::::0;-1:-1:-1;;;;;4524:23:32::1;:39;4520:93;;4586:16;;-1:-1:-1::0;;;4586:16:32::1;;;;;;;;;;;4520:93;4652:35;4667:9:::0;4678:8;4652:14:::1;:35::i;:::-;;4273:421:::0;;:::o;1359:130:15:-;1247:7;1273:6;-1:-1:-1;;;;;1273:6:15;719:10:22;1422:23:15;1414:68;;;;-1:-1:-1;;;1414:68:15;;727:2:73;1414:68:15;;;709:21:73;;;746:18;;;739:30;805:34;785:18;;;778:62;857:18;;1414:68:15;;;;;;;;;1359:130::o;6851:168:32:-;906:4;6925:9;:30;6921:92;;;6978:24;;-1:-1:-1;;;6978:24:32;;;;;1032:25:73;;;1005:18;;6978:24:32;886:177:73;6921:92:32;6851:168;:::o;5161:383::-;5278:25;1094:13:15;:11;:13::i;:::-;5375:28:32::1;5393:9:::0;5375:17:::1;:28::i;:::-;5470:12;5483:9;5470:23;;;;;;;:::i;:::-;;::::0;-1:-1:-1;;;;;5470:23:32::1;::::0;-1:-1:-1;5529:8:32;5470:23;5516:9;5503:23:::1;::::0;::::1;;;;;:::i;:::-;;:34:::0;;-1:-1:-1;;;;;;5503:34:32::1;-1:-1:-1::0;;;;;5503:34:32;;;::::1;::::0;;;::::1;::::0;;5161:383;;-1:-1:-1;;5161:383:32:o;14:374:73:-;116:6;124;177:2;165:9;156:7;152:23;148:32;145:52;;;193:1;190;183:12;145:52;216:16;;275:2;260:18;;254:25;216:16;;-1:-1:-1;;;;;;308:31:73;;298:42;;288:70;;354:1;351;344:12;288:70;377:5;367:15;;;14:374;;;;;:::o;393:127::-;454:10;449:3;445:20;442:1;435:31;485:4;482:1;475:15;509:4;506:1;499:15;886:177;470:7093:32;;;;;;",
+    "linkReferences": {}
+  },
+  "deployedBytecode": {
+    "object": "0x608060405234801561001057600080fd5b50600436106100885760003560e01c80638a283fc31161005b5780638a283fc3146100ea5780638da5cb5b146100fd578063b28320961461010e578063f2fde38b1461012157600080fd5b8063245b3ef31461008d578063293de354146100bd578063715018a6146100d05780637aa414cb146100da575b600080fd5b6100a061009b3660046103f6565b610134565b6040516001600160a01b0390911681526020015b60405180910390f35b6100a06100cb366004610424565b61014f565b6100d86101bd565b005b6040516103e881526020016100b4565b6100a06100f83660046103f6565b6101d1565b6000546001600160a01b03166100a0565b6100d861011c366004610424565b610201565b6100d861012f366004610454565b610260565b600061013e6102de565b61014982600061014f565b92915050565b60006101596102de565b61016283610338565b6001836103e9811061017657610176610478565b01546001600160a01b03169050816001846103e9811061019857610198610478565b0180546001600160a01b0319166001600160a01b039290921691909117905592915050565b6101c56102de565b6101cf600061035e565b565b60006101dc826103ae565b6001826103e981106101f0576101f0610478565b01546001600160a01b031692915050565b6102096102de565b61021282610338565b60006001836103e9811061022857610228610478565b01546001600160a01b03161461025157604051630b832ba160e41b815260040160405180910390fd5b61025b828261014f565b505050565b6102686102de565b6001600160a01b0381166102d25760405162461bcd60e51b815260206004820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201526564647265737360d01b60648201526084015b60405180910390fd5b6102db8161035e565b50565b6000546001600160a01b031633146101cf5760405162461bcd60e51b815260206004820181905260248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e657260448201526064016102c9565b6103e88111156102db5760405163533dcfcf60e11b8152600481018290526024016102c9565b600080546001600160a01b038381166001600160a01b0319831681178455604051919092169283917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09190a35050565b6103b781610338565b60006001826103e981106103cd576103cd610478565b01546001600160a01b0316036102db576040516312ea862760e21b815260040160405180910390fd5b60006020828403121561040857600080fd5b5035919050565b6001600160a01b03811681146102db57600080fd5b6000806040838503121561043757600080fd5b8235915060208301356104498161040f565b809150509250929050565b60006020828403121561046657600080fd5b81356104718161040f565b9392505050565b634e487b7160e01b600052603260045260246000fdfea2646970667358221220f6a9ab81b5b064d17e8e605e3dbfda8556a431d27cf04b2a35490df0e3716c8164736f6c63430008130033",
+    "sourceMap": "470:7093:32:-:0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;5935:202;;;;;;:::i;:::-;;:::i;:::-;;;-1:-1:-1;;;;;386:32:73;;;368:51;;356:2;341:18;5935:202:32;;;;;;;;5161:383;;;;;;:::i;:::-;;:::i;1831:101:15:-;;;:::i;:::-;;6277:110:32;;;906:4;1085:25:73;;1073:2;1058:18;6277:110:32;939:177:73;3506:310:32;;;;;;:::i;:::-;;:::i;1201:85:15:-;1247:7;1273:6;-1:-1:-1;;;;;1273:6:15;1201:85;;4273:421:32;;;;;;:::i;:::-;;:::i;2081:198:15:-;;;;;;:::i;:::-;;:::i;5935:202:32:-;6029:25;1094:13:15;:11;:13::i;:::-;6077:53:32::1;6092:9;991:3;6077:14;:53::i;:::-;6070:60:::0;5935:202;-1:-1:-1;;5935:202:32:o;5161:383::-;5278:25;1094:13:15;:11;:13::i;:::-;5375:28:32::1;5393:9;5375:17;:28::i;:::-;5470:12;5483:9;5470:23;;;;;;;:::i;:::-;;::::0;-1:-1:-1;;;;;5470:23:32::1;::::0;-1:-1:-1;5529:8:32;5470:23;5516:9;5503:23:::1;::::0;::::1;;;;;:::i;:::-;;:34:::0;;-1:-1:-1;;;;;;5503:34:32::1;-1:-1:-1::0;;;;;5503:34:32;;;::::1;::::0;;;::::1;::::0;;5161:383;;-1:-1:-1;;5161:383:32:o;1831:101:15:-;1094:13;:11;:13::i;:::-;1895:30:::1;1922:1;1895:18;:30::i;:::-;1831:101::o:0;3506:310:32:-;3570:22;3666:27;3683:9;3666:16;:27::i;:::-;3786:12;3799:9;3786:23;;;;;;;:::i;:::-;;;-1:-1:-1;;;;;3786:23:32;;3506:310;-1:-1:-1;;3506:310:32:o;4273:421::-;1094:13:15;:11;:13::i;:::-;4420:28:32::1;4438:9;4420:17;:28::i;:::-;991:3;4524:12;4537:9:::0;4524:23:::1;::::0;::::1;;;;;:::i;:::-;;::::0;-1:-1:-1;;;;;4524:23:32::1;:39;4520:93;;4586:16;;-1:-1:-1::0;;;4586:16:32::1;;;;;;;;;;;4520:93;4652:35;4667:9;4678:8;4652:14;:35::i;:::-;;4273:421:::0;;:::o;2081:198:15:-;1094:13;:11;:13::i;:::-;-1:-1:-1;;;;;2169:22:15;::::1;2161:73;;;::::0;-1:-1:-1;;;2161:73:15;;1930:2:73;2161:73:15::1;::::0;::::1;1912:21:73::0;1969:2;1949:18;;;1942:30;2008:34;1988:18;;;1981:62;-1:-1:-1;;;2059:18:73;;;2052:36;2105:19;;2161:73:15::1;;;;;;;;;2244:28;2263:8;2244:18;:28::i;:::-;2081:198:::0;:::o;1359:130::-;1247:7;1273:6;-1:-1:-1;;;;;1273:6:15;719:10:22;1422:23:15;1414:68;;;;-1:-1:-1;;;1414:68:15;;2337:2:73;1414:68:15;;;2319:21:73;;;2356:18;;;2349:30;2415:34;2395:18;;;2388:62;2467:18;;1414:68:15;2135:356:73;6851:168:32;906:4;6925:9;:30;6921:92;;;6978:24;;-1:-1:-1;;;6978:24:32;;;;;1085:25:73;;;1058:18;;6978:24:32;939:177:73;2433:187:15;2506:16;2525:6;;-1:-1:-1;;;;;2541:17:15;;;-1:-1:-1;;;;;;2541:17:15;;;;;;2573:40;;2525:6;;;;;;;2573:40;;2506:16;2573:40;2496:124;2433:187;:::o;7354:207:32:-;7423:28;7441:9;7423:17;:28::i;:::-;991:3;7466:12;7479:9;7466:23;;;;;;;:::i;:::-;;;-1:-1:-1;;;;;7466:23:32;:39;7462:93;;7528:16;;-1:-1:-1;;;7528:16:32;;;;;;;;;;;14:180:73;73:6;126:2;114:9;105:7;101:23;97:32;94:52;;;142:1;139;132:12;94:52;-1:-1:-1;165:23:73;;14:180;-1:-1:-1;14:180:73:o;430:146::-;-1:-1:-1;;;;;520:31:73;;510:42;;500:70;;566:1;563;556:12;581:353;672:6;680;733:2;721:9;712:7;708:23;704:32;701:52;;;749:1;746;739:12;701:52;785:9;772:23;762:33;;845:2;834:9;830:18;817:32;858:46;898:5;858:46;:::i;:::-;923:5;913:15;;;581:353;;;;;:::o;1329:262::-;1388:6;1441:2;1429:9;1420:7;1416:23;1412:32;1409:52;;;1457:1;1454;1447:12;1409:52;1496:9;1483:23;1515:46;1555:5;1515:46;:::i;:::-;1580:5;1329:262;-1:-1:-1;;;1329:262:73:o;1596:127::-;1657:10;1652:3;1648:20;1645:1;1638:31;1688:4;1685:1;1678:15;1712:4;1709:1;1702:15",
+    "linkReferences": {}
+  },
+  "methodIdentifiers": {
+    "addVerifier(uint256,address)": "b2832096",
+    "disableVerifier(uint256)": "245b3ef3",
+    "getVerifierFor(uint256)": "8a283fc3",
+    "maximumBatchSize()": "7aa414cb",
+    "owner()": "8da5cb5b",
+    "renounceOwnership()": "715018a6",
+    "transferOwnership(address)": "f2fde38b",
+    "updateVerifier(uint256,address)": "293de354"
+  },
+  "rawMetadata": "{\"compiler\":{\"version\":\"0.8.19+commit.7dd6d404\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"initialBatchSize\",\"type\":\"uint256\"},{\"internalType\":\"contract ITreeVerifier\",\"name\":\"initialVerifier\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"requestedBatch\",\"type\":\"uint256\"}],\"name\":\"BatchTooLarge\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NoSuchVerifier\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"VerifierExists\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"batchSize\",\"type\":\"uint256\"},{\"internalType\":\"contract ITreeVerifier\",\"name\":\"verifier\",\"type\":\"address\"}],\"name\":\"addVerifier\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"batchSize\",\"type\":\"uint256\"}],\"name\":\"disableVerifier\",\"outputs\":[{\"internalType\":\"contract ITreeVerifier\",\"name\":\"oldVerifier\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"batchSize\",\"type\":\"uint256\"}],\"name\":\"getVerifierFor\",\"outputs\":[{\"internalType\":\"contract ITreeVerifier\",\"name\":\"verifier\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"maximumBatchSize\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"batchSize\",\"type\":\"uint256\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"batchSize\",\"type\":\"uint256\"},{\"internalType\":\"contract ITreeVerifier\",\"name\":\"verifier\",\"type\":\"address\"}],\"name\":\"updateVerifier\",\"outputs\":[{\"internalType\":\"contract ITreeVerifier\",\"name\":\"oldVerifier\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"author\":\"Worldcoin\",\"details\":\"It should be used to query the correct verifier before using that verifier for verifying a      tree modification proof.\",\"errors\":{\"BatchTooLarge(uint256)\":[{\"params\":{\"requestedBatch\":\"The size of the batch that was requested.\"}}]},\"kind\":\"dev\",\"methods\":{\"addVerifier(uint256,address)\":{\"custom:reverts\":\"VerifierExists If `batchSize` already has an associated verifier.BatchTooLarge If `batchSize` exceeds the maximum batch size.string If the caller is not the owner.\",\"params\":{\"batchSize\":\"The batch size to add the verifier for.\",\"verifier\":\"The verifier for a batch of size `batchSize`.\"}},\"constructor\":{\"custom:reverts\":\"BatchTooLarge If the `initialBatchSize` exceeds the maximum batch size.\",\"params\":{\"initialBatchSize\":\"The size of the initial batch (the size of the batch in        `initialVerifier`).\",\"initialVerifier\":\"The verifier for batches of size `initialBatchSize`.\"}},\"disableVerifier(uint256)\":{\"custom:reverts\":\"BatchTooLarge If `batchSize` exceeds the maximum batch size.string If the caller is not the owner.\",\"params\":{\"batchSize\":\"The batch size to disable the verifier for.\"},\"returns\":{\"oldVerifier\":\"The old verifier associated with the batch size.\"}},\"getVerifierFor(uint256)\":{\"custom:reverts\":\"BatchTooLarge If `batchSize` exceeds the maximum batch size.NoSuchVerifier If there is no verifier associated with the `batchSize`.\",\"params\":{\"batchSize\":\"The batch size to get the associated verifier for.\"},\"returns\":{\"verifier\":\"The tree verifier for the provided `batchSize`.\"}},\"maximumBatchSize()\":{\"returns\":{\"batchSize\":\"The maximum batch size.\"}},\"owner()\":{\"details\":\"Returns the address of the current owner.\"},\"renounceOwnership()\":{\"details\":\"Leaves the contract without owner. It will not be possible to call `onlyOwner` functions anymore. Can only be called by the current owner. NOTE: Renouncing ownership will leave the contract without an owner, thereby removing any functionality that is only available to the owner.\"},\"transferOwnership(address)\":{\"details\":\"Transfers ownership of the contract to a new account (`newOwner`). Can only be called by the current owner.\"},\"updateVerifier(uint256,address)\":{\"custom:reverts\":\"BatchTooLarge If `batchSize` exceeds the maximum batch size.string If the caller is not the owner.\",\"params\":{\"batchSize\":\"The batch size to add the verifier for.\",\"verifier\":\"The verifier for a batch of size `batchSize`.\"},\"returns\":{\"oldVerifier\":\"The old verifier instance associated with this batch size.\"}}},\"stateVariables\":{\"verifier_lut\":{\"details\":\"It is one bigger than the batch size so that you can address directly by the batch      size.\"}},\"title\":\"Batch Lookup Table\",\"version\":1},\"userdoc\":{\"errors\":{\"BatchTooLarge(uint256)\":[{\"notice\":\"Raised if a too large batch is inserted or requested.\"}],\"NoSuchVerifier()\":[{\"notice\":\"Raised if a batch size is requested that the lookup table doesn't know about.\"}],\"VerifierExists()\":[{\"notice\":\"Raised if an attempt is made to add a verifier for a batch size that already exists.\"}]},\"kind\":\"user\",\"methods\":{\"addVerifier(uint256,address)\":{\"notice\":\"Adds a verifier for the provided `batchSize`.\"},\"constructor\":{\"notice\":\"Constructs a new batch lookup table.\"},\"disableVerifier(uint256)\":{\"notice\":\"Disables the verifier for the provided batch size.\"},\"getVerifierFor(uint256)\":{\"notice\":\"Obtains the verifier for the provided `batchSize`.\"},\"maximumBatchSize()\":{\"notice\":\"Gets the maximum batch size supported by this lookup table.\"},\"updateVerifier(uint256,address)\":{\"notice\":\"Updates the verifier for the provided `batchSize`.\"}},\"notice\":\"A table that provides the correct tree verifier based on the provided batch size.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"src/data/VerifierLookupTable.sol\":\"VerifierLookupTable\"},\"evmVersion\":\"london\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[\":@zk-kit/=lib/zk-kit/packages/\",\":contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/\",\":ds-test/=lib/ds-test/src/\",\":forge-std/=lib/forge-std/src/\",\":openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/\",\":openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/\",\":semaphore/=lib/semaphore/contracts/\",\":solmate/=lib/solmate/src/\",\":zk-kit/=lib/zk-kit/\"]},\"sources\":{\"lib/openzeppelin-contracts/contracts/access/Ownable.sol\":{\"keccak256\":\"0xa94b34880e3c1b0b931662cb1c09e5dfa6662f31cba80e07c5ee71cd135c9673\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://40fb1b5102468f783961d0af743f91b9980cf66b50d1d12009f6bb1869cea4d2\",\"dweb:/ipfs/QmYqEbJML4jB1GHbzD4cUZDtJg5wVwNm3vDJq1GbyDus8y\"]},\"lib/openzeppelin-contracts/contracts/utils/Context.sol\":{\"keccak256\":\"0xe2e337e6dde9ef6b680e07338c493ebea1b5fd09b43424112868e9cc1706bca7\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://6df0ddf21ce9f58271bdfaa85cde98b200ef242a05a3f85c2bc10a8294800a92\",\"dweb:/ipfs/QmRK2Y5Yc6BK7tGKkgsgn3aJEQGi5aakeSPZvS65PV8Xp3\"]},\"src/data/VerifierLookupTable.sol\":{\"keccak256\":\"0x104b7c3462b1709761359faf82cb1385d6ac85fddb189607fbfbc36d547e5912\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://95adb2381685029adca73de0f6ec0936f14746c96d4ddf48cb6f4b78e2fca9d5\",\"dweb:/ipfs/QmStwjLPAp2tggZ5kfUozbfoikaKyykh9FY6tkhKxULd45\"]},\"src/interfaces/ITreeVerifier.sol\":{\"keccak256\":\"0x3f980c7fa04a40d3e128a27ac7eb2fba6020a2a81baec4172e3ce809a1189388\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://5e7cca84723edc4bfffec31b48dcd93bf78b677b80939d97209c57ad8a248f15\",\"dweb:/ipfs/QmSxNKodWF1Fh94b3UmKQS63KE7arLqgdrXyGxVq7gXJHR\"]}},\"version\":1}",
+  "metadata": {
+    "compiler": {
+      "version": "0.8.19+commit.7dd6d404"
+    },
+    "language": "Solidity",
+    "output": {
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "initialBatchSize",
+              "type": "uint256"
+            },
+            {
+              "internalType": "contract ITreeVerifier",
+              "name": "initialVerifier",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "requestedBatch",
+              "type": "uint256"
+            }
+          ],
+          "type": "error",
+          "name": "BatchTooLarge"
+        },
+        {
+          "inputs": [],
+          "type": "error",
+          "name": "NoSuchVerifier"
+        },
+        {
+          "inputs": [],
+          "type": "error",
+          "name": "VerifierExists"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address",
+              "indexed": true
+            },
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address",
+              "indexed": true
+            }
+          ],
+          "type": "event",
+          "name": "OwnershipTransferred",
+          "anonymous": false
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "batchSize",
+              "type": "uint256"
+            },
+            {
+              "internalType": "contract ITreeVerifier",
+              "name": "verifier",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "addVerifier"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "batchSize",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "disableVerifier",
+          "outputs": [
+            {
+              "internalType": "contract ITreeVerifier",
+              "name": "oldVerifier",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "batchSize",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function",
+          "name": "getVerifierFor",
+          "outputs": [
+            {
+              "internalType": "contract ITreeVerifier",
+              "name": "verifier",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "inputs": [],
+          "stateMutability": "pure",
+          "type": "function",
+          "name": "maximumBatchSize",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "batchSize",
+              "type": "uint256"
+            }
+          ]
+        },
+        {
+          "inputs": [],
+          "stateMutability": "view",
+          "type": "function",
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ]
+        },
+        {
+          "inputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "renounceOwnership"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "transferOwnership"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "batchSize",
+              "type": "uint256"
+            },
+            {
+              "internalType": "contract ITreeVerifier",
+              "name": "verifier",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "updateVerifier",
+          "outputs": [
+            {
+              "internalType": "contract ITreeVerifier",
+              "name": "oldVerifier",
+              "type": "address"
+            }
+          ]
+        }
+      ],
+      "devdoc": {
+        "kind": "dev",
+        "methods": {
+          "addVerifier(uint256,address)": {
+            "custom:reverts": "VerifierExists If `batchSize` already has an associated verifier.BatchTooLarge If `batchSize` exceeds the maximum batch size.string If the caller is not the owner.",
+            "params": {
+              "batchSize": "The batch size to add the verifier for.",
+              "verifier": "The verifier for a batch of size `batchSize`."
+            }
+          },
+          "constructor": {
+            "custom:reverts": "BatchTooLarge If the `initialBatchSize` exceeds the maximum batch size.",
+            "params": {
+              "initialBatchSize": "The size of the initial batch (the size of the batch in        `initialVerifier`).",
+              "initialVerifier": "The verifier for batches of size `initialBatchSize`."
+            }
+          },
+          "disableVerifier(uint256)": {
+            "custom:reverts": "BatchTooLarge If `batchSize` exceeds the maximum batch size.string If the caller is not the owner.",
+            "params": {
+              "batchSize": "The batch size to disable the verifier for."
+            },
+            "returns": {
+              "oldVerifier": "The old verifier associated with the batch size."
+            }
+          },
+          "getVerifierFor(uint256)": {
+            "custom:reverts": "BatchTooLarge If `batchSize` exceeds the maximum batch size.NoSuchVerifier If there is no verifier associated with the `batchSize`.",
+            "params": {
+              "batchSize": "The batch size to get the associated verifier for."
+            },
+            "returns": {
+              "verifier": "The tree verifier for the provided `batchSize`."
+            }
+          },
+          "maximumBatchSize()": {
+            "returns": {
+              "batchSize": "The maximum batch size."
+            }
+          },
+          "owner()": {
+            "details": "Returns the address of the current owner."
+          },
+          "renounceOwnership()": {
+            "details": "Leaves the contract without owner. It will not be possible to call `onlyOwner` functions anymore. Can only be called by the current owner. NOTE: Renouncing ownership will leave the contract without an owner, thereby removing any functionality that is only available to the owner."
+          },
+          "transferOwnership(address)": {
+            "details": "Transfers ownership of the contract to a new account (`newOwner`). Can only be called by the current owner."
+          },
+          "updateVerifier(uint256,address)": {
+            "custom:reverts": "BatchTooLarge If `batchSize` exceeds the maximum batch size.string If the caller is not the owner.",
+            "params": {
+              "batchSize": "The batch size to add the verifier for.",
+              "verifier": "The verifier for a batch of size `batchSize`."
+            },
+            "returns": {
+              "oldVerifier": "The old verifier instance associated with this batch size."
+            }
+          }
+        },
+        "version": 1
+      },
+      "userdoc": {
+        "kind": "user",
+        "methods": {
+          "addVerifier(uint256,address)": {
+            "notice": "Adds a verifier for the provided `batchSize`."
+          },
+          "constructor": {
+            "notice": "Constructs a new batch lookup table."
+          },
+          "disableVerifier(uint256)": {
+            "notice": "Disables the verifier for the provided batch size."
+          },
+          "getVerifierFor(uint256)": {
+            "notice": "Obtains the verifier for the provided `batchSize`."
+          },
+          "maximumBatchSize()": {
+            "notice": "Gets the maximum batch size supported by this lookup table."
+          },
+          "updateVerifier(uint256,address)": {
+            "notice": "Updates the verifier for the provided `batchSize`."
+          }
+        },
+        "version": 1
+      }
+    },
+    "settings": {
+      "remappings": [
+        ":@zk-kit/=lib/zk-kit/packages/",
+        ":contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+        ":ds-test/=lib/ds-test/src/",
+        ":forge-std/=lib/forge-std/src/",
+        ":openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
+        ":openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/",
+        ":semaphore/=lib/semaphore/contracts/",
+        ":solmate/=lib/solmate/src/",
+        ":zk-kit/=lib/zk-kit/"
+      ],
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "metadata": {
+        "bytecodeHash": "ipfs"
+      },
+      "compilationTarget": {
+        "src/data/VerifierLookupTable.sol": "VerifierLookupTable"
+      },
+      "libraries": {}
+    },
+    "sources": {
+      "lib/openzeppelin-contracts/contracts/access/Ownable.sol": {
+        "keccak256": "0xa94b34880e3c1b0b931662cb1c09e5dfa6662f31cba80e07c5ee71cd135c9673",
+        "urls": [
+          "bzz-raw://40fb1b5102468f783961d0af743f91b9980cf66b50d1d12009f6bb1869cea4d2",
+          "dweb:/ipfs/QmYqEbJML4jB1GHbzD4cUZDtJg5wVwNm3vDJq1GbyDus8y"
+        ],
+        "license": "MIT"
+      },
+      "lib/openzeppelin-contracts/contracts/utils/Context.sol": {
+        "keccak256": "0xe2e337e6dde9ef6b680e07338c493ebea1b5fd09b43424112868e9cc1706bca7",
+        "urls": [
+          "bzz-raw://6df0ddf21ce9f58271bdfaa85cde98b200ef242a05a3f85c2bc10a8294800a92",
+          "dweb:/ipfs/QmRK2Y5Yc6BK7tGKkgsgn3aJEQGi5aakeSPZvS65PV8Xp3"
+        ],
+        "license": "MIT"
+      },
+      "src/data/VerifierLookupTable.sol": {
+        "keccak256": "0x104b7c3462b1709761359faf82cb1385d6ac85fddb189607fbfbc36d547e5912",
+        "urls": [
+          "bzz-raw://95adb2381685029adca73de0f6ec0936f14746c96d4ddf48cb6f4b78e2fca9d5",
+          "dweb:/ipfs/QmStwjLPAp2tggZ5kfUozbfoikaKyykh9FY6tkhKxULd45"
+        ],
+        "license": "MIT"
+      },
+      "src/interfaces/ITreeVerifier.sol": {
+        "keccak256": "0x3f980c7fa04a40d3e128a27ac7eb2fba6020a2a81baec4172e3ce809a1189388",
+        "urls": [
+          "bzz-raw://5e7cca84723edc4bfffec31b48dcd93bf78b677b80939d97209c57ad8a248f15",
+          "dweb:/ipfs/QmSxNKodWF1Fh94b3UmKQS63KE7arLqgdrXyGxVq7gXJHR"
+        ],
+        "license": "MIT"
+      }
+    },
+    "version": 1
+  },
+  "ast": {
+    "absolutePath": "src/data/VerifierLookupTable.sol",
+    "id": 26407,
+    "exportedSymbols": {
+      "ITreeVerifier": [
+        26443
+      ],
+      "Ownable": [
+        22150
+      ],
+      "VerifierLookupTable": [
+        26406
+      ]
+    },
+    "nodeType": "SourceUnit",
+    "src": "32:7532:32",
+    "nodes": [
+      {
+        "id": 26197,
+        "nodeType": "PragmaDirective",
+        "src": "32:24:32",
+        "nodes": [],
+        "literals": [
+          "solidity",
+          "^",
+          "0.8",
+          ".19"
+        ]
+      },
+      {
+        "id": 26199,
+        "nodeType": "ImportDirective",
+        "src": "58:66:32",
+        "nodes": [],
+        "absolutePath": "lib/openzeppelin-contracts/contracts/access/Ownable.sol",
+        "file": "openzeppelin-contracts/access/Ownable.sol",
+        "nameLocation": "-1:-1:-1",
+        "scope": 26407,
+        "sourceUnit": 22151,
+        "symbolAliases": [
+          {
+            "foreign": {
+              "id": 26198,
+              "name": "Ownable",
+              "nodeType": "Identifier",
+              "overloadedDeclarations": [],
+              "referencedDeclaration": 22150,
+              "src": "66:7:32",
+              "typeDescriptions": {}
+            },
+            "nameLocation": "-1:-1:-1"
+          }
+        ],
+        "unitAlias": ""
+      },
+      {
+        "id": 26201,
+        "nodeType": "ImportDirective",
+        "src": "126:62:32",
+        "nodes": [],
+        "absolutePath": "src/interfaces/ITreeVerifier.sol",
+        "file": "../interfaces/ITreeVerifier.sol",
+        "nameLocation": "-1:-1:-1",
+        "scope": 26407,
+        "sourceUnit": 26444,
+        "symbolAliases": [
+          {
+            "foreign": {
+              "id": 26200,
+              "name": "ITreeVerifier",
+              "nodeType": "Identifier",
+              "overloadedDeclarations": [],
+              "referencedDeclaration": 26443,
+              "src": "134:13:32",
+              "typeDescriptions": {}
+            },
+            "nameLocation": "-1:-1:-1"
+          }
+        ],
+        "unitAlias": ""
+      },
+      {
+        "id": 26406,
+        "nodeType": "ContractDefinition",
+        "src": "470:7093:32",
+        "nodes": [
+          {
+            "id": 26208,
+            "nodeType": "VariableDeclaration",
+            "src": "859:51:32",
+            "nodes": [],
+            "constant": true,
+            "documentation": {
+              "id": 26205,
+              "nodeType": "StructuredDocumentation",
+              "src": "772:82:32",
+              "text": "The maximum size of a batch that will be used by the WorldID Identity Manager."
+            },
+            "mutability": "constant",
+            "name": "MAXIMUM_BATCH_SIZE",
+            "nameLocation": "885:18:32",
+            "scope": 26406,
+            "stateVariable": true,
+            "storageLocation": "default",
+            "typeDescriptions": {
+              "typeIdentifier": "t_uint256",
+              "typeString": "uint256"
+            },
+            "typeName": {
+              "id": 26206,
+              "name": "uint256",
+              "nodeType": "ElementaryTypeName",
+              "src": "859:7:32",
+              "typeDescriptions": {
+                "typeIdentifier": "t_uint256",
+                "typeString": "uint256"
+              }
+            },
+            "value": {
+              "hexValue": "31303030",
+              "id": 26207,
+              "isConstant": false,
+              "isLValue": false,
+              "isPure": true,
+              "kind": "number",
+              "lValueRequested": false,
+              "nodeType": "Literal",
+              "src": "906:4:32",
+              "typeDescriptions": {
+                "typeIdentifier": "t_rational_1000_by_1",
+                "typeString": "int_const 1000"
+              },
+              "value": "1000"
+            },
+            "visibility": "internal"
+          },
+          {
+            "id": 26215,
+            "nodeType": "VariableDeclaration",
+            "src": "943:52:32",
+            "nodes": [],
+            "constant": true,
+            "documentation": {
+              "id": 26209,
+              "nodeType": "StructuredDocumentation",
+              "src": "917:21:32",
+              "text": "The null address."
+            },
+            "mutability": "constant",
+            "name": "nullAddress",
+            "nameLocation": "969:11:32",
+            "scope": 26406,
+            "stateVariable": true,
+            "storageLocation": "default",
+            "typeDescriptions": {
+              "typeIdentifier": "t_address",
+              "typeString": "address"
+            },
+            "typeName": {
+              "id": 26210,
+              "name": "address",
+              "nodeType": "ElementaryTypeName",
+              "src": "943:7:32",
+              "stateMutability": "nonpayable",
+              "typeDescriptions": {
+                "typeIdentifier": "t_address",
+                "typeString": "address"
+              }
+            },
+            "value": {
+              "arguments": [
+                {
+                  "hexValue": "307830",
+                  "id": 26213,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "991:3:32",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_rational_0_by_1",
+                    "typeString": "int_const 0"
+                  },
+                  "value": "0x0"
+                }
+              ],
+              "expression": {
+                "argumentTypes": [
+                  {
+                    "typeIdentifier": "t_rational_0_by_1",
+                    "typeString": "int_const 0"
+                  }
+                ],
+                "id": 26212,
+                "isConstant": false,
+                "isLValue": false,
+                "isPure": true,
+                "lValueRequested": false,
+                "nodeType": "ElementaryTypeNameExpression",
+                "src": "983:7:32",
+                "typeDescriptions": {
+                  "typeIdentifier": "t_type$_t_address_$",
+                  "typeString": "type(address)"
+                },
+                "typeName": {
+                  "id": 26211,
+                  "name": "address",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "983:7:32",
+                  "typeDescriptions": {}
+                }
+              },
+              "id": 26214,
+              "isConstant": false,
+              "isLValue": false,
+              "isPure": true,
+              "kind": "typeConversion",
+              "lValueRequested": false,
+              "nameLocations": [],
+              "names": [],
+              "nodeType": "FunctionCall",
+              "src": "983:12:32",
+              "tryCall": false,
+              "typeDescriptions": {
+                "typeIdentifier": "t_address",
+                "typeString": "address"
+              }
+            },
+            "visibility": "internal"
+          },
+          {
+            "id": 26222,
+            "nodeType": "VariableDeclaration",
+            "src": "1029:73:32",
+            "nodes": [],
+            "constant": true,
+            "documentation": {
+              "id": 26216,
+              "nodeType": "StructuredDocumentation",
+              "src": "1002:22:32",
+              "text": "The null verifier."
+            },
+            "mutability": "constant",
+            "name": "nullVerifier",
+            "nameLocation": "1061:12:32",
+            "scope": 26406,
+            "stateVariable": true,
+            "storageLocation": "default",
+            "typeDescriptions": {
+              "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+              "typeString": "contract ITreeVerifier"
+            },
+            "typeName": {
+              "id": 26218,
+              "nodeType": "UserDefinedTypeName",
+              "pathNode": {
+                "id": 26217,
+                "name": "ITreeVerifier",
+                "nameLocations": [
+                  "1029:13:32"
+                ],
+                "nodeType": "IdentifierPath",
+                "referencedDeclaration": 26443,
+                "src": "1029:13:32"
+              },
+              "referencedDeclaration": 26443,
+              "src": "1029:13:32",
+              "typeDescriptions": {
+                "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                "typeString": "contract ITreeVerifier"
+              }
+            },
+            "value": {
+              "arguments": [
+                {
+                  "id": 26220,
+                  "name": "nullAddress",
+                  "nodeType": "Identifier",
+                  "overloadedDeclarations": [],
+                  "referencedDeclaration": 26215,
+                  "src": "1090:11:32",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  }
+                }
+              ],
+              "expression": {
+                "argumentTypes": [
+                  {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  }
+                ],
+                "id": 26219,
+                "name": "ITreeVerifier",
+                "nodeType": "Identifier",
+                "overloadedDeclarations": [],
+                "referencedDeclaration": 26443,
+                "src": "1076:13:32",
+                "typeDescriptions": {
+                  "typeIdentifier": "t_type$_t_contract$_ITreeVerifier_$26443_$",
+                  "typeString": "type(contract ITreeVerifier)"
+                }
+              },
+              "id": 26221,
+              "isConstant": false,
+              "isLValue": false,
+              "isPure": true,
+              "kind": "typeConversion",
+              "lValueRequested": false,
+              "nameLocations": [],
+              "names": [],
+              "nodeType": "FunctionCall",
+              "src": "1076:26:32",
+              "tryCall": false,
+              "typeDescriptions": {
+                "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                "typeString": "contract ITreeVerifier"
+              }
+            },
+            "visibility": "internal"
+          },
+          {
+            "id": 26230,
+            "nodeType": "VariableDeclaration",
+            "src": "1278:59:32",
+            "nodes": [],
+            "constant": false,
+            "documentation": {
+              "id": 26223,
+              "nodeType": "StructuredDocumentation",
+              "src": "1109:164:32",
+              "text": "The lookup table for routing batches.\n @dev It is one bigger than the batch size so that you can address directly by the batch\n      size."
+            },
+            "mutability": "mutable",
+            "name": "verifier_lut",
+            "nameLocation": "1325:12:32",
+            "scope": 26406,
+            "stateVariable": true,
+            "storageLocation": "default",
+            "typeDescriptions": {
+              "typeIdentifier": "t_array$_t_contract$_ITreeVerifier_$26443_$1001_storage",
+              "typeString": "contract ITreeVerifier[1001]"
+            },
+            "typeName": {
+              "baseType": {
+                "id": 26225,
+                "nodeType": "UserDefinedTypeName",
+                "pathNode": {
+                  "id": 26224,
+                  "name": "ITreeVerifier",
+                  "nameLocations": [
+                    "1278:13:32"
+                  ],
+                  "nodeType": "IdentifierPath",
+                  "referencedDeclaration": 26443,
+                  "src": "1278:13:32"
+                },
+                "referencedDeclaration": 26443,
+                "src": "1278:13:32",
+                "typeDescriptions": {
+                  "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                  "typeString": "contract ITreeVerifier"
+                }
+              },
+              "id": 26229,
+              "length": {
+                "commonType": {
+                  "typeIdentifier": "t_uint256",
+                  "typeString": "uint256"
+                },
+                "id": 26228,
+                "isConstant": false,
+                "isLValue": false,
+                "isPure": true,
+                "lValueRequested": false,
+                "leftExpression": {
+                  "id": 26226,
+                  "name": "MAXIMUM_BATCH_SIZE",
+                  "nodeType": "Identifier",
+                  "overloadedDeclarations": [],
+                  "referencedDeclaration": 26208,
+                  "src": "1292:18:32",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  }
+                },
+                "nodeType": "BinaryOperation",
+                "operator": "+",
+                "rightExpression": {
+                  "hexValue": "31",
+                  "id": 26227,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "1313:1:32",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_rational_1_by_1",
+                    "typeString": "int_const 1"
+                  },
+                  "value": "1"
+                },
+                "src": "1292:22:32",
+                "typeDescriptions": {
+                  "typeIdentifier": "t_uint256",
+                  "typeString": "uint256"
+                }
+              },
+              "nodeType": "ArrayTypeName",
+              "src": "1278:37:32",
+              "typeDescriptions": {
+                "typeIdentifier": "t_array$_t_contract$_ITreeVerifier_$26443_$1001_storage_ptr",
+                "typeString": "contract ITreeVerifier[1001]"
+              }
+            },
+            "visibility": "internal"
+          },
+          {
+            "id": 26235,
+            "nodeType": "ErrorDefinition",
+            "src": "1750:44:32",
+            "nodes": [],
+            "documentation": {
+              "id": 26231,
+              "nodeType": "StructuredDocumentation",
+              "src": "1600:145:32",
+              "text": "@notice Raised if a too large batch is inserted or requested.\n @param requestedBatch The size of the batch that was requested."
+            },
+            "errorSelector": "a67b9f9e",
+            "name": "BatchTooLarge",
+            "nameLocation": "1756:13:32",
+            "parameters": {
+              "id": 26234,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 26233,
+                  "mutability": "mutable",
+                  "name": "requestedBatch",
+                  "nameLocation": "1778:14:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26235,
+                  "src": "1770:22:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 26232,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1770:7:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "1769:24:32"
+            }
+          },
+          {
+            "id": 26238,
+            "nodeType": "ErrorDefinition",
+            "src": "1894:23:32",
+            "nodes": [],
+            "documentation": {
+              "id": 26236,
+              "nodeType": "StructuredDocumentation",
+              "src": "1800:89:32",
+              "text": "@notice Raised if a batch size is requested that the lookup table doesn't know about."
+            },
+            "errorSelector": "4baa189c",
+            "name": "NoSuchVerifier",
+            "nameLocation": "1900:14:32",
+            "parameters": {
+              "id": 26237,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "1914:2:32"
+            }
+          },
+          {
+            "id": 26241,
+            "nodeType": "ErrorDefinition",
+            "src": "2024:23:32",
+            "nodes": [],
+            "documentation": {
+              "id": 26239,
+              "nodeType": "StructuredDocumentation",
+              "src": "1923:96:32",
+              "text": "@notice Raised if an attempt is made to add a verifier for a batch size that already exists."
+            },
+            "errorSelector": "b832ba10",
+            "name": "VerifierExists",
+            "nameLocation": "2030:14:32",
+            "parameters": {
+              "id": 26240,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "2044:2:32"
+            }
+          },
+          {
+            "id": 26258,
+            "nodeType": "FunctionDefinition",
+            "src": "2681:142:32",
+            "nodes": [],
+            "body": {
+              "id": 26257,
+              "nodeType": "Block",
+              "src": "2760:63:32",
+              "nodes": [],
+              "statements": [
+                {
+                  "expression": {
+                    "arguments": [
+                      {
+                        "id": 26253,
+                        "name": "initialBatchSize",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26244,
+                        "src": "2782:16:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      },
+                      {
+                        "id": 26254,
+                        "name": "initialVerifier",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26247,
+                        "src": "2800:15:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                          "typeString": "contract ITreeVerifier"
+                        }
+                      }
+                    ],
+                    "expression": {
+                      "argumentTypes": [
+                        {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        },
+                        {
+                          "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                          "typeString": "contract ITreeVerifier"
+                        }
+                      ],
+                      "id": 26252,
+                      "name": "addVerifier",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26309,
+                      "src": "2770:11:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_function_internal_nonpayable$_t_uint256_$_t_contract$_ITreeVerifier_$26443_$returns$__$",
+                        "typeString": "function (uint256,contract ITreeVerifier)"
+                      }
+                    },
+                    "id": 26255,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "kind": "functionCall",
+                    "lValueRequested": false,
+                    "nameLocations": [],
+                    "names": [],
+                    "nodeType": "FunctionCall",
+                    "src": "2770:46:32",
+                    "tryCall": false,
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_tuple$__$",
+                      "typeString": "tuple()"
+                    }
+                  },
+                  "id": 26256,
+                  "nodeType": "ExpressionStatement",
+                  "src": "2770:46:32"
+                }
+              ]
+            },
+            "documentation": {
+              "id": 26242,
+              "nodeType": "StructuredDocumentation",
+              "src": "2309:367:32",
+              "text": "@notice Constructs a new batch lookup table.\n @param initialBatchSize The size of the initial batch (the size of the batch in\n        `initialVerifier`).\n @param initialVerifier The verifier for batches of size `initialBatchSize`.\n @custom:reverts BatchTooLarge If the `initialBatchSize` exceeds the maximum batch size."
+            },
+            "implemented": true,
+            "kind": "constructor",
+            "modifiers": [
+              {
+                "arguments": [],
+                "id": 26250,
+                "kind": "baseConstructorSpecifier",
+                "modifierName": {
+                  "id": 26249,
+                  "name": "Ownable",
+                  "nameLocations": [
+                    "2750:7:32"
+                  ],
+                  "nodeType": "IdentifierPath",
+                  "referencedDeclaration": 22150,
+                  "src": "2750:7:32"
+                },
+                "nodeType": "ModifierInvocation",
+                "src": "2750:9:32"
+              }
+            ],
+            "name": "",
+            "nameLocation": "-1:-1:-1",
+            "parameters": {
+              "id": 26248,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 26244,
+                  "mutability": "mutable",
+                  "name": "initialBatchSize",
+                  "nameLocation": "2701:16:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26258,
+                  "src": "2693:24:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 26243,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "2693:7:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 26247,
+                  "mutability": "mutable",
+                  "name": "initialVerifier",
+                  "nameLocation": "2733:15:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26258,
+                  "src": "2719:29:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                    "typeString": "contract ITreeVerifier"
+                  },
+                  "typeName": {
+                    "id": 26246,
+                    "nodeType": "UserDefinedTypeName",
+                    "pathNode": {
+                      "id": 26245,
+                      "name": "ITreeVerifier",
+                      "nameLocations": [
+                        "2719:13:32"
+                      ],
+                      "nodeType": "IdentifierPath",
+                      "referencedDeclaration": 26443,
+                      "src": "2719:13:32"
+                    },
+                    "referencedDeclaration": 26443,
+                    "src": "2719:13:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "2692:57:32"
+            },
+            "returnParameters": {
+              "id": 26251,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "2760:0:32"
+            },
+            "scope": 26406,
+            "stateMutability": "nonpayable",
+            "virtual": false,
+            "visibility": "public"
+          },
+          {
+            "id": 26278,
+            "nodeType": "FunctionDefinition",
+            "src": "3506:310:32",
+            "nodes": [],
+            "body": {
+              "id": 26277,
+              "nodeType": "Block",
+              "src": "3594:222:32",
+              "nodes": [],
+              "statements": [
+                {
+                  "expression": {
+                    "arguments": [
+                      {
+                        "id": 26268,
+                        "name": "batchSize",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26261,
+                        "src": "3683:9:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      }
+                    ],
+                    "expression": {
+                      "argumentTypes": [
+                        {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      ],
+                      "id": 26267,
+                      "name": "validateVerifier",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26405,
+                      "src": "3666:16:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_function_internal_view$_t_uint256_$returns$__$",
+                        "typeString": "function (uint256) view"
+                      }
+                    },
+                    "id": 26269,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "kind": "functionCall",
+                    "lValueRequested": false,
+                    "nameLocations": [],
+                    "names": [],
+                    "nodeType": "FunctionCall",
+                    "src": "3666:27:32",
+                    "tryCall": false,
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_tuple$__$",
+                      "typeString": "tuple()"
+                    }
+                  },
+                  "id": 26270,
+                  "nodeType": "ExpressionStatement",
+                  "src": "3666:27:32"
+                },
+                {
+                  "expression": {
+                    "id": 26275,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "leftHandSide": {
+                      "id": 26271,
+                      "name": "verifier",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26265,
+                      "src": "3775:8:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                        "typeString": "contract ITreeVerifier"
+                      }
+                    },
+                    "nodeType": "Assignment",
+                    "operator": "=",
+                    "rightHandSide": {
+                      "baseExpression": {
+                        "id": 26272,
+                        "name": "verifier_lut",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26230,
+                        "src": "3786:12:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_array$_t_contract$_ITreeVerifier_$26443_$1001_storage",
+                          "typeString": "contract ITreeVerifier[1001] storage ref"
+                        }
+                      },
+                      "id": 26274,
+                      "indexExpression": {
+                        "id": 26273,
+                        "name": "batchSize",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26261,
+                        "src": "3799:9:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      },
+                      "isConstant": false,
+                      "isLValue": true,
+                      "isPure": false,
+                      "lValueRequested": false,
+                      "nodeType": "IndexAccess",
+                      "src": "3786:23:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                        "typeString": "contract ITreeVerifier"
+                      }
+                    },
+                    "src": "3775:34:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    }
+                  },
+                  "id": 26276,
+                  "nodeType": "ExpressionStatement",
+                  "src": "3775:34:32"
+                }
+              ]
+            },
+            "documentation": {
+              "id": 26259,
+              "nodeType": "StructuredDocumentation",
+              "src": "3085:416:32",
+              "text": "@notice Obtains the verifier for the provided `batchSize`.\n @param batchSize The batch size to get the associated verifier for.\n @return verifier The tree verifier for the provided `batchSize`.\n @custom:reverts BatchTooLarge If `batchSize` exceeds the maximum batch size.\n @custom:reverts NoSuchVerifier If there is no verifier associated with the `batchSize`."
+            },
+            "functionSelector": "8a283fc3",
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [],
+            "name": "getVerifierFor",
+            "nameLocation": "3515:14:32",
+            "parameters": {
+              "id": 26262,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 26261,
+                  "mutability": "mutable",
+                  "name": "batchSize",
+                  "nameLocation": "3538:9:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26278,
+                  "src": "3530:17:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 26260,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "3530:7:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "3529:19:32"
+            },
+            "returnParameters": {
+              "id": 26266,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 26265,
+                  "mutability": "mutable",
+                  "name": "verifier",
+                  "nameLocation": "3584:8:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26278,
+                  "src": "3570:22:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                    "typeString": "contract ITreeVerifier"
+                  },
+                  "typeName": {
+                    "id": 26264,
+                    "nodeType": "UserDefinedTypeName",
+                    "pathNode": {
+                      "id": 26263,
+                      "name": "ITreeVerifier",
+                      "nameLocations": [
+                        "3570:13:32"
+                      ],
+                      "nodeType": "IdentifierPath",
+                      "referencedDeclaration": 26443,
+                      "src": "3570:13:32"
+                    },
+                    "referencedDeclaration": 26443,
+                    "src": "3570:13:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "3569:24:32"
+            },
+            "scope": 26406,
+            "stateMutability": "view",
+            "virtual": false,
+            "visibility": "public"
+          },
+          {
+            "id": 26309,
+            "nodeType": "FunctionDefinition",
+            "src": "4273:421:32",
+            "nodes": [],
+            "body": {
+              "id": 26308,
+              "nodeType": "Block",
+              "src": "4354:340:32",
+              "nodes": [],
+              "statements": [
+                {
+                  "expression": {
+                    "arguments": [
+                      {
+                        "id": 26290,
+                        "name": "batchSize",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26281,
+                        "src": "4438:9:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      }
+                    ],
+                    "expression": {
+                      "argumentTypes": [
+                        {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      ],
+                      "id": 26289,
+                      "name": "validateBatchSize",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26384,
+                      "src": "4420:17:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_function_internal_pure$_t_uint256_$returns$__$",
+                        "typeString": "function (uint256) pure"
+                      }
+                    },
+                    "id": 26291,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "kind": "functionCall",
+                    "lValueRequested": false,
+                    "nameLocations": [],
+                    "names": [],
+                    "nodeType": "FunctionCall",
+                    "src": "4420:28:32",
+                    "tryCall": false,
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_tuple$__$",
+                      "typeString": "tuple()"
+                    }
+                  },
+                  "id": 26292,
+                  "nodeType": "ExpressionStatement",
+                  "src": "4420:28:32"
+                },
+                {
+                  "condition": {
+                    "commonType": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    },
+                    "id": 26297,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "leftExpression": {
+                      "baseExpression": {
+                        "id": 26293,
+                        "name": "verifier_lut",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26230,
+                        "src": "4524:12:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_array$_t_contract$_ITreeVerifier_$26443_$1001_storage",
+                          "typeString": "contract ITreeVerifier[1001] storage ref"
+                        }
+                      },
+                      "id": 26295,
+                      "indexExpression": {
+                        "id": 26294,
+                        "name": "batchSize",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26281,
+                        "src": "4537:9:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      },
+                      "isConstant": false,
+                      "isLValue": true,
+                      "isPure": false,
+                      "lValueRequested": false,
+                      "nodeType": "IndexAccess",
+                      "src": "4524:23:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                        "typeString": "contract ITreeVerifier"
+                      }
+                    },
+                    "nodeType": "BinaryOperation",
+                    "operator": "!=",
+                    "rightExpression": {
+                      "id": 26296,
+                      "name": "nullVerifier",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26222,
+                      "src": "4551:12:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                        "typeString": "contract ITreeVerifier"
+                      }
+                    },
+                    "src": "4524:39:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bool",
+                      "typeString": "bool"
+                    }
+                  },
+                  "id": 26302,
+                  "nodeType": "IfStatement",
+                  "src": "4520:93:32",
+                  "trueBody": {
+                    "id": 26301,
+                    "nodeType": "Block",
+                    "src": "4565:48:32",
+                    "statements": [
+                      {
+                        "errorCall": {
+                          "arguments": [],
+                          "expression": {
+                            "argumentTypes": [],
+                            "id": 26298,
+                            "name": "VerifierExists",
+                            "nodeType": "Identifier",
+                            "overloadedDeclarations": [],
+                            "referencedDeclaration": 26241,
+                            "src": "4586:14:32",
+                            "typeDescriptions": {
+                              "typeIdentifier": "t_function_error_pure$__$returns$__$",
+                              "typeString": "function () pure"
+                            }
+                          },
+                          "id": 26299,
+                          "isConstant": false,
+                          "isLValue": false,
+                          "isPure": false,
+                          "kind": "functionCall",
+                          "lValueRequested": false,
+                          "nameLocations": [],
+                          "names": [],
+                          "nodeType": "FunctionCall",
+                          "src": "4586:16:32",
+                          "tryCall": false,
+                          "typeDescriptions": {
+                            "typeIdentifier": "t_tuple$__$",
+                            "typeString": "tuple()"
+                          }
+                        },
+                        "id": 26300,
+                        "nodeType": "RevertStatement",
+                        "src": "4579:23:32"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "expression": {
+                    "arguments": [
+                      {
+                        "id": 26304,
+                        "name": "batchSize",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26281,
+                        "src": "4667:9:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      },
+                      {
+                        "id": 26305,
+                        "name": "verifier",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26284,
+                        "src": "4678:8:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                          "typeString": "contract ITreeVerifier"
+                        }
+                      }
+                    ],
+                    "expression": {
+                      "argumentTypes": [
+                        {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        },
+                        {
+                          "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                          "typeString": "contract ITreeVerifier"
+                        }
+                      ],
+                      "id": 26303,
+                      "name": "updateVerifier",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26340,
+                      "src": "4652:14:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_function_internal_nonpayable$_t_uint256_$_t_contract$_ITreeVerifier_$26443_$returns$_t_contract$_ITreeVerifier_$26443_$",
+                        "typeString": "function (uint256,contract ITreeVerifier) returns (contract ITreeVerifier)"
+                      }
+                    },
+                    "id": 26306,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "kind": "functionCall",
+                    "lValueRequested": false,
+                    "nameLocations": [],
+                    "names": [],
+                    "nodeType": "FunctionCall",
+                    "src": "4652:35:32",
+                    "tryCall": false,
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    }
+                  },
+                  "id": 26307,
+                  "nodeType": "ExpressionStatement",
+                  "src": "4652:35:32"
+                }
+              ]
+            },
+            "documentation": {
+              "id": 26279,
+              "nodeType": "StructuredDocumentation",
+              "src": "3822:446:32",
+              "text": "@notice Adds a verifier for the provided `batchSize`.\n @param batchSize The batch size to add the verifier for.\n @param verifier The verifier for a batch of size `batchSize`.\n @custom:reverts VerifierExists If `batchSize` already has an associated verifier.\n @custom:reverts BatchTooLarge If `batchSize` exceeds the maximum batch size.\n @custom:reverts string If the caller is not the owner."
+            },
+            "functionSelector": "b2832096",
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [
+              {
+                "id": 26287,
+                "kind": "modifierInvocation",
+                "modifierName": {
+                  "id": 26286,
+                  "name": "onlyOwner",
+                  "nameLocations": [
+                    "4344:9:32"
+                  ],
+                  "nodeType": "IdentifierPath",
+                  "referencedDeclaration": 22069,
+                  "src": "4344:9:32"
+                },
+                "nodeType": "ModifierInvocation",
+                "src": "4344:9:32"
+              }
+            ],
+            "name": "addVerifier",
+            "nameLocation": "4282:11:32",
+            "parameters": {
+              "id": 26285,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 26281,
+                  "mutability": "mutable",
+                  "name": "batchSize",
+                  "nameLocation": "4302:9:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26309,
+                  "src": "4294:17:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 26280,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "4294:7:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 26284,
+                  "mutability": "mutable",
+                  "name": "verifier",
+                  "nameLocation": "4327:8:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26309,
+                  "src": "4313:22:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                    "typeString": "contract ITreeVerifier"
+                  },
+                  "typeName": {
+                    "id": 26283,
+                    "nodeType": "UserDefinedTypeName",
+                    "pathNode": {
+                      "id": 26282,
+                      "name": "ITreeVerifier",
+                      "nameLocations": [
+                        "4313:13:32"
+                      ],
+                      "nodeType": "IdentifierPath",
+                      "referencedDeclaration": 26443,
+                      "src": "4313:13:32"
+                    },
+                    "referencedDeclaration": 26443,
+                    "src": "4313:13:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "4293:43:32"
+            },
+            "returnParameters": {
+              "id": 26288,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "4354:0:32"
+            },
+            "scope": 26406,
+            "stateMutability": "nonpayable",
+            "virtual": false,
+            "visibility": "public"
+          },
+          {
+            "id": 26340,
+            "nodeType": "FunctionDefinition",
+            "src": "5161:383:32",
+            "nodes": [],
+            "body": {
+              "id": 26339,
+              "nodeType": "Block",
+              "src": "5309:235:32",
+              "nodes": [],
+              "statements": [
+                {
+                  "expression": {
+                    "arguments": [
+                      {
+                        "id": 26324,
+                        "name": "batchSize",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26312,
+                        "src": "5393:9:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      }
+                    ],
+                    "expression": {
+                      "argumentTypes": [
+                        {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      ],
+                      "id": 26323,
+                      "name": "validateBatchSize",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26384,
+                      "src": "5375:17:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_function_internal_pure$_t_uint256_$returns$__$",
+                        "typeString": "function (uint256) pure"
+                      }
+                    },
+                    "id": 26325,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "kind": "functionCall",
+                    "lValueRequested": false,
+                    "nameLocations": [],
+                    "names": [],
+                    "nodeType": "FunctionCall",
+                    "src": "5375:28:32",
+                    "tryCall": false,
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_tuple$__$",
+                      "typeString": "tuple()"
+                    }
+                  },
+                  "id": 26326,
+                  "nodeType": "ExpressionStatement",
+                  "src": "5375:28:32"
+                },
+                {
+                  "expression": {
+                    "id": 26331,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "leftHandSide": {
+                      "id": 26327,
+                      "name": "oldVerifier",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26321,
+                      "src": "5456:11:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                        "typeString": "contract ITreeVerifier"
+                      }
+                    },
+                    "nodeType": "Assignment",
+                    "operator": "=",
+                    "rightHandSide": {
+                      "baseExpression": {
+                        "id": 26328,
+                        "name": "verifier_lut",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26230,
+                        "src": "5470:12:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_array$_t_contract$_ITreeVerifier_$26443_$1001_storage",
+                          "typeString": "contract ITreeVerifier[1001] storage ref"
+                        }
+                      },
+                      "id": 26330,
+                      "indexExpression": {
+                        "id": 26329,
+                        "name": "batchSize",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26312,
+                        "src": "5483:9:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      },
+                      "isConstant": false,
+                      "isLValue": true,
+                      "isPure": false,
+                      "lValueRequested": false,
+                      "nodeType": "IndexAccess",
+                      "src": "5470:23:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                        "typeString": "contract ITreeVerifier"
+                      }
+                    },
+                    "src": "5456:37:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    }
+                  },
+                  "id": 26332,
+                  "nodeType": "ExpressionStatement",
+                  "src": "5456:37:32"
+                },
+                {
+                  "expression": {
+                    "id": 26337,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "leftHandSide": {
+                      "baseExpression": {
+                        "id": 26333,
+                        "name": "verifier_lut",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26230,
+                        "src": "5503:12:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_array$_t_contract$_ITreeVerifier_$26443_$1001_storage",
+                          "typeString": "contract ITreeVerifier[1001] storage ref"
+                        }
+                      },
+                      "id": 26335,
+                      "indexExpression": {
+                        "id": 26334,
+                        "name": "batchSize",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26312,
+                        "src": "5516:9:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      },
+                      "isConstant": false,
+                      "isLValue": true,
+                      "isPure": false,
+                      "lValueRequested": true,
+                      "nodeType": "IndexAccess",
+                      "src": "5503:23:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                        "typeString": "contract ITreeVerifier"
+                      }
+                    },
+                    "nodeType": "Assignment",
+                    "operator": "=",
+                    "rightHandSide": {
+                      "id": 26336,
+                      "name": "verifier",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26315,
+                      "src": "5529:8:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                        "typeString": "contract ITreeVerifier"
+                      }
+                    },
+                    "src": "5503:34:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    }
+                  },
+                  "id": 26338,
+                  "nodeType": "ExpressionStatement",
+                  "src": "5503:34:32"
+                }
+              ]
+            },
+            "documentation": {
+              "id": 26310,
+              "nodeType": "StructuredDocumentation",
+              "src": "4700:456:32",
+              "text": "@notice Updates the verifier for the provided `batchSize`.\n @param batchSize The batch size to add the verifier for.\n @param verifier The verifier for a batch of size `batchSize`.\n @return oldVerifier The old verifier instance associated with this batch size.\n @custom:reverts BatchTooLarge If `batchSize` exceeds the maximum batch size.\n @custom:reverts string If the caller is not the owner."
+            },
+            "functionSelector": "293de354",
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [
+              {
+                "id": 26318,
+                "kind": "modifierInvocation",
+                "modifierName": {
+                  "id": 26317,
+                  "name": "onlyOwner",
+                  "nameLocations": [
+                    "5251:9:32"
+                  ],
+                  "nodeType": "IdentifierPath",
+                  "referencedDeclaration": 22069,
+                  "src": "5251:9:32"
+                },
+                "nodeType": "ModifierInvocation",
+                "src": "5251:9:32"
+              }
+            ],
+            "name": "updateVerifier",
+            "nameLocation": "5170:14:32",
+            "parameters": {
+              "id": 26316,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 26312,
+                  "mutability": "mutable",
+                  "name": "batchSize",
+                  "nameLocation": "5193:9:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26340,
+                  "src": "5185:17:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 26311,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "5185:7:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 26315,
+                  "mutability": "mutable",
+                  "name": "verifier",
+                  "nameLocation": "5218:8:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26340,
+                  "src": "5204:22:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                    "typeString": "contract ITreeVerifier"
+                  },
+                  "typeName": {
+                    "id": 26314,
+                    "nodeType": "UserDefinedTypeName",
+                    "pathNode": {
+                      "id": 26313,
+                      "name": "ITreeVerifier",
+                      "nameLocations": [
+                        "5204:13:32"
+                      ],
+                      "nodeType": "IdentifierPath",
+                      "referencedDeclaration": 26443,
+                      "src": "5204:13:32"
+                    },
+                    "referencedDeclaration": 26443,
+                    "src": "5204:13:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "5184:43:32"
+            },
+            "returnParameters": {
+              "id": 26322,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 26321,
+                  "mutability": "mutable",
+                  "name": "oldVerifier",
+                  "nameLocation": "5292:11:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26340,
+                  "src": "5278:25:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                    "typeString": "contract ITreeVerifier"
+                  },
+                  "typeName": {
+                    "id": 26320,
+                    "nodeType": "UserDefinedTypeName",
+                    "pathNode": {
+                      "id": 26319,
+                      "name": "ITreeVerifier",
+                      "nameLocations": [
+                        "5278:13:32"
+                      ],
+                      "nodeType": "IdentifierPath",
+                      "referencedDeclaration": 26443,
+                      "src": "5278:13:32"
+                    },
+                    "referencedDeclaration": 26443,
+                    "src": "5278:13:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "5277:27:32"
+            },
+            "scope": 26406,
+            "stateMutability": "nonpayable",
+            "virtual": false,
+            "visibility": "public"
+          },
+          {
+            "id": 26359,
+            "nodeType": "FunctionDefinition",
+            "src": "5935:202:32",
+            "nodes": [],
+            "body": {
+              "id": 26358,
+              "nodeType": "Block",
+              "src": "6060:77:32",
+              "nodes": [],
+              "statements": [
+                {
+                  "expression": {
+                    "arguments": [
+                      {
+                        "id": 26352,
+                        "name": "batchSize",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26343,
+                        "src": "6092:9:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      },
+                      {
+                        "arguments": [
+                          {
+                            "id": 26354,
+                            "name": "nullAddress",
+                            "nodeType": "Identifier",
+                            "overloadedDeclarations": [],
+                            "referencedDeclaration": 26215,
+                            "src": "6117:11:32",
+                            "typeDescriptions": {
+                              "typeIdentifier": "t_address",
+                              "typeString": "address"
+                            }
+                          }
+                        ],
+                        "expression": {
+                          "argumentTypes": [
+                            {
+                              "typeIdentifier": "t_address",
+                              "typeString": "address"
+                            }
+                          ],
+                          "id": 26353,
+                          "name": "ITreeVerifier",
+                          "nodeType": "Identifier",
+                          "overloadedDeclarations": [],
+                          "referencedDeclaration": 26443,
+                          "src": "6103:13:32",
+                          "typeDescriptions": {
+                            "typeIdentifier": "t_type$_t_contract$_ITreeVerifier_$26443_$",
+                            "typeString": "type(contract ITreeVerifier)"
+                          }
+                        },
+                        "id": 26355,
+                        "isConstant": false,
+                        "isLValue": false,
+                        "isPure": true,
+                        "kind": "typeConversion",
+                        "lValueRequested": false,
+                        "nameLocations": [],
+                        "names": [],
+                        "nodeType": "FunctionCall",
+                        "src": "6103:26:32",
+                        "tryCall": false,
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                          "typeString": "contract ITreeVerifier"
+                        }
+                      }
+                    ],
+                    "expression": {
+                      "argumentTypes": [
+                        {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        },
+                        {
+                          "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                          "typeString": "contract ITreeVerifier"
+                        }
+                      ],
+                      "id": 26351,
+                      "name": "updateVerifier",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26340,
+                      "src": "6077:14:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_function_internal_nonpayable$_t_uint256_$_t_contract$_ITreeVerifier_$26443_$returns$_t_contract$_ITreeVerifier_$26443_$",
+                        "typeString": "function (uint256,contract ITreeVerifier) returns (contract ITreeVerifier)"
+                      }
+                    },
+                    "id": 26356,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "kind": "functionCall",
+                    "lValueRequested": false,
+                    "nameLocations": [],
+                    "names": [],
+                    "nodeType": "FunctionCall",
+                    "src": "6077:53:32",
+                    "tryCall": false,
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    }
+                  },
+                  "functionReturnParameters": 26350,
+                  "id": 26357,
+                  "nodeType": "Return",
+                  "src": "6070:60:32"
+                }
+              ]
+            },
+            "documentation": {
+              "id": 26341,
+              "nodeType": "StructuredDocumentation",
+              "src": "5550:380:32",
+              "text": "@notice Disables the verifier for the provided batch size.\n @param batchSize The batch size to disable the verifier for.\n @return oldVerifier The old verifier associated with the batch size.\n @custom:reverts BatchTooLarge If `batchSize` exceeds the maximum batch size.\n @custom:reverts string If the caller is not the owner."
+            },
+            "functionSelector": "245b3ef3",
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [
+              {
+                "id": 26346,
+                "kind": "modifierInvocation",
+                "modifierName": {
+                  "id": 26345,
+                  "name": "onlyOwner",
+                  "nameLocations": [
+                    "6002:9:32"
+                  ],
+                  "nodeType": "IdentifierPath",
+                  "referencedDeclaration": 22069,
+                  "src": "6002:9:32"
+                },
+                "nodeType": "ModifierInvocation",
+                "src": "6002:9:32"
+              }
+            ],
+            "name": "disableVerifier",
+            "nameLocation": "5944:15:32",
+            "parameters": {
+              "id": 26344,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 26343,
+                  "mutability": "mutable",
+                  "name": "batchSize",
+                  "nameLocation": "5968:9:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26359,
+                  "src": "5960:17:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 26342,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "5960:7:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "5959:19:32"
+            },
+            "returnParameters": {
+              "id": 26350,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 26349,
+                  "mutability": "mutable",
+                  "name": "oldVerifier",
+                  "nameLocation": "6043:11:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26359,
+                  "src": "6029:25:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                    "typeString": "contract ITreeVerifier"
+                  },
+                  "typeName": {
+                    "id": 26348,
+                    "nodeType": "UserDefinedTypeName",
+                    "pathNode": {
+                      "id": 26347,
+                      "name": "ITreeVerifier",
+                      "nameLocations": [
+                        "6029:13:32"
+                      ],
+                      "nodeType": "IdentifierPath",
+                      "referencedDeclaration": 26443,
+                      "src": "6029:13:32"
+                    },
+                    "referencedDeclaration": 26443,
+                    "src": "6029:13:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "6028:27:32"
+            },
+            "scope": 26406,
+            "stateMutability": "nonpayable",
+            "virtual": false,
+            "visibility": "public"
+          },
+          {
+            "id": 26368,
+            "nodeType": "FunctionDefinition",
+            "src": "6277:110:32",
+            "nodes": [],
+            "body": {
+              "id": 26367,
+              "nodeType": "Block",
+              "src": "6345:42:32",
+              "nodes": [],
+              "statements": [
+                {
+                  "expression": {
+                    "id": 26365,
+                    "name": "MAXIMUM_BATCH_SIZE",
+                    "nodeType": "Identifier",
+                    "overloadedDeclarations": [],
+                    "referencedDeclaration": 26208,
+                    "src": "6362:18:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "functionReturnParameters": 26364,
+                  "id": 26366,
+                  "nodeType": "Return",
+                  "src": "6355:25:32"
+                }
+              ]
+            },
+            "documentation": {
+              "id": 26360,
+              "nodeType": "StructuredDocumentation",
+              "src": "6143:129:32",
+              "text": "@notice Gets the maximum batch size supported by this lookup table.\n @return batchSize The maximum batch size."
+            },
+            "functionSelector": "7aa414cb",
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [],
+            "name": "maximumBatchSize",
+            "nameLocation": "6286:16:32",
+            "parameters": {
+              "id": 26361,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "6302:2:32"
+            },
+            "returnParameters": {
+              "id": 26364,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 26363,
+                  "mutability": "mutable",
+                  "name": "batchSize",
+                  "nameLocation": "6334:9:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26368,
+                  "src": "6326:17:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 26362,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "6326:7:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "6325:19:32"
+            },
+            "scope": 26406,
+            "stateMutability": "pure",
+            "virtual": false,
+            "visibility": "public"
+          },
+          {
+            "id": 26384,
+            "nodeType": "FunctionDefinition",
+            "src": "6851:168:32",
+            "nodes": [],
+            "body": {
+              "id": 26383,
+              "nodeType": "Block",
+              "src": "6911:108:32",
+              "nodes": [],
+              "statements": [
+                {
+                  "condition": {
+                    "commonType": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    },
+                    "id": 26376,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "leftExpression": {
+                      "id": 26374,
+                      "name": "batchSize",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26371,
+                      "src": "6925:9:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_uint256",
+                        "typeString": "uint256"
+                      }
+                    },
+                    "nodeType": "BinaryOperation",
+                    "operator": ">",
+                    "rightExpression": {
+                      "id": 26375,
+                      "name": "MAXIMUM_BATCH_SIZE",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26208,
+                      "src": "6937:18:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_uint256",
+                        "typeString": "uint256"
+                      }
+                    },
+                    "src": "6925:30:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bool",
+                      "typeString": "bool"
+                    }
+                  },
+                  "id": 26382,
+                  "nodeType": "IfStatement",
+                  "src": "6921:92:32",
+                  "trueBody": {
+                    "id": 26381,
+                    "nodeType": "Block",
+                    "src": "6957:56:32",
+                    "statements": [
+                      {
+                        "errorCall": {
+                          "arguments": [
+                            {
+                              "id": 26378,
+                              "name": "batchSize",
+                              "nodeType": "Identifier",
+                              "overloadedDeclarations": [],
+                              "referencedDeclaration": 26371,
+                              "src": "6992:9:32",
+                              "typeDescriptions": {
+                                "typeIdentifier": "t_uint256",
+                                "typeString": "uint256"
+                              }
+                            }
+                          ],
+                          "expression": {
+                            "argumentTypes": [
+                              {
+                                "typeIdentifier": "t_uint256",
+                                "typeString": "uint256"
+                              }
+                            ],
+                            "id": 26377,
+                            "name": "BatchTooLarge",
+                            "nodeType": "Identifier",
+                            "overloadedDeclarations": [],
+                            "referencedDeclaration": 26235,
+                            "src": "6978:13:32",
+                            "typeDescriptions": {
+                              "typeIdentifier": "t_function_error_pure$_t_uint256_$returns$__$",
+                              "typeString": "function (uint256) pure"
+                            }
+                          },
+                          "id": 26379,
+                          "isConstant": false,
+                          "isLValue": false,
+                          "isPure": false,
+                          "kind": "functionCall",
+                          "lValueRequested": false,
+                          "nameLocations": [],
+                          "names": [],
+                          "nodeType": "FunctionCall",
+                          "src": "6978:24:32",
+                          "tryCall": false,
+                          "typeDescriptions": {
+                            "typeIdentifier": "t_tuple$__$",
+                            "typeString": "tuple()"
+                          }
+                        },
+                        "id": 26380,
+                        "nodeType": "RevertStatement",
+                        "src": "6971:31:32"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "documentation": {
+              "id": 26369,
+              "nodeType": "StructuredDocumentation",
+              "src": "6649:197:32",
+              "text": "@notice Checks if the batch size is valid.\n @param batchSize The batch size to check.\n @custom:reverts BatchTooLarge If `batchSize` exceeds the maximum batch size."
+            },
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [],
+            "name": "validateBatchSize",
+            "nameLocation": "6860:17:32",
+            "parameters": {
+              "id": 26372,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 26371,
+                  "mutability": "mutable",
+                  "name": "batchSize",
+                  "nameLocation": "6886:9:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26384,
+                  "src": "6878:17:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 26370,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "6878:7:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "6877:19:32"
+            },
+            "returnParameters": {
+              "id": 26373,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "6911:0:32"
+            },
+            "scope": 26406,
+            "stateMutability": "pure",
+            "virtual": false,
+            "visibility": "internal"
+          },
+          {
+            "id": 26405,
+            "nodeType": "FunctionDefinition",
+            "src": "7354:207:32",
+            "nodes": [],
+            "body": {
+              "id": 26404,
+              "nodeType": "Block",
+              "src": "7413:148:32",
+              "nodes": [],
+              "statements": [
+                {
+                  "expression": {
+                    "arguments": [
+                      {
+                        "id": 26391,
+                        "name": "batchSize",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26387,
+                        "src": "7441:9:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      }
+                    ],
+                    "expression": {
+                      "argumentTypes": [
+                        {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      ],
+                      "id": 26390,
+                      "name": "validateBatchSize",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26384,
+                      "src": "7423:17:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_function_internal_pure$_t_uint256_$returns$__$",
+                        "typeString": "function (uint256) pure"
+                      }
+                    },
+                    "id": 26392,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "kind": "functionCall",
+                    "lValueRequested": false,
+                    "nameLocations": [],
+                    "names": [],
+                    "nodeType": "FunctionCall",
+                    "src": "7423:28:32",
+                    "tryCall": false,
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_tuple$__$",
+                      "typeString": "tuple()"
+                    }
+                  },
+                  "id": 26393,
+                  "nodeType": "ExpressionStatement",
+                  "src": "7423:28:32"
+                },
+                {
+                  "condition": {
+                    "commonType": {
+                      "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                      "typeString": "contract ITreeVerifier"
+                    },
+                    "id": 26398,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "leftExpression": {
+                      "baseExpression": {
+                        "id": 26394,
+                        "name": "verifier_lut",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26230,
+                        "src": "7466:12:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_array$_t_contract$_ITreeVerifier_$26443_$1001_storage",
+                          "typeString": "contract ITreeVerifier[1001] storage ref"
+                        }
+                      },
+                      "id": 26396,
+                      "indexExpression": {
+                        "id": 26395,
+                        "name": "batchSize",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 26387,
+                        "src": "7479:9:32",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      },
+                      "isConstant": false,
+                      "isLValue": true,
+                      "isPure": false,
+                      "lValueRequested": false,
+                      "nodeType": "IndexAccess",
+                      "src": "7466:23:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                        "typeString": "contract ITreeVerifier"
+                      }
+                    },
+                    "nodeType": "BinaryOperation",
+                    "operator": "==",
+                    "rightExpression": {
+                      "id": 26397,
+                      "name": "nullVerifier",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 26222,
+                      "src": "7493:12:32",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_contract$_ITreeVerifier_$26443",
+                        "typeString": "contract ITreeVerifier"
+                      }
+                    },
+                    "src": "7466:39:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bool",
+                      "typeString": "bool"
+                    }
+                  },
+                  "id": 26403,
+                  "nodeType": "IfStatement",
+                  "src": "7462:93:32",
+                  "trueBody": {
+                    "id": 26402,
+                    "nodeType": "Block",
+                    "src": "7507:48:32",
+                    "statements": [
+                      {
+                        "errorCall": {
+                          "arguments": [],
+                          "expression": {
+                            "argumentTypes": [],
+                            "id": 26399,
+                            "name": "NoSuchVerifier",
+                            "nodeType": "Identifier",
+                            "overloadedDeclarations": [],
+                            "referencedDeclaration": 26238,
+                            "src": "7528:14:32",
+                            "typeDescriptions": {
+                              "typeIdentifier": "t_function_error_pure$__$returns$__$",
+                              "typeString": "function () pure"
+                            }
+                          },
+                          "id": 26400,
+                          "isConstant": false,
+                          "isLValue": false,
+                          "isPure": false,
+                          "kind": "functionCall",
+                          "lValueRequested": false,
+                          "nameLocations": [],
+                          "names": [],
+                          "nodeType": "FunctionCall",
+                          "src": "7528:16:32",
+                          "tryCall": false,
+                          "typeDescriptions": {
+                            "typeIdentifier": "t_tuple$__$",
+                            "typeString": "tuple()"
+                          }
+                        },
+                        "id": 26401,
+                        "nodeType": "RevertStatement",
+                        "src": "7521:23:32"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "documentation": {
+              "id": 26385,
+              "nodeType": "StructuredDocumentation",
+              "src": "7025:324:32",
+              "text": "@notice Checks if the entry for the provided `batchSize` is a valid verifier.\n @param batchSize The batch size to check.\n @custom:reverts NoSuchVerifier If `batchSize` does not have an associated verifier.\n @custom:reverts BatchTooLarge If `batchSize` exceeds the maximum batch size."
+            },
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [],
+            "name": "validateVerifier",
+            "nameLocation": "7363:16:32",
+            "parameters": {
+              "id": 26388,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 26387,
+                  "mutability": "mutable",
+                  "name": "batchSize",
+                  "nameLocation": "7388:9:32",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 26405,
+                  "src": "7380:17:32",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 26386,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "7380:7:32",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "7379:19:32"
+            },
+            "returnParameters": {
+              "id": 26389,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "7413:0:32"
+            },
+            "scope": 26406,
+            "stateMutability": "view",
+            "virtual": false,
+            "visibility": "internal"
+          }
+        ],
+        "abstract": false,
+        "baseContracts": [
+          {
+            "baseName": {
+              "id": 26203,
+              "name": "Ownable",
+              "nameLocations": [
+                "502:7:32"
+              ],
+              "nodeType": "IdentifierPath",
+              "referencedDeclaration": 22150,
+              "src": "502:7:32"
+            },
+            "id": 26204,
+            "nodeType": "InheritanceSpecifier",
+            "src": "502:7:32"
+          }
+        ],
+        "canonicalName": "VerifierLookupTable",
+        "contractDependencies": [],
+        "contractKind": "contract",
+        "documentation": {
+          "id": 26202,
+          "nodeType": "StructuredDocumentation",
+          "src": "190:280:32",
+          "text": "@title Batch Lookup Table\n @author Worldcoin\n @notice A table that provides the correct tree verifier based on the provided batch size.\n @dev It should be used to query the correct verifier before using that verifier for verifying a\n      tree modification proof."
+        },
+        "fullyImplemented": true,
+        "linearizedBaseContracts": [
+          26406,
+          22150,
+          22929
+        ],
+        "name": "VerifierLookupTable",
+        "nameLocation": "479:19:32",
+        "scope": 26407,
+        "usedErrors": [
+          26235,
+          26238,
+          26241
+        ]
+      }
+    ],
+    "license": "MIT"
+  },
+  "id": 32
+}

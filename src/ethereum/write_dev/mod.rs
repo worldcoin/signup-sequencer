@@ -290,6 +290,11 @@ impl Provider {
     #[instrument(level = "debug", skip_all)]
     async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
         // TODO: This implementation requires changes in the smart contract
+        // Currently we emit no events for submitted transactions - which makes
+        // it difficult to query a given node for a list of pending
+        // transactions. If we were to emit an event, we could fetch logs
+        // from pending logs that contain the given address and topic hash
+        // and resolve these logs to transaction hashes.
         Ok(vec![])
     }
 

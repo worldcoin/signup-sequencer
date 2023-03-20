@@ -1,9 +1,10 @@
+use std::sync::Arc;
+
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use hyper::StatusCode;
 use semaphore::protocol::verify_proof;
 use serde::Serialize;
-use std::sync::Arc;
 use tokio::try_join;
 use tracing::{info, instrument, warn};
 
@@ -231,16 +232,21 @@ impl App {
         if leaf_idx < next_index {
             return Ok(()); // Someone sync'd first, we're up to date
         }
+
         let identities = self
             .database
             .get_updates_in_range(next_index, leaf_idx)
             .await?;
-        tree.append_many_fresh(&identities).await;
 
-        let last_identity = tree.get_leaf(leaf_idx).await;
-        self.database
-            .insert_pending_root(&tree.get_root().await, &last_identity, leaf_idx)
-            .await?;
+        for (identity, tree_root) in tree
+            .append_many_fresh_with_intermediate_roots(&identities)
+            .await
+        {
+            self.database
+                .insert_pending_root(&tree_root, &identity.element, identity.leaf_index)
+                .await?;
+        }
+
         Ok(())
     }
 

@@ -121,10 +121,12 @@ impl Database {
         identity: &Hash,
     ) -> Result<Option<usize>, Error> {
         let query = sqlx::query(
-            r#"INSERT INTO identities (commitment, leaf_index, status)
-                       VALUES ($1, (SELECT COALESCE(MAX(leaf_index) + 1, 0) FROM identities), $2)
-                       ON CONFLICT DO NOTHING
-                       RETURNING leaf_index;"#,
+            r#"
+            INSERT INTO identities (commitment, leaf_index, status)
+            VALUES ($1, (SELECT COALESCE(MAX(leaf_index) + 1, 0) FROM identities), $2)
+            ON CONFLICT DO NOTHING
+            RETURNING leaf_index;
+            "#,
         )
         .bind(identity)
         .bind(<&str>::from(Status::Pending));
@@ -145,25 +147,30 @@ impl Database {
     ) -> Result<(), Error> {
         let mut tx = self.pool.begin().await?;
 
-        // Note that there are more efficient ways to do this in certain dialects of
-        // SQL. Postgres has the `VALUES` embedding, for example. Using a transaction as
-        // done here is backend agnostic, and hence works in production and for the
-        // tests.
-        for index in leaf_indices {
-            let query = sqlx::query(
-                r#"UPDATE identities
-                           SET status = $2
-                           WHERE leaf_index = $1;"#,
-            )
-            .bind(*index as i64)
-            .bind(<&str>::from(Status::Mined));
-            tx.execute(query).await?;
-        }
+        let values = leaf_indices
+            .iter()
+            .map(|index| format!("({index})"))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let query = format!(
+            r#"
+            UPDATE identities
+            SET status = $1
+            FROM ( VALUES {values} ) AS update (index)
+            WHERE leaf_index = update.index;
+            "#
+        );
+
+        let query = sqlx::query(&query).bind(<&str>::from(Status::Mined));
+        tx.execute(query).await?;
 
         let query = sqlx::query(
-            r#"UPDATE root_history
+            r#"
+            UPDATE root_history
             SET status = $2, mined_at = CURRENT_TIMESTAMP
-            WHERE root = $1;"#,
+            WHERE root = $1;
+            "#,
         )
         .bind(root)
         .bind(<&str>::from(Status::Mined));
@@ -227,10 +234,12 @@ impl Database {
         to_index: usize,
     ) -> Result<Vec<TreeUpdate>, Error> {
         let query = sqlx::query(
-            r#"SELECT commitment, leaf_index, status
-                       FROM identities
-                       WHERE leaf_index >= $1 AND leaf_index <= $2
-                       ORDER BY leaf_index ASC;"#,
+            r#"
+            SELECT commitment, leaf_index, status
+            FROM identities
+            WHERE leaf_index >= $1 AND leaf_index <= $2
+            ORDER BY leaf_index ASC;
+            "#,
         )
         .bind(from_index as i64)
         .bind(to_index as i64);
@@ -252,10 +261,12 @@ impl Database {
         identity: &Hash,
     ) -> Result<Option<TreeItem>, Error> {
         let query = sqlx::query(
-            r#"SELECT leaf_index, status
-                       FROM identities
-                       WHERE commitment = $1
-                       LIMIT 1;"#,
+            r#"
+            SELECT leaf_index, status
+            FROM identities
+            WHERE commitment = $1
+            LIMIT 1;
+            "#,
         )
         .bind(identity);
         let Some(row) = self.pool.fetch_optional(query).await? else {
@@ -276,10 +287,12 @@ impl Database {
         status: Status,
     ) -> Result<Vec<TreeUpdate>, Error> {
         let query = sqlx::query(
-            r#"SELECT leaf_index, commitment
-                       FROM identities
-                       WHERE status = $1
-                       ORDER BY leaf_index ASC;"#,
+            r#"
+            SELECT leaf_index, commitment
+            FROM identities
+            WHERE status = $1
+            ORDER BY leaf_index ASC;
+            "#,
         )
         .bind(<&str>::from(status));
         let rows = self.pool.fetch_all(query).await?;
@@ -296,7 +309,8 @@ impl Database {
         // This tries really hard to do everything in one query to prevent race
         // conditions.
         let query = sqlx::query(
-            r#"SELECT
+            r#"
+            SELECT
                 status,
                 COALESCE(
                     (SELECT r2.created_at
@@ -314,8 +328,8 @@ impl Database {
                     LIMIT 1),
                     CASE WHEN r.status = $2 THEN CURRENT_TIMESTAMP END
                 ) as mined_valid_as_of
-                FROM root_history r
-                WHERE r.root = $1;
+            FROM root_history r
+            WHERE r.root = $1;
             "#,
         )
         .bind(root)
@@ -346,10 +360,11 @@ impl Database {
         last_index: usize,
     ) -> Result<(), Error> {
         let query = sqlx::query(
-            r#"INSERT INTO
-            root_history(root, last_identity, last_index, status, created_at)
+            r#"
+            INSERT INTO root_history(root, last_identity, last_index, status, created_at)
             VALUES($1, $2, $3, $4, CURRENT_TIMESTAMP)
-            ON CONFLICT (root) DO NOTHING;"#,
+            ON CONFLICT (root) DO NOTHING;
+            "#,
         )
         .bind(root)
         .bind(last_identity)

@@ -67,11 +67,12 @@ impl RunningInstance {
         // already dead.
         let _ = self.shutdown_sender.send(());
 
-        info!("Awaiting committer shutdown.");
-        self.process_identities_handle.await?;
+        info!("Awaiting tasks to shutdown.");
+        let (process_identities_result, mine_identities_result) =
+            tokio::join!(self.process_identities_handle, self.mine_identities_handle);
 
-        info!("Awaiting miner shutdown.");
-        self.mine_identities_handle.await?;
+        process_identities_result?;
+        mine_identities_result?;
 
         Ok(())
     }

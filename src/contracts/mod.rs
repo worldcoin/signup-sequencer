@@ -195,9 +195,17 @@ impl IdentityManager {
             .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
     }
 
+    #[instrument(level = "debug", skip_all)]
     pub async fn mine_identities(&self, transaction_id: TransactionId) -> anyhow::Result<()> {
         self.ethereum.mine_transaction(transaction_id).await?;
         Ok(())
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    pub async fn fetch_pending_identities(&self) -> anyhow::Result<Vec<TransactionId>> {
+        let pending_identities = self.ethereum.fetch_pending_transactions().await?;
+
+        Ok(pending_identities)
     }
 
     #[instrument(level = "debug", skip_all)]

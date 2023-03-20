@@ -146,6 +146,10 @@ impl WriteProvider for Provider {
         self.send_transaction(tx).await
     }
 
+    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
+        self.fetch_pending_transactions().await
+    }
+
     async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
         self.mine_transaction(tx).await
     }
@@ -284,10 +288,19 @@ impl Provider {
     }
 
     #[instrument(level = "debug", skip_all)]
-    async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
-        let tx_hash = hex::decode(&tx.0).map_err(|err| TxError::Parse(Box::new(err)))?;
+    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
+        // TODO: This implementation requires changes in the smart contract
+        // Currently we emit no events for submitted transactions - which makes
+        // it difficult to query a given node for a list of pending
+        // transactions. If we were to emit an event, we could fetch logs
+        // from pending logs that contain the given address and topic hash
+        // and resolve these logs to transaction hashes.
+        Ok(vec![])
+    }
 
-        let tx_hash = TxHash::from_slice(&tx_hash);
+    #[instrument(level = "debug", skip_all)]
+    async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
+        let tx_hash = decode_tx_id(&tx)?;
 
         // We're fetching the transaction again to get the nonce and gas limit
         // TODO: We should be able to transfer this data via the input args
@@ -435,4 +448,9 @@ impl Provider {
 
         Ok(TransactionId(transaction_id))
     }
+}
+
+fn decode_tx_id(tx: &TransactionId) -> Result<H256, TxError> {
+    let tx_hash = hex::decode(&tx.0).map_err(|err| TxError::Parse(Box::new(err)))?;
+    Ok(TxHash::from_slice(&tx_hash))
 }

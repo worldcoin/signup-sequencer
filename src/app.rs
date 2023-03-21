@@ -64,6 +64,14 @@ pub struct Options {
     /// Timeout for the tree lock (seconds).
     #[clap(long, env, default_value = "120")]
     pub lock_timeout: u64,
+
+    /// The depth of the tree prefix that is vectorized.
+    #[clap(long, env, default_value = "20")]
+    pub dense_tree_prefix_depth: usize,
+
+    /// The number of updates to trigger garbage collection.
+    #[clap(long, env, default_value = "10000")]
+    pub tree_gc_threshold: usize,
 }
 
 pub struct App {
@@ -104,6 +112,8 @@ impl App {
             &database,
             // Poseidon tree depth is one more than the contract's tree depth
             identity_manager.tree_depth(),
+            options.dense_tree_prefix_depth,
+            options.tree_gc_threshold,
             identity_manager.initial_leaf_value(),
         )
         .await?;
@@ -142,10 +152,16 @@ impl App {
     async fn initialize_tree(
         database: &Database,
         tree_depth: usize,
+        dense_prefix_depth: usize,
+        gc_threshold: usize,
         initial_leaf_value: Hash,
     ) -> AnyhowResult<TreeState> {
-        let mut mined_builder =
-            CanonicalTreeBuilder::new(tree_depth, tree_depth, 1, initial_leaf_value);
+        let mut mined_builder = CanonicalTreeBuilder::new(
+            tree_depth,
+            dense_prefix_depth,
+            gc_threshold,
+            initial_leaf_value,
+        );
         let mined_items = database.get_commitments_by_status(Status::Mined).await?;
         for update in mined_items {
             mined_builder.update(&update);

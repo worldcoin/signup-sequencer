@@ -68,6 +68,7 @@ where
     })
 }
 
+#[allow(dead_code)]
 pub fn u256_to_f64(value: U256) -> f64 {
     value.to_string().parse::<f64>().unwrap()
 }

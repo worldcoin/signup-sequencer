@@ -10,9 +10,13 @@ pub use write::TxError;
 
 use self::write::{TransactionId, WriteProvider};
 
-mod read;
+pub mod read;
 pub mod write;
+
+#[cfg(not(feature = "oz-provider"))]
 mod write_dev;
+
+#[cfg(feature = "oz-provider")]
 mod write_oz;
 
 // TODO: Log and metrics for signer / nonces.
@@ -48,7 +52,7 @@ impl Ethereum {
 
         #[cfg(feature = "oz-provider")]
         let write_provider: Arc<dyn WriteProvider> =
-            Arc::new(write_oz::Provider::new(&options.write_options)?);
+            Arc::new(write_oz::Provider::new(&options.write_options).await?);
 
         Ok(Self {
             read_provider: Arc::new(read_provider),
@@ -72,5 +76,13 @@ impl Ethereum {
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
         self.write_provider.send_transaction(tx, only_once).await
+    }
+
+    pub async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
+        self.write_provider.fetch_pending_transactions().await
+    }
+
+    pub async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
+        self.write_provider.mine_transaction(tx).await
     }
 }

@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
-use futures::TryFutureExt;
 use hyper::StatusCode;
+use semaphore::protocol::verify_proof;
 use serde::Serialize;
 use tokio::try_join;
 use tracing::{debug, info, instrument, warn};
@@ -16,11 +16,11 @@ use crate::{
     identity_committer,
     identity_committer::IdentityCommitter,
     identity_tree::{
-        CanonicalTreeBuilder, Hash, InclusionProof, Status, TreeItem, TreeState, TreeVersionReadOps,
+        CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeItem, TreeState,
     },
     prover,
     prover::batch_insertion::Prover as BatchInsertionProver,
-    server::{Error as ServerError, ToResponseCode},
+    server::{Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
 };
 
 #[derive(Serialize)]
@@ -34,6 +34,16 @@ impl From<InclusionProof> for InclusionProofResponse {
 }
 
 impl ToResponseCode for InclusionProofResponse {
+    fn to_response_code(&self) -> StatusCode {
+        StatusCode::OK
+    }
+}
+
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct VerifySemaphoreProofResponse(RootItem);
+
+impl ToResponseCode for VerifySemaphoreProofResponse {
     fn to_response_code(&self) -> StatusCode {
         StatusCode::OK
     }
@@ -76,8 +86,6 @@ pub struct Options {
 
 pub struct App {
     database:           Arc<Database>,
-    #[allow(dead_code)]
-    ethereum:           Ethereum,
     identity_manager:   SharedIdentityManager,
     identity_committer: Arc<IdentityCommitter>,
     tree_state:         TreeState,
@@ -89,24 +97,42 @@ impl App {
     ///
     /// Will return `Err` if the internal Ethereum handler errors or if the
     /// `options.storage_file` is not accessible.
-    #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         // Connect to Ethereum and Database
-        let (database, (ethereum, identity_manager)) = {
+        let (database, identity_manager) = {
             let db = Database::new(options.database);
             let prover = BatchInsertionProver::new(&options.prover.batch_insertion)?;
 
-            let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
+            let eth = async move {
+                let ethereum = Ethereum::new(options.ethereum).await?;
+
                 let identity_manager =
                     IdentityManager::new(options.contracts, ethereum.clone(), prover).await?;
-                Ok((ethereum, Arc::new(identity_manager)))
-            });
+
+                Ok(Arc::new(identity_manager))
+            };
 
             // Connect to both in parallel
             try_join!(db, eth)?
         };
+
         let database = Arc::new(database);
+
+        // Await for all pending transactions
+        let pending_identities = identity_manager.fetch_pending_identities().await?;
+
+        for pending_identity_tx in pending_identities {
+            // Ignores the result of each transaction - we only care about a clean slate in
+            // terms of pending transactions
+            drop(identity_manager.mine_identities(pending_identity_tx).await);
+        }
+
+        // Prefetch latest root & mark it as mined
+        let root_hash = identity_manager.latest_root().await?;
+        let root_hash = root_hash.into();
+
+        database.mark_root_submitted_to_contract(&root_hash).await?;
 
         let tree_state = Self::initialize_tree(
             &database,
@@ -136,7 +162,6 @@ impl App {
         // Sync with chain on start up
         let app = Self {
             database,
-            ethereum,
             identity_manager,
             identity_committer,
             tree_state,
@@ -230,25 +255,24 @@ impl App {
     async fn sync_tree_to(&self, leaf_idx: usize) -> Result<(), ServerError> {
         let tree = self.tree_state.get_latest_tree();
         let next_index = tree.next_leaf();
-        debug!(
-            "syncing tree from root {} to with next index {} to index {}",
-            tree.get_root(),
-            next_index,
-            leaf_idx
-        );
         if leaf_idx < next_index {
             return Ok(()); // Someone sync'd first, we're up to date
         }
+
         let identities = self
             .database
             .get_updates_in_range(next_index, leaf_idx)
             .await?;
-        tree.append_many_fresh(&identities);
-        debug!(
-            "synced tree to root {} with next leaf {}",
-            tree.get_root(),
-            tree.next_leaf()
-        );
+
+        for (identity, tree_root) in tree
+            .append_many_fresh_with_intermediate_roots(&identities)
+            .await
+        {
+            self.database
+                .insert_pending_root(&tree_root, &identity.element, identity.leaf_index)
+                .await?;
+        }
+
         Ok(())
     }
 
@@ -273,6 +297,35 @@ impl App {
         let proof = self.tree_state.get_proof_for(&item);
 
         Ok(InclusionProofResponse(proof))
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the provided proof is invalid.
+    #[instrument(level = "debug", skip_all)]
+    pub async fn verify_semaphore_proof(
+        &self,
+        request: &VerifySemaphoreProofRequest,
+    ) -> Result<VerifySemaphoreProofResponse, ServerError> {
+        let Some(root_state) = self.database.get_root_state(&request.root).await? else {
+            return Err(ServerError::InvalidRoot)
+        };
+
+        let checked = verify_proof(
+            request.root,
+            request.nullifier_hash,
+            request.signal_hash,
+            request.external_nullifier_hash,
+            &request.proof,
+        );
+        match checked {
+            Ok(true) => Ok(VerifySemaphoreProofResponse(root_state)),
+            Ok(false) => Err(ServerError::InvalidProof),
+            Err(err) => {
+                info!(?err, "verify_proof failed with error");
+                Err(ServerError::ProverError)
+            }
+        }
     }
 
     /// # Errors

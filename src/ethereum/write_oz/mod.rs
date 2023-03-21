@@ -1,16 +1,18 @@
-use self::openzeppelin::OzRelay;
+use std::time::Duration;
+
 use anyhow::Result as AnyhowResult;
 use async_trait::async_trait;
 use clap::Parser;
 use ethers::types::{transaction::eip2718::TypedTransaction, Address, H160};
-use std::{sync::Arc, time::Duration};
 
+use self::openzeppelin::OzRelay;
 use super::{
     read::duration_from_str,
     write::{TransactionId, WriteProvider},
     TxError,
 };
 
+mod error;
 mod openzeppelin;
 
 // TODO: Log and metrics for signer / nonces.
@@ -39,19 +41,18 @@ pub struct Options {
     pub oz_transaction_validity: Duration,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Provider {
-    inner:   Arc<OzRelay>,
+    inner:   OzRelay,
     address: Address,
 }
 
 impl Provider {
-    #[allow(dead_code)]
-    pub fn new(options: &Options) -> AnyhowResult<Self> {
-        let relay = OzRelay::new(options)?;
+    pub async fn new(options: &Options) -> AnyhowResult<Self> {
+        let relay = OzRelay::new(options).await?;
 
         Ok(Self {
-            inner:   Arc::new(relay),
+            inner:   relay,
             address: options.oz_address,
         })
     }
@@ -65,6 +66,14 @@ impl WriteProvider for Provider {
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
         self.inner.send_transaction(tx, only_once).await
+    }
+
+    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
+        self.inner.fetch_pending_transactions().await
+    }
+
+    async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
+        self.inner.mine_transaction(tx).await
     }
 
     fn address(&self) -> Address {

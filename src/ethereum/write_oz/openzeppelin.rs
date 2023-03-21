@@ -1,32 +1,20 @@
+use std::{fmt::Debug, time::Duration};
+
 use anyhow::Result as AnyhowResult;
-use chrono::{DateTime, Utc};
-use cognitoauth::cognito_srp_auth::{auth, CognitoAuthInput};
-use ethers::{
-    providers::ProviderError,
-    types::{transaction::eip2718::TypedTransaction, Bytes, NameOrAddress, TxHash, U256},
-};
-use hyper::StatusCode;
+use ethers::types::transaction::eip2718::TypedTransaction;
 use once_cell::sync::Lazy;
+use oz_api::{
+    data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status},
+    OzApi,
+};
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use reqwest::{header::HeaderValue, Client};
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use std::{collections::HashMap, fmt::Debug, time::Duration};
-use thiserror::Error;
-use tokio::{sync::Mutex, time::timeout};
+use tokio::time::timeout;
 use tracing::{error, info, info_span, Instrument};
 
+use super::{error::Error, Options};
 use crate::ethereum::{write::TransactionId, TxError};
 
-use super::Options;
-
-// Same for every project, taken from here: https://docs.openzeppelin.com/defender/api-auth
-const RELAY_TXS_URL: &str = "https://api.defender.openzeppelin.com/txs";
-const CLIENT_ID: &str = "1bpd19lcr33qvg5cr3oi79rdap";
-const POOL_ID: &str = "us-west-2_iLmIggsiy";
-
-static CLIENTS: Lazy<Mutex<HashMap<String, ExpiringClient>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+const DEFENDER_RELAY_URL: &str = "https://api.defender.openzeppelin.com";
 
 static TX_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!("eth_tx_count", "The transaction count by bytes4.", &[
@@ -35,101 +23,69 @@ static TX_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
     .unwrap()
 });
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct OzRelay {
-    api_key:              String,
-    api_secret:           String,
+    oz_api:               OzApi,
     transaction_validity: chrono::Duration,
     send_timeout:         Duration,
     mine_timeout:         Duration,
 }
 
 impl OzRelay {
-    pub fn new(options: &Options) -> AnyhowResult<Self> {
+    pub async fn new(options: &Options) -> AnyhowResult<Self> {
+        let oz_api = OzApi::new(
+            DEFENDER_RELAY_URL,
+            &options.oz_api_key,
+            &options.oz_api_secret,
+        )
+        .await?;
+
         Ok(Self {
-            api_key:              options.oz_api_key.to_string(),
-            api_secret:           options.oz_api_secret.to_string(),
+            oz_api,
             transaction_validity: chrono::Duration::from_std(options.oz_transaction_validity)?,
-            send_timeout:         Duration::from_secs(60),
-            mine_timeout:         Duration::from_secs(60),
+            send_timeout: Duration::from_secs(60),
+            mine_timeout: Duration::from_secs(60),
         })
     }
 
-    async fn query(&self, tx_id: &str) -> Result<SubmittedTransaction, Error> {
-        let url = format!("{RELAY_TXS_URL}/{tx_id}");
-        let client = get_client(&self.api_key, &self.api_secret)
-            .await
-            .map_err(|_| Error::Authentication)?;
+    async fn query(&self, tx_id: &str) -> Result<RelayerTransactionBase, Error> {
+        let tx = self.oz_api.query_transaction(tx_id).await?;
 
-        let res = client
-            .get(url)
-            .send()
-            .await
-            .map_err(|_| Error::RequestFailed)?;
-
-        let status = res.status();
-        let item = res.json::<SubmittedTransaction>().await.map_err(|e| {
-            error!(?status, ?e, "error occurred, unknown response format");
-            Error::UnknownResponseFormat
-        })?;
-
-        Ok(item)
+        Ok(tx)
     }
 
-    async fn list_recent_transactions(&self) -> Result<Vec<SubmittedTransaction>, Error> {
-        let client = get_client(&self.api_key, &self.api_secret)
-            .await
-            .map_err(|_| Error::Authentication)?;
+    async fn list_recent_transactions(&self) -> Result<Vec<RelayerTransactionBase>, Error> {
+        let transactions = self.oz_api.list_transactions(None, Some(10)).await?;
 
-        let res = client
-            .get(format!("{RELAY_TXS_URL}?limit=10"))
-            .send()
-            .await
-            .map_err(|_| Error::RequestFailed)?;
-
-        let status = res.status();
-        let items = res.json::<Vec<SubmittedTransaction>>().await.map_err(|e| {
-            error!(?status, ?e, "error occurred, unknown response format");
-            Error::UnknownResponseFormat
-        })?;
-
-        Ok(items)
+        Ok(transactions)
     }
 
     async fn mine_transaction_id_unchecked(
         &self,
         id: &str,
-    ) -> Result<SubmittedTransaction, TxError> {
+    ) -> Result<RelayerTransactionBase, TxError> {
         loop {
             let transaction = self.query(id).await.map_err(|error| {
                 error!(?error, "Failed to get transaction status");
                 TxError::Send(Box::new(error))
             })?;
-            let status = transaction
-                .status
-                .as_ref()
-                .ok_or_else(|| TxError::Dropped(TxHash::default()))?;
 
-            // Transaction statuses documented here:
-            // https://docs.openzeppelin.com/defender/relay-api-reference#transaction-status
+            let status = transaction.status;
 
             // Terminal failure. The transaction won't be retried by OpenZeppelin. No reason
             // provided
-            if status == "failed" {
-                return Err(TxError::Failed(None));
+            match status {
+                Status::Failed => return Err(TxError::Failed(None)),
+                Status::Mined | Status::Confirmed => return Ok(transaction),
+                _ => {
+                    info!("waiting 5 s to mine");
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
             }
-
-            // Transaction mined successfully
-            if status == "mined" || status == "confirmed" {
-                return Ok(transaction);
-            }
-
-            info!("waiting 5 s to mine");
-            tokio::time::sleep(Duration::from_secs(5)).await;
         }
     }
 
-    async fn mine_transaction_id(&self, id: &str) -> Result<SubmittedTransaction, TxError> {
+    async fn mine_transaction_id(&self, id: &str) -> Result<RelayerTransactionBase, TxError> {
         timeout(self.mine_timeout, self.mine_transaction_id_unchecked(id))
             .await
             .map_err(|_| TxError::ConfirmationTimeout)?
@@ -139,12 +95,8 @@ impl OzRelay {
         &self,
         tx: T,
     ) -> Result<String, Error> {
-        let client = get_client(&self.api_key, &self.api_secret)
-            .await
-            .map_err(|_| Error::Authentication)?;
-
         let tx: TypedTransaction = tx.into();
-        let api_tx = Transaction {
+        let api_tx = SendBaseTransactionRequest {
             to:          tx.to(),
             value:       tx.value(),
             gas_limit:   tx.gas(),
@@ -152,30 +104,9 @@ impl OzRelay {
             valid_until: Some(chrono::Utc::now() + self.transaction_validity),
         };
 
-        let res = client
-            .post(RELAY_TXS_URL)
-            .body(json!(api_tx).to_string())
-            .send()
-            .await
-            .map_err(|_| Error::RequestFailed)?;
+        let tx = self.oz_api.send_transaction(api_tx).await?;
 
-        if res.status() == StatusCode::OK {
-            let obj = res
-                .json::<Value>()
-                .await
-                .map_err(|_| Error::UnknownResponseFormat)?;
-            let id = obj
-                .get("transactionId")
-                .ok_or(Error::MissingTransactionId)?
-                .as_str()
-                .unwrap();
-            Ok(id.to_string())
-        } else {
-            let text = res.text().await;
-            info!(?text, "response error");
-
-            Err(Error::UnknownResponseFormat)
-        }
+        Ok(tx.transaction_id)
     }
 
     /// When `only_once` is set to true, this method tries to be idempotent.
@@ -215,8 +146,10 @@ impl OzRelay {
             if let Some(existing_transaction) = existing_transaction {
                 info!(only_once, "mining previously submitted transaction");
 
-                let transaction_id = existing_transaction.transaction_id.clone().unwrap();
+                let transaction_id = existing_transaction.transaction_id.clone();
+
                 self.mine_transaction_id(&transaction_id).await?;
+
                 return Ok(TransactionId(transaction_id));
             }
         }
@@ -245,112 +178,26 @@ impl OzRelay {
 
         info!(?tx_id, "Transaction submitted to OZ Relay");
 
-        self.mine_transaction_id(&tx_id).await?;
         Ok(TransactionId(tx_id))
     }
-}
 
-#[derive(Debug)]
-struct ExpiringClient {
-    client:          Client,
-    expiration_time: i64,
-}
+    pub async fn mine_transaction(&self, tx_id: TransactionId) -> Result<(), TxError> {
+        self.mine_transaction_id(tx_id.0.as_str()).await?;
 
-/// Refreshes or creates a new access token for Defender API and returns it.
-async fn get_client(api_key: &str, api_secret: &str) -> eyre::Result<Client> {
-    let now = chrono::Utc::now().timestamp();
-    let mut clients = CLIENTS.lock().await;
-    if let Some(client) = clients.get(api_key) {
-        if now < client.expiration_time {
-            // token still valid
-            return Ok(client.client.clone());
-        }
+        Ok(())
     }
 
-    let input = CognitoAuthInput {
-        client_id:     CLIENT_ID.to_string(),
-        pool_id:       POOL_ID.to_string(),
-        username:      api_key.to_string(),
-        password:      api_secret.to_string(),
-        mfa:           None,
-        client_secret: None,
-    };
+    pub async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
+        let recent_pending_txs = self
+            .list_recent_transactions()
+            .await
+            .map_err(|err| TxError::Fetch(Box::new(err)))?;
 
-    let res = auth(input)
-        .await
-        .map_err(|_| eyre::eyre!("Authentication failed"))?
-        .ok_or(eyre::eyre!("Authentication failed"))?;
+        let pending_txs = recent_pending_txs
+            .into_iter()
+            .map(|tx| TransactionId(tx.transaction_id))
+            .collect();
 
-    let access_token = res
-        .access_token()
-        .ok_or(eyre::eyre!("Authentication failed"))?;
-
-    let mut auth_value = HeaderValue::from_str(&format!("Bearer {access_token}"))?;
-    auth_value.set_sensitive(true);
-
-    let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert(reqwest::header::AUTHORIZATION, auth_value);
-    headers.insert("X-Api-Key", HeaderValue::from_str(api_key)?);
-
-    let client = Client::builder().default_headers(headers).build()?;
-
-    clients.insert(api_key.to_string(), ExpiringClient {
-        client:          client.clone(),
-        expiration_time: now + i64::from(res.expires_in()),
-    });
-    Ok(client)
-}
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Transport error")]
-    Transport(#[from] ethers::providers::HttpClientError),
-    #[error("Authentication error")]
-    Authentication,
-    #[error("Request failed")]
-    RequestFailed,
-    #[error("Unknown response format")]
-    UnknownResponseFormat,
-    #[error("Missing transaction id")]
-    MissingTransactionId,
-}
-
-impl From<Error> for ProviderError {
-    fn from(error: Error) -> Self {
-        Self::JsonRpcClientError(Box::new(error))
+        Ok(pending_txs)
     }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Transaction<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub to:          Option<&'a NameOrAddress>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub value:       Option<&'a U256>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub gas_limit:   Option<&'a U256>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data:        Option<&'a Bytes>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub valid_until: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubmittedTransaction {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub transaction_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub to:             Option<NameOrAddress>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub value:          Option<U256>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub gas_limit:      Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data:           Option<Bytes>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub valid_until:    Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status:         Option<String>,
 }

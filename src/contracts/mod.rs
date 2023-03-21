@@ -1,8 +1,16 @@
 //! Functionality for interacting with smart contracts deployed on chain.
 mod abi;
 
-use anyhow::anyhow;
 use std::sync::Arc;
+
+use anyhow::anyhow;
+use clap::Parser;
+use ethers::{
+    providers::Middleware,
+    types::{Address, U256},
+};
+use semaphore::Field;
+use tracing::{error, info, instrument};
 
 use self::abi::BatchingContract as ContractAbi;
 use crate::{
@@ -12,13 +20,6 @@ use crate::{
         proof::Proof,
     },
 };
-use clap::Parser;
-use ethers::{
-    providers::Middleware,
-    types::{Address, U256},
-};
-use semaphore::Field;
-use tracing::{error, info, instrument};
 
 /// Configuration options for the component responsible for interacting with the
 /// contract.
@@ -123,11 +124,38 @@ impl IdentityManager {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn is_owner(&self) -> anyhow::Result<bool> {
-        info!(address = ?self.ethereum.address(), "Signer address");
-        let owner = self.abi.owner().call().await?;
-        info!(?owner, "Fetched owner address");
-        Ok(owner == self.ethereum.address())
+    pub async fn prepare_proof(
+        &self,
+        start_index: usize,
+        pre_root: U256,
+        post_root: U256,
+        identity_commitments: &[Identity],
+    ) -> anyhow::Result<Proof> {
+        // We also can't proceed unless the merkle proofs match the known tree depth.
+        // Things will break if we do.
+        for id in identity_commitments {
+            if id.merkle_proof.len() != self.tree_depth {
+                return Err(anyhow!(format!(
+                    "Length of merkle proof ({len}) did not match tree depth ({depth})",
+                    len = id.merkle_proof.len(),
+                    depth = self.tree_depth
+                )));
+            }
+        }
+
+        let actual_start_index: u32 = start_index.try_into()?;
+
+        let proof_data: Proof = self
+            .prover
+            .generate_proof(
+                actual_start_index,
+                pre_root,
+                post_root,
+                identity_commitments,
+            )
+            .await?;
+
+        Ok(proof_data)
     }
 
     #[instrument(level = "debug", skip_all)]
@@ -137,36 +165,10 @@ impl IdentityManager {
         pre_root: U256,
         post_root: U256,
         identity_commitments: Vec<Identity>,
+        proof_data: Proof,
     ) -> anyhow::Result<TransactionId> {
-        // Ensure that we are not going to submit based on an out of date root anyway.
-        self.assert_latest_root(pre_root.into()).await?;
-
-        // We also can't proceed unless the merkle proofs match the known tree depth.
-        // Things will break if we do.
-        let _ = &identity_commitments.iter().try_for_each(|id| {
-            if id.merkle_proof.len() == self.tree_depth {
-                Ok(())
-            } else {
-                Err(anyhow!(format!(
-                    "Length of merkle proof ({len}) did not match tree depth ({depth})",
-                    len = id.merkle_proof.len(),
-                    depth = self.tree_depth
-                )))
-            }
-        })?;
-
-        // Preparing the transaction to send on chain is just a bunch of data
-        // marshalling.
         let actual_start_index: u32 = start_index.try_into()?;
-        let proof_data: Proof = self
-            .prover
-            .generate_proof(
-                actual_start_index,
-                pre_root,
-                post_root,
-                &identity_commitments,
-            )
-            .await?;
+
         let proof_points_array: [U256; 8] = proof_data.into();
         let identities = identity_commitments
             .iter()
@@ -194,6 +196,19 @@ impl IdentityManager {
     }
 
     #[instrument(level = "debug", skip_all)]
+    pub async fn mine_identities(&self, transaction_id: TransactionId) -> anyhow::Result<()> {
+        self.ethereum.mine_transaction(transaction_id).await?;
+        Ok(())
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    pub async fn fetch_pending_identities(&self) -> anyhow::Result<Vec<TransactionId>> {
+        let pending_identities = self.ethereum.fetch_pending_transactions().await?;
+
+        Ok(pending_identities)
+    }
+
+    #[instrument(level = "debug", skip_all)]
     pub async fn assert_latest_root(&self, root: Field) -> anyhow::Result<()> {
         let latest_root = self.abi.latest_root().call().await?;
         let processed_root: U256 = root.into();
@@ -205,14 +220,10 @@ impl IdentityManager {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn assert_valid_root(&self, root: Field) -> anyhow::Result<()> {
-        if self.abi.check_valid_root(root.into()).call().await? {
-            Ok(())
-        } else {
-            Err(anyhow::Error::msg(format!(
-                "The root {root} no longer valid"
-            )))
-        }
+    pub async fn latest_root(&self) -> anyhow::Result<U256> {
+        let latest_root = self.abi.latest_root().call().await?;
+
+        Ok(latest_root)
     }
 }
 

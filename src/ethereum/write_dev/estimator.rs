@@ -7,7 +7,6 @@ use thiserror::Error;
 
 /// Estimator Provider Errors
 #[derive(Error, Debug)]
-#[allow(clippy::module_name_repetitions)]
 pub enum EstimatorError<Inner: Middleware> {
     #[error("{0}")]
     /// Thrown when an internal middleware errors
@@ -39,8 +38,6 @@ impl<Inner: Middleware> Estimator<Inner> {
         }
     }
 
-    #[allow(clippy::cast_precision_loss)]
-    #[allow(clippy::cast_lossless)]
     pub fn rescale(&self, gas: U256) -> U256 {
         let gas = {
             let n = (256_u32 - 64).saturating_sub(gas.leading_zeros());

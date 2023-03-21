@@ -1,17 +1,17 @@
-#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
 use sqlx::{
-    any::AnyKind,
     migrate::{Migrate, MigrateDatabase, Migrator},
     pool::PoolOptions,
-    Any, Executor, Pool, Row,
+    Executor, Pool, Postgres, Row,
 };
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;
 
-use crate::identity_tree::{Hash, Status, TreeItem, TreeUpdate};
+use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
@@ -20,9 +20,7 @@ static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 pub struct Options {
     /// Database server connection string.
     /// Example: `postgres://user:password@localhost:5432/database`
-    /// Sqlite file: ``
-    /// In memory DB: `sqlite::memory:`
-    #[clap(long, env, default_value = "sqlite::memory:")]
+    #[clap(long, env)]
     pub database: Url,
 
     /// Allow creation or migration of the database schema.
@@ -35,7 +33,7 @@ pub struct Options {
 }
 
 pub struct Database {
-    pool: Pool<Any>,
+    pool: Pool<Postgres>,
 }
 
 impl Database {
@@ -44,34 +42,26 @@ impl Database {
         info!(url = %&options.database, "Connecting to database");
 
         // Create database if requested and does not exist
-        if options.database_migrate && !Any::database_exists(options.database.as_str()).await? {
-            warn!(url = %&options.database, "Database does not exist, creating
-        database");
-            Any::create_database(options.database.as_str()).await?;
+        if options.database_migrate && !Postgres::database_exists(options.database.as_str()).await?
+        {
+            warn!(url = %&options.database, "Database does not exist, creating database");
+            Postgres::create_database(options.database.as_str()).await?;
         }
 
         // Create a connection pool
-        let pool = PoolOptions::<Any>::new()
+        let pool = PoolOptions::<Postgres>::new()
             .max_connections(options.database_max_connections)
             .connect(options.database.as_str())
             .await
             .context("error connecting to database")?;
 
-        // Log DB version to test connection.
-        let sql = match pool.any_kind() {
-            AnyKind::Sqlite => "sqlite_version() || ' ' || sqlite_source_id()",
-            AnyKind::Postgres => "version()",
-
-            // Depending on compilation flags there may be more patterns.
-            #[allow(unreachable_patterns)]
-            _ => "'unknown'",
-        };
         let version = pool
-            .fetch_one(format!("SELECT {sql};").as_str())
+            .fetch_one("SELECT version()")
             .await
             .context("error getting database version")?
             .get::<String, _>(0);
-        info!(url = %&options.database, kind = ?pool.any_kind(), ?version, "Connected to database");
+
+        info!(url = %&options.database, ?version, "Connected to database");
 
         // Run migrations if requested.
         let latest = MIGRATOR.migrations.last().unwrap().version;
@@ -131,10 +121,12 @@ impl Database {
         identity: &Hash,
     ) -> Result<Option<usize>, Error> {
         let query = sqlx::query(
-            r#"INSERT INTO identities (commitment, leaf_index, status)
-                       VALUES ($1, (SELECT COALESCE(MAX(leaf_index) + 1, 0) FROM identities), $2)
-                       ON CONFLICT DO NOTHING
-                       RETURNING leaf_index;"#,
+            r#"
+            INSERT INTO identities (commitment, leaf_index, status)
+            VALUES ($1, (SELECT COALESCE(MAX(leaf_index) + 1, 0) FROM identities), $2)
+            ON CONFLICT DO NOTHING
+            RETURNING leaf_index;
+            "#,
         )
         .bind(identity)
         .bind(<&str>::from(Status::Pending));
@@ -150,26 +142,89 @@ impl Database {
     /// failure occurs, the entire batch will be rolled back.
     pub async fn mark_identities_submitted_to_contract(
         &self,
+        root: &Hash,
         leaf_indices: &[usize],
     ) -> Result<(), Error> {
         let mut tx = self.pool.begin().await?;
 
-        // Note that there are more efficient ways to do this in certain dialects of
-        // SQL. Postgres has the `VALUES` embedding, for example. Using a transaction as
-        // done here is backend agnostic, and hence works in production and for the
-        // tests.
-        for index in leaf_indices {
-            let query = sqlx::query(
-                r#"UPDATE identities
-                           SET status = $2
-                           WHERE leaf_index = $1;"#,
-            )
-            .bind(*index as i64)
-            .bind(<&str>::from(Status::Mined));
-            tx.execute(query).await?;
-        }
+        let values = leaf_indices
+            .iter()
+            .map(|index| format!("({index})"))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let query = format!(
+            r#"
+            UPDATE identities
+            SET status = $1
+            FROM ( VALUES {values} ) AS update (index)
+            WHERE leaf_index = update.index;
+            "#
+        );
+
+        let query = sqlx::query(&query).bind(<&str>::from(Status::Mined));
+        tx.execute(query).await?;
+
+        let query = sqlx::query(
+            r#"
+            UPDATE root_history
+            SET status = $2, mined_at = CURRENT_TIMESTAMP
+            WHERE root = $1;
+            "#,
+        )
+        .bind(root)
+        .bind(<&str>::from(Status::Mined));
+        tx.execute(query).await?;
 
         tx.commit().await?;
+        Ok(())
+    }
+
+    /// Marks the identities and roots from before a given root hash as mined
+    #[instrument(skip(self), level = "debug")]
+    pub async fn mark_root_submitted_to_contract(&self, root: &Hash) -> Result<(), Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let root_leaf_index_query = sqlx::query(
+            r#"
+            SELECT last_index FROM root_history WHERE root = $1
+            "#,
+        )
+        .bind(root);
+
+        let row = tx.fetch_optional(root_leaf_index_query).await?;
+        // If this is the first time the sequencer is starting then we will not have any
+        // roots in the database.
+        let Some(row) = row else { return Ok(()) };
+        let root_leaf_index = row.get::<i64, _>(0);
+
+        let str_mined_status = <&str>::from(Status::Mined);
+        let update_root_history_query = sqlx::query(
+            r#"
+            UPDATE root_history
+            SET status = $1, mined_at = CURRENT_TIMESTAMP
+            WHERE last_index <= $2
+            "#,
+        )
+        .bind(str_mined_status)
+        .bind(root_leaf_index);
+
+        tx.execute(update_root_history_query).await?;
+
+        let update_identities_query = sqlx::query(
+            r#"
+            UPDATE identities
+            SET status = $1
+            WHERE leaf_index <= $2
+            "#,
+        )
+        .bind(str_mined_status)
+        .bind(root_leaf_index);
+
+        tx.execute(update_identities_query).await?;
+
+        tx.commit().await?;
+
         Ok(())
     }
 
@@ -179,10 +234,12 @@ impl Database {
         to_index: usize,
     ) -> Result<Vec<TreeUpdate>, Error> {
         let query = sqlx::query(
-            r#"SELECT commitment, leaf_index, status
-                       FROM identities
-                       WHERE leaf_index >= $1 AND leaf_index <= $2
-                       ORDER BY leaf_index ASC;"#,
+            r#"
+            SELECT commitment, leaf_index, status
+            FROM identities
+            WHERE leaf_index >= $1 AND leaf_index <= $2
+            ORDER BY leaf_index ASC;
+            "#,
         )
         .bind(from_index as i64)
         .bind(to_index as i64);
@@ -204,10 +261,12 @@ impl Database {
         identity: &Hash,
     ) -> Result<Option<TreeItem>, Error> {
         let query = sqlx::query(
-            r#"SELECT leaf_index, status
-                       FROM identities
-                       WHERE commitment = $1
-                       LIMIT 1;"#,
+            r#"
+            SELECT leaf_index, status
+            FROM identities
+            WHERE commitment = $1
+            LIMIT 1;
+            "#,
         )
         .bind(identity);
         let Some(row) = self.pool.fetch_optional(query).await? else {
@@ -228,10 +287,12 @@ impl Database {
         status: Status,
     ) -> Result<Vec<TreeUpdate>, Error> {
         let query = sqlx::query(
-            r#"SELECT leaf_index, commitment
-                       FROM identities
-                       WHERE status = $1
-                       ORDER BY leaf_index ASC;"#,
+            r#"
+            SELECT leaf_index, commitment
+            FROM identities
+            WHERE status = $1
+            ORDER BY leaf_index ASC;
+            "#,
         )
         .bind(<&str>::from(status));
         let rows = self.pool.fetch_all(query).await?;
@@ -243,10 +304,171 @@ impl Database {
             })
             .collect::<Vec<_>>())
     }
+
+    pub async fn get_root_state(&self, root: &Hash) -> Result<Option<RootItem>, Error> {
+        // This tries really hard to do everything in one query to prevent race
+        // conditions.
+        let query = sqlx::query(
+            r#"
+            SELECT
+                status,
+                COALESCE(
+                    (SELECT r2.created_at
+                    FROM root_history r2
+                    WHERE r2.last_index > r.last_index
+                    ORDER BY r2.last_index
+                    LIMIT 1),
+                    CURRENT_TIMESTAMP
+                ) as pending_valid_as_of,
+                COALESCE(
+                    (SELECT r2.mined_at
+                    FROM root_history r2
+                    WHERE r2.last_index > r.last_index AND r2.status = $2
+                    ORDER BY r2.last_index
+                    LIMIT 1),
+                    CASE WHEN r.status = $2 THEN CURRENT_TIMESTAMP END
+                ) as mined_valid_as_of
+            FROM root_history r
+            WHERE r.root = $1;
+            "#,
+        )
+        .bind(root)
+        .bind(<&str>::from(Status::Mined));
+
+        let row = self.pool.fetch_optional(query).await?;
+
+        Ok(row.map(|r| {
+            let status = r
+                .get::<&str, _>(0)
+                .parse()
+                .expect("Status is unreadable, database is corrupt");
+            let pending_valid_as_of = r.get::<_, _>(1);
+            let mined_valid_as_of = r.get::<_, _>(2);
+            RootItem {
+                root: *root,
+                status,
+                pending_valid_as_of,
+                mined_valid_as_of,
+            }
+        }))
+    }
+
+    pub async fn insert_pending_root(
+        &self,
+        root: &Hash,
+        last_identity: &Hash,
+        last_index: usize,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO root_history(root, last_identity, last_index, status, created_at)
+            VALUES($1, $2, $3, $4, CURRENT_TIMESTAMP)
+            ON CONFLICT (root) DO NOTHING;
+            "#,
+        )
+        .bind(root)
+        .bind(last_identity)
+        .bind(last_index as i64)
+        .bind(<&str>::from(Status::Pending));
+        self.pool.execute(query).await?;
+
+        Ok(())
+    }
+
+    pub async fn count_pending_identities(&self) -> Result<i32, Error> {
+        let query =
+            sqlx::query(r#"SELECT COUNT(leaf_index) as pending FROM identities WHERE status = $1"#)
+                .bind(<&str>::from(Status::Pending));
+        let result = self.pool.fetch_one(query).await?;
+        Ok(result.get::<i64, _>(0) as i32)
+    }
 }
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("database error")]
+    #[error("database error: {0}")]
     InternalError(#[from] sqlx::Error),
+}
+
+#[cfg(test)]
+mod test {
+    use std::time::Duration;
+
+    use chrono::Utc;
+    use reqwest::Url;
+    use semaphore::Field;
+
+    use super::{Database, Options};
+    use crate::identity_tree::Status;
+
+    #[tokio::test]
+    async fn test_root_invalidation() -> anyhow::Result<()> {
+        let db_container = postgres_docker_utils::setup().await?;
+        let port = db_container.port();
+
+        let url = format!("postgres://postgres:postgres@localhost:{port}/database");
+
+        let db = Database::new(Options {
+            database:                 Url::parse(&url)?,
+            database_migrate:         true,
+            database_max_connections: 10,
+        })
+        .await?;
+
+        let identities = (1..5).map(Field::from).collect::<Vec<_>>();
+        let roots = (1..5).map(Field::from).collect::<Vec<_>>();
+        db.insert_identity_if_does_not_exist(&identities[0]).await?;
+        db.insert_pending_root(&roots[0], &identities[0], 0).await?;
+
+        // Invalid root returns None
+        assert!(db.get_root_state(&roots[1]).await?.is_none());
+
+        // Basic scenario, latest pending root
+        let root_item = db.get_root_state(&roots[0]).await?.unwrap();
+        assert_eq!(roots[0], root_item.root);
+        assert!(matches!(root_item.status, Status::Pending));
+        assert!(root_item.mined_valid_as_of.is_none());
+
+        // Inserting a new pending root sets invalidation time for the previous root
+        db.insert_identity_if_does_not_exist(&identities[1]).await?;
+        db.insert_identity_if_does_not_exist(&identities[2]).await?;
+        db.insert_pending_root(&roots[1], &identities[2], 2).await?;
+        let root_1_inserted_at = Utc::now();
+
+        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
+
+        let root_item_0 = db.get_root_state(&roots[0]).await?.unwrap();
+        let root_item_1 = db.get_root_state(&roots[1]).await?.unwrap();
+
+        assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
+        assert!(root_item_1.pending_valid_as_of > root_1_inserted_at);
+
+        // Test mined roots
+        db.insert_identity_if_does_not_exist(&identities[3]).await?;
+        db.insert_pending_root(&roots[2], &identities[3], 3).await?;
+        db.mark_identities_submitted_to_contract(&roots[2], &[0, 1, 2, 3])
+            .await?;
+
+        let root_2_mined_at = Utc::now();
+
+        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
+
+        let root_item_2 = db.get_root_state(&roots[2]).await?.unwrap();
+        assert!(matches!(root_item_2.status, Status::Mined));
+        assert!(root_item_2.mined_valid_as_of.is_some());
+
+        let root_item_1 = db.get_root_state(&roots[1]).await?.unwrap();
+        assert!(matches!(root_item_1.status, Status::Pending));
+        assert!(root_item_1.mined_valid_as_of.unwrap() < root_2_mined_at);
+        assert!(root_item_1.pending_valid_as_of < root_2_mined_at);
+
+        let root_item_0 = db.get_root_state(&roots[0]).await?.unwrap();
+        assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
+        assert!(matches!(root_item_0.status, Status::Pending));
+        assert!(root_item_0.mined_valid_as_of.unwrap() < root_2_mined_at);
+        assert!(root_item_0.mined_valid_as_of.unwrap() > root_1_inserted_at);
+        assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
+
+        Ok(())
+    }
 }

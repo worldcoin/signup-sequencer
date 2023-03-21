@@ -1,8 +1,11 @@
-use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
-use super::{
-    read::ReadProvider,
-    write::{TransactionId, TxError, WriteProvider},
-};
+#![allow(
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_lossless
+)]
+
+use std::{sync::Arc, time::Duration};
+
 use anyhow::{anyhow, Result as AnyhowResult};
 use async_trait::async_trait;
 use clap::Parser;
@@ -15,11 +18,11 @@ use ethers::{
         },
         SignerMiddleware,
     },
-    providers::Middleware,
+    providers::{Middleware, PendingTransaction},
     signers::{LocalWallet, Signer, Wallet},
     types::{
         transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,
-        BlockNumber, Chain, H256, U64,
+        BlockNumber, Chain, TxHash, H256, U64,
     },
 };
 use futures::try_join;
@@ -29,9 +32,14 @@ use prometheus::{
     register_int_counter_vec, Counter, Gauge, Histogram, IntCounterVec,
 };
 use reqwest::Client as ReqwestClient;
-use std::{sync::Arc, time::Duration};
 use tokio::time::timeout;
 use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
+
+use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
+use super::{
+    read::ReadProvider,
+    write::{TransactionId, TxError, WriteProvider},
+};
 
 mod estimator;
 mod gas_oracle_logger;
@@ -138,13 +146,20 @@ impl WriteProvider for Provider {
         self.send_transaction(tx).await
     }
 
+    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
+        self.fetch_pending_transactions().await
+    }
+
+    async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
+        self.mine_transaction(tx).await
+    }
+
     fn address(&self) -> Address {
         self.address
     }
 }
 
 impl Provider {
-    #[allow(dead_code)]
     pub async fn new(read_provider: ReadProvider, options: Options) -> AnyhowResult<Self> {
         let legacy = read_provider.legacy;
 
@@ -272,9 +287,104 @@ impl Provider {
         })
     }
 
+    #[instrument(level = "debug", skip_all)]
+    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
+        // TODO: This implementation requires changes in the smart contract
+        // Currently we emit no events for submitted transactions - which makes
+        // it difficult to query a given node for a list of pending
+        // transactions. If we were to emit an event, we could fetch logs
+        // from pending logs that contain the given address and topic hash
+        // and resolve these logs to transaction hashes.
+        Ok(vec![])
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
+        let tx_hash = decode_tx_id(&tx)?;
+
+        // We're fetching the transaction again to get the nonce and gas limit
+        // TODO: We should be able to transfer this data via the input args
+        let tx = self
+            .inner
+            .get_transaction(tx_hash)
+            .await
+            .map_err(|err| TxError::Fetch(Box::new(err)))?
+            .ok_or_else(|| {
+                error!(?tx_hash, "Transaction dropped");
+                TxError::Dropped(tx_hash)
+            })?;
+
+        let nonce = tx.nonce;
+
+        let pending = PendingTransaction::new(tx_hash, self.inner.provider());
+
+        let timer = TX_LATENCY.start_timer();
+
+        let receipt = timeout(self.mine_timeout, pending)
+            .instrument(info_span!("Wait for TX to be mined"))
+            .await
+            .map_err(|elapsed| {
+                error!(?elapsed, "Waiting for transaction confirmation timed out");
+                TxError::ConfirmationTimeout
+            })?
+            .map_err(|err| {
+                error!(?nonce, ?tx_hash, ?err, "Transaction failed to confirm");
+
+                TxError::Confirmation(err)
+            })?
+            .ok_or_else(|| {
+                error!(?nonce, ?tx_hash, "Transaction dropped");
+                TxError::Dropped(tx_hash)
+            })?;
+
+        timer.observe_duration();
+        info!(?nonce, ?tx_hash, ?receipt, "Transaction mined");
+
+        if let Some(gas_price) = receipt.effective_gas_price {
+            TX_GAS_PRICE.set(gas_price.as_u128() as f64);
+        } else {
+            error!(
+                ?nonce,
+                ?tx,
+                ?receipt,
+                "Receipt did not include effective gas price."
+            );
+        }
+
+        if let Some(gas_used) = receipt.gas_used {
+            TX_GAS_USED.inc_by(gas_used.as_u128() as f64);
+            let gas_limit = tx.gas;
+            let gas_fraction = gas_used.as_u128() as f64 / gas_limit.as_u128() as f64;
+
+            TX_GAS_FRACTION.observe(gas_fraction);
+
+            if gas_fraction > 0.9 {
+                warn!(
+                    ?nonce,
+                    %gas_used,
+                    %gas_limit,
+                    %gas_fraction,
+                    "Transaction used more than 90% of the gas limit."
+                );
+            }
+
+            if let Some(gas_price) = receipt.effective_gas_price {
+                let cost_wei = gas_used * gas_price;
+                TX_WEI_USED.inc_by(cost_wei.as_u128() as f64);
+            }
+        } else {
+            error!(?nonce, ?tx, ?receipt, "Receipt did not include gas used.");
+        }
+
+        // Check receipt status for success
+        if receipt.status != Some(U64::from(1_u64)) {
+            return Err(TxError::Failed(Some(receipt)));
+        }
+
+        Ok(())
+    }
+
     #[instrument(level = "info", skip(self))]
-    #[allow(clippy::option_if_let_else)] // Less readable
-    #[allow(clippy::cast_precision_loss)]
     async fn send_transaction_unlogged(
         &self,
         tx: TypedTransaction,
@@ -299,6 +409,7 @@ impl Provider {
                 error!(?error, "Failed to fill transaction");
                 TxError::Fill(Box::new(error))
             })?;
+
         let nonce = tx.nonce().unwrap().as_u64();
         let gas_limit = tx.gas().unwrap().as_u128() as f64;
         let gas_price = tx.gas_price().unwrap().as_u128() as f64;
@@ -328,72 +439,18 @@ impl Provider {
             error!(?nonce, ?error, "Failed to send transaction");
             TxError::Send(Box::new(error))
         })?;
+
         let tx_hash: H256 = *pending;
+
         info!(?nonce, ?tx_hash, "Transaction in mempool");
 
-        // Wait for TX to be mined
-        let timer = TX_LATENCY.start_timer();
-        let receipt = timeout(self.mine_timeout, pending)
-            .instrument(info_span!("Wait for TX to be mined"))
-            .await
-            .map_err(|elapsed| {
-                error!(?elapsed, "Waiting for transaction confirmation timed out");
-                TxError::ConfirmationTimeout
-            })?
-            .map_err(|err| {
-                error!(?nonce, ?tx_hash, ?err, "Transaction failed to confirm");
+        let transaction_id = hex::encode(tx_hash.as_bytes());
 
-                TxError::Confirmation(err)
-            })?
-            .ok_or_else(|| {
-                error!(?nonce, ?tx_hash, "Transaction dropped");
-                TxError::Dropped(tx_hash)
-            })?;
-        timer.observe_duration();
-        info!(?nonce, ?tx_hash, ?receipt, "Transaction mined");
-
-        // Check receipt for gas used
-        if let Some(gas_price) = receipt.effective_gas_price {
-            TX_GAS_PRICE.set(gas_price.as_u128() as f64);
-        } else {
-            error!(
-                ?nonce,
-                ?tx,
-                ?receipt,
-                "Receipt did not include effective gas price."
-            );
-        }
-        if let Some(gas_used) = receipt.gas_used {
-            TX_GAS_USED.inc_by(gas_used.as_u128() as f64);
-            if let Some(gas_limit) = tx.gas() {
-                let gas_fraction = gas_used.as_u128() as f64 / gas_limit.as_u128() as f64;
-                TX_GAS_FRACTION.observe(gas_fraction);
-                if gas_fraction > 0.9 {
-                    warn!(
-                        ?nonce,
-                        %gas_used,
-                        %gas_limit,
-                        %gas_fraction,
-                        "Transaction used more than 90% of the gas limit."
-                    );
-                }
-            }
-            if let Some(gas_price) = receipt.effective_gas_price {
-                let cost_wei = gas_used * gas_price;
-                TX_WEI_USED.inc_by(cost_wei.as_u128() as f64);
-            }
-        } else {
-            error!(?nonce, ?tx, ?receipt, "Receipt did not include gas used.");
-        }
-
-        // Check receipt status for success
-        if receipt.status != Some(U64::from(1_u64)) {
-            return Err(TxError::Failed(Some(receipt)));
-        }
-
-        let transaction_id = receipt
-            .block_number
-            .map_or(String::new(), |b| b.to_string());
         Ok(TransactionId(transaction_id))
     }
+}
+
+fn decode_tx_id(tx: &TransactionId) -> Result<H256, TxError> {
+    let tx_hash = hex::decode(&tx.0).map_err(|err| TxError::Parse(Box::new(err)))?;
+    Ok(TxHash::from_slice(&tx_hash))
 }

@@ -1,7 +1,8 @@
+use std::{future::Future, ptr};
+
 use anyhow::{Error as EyreError, Result as AnyhowResult};
 use ethers::types::U256;
 use futures::FutureExt;
-use std::{future::Future, ptr};
 use tokio::task::JoinHandle;
 use tracing::error;
 
@@ -68,11 +69,6 @@ where
     })
 }
 
-#[allow(dead_code)]
-pub fn u256_to_f64(value: U256) -> f64 {
-    value.to_string().parse::<f64>().unwrap()
-}
-
 /// Enables a pattern of updating a value with a function that takes ownership
 /// and returns a new version of the value. This is akin to `mem::replace`, but
 /// allows more flexibility.
@@ -83,5 +79,34 @@ pub fn replace_with<T>(value: &mut T, modifier: impl FnOnce(T) -> T) {
         let v = ptr::read(value);
         let v = modifier(v);
         ptr::write(value, v);
+    }
+}
+
+#[allow(dead_code)]
+pub fn u256_to_f64(value: U256) -> f64 {
+    value
+        .to_string()
+        .parse::<f64>()
+        .expect("Failed to parse U256 to f64")
+}
+
+#[cfg(test)]
+mod tests {
+    use hex_literal::hex;
+    use test_case::test_case;
+
+    use super::*;
+
+    #[test_case(1_000_000_000_000_000_000 => 1_000_000_000_000_000_000.0)]
+    #[test_case(42 => 42.0)]
+    #[test_case(0 => 0.0)]
+    fn test_u256_to_f64_small(v: u64) -> f64 {
+        u256_to_f64(U256::from(v))
+    }
+
+    #[test_case(hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF") => 115792089237316195423570985008687907853269984665640564039457584007913129639935.0)]
+    #[test_case(hex!("0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF") => 7237005577332262213973186563042994240829374041602535252466099000494570602495.0)]
+    fn test_u256_to_f64_large(v: [u8; 32]) -> f64 {
+        u256_to_f64(U256::from(v))
     }
 }

@@ -9,14 +9,11 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::{
     contracts::IdentityManager,
     database::Database,
-    identity_committer::PendingIdentities,
-    identity_tree::{TreeUpdate, TreeVersion, TreeWithNextVersion},
+    identity_committer::{IdentityCommitter, PendingIdentities},
+    identity_tree::{
+        Intermediate, TreeUpdate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
+    },
     prover::batch_insertion::Identity,
-};
-
-use crate::{
-    identity_committer::IdentityCommitter,
-    identity_tree::{Intermediate, TreeVersionReadOps},
 };
 
 /// The number of seconds either side of the timer tick to treat as enough to
@@ -32,6 +29,9 @@ impl IdentityCommitter {
         pending_identities_sender: &mpsc::Sender<PendingIdentities>,
         timeout_secs: u64,
     ) -> AnyhowResult<()> {
+        info!("Awaiting for a clean slate");
+        identity_manager.await_clean_slate().await?;
+
         info!("Starting identity processor.");
         let batch_size = identity_manager.batch_size();
 

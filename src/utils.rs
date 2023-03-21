@@ -69,6 +69,36 @@ where
     })
 }
 
+pub fn spawn_with_exp_backoff<S, F, T>(future_spawner: S) -> JoinHandle<T>
+where
+    F: Future<Output = AnyhowResult<T>> + Send + 'static,
+    S: Fn() -> F + Send + Sync + 'static,
+    T: Send + 'static,
+{
+    // Run task in background, returning a handle.
+    tokio::spawn(async move {
+        loop {
+            let future = future_spawner();
+
+            // Wrap in `AssertUnwindSafe` so we can call `FuturesExt::catch_unwind` on it.
+            let future = std::panic::AssertUnwindSafe(future);
+
+            let result = future.catch_unwind().await;
+
+            match result {
+                // Task succeeded or is shutting down gracefully
+                Ok(Ok(t)) => return t,
+                Ok(Err(e)) => {
+                    error!("Task failed: {:?}", e);
+                }
+                Err(e) => {
+                    error!("Task panicked: {:?}", e);
+                }
+            }
+        }
+    })
+}
+
 /// Enables a pattern of updating a value with a function that takes ownership
 /// and returns a new version of the value. This is akin to `mem::replace`, but
 /// allows more flexibility.

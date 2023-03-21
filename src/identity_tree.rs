@@ -1,3 +1,4 @@
+use chrono::Utc;
 use std::{
     str::FromStr,
     sync::{Arc, Mutex, MutexGuard},
@@ -69,6 +70,15 @@ impl From<Status> for &str {
             Status::Mined => "mined",
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RootItem {
+    pub root:                Field,
+    pub status:              Status,
+    pub pending_valid_as_of: chrono::DateTime<Utc>,
+    pub mined_valid_as_of:   Option<chrono::DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -352,15 +362,22 @@ impl<V: Version> TreeVersion<V> {
 impl TreeVersion<Latest> {
     /// Appends a batch of updates to the tree. This method makes sure it only
     /// applies the updates past `next_leaf`, leaving older leaves untouched.
-    pub fn append_many_fresh(&self, updates: &[TreeUpdate]) {
+    pub async fn append_many_fresh_with_intermediate_roots<'t>(
+        &self,
+        updates: &'t [TreeUpdate],
+    ) -> Vec<(&'t TreeUpdate, Hash)> {
         let mut data = self.get_data();
         let next_leaf = data.next_leaf;
         updates
             .iter()
             .filter(|update| update.leaf_index >= next_leaf)
-            .for_each(|update| {
+            .map(|update| {
                 data.update(update.leaf_index, update.element);
-            });
+                let root = data.get_root();
+
+                (update, root)
+            })
+            .collect()
     }
 }
 

@@ -10,11 +10,14 @@ use crate::{
     contracts::IdentityManager,
     database::Database,
     identity_committer::PendingIdentities,
-    identity_tree::{TreeUpdate, TreeVersion},
+    identity_tree::{TreeUpdate, TreeVersion, TreeWithNextVersion},
     prover::batch_insertion::Identity,
 };
 
-use crate::identity_committer::IdentityCommitter;
+use crate::{
+    identity_committer::IdentityCommitter,
+    identity_tree::{Intermediate, TreeVersionReadOps},
+};
 
 /// The number of seconds either side of the timer tick to treat as enough to
 /// trigger a forced batch insertion.
@@ -24,7 +27,7 @@ impl IdentityCommitter {
     pub async fn process_identities(
         database: &Database,
         identity_manager: &IdentityManager,
-        batching_tree: &TreeVersion,
+        batching_tree: &TreeVersion<Intermediate>,
         wake_up_receiver: &mut mpsc::Receiver<()>,
         pending_identities_sender: &mpsc::Sender<PendingIdentities>,
         timeout_secs: u64,
@@ -60,7 +63,7 @@ impl IdentityCommitter {
                     // If the timer has fired we want to insert whatever
                     // identities we have, even if it's not many. This ensures
                     // a minimum quality of service for API users.
-                    let updates = batching_tree.peek_next_updates(batch_size).await;
+                    let updates = batching_tree.peek_next_updates(batch_size);
                     if updates.is_empty() {
                         continue;
                     }
@@ -97,7 +100,7 @@ impl IdentityCommitter {
                         timeout_secs.abs_diff(diff_secs) <= DEBOUNCE_THRESHOLD_SECS;
 
                     // We have _at most_ one complete batch here.
-                    let updates = batching_tree.peek_next_updates(batch_size).await;
+                    let updates = batching_tree.peek_next_updates(batch_size);
 
                     // If there are not enough identities to insert at this
                     // stage we can wait. The timer will ensure that the API
@@ -136,7 +139,7 @@ impl IdentityCommitter {
     async fn commit_identities(
         database: &Database,
         identity_manager: &IdentityManager,
-        batching_tree: &TreeVersion,
+        batching_tree: &TreeVersion<Intermediate>,
         pending_identities_sender: &mpsc::Sender<PendingIdentities>,
         updates: &[TreeUpdate],
     ) -> AnyhowResult<()> {
@@ -161,13 +164,13 @@ impl IdentityCommitter {
 
         // Grab the initial conditions before the updates are applied to the tree.
         let start_index = updates[0].leaf_index;
-        let pre_root: U256 = batching_tree.get_root().await.into();
+        let pre_root: U256 = batching_tree.get_root().into();
         let mut commitments: Vec<U256> =
             updates.iter().map(|update| update.element.into()).collect();
 
         // Next we apply the updates, retrieving the merkle proofs after each step of
         // that process.
-        let mut merkle_proofs = batching_tree.apply_next_updates(updates.len()).await;
+        let mut merkle_proofs = batching_tree.apply_next_updates(updates.len());
 
         // Grab some variables for sizes to make querying easier.
         let batch_size = identity_manager.batch_size();
@@ -195,7 +198,7 @@ impl IdentityCommitter {
             commitments.append(&mut vec![U256::zero(); padding]);
 
             for i in start_index..(start_index + padding) {
-                let (_, proof) = batching_tree.get_proof(i).await;
+                let (_, proof) = batching_tree.get_proof(i);
                 merkle_proofs.push(proof);
             }
         }
@@ -213,7 +216,7 @@ impl IdentityCommitter {
 
         // With the updates applied we can grab the value of the tree's new root and
         // build our identities for sending to the identity manager.
-        let post_root: U256 = batching_tree.get_root().await.into();
+        let post_root: U256 = batching_tree.get_root().into();
         let identity_commitments: Vec<Identity> = commitments
             .iter()
             .zip(merkle_proofs)

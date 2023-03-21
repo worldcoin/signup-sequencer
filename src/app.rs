@@ -6,7 +6,7 @@ use hyper::StatusCode;
 use semaphore::protocol::verify_proof;
 use serde::Serialize;
 use tokio::try_join;
-use tracing::{debug, info, instrument, warn};
+use tracing::{info, instrument, warn};
 
 use crate::{
     contracts,
@@ -17,6 +17,7 @@ use crate::{
     identity_committer::IdentityCommitter,
     identity_tree::{
         CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeItem, TreeState,
+        TreeVersionReadOps,
     },
     prover,
     prover::batch_insertion::Prover as BatchInsertionProver,

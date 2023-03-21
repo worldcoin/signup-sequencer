@@ -6,7 +6,7 @@ use crate::{
     contracts::IdentityManager,
     database::Database,
     identity_committer::{IdentityCommitter, PendingIdentities},
-    identity_tree::TreeVersion,
+    identity_tree::{Canonical, TreeVersion, TreeWithNextVersion},
 };
 
 impl IdentityCommitter {
@@ -14,7 +14,7 @@ impl IdentityCommitter {
     pub async fn mine_identities(
         database: &Database,
         identity_manager: &IdentityManager,
-        mined_tree: &TreeVersion,
+        mined_tree: &TreeVersion<Canonical>,
         mut pending_identities_receiver: mpsc::Receiver<PendingIdentities>,
     ) -> AnyhowResult<()> {
         loop {
@@ -42,7 +42,7 @@ impl IdentityCommitter {
 
             info!(start_index, ?pre_root, ?post_root, "Batch mined");
 
-            mined_tree.apply_next_updates(identity_keys.len()).await;
+            mined_tree.apply_next_updates(identity_keys.len());
 
             Self::log_pending_identities_count(database).await?;
         }

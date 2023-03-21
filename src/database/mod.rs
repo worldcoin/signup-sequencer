@@ -64,7 +64,12 @@ impl Database {
         info!(url = %&options.database, ?version, "Connected to database");
 
         // Run migrations if requested.
-        let latest = MIGRATOR.migrations.last().unwrap().version;
+        let latest = MIGRATOR
+            .migrations
+            .last()
+            .expect("Missing migrations")
+            .version;
+
         if options.database_migrate {
             info!(url = %&options.database, "Running migrations");
             MIGRATOR.run(&pool).await?;

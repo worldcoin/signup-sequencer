@@ -1,13 +1,14 @@
-use axum::{routing::post, Json, Router};
-use axum_server::Handle;
-use ethers::{types::U256, utils::keccak256};
-use semaphore::poseidon_tree::{Branch, Proof as TreeProof};
-use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
     mem::size_of,
     net::SocketAddr,
 };
+
+use axum::{routing::post, Json, Router};
+use axum_server::Handle;
+use ethers::{types::U256, utils::keccak256};
+use semaphore::poseidon_tree::{Branch, Proof as TreeProof};
+use serde::{Deserialize, Serialize};
 
 /// A representation of an error from the prover.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,7 +110,7 @@ impl Service {
                 .handle(serverside_handle)
                 .serve(service)
                 .await
-                .unwrap();
+                .expect("Failed to bind server");
         });
 
         let service = Self { server };

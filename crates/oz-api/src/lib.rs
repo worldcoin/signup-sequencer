@@ -51,7 +51,7 @@ impl OzApi {
         let headers = self.headers().await?;
 
         let res = headers
-            .apply(self.client.post(self.txs_url()))
+            .apply(self.client.post(self.txs_url()?))
             .json(&tx)
             .send()
             .await?;
@@ -64,7 +64,7 @@ impl OzApi {
         status: Option<Status>,
         limit: Option<usize>,
     ) -> Result<Vec<RelayerTransactionBase>> {
-        let mut url = self.txs_url();
+        let mut url = self.txs_url()?;
 
         let mut query_items = vec![];
 
@@ -88,7 +88,7 @@ impl OzApi {
     }
 
     pub async fn query_transaction(&self, tx_id: &str) -> Result<RelayerTransactionBase> {
-        let url = self.txs_url().join("txs/")?.join(tx_id)?;
+        let url = self.txs_url()?.join("txs/")?.join(tx_id)?;
 
         let headers = self.headers().await?;
 
@@ -97,8 +97,8 @@ impl OzApi {
         Self::json_or_error(res).await
     }
 
-    fn txs_url(&self) -> Url {
-        self.api_url.join("txs").unwrap()
+    fn txs_url(&self) -> Result<Url> {
+        Ok(self.api_url.join("txs")?)
     }
 
     async fn headers(&self) -> Result<MutexGuard<ExpiringHeaders>> {

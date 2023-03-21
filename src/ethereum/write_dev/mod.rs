@@ -40,6 +40,7 @@ use super::{
     read::ReadProvider,
     write::{TransactionId, TxError, WriteProvider},
 };
+use crate::utils::u256_to_f64;
 
 mod estimator;
 mod gas_oracle_logger;
@@ -410,9 +411,19 @@ impl Provider {
                 TxError::Fill(Box::new(error))
             })?;
 
-        let nonce = tx.nonce().unwrap().as_u64();
-        let gas_limit = tx.gas().unwrap().as_u128() as f64;
-        let gas_price = tx.gas_price().unwrap().as_u128() as f64;
+        let nonce = tx
+            .nonce()
+            .ok_or_else(|| TxError::fill("Failed to fill transaction nonce"))?;
+        let gas_limit = tx
+            .gas()
+            .ok_or_else(|| TxError::fill("Failed to fill transaction gas limit"))?;
+        let gas_price = tx
+            .gas_price()
+            .ok_or_else(|| TxError::fill("Failed to fill transaction gas price"))?;
+
+        let nonce = nonce.as_u64();
+        let gas_limit = u256_to_f64(*gas_limit);
+        let gas_price = u256_to_f64(gas_price);
 
         // Log transaction
         info!(?tx, ?nonce, ?gas_limit, ?gas_price, "Sending transaction.");

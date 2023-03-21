@@ -82,7 +82,7 @@ pub fn replace_with<T>(value: &mut T, modifier: impl FnOnce(T) -> T) {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(not(feature = "oz-provider"))]
 pub fn u256_to_f64(value: U256) -> f64 {
     value
         .to_string()
@@ -90,6 +90,7 @@ pub fn u256_to_f64(value: U256) -> f64 {
         .expect("Failed to parse U256 to f64")
 }
 
+#[cfg(not(feature = "oz-provider"))]
 #[cfg(test)]
 mod tests {
     use hex_literal::hex;

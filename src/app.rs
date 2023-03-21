@@ -6,7 +6,7 @@ use futures::TryFutureExt;
 use hyper::StatusCode;
 use serde::Serialize;
 use tokio::try_join;
-use tracing::{info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
 use crate::{
     contracts,
@@ -15,7 +15,9 @@ use crate::{
     ethereum::{self, Ethereum},
     identity_committer,
     identity_committer::IdentityCommitter,
-    identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, Status, TreeItem, TreeState},
+    identity_tree::{
+        CanonicalTreeBuilder, Hash, InclusionProof, Status, TreeItem, TreeState, TreeVersionReadOps,
+    },
     prover,
     prover::batch_insertion::Prover as BatchInsertionProver,
     server::{Error as ServerError, ToResponseCode},
@@ -101,7 +103,7 @@ impl App {
         let tree_state = Self::initialize_tree(
             &database,
             // Poseidon tree depth is one more than the contract's tree depth
-            identity_manager.tree_depth() + 1,
+            identity_manager.tree_depth(),
             identity_manager.initial_leaf_value(),
         )
         .await?;
@@ -142,16 +144,19 @@ impl App {
         tree_depth: usize,
         initial_leaf_value: Hash,
     ) -> AnyhowResult<TreeState> {
-        let mut mined_builder = CanonicalTreeBuilder::new(tree_depth, initial_leaf_value);
+        let mut mined_builder =
+            CanonicalTreeBuilder::new(tree_depth, tree_depth, 1, initial_leaf_value);
         let mined_items = database.get_commitments_by_status(Status::Mined).await?;
         for update in mined_items {
-            mined_builder.append(&update);
+            mined_builder.update(&update);
         }
-        let mined = mined_builder.seal();
-        let batching = mined.next_version().await;
-        let latest = batching.next_version().await;
+        let (mined, batching_builder) = mined_builder.seal();
+        let (batching, mut latest_builder) = batching_builder.seal_and_continue();
         let pending_items = database.get_commitments_by_status(Status::Pending).await?;
-        latest.append_many_fresh(&pending_items).await;
+        for update in pending_items {
+            latest_builder.update(&update);
+        }
+        let latest = latest_builder.seal();
         Ok(TreeState::new(mined, batching, latest))
     }
 
@@ -194,14 +199,12 @@ impl App {
 
         self.identity_committer.notify_queued().await;
 
-        Ok(InclusionProofResponse::from(
-            self.tree_state
-                .get_proof_for(&TreeItem {
-                    leaf_index: leaf_idx,
-                    status:     Status::Pending,
-                })
-                .await,
-        ))
+        Ok(InclusionProofResponse::from(self.tree_state.get_proof_for(
+            &TreeItem {
+                leaf_index: leaf_idx,
+                status:     Status::Pending,
+            },
+        )))
     }
 
     fn identity_is_reduced(&self, commitment: Hash) -> bool {
@@ -210,7 +213,13 @@ impl App {
 
     async fn sync_tree_to(&self, leaf_idx: usize) -> Result<(), ServerError> {
         let tree = self.tree_state.get_latest_tree();
-        let next_index = tree.next_leaf().await;
+        let next_index = tree.next_leaf();
+        debug!(
+            "syncing tree from root {} to with next index {} to index {}",
+            tree.get_root(),
+            next_index,
+            leaf_idx
+        );
         if leaf_idx < next_index {
             return Ok(()); // Someone sync'd first, we're up to date
         }
@@ -218,7 +227,12 @@ impl App {
             .database
             .get_updates_in_range(next_index, leaf_idx)
             .await?;
-        tree.append_many_fresh(&identities).await;
+        tree.append_many_fresh(&identities);
+        debug!(
+            "synced tree to root {} with next leaf {}",
+            tree.get_root(),
+            tree.next_leaf()
+        );
         Ok(())
     }
 
@@ -240,7 +254,7 @@ impl App {
             .await?
             .ok_or(ServerError::InvalidCommitment)?;
 
-        let proof = self.tree_state.get_proof_for(&item).await;
+        let proof = self.tree_state.get_proof_for(&item);
 
         Ok(InclusionProofResponse(proof))
     }

@@ -1,7 +1,7 @@
 use anyhow::{Error as EyreError, Result as AnyhowResult};
 use ethers::types::U256;
 use futures::FutureExt;
-use std::future::Future;
+use std::{future::Future, ptr};
 use tokio::task::JoinHandle;
 use tracing::error;
 
@@ -70,4 +70,12 @@ where
 
 pub fn u256_to_f64(value: U256) -> f64 {
     value.to_string().parse::<f64>().unwrap()
+}
+
+pub fn replace_with<T>(value: &mut T, modifier: impl FnOnce(T) -> T) {
+    unsafe {
+        let v = ptr::read(value);
+        let v = modifier(v);
+        ptr::write(value, v);
+    }
 }

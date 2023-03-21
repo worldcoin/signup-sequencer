@@ -21,7 +21,10 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::{
     contracts::{IdentityManager, SharedIdentityManager},
     database::Database,
-    identity_tree::{Canonical, Intermediate, TreeState, TreeUpdate, TreeVersion},
+    identity_tree::{
+        Canonical, Intermediate, TreeState, TreeUpdate, TreeVersion, TreeVersionReadOps,
+        TreeWithNextVersion,
+    },
     prover::batch_insertion::Identity,
     utils::spawn_or_abort,
 };
@@ -191,7 +194,7 @@ impl IdentityCommitter {
                     // If the timer has fired we want to insert whatever
                     // identities we have, even if it's not many. This ensures
                     // a minimum quality of service for API users.
-                    let updates = batching_tree.peek_next_updates(batch_size).await;
+                    let updates = batching_tree.peek_next_updates(batch_size);
                     if updates.is_empty() {
                         continue;
                     }
@@ -227,7 +230,7 @@ impl IdentityCommitter {
                         timeout_secs.abs_diff(diff_secs) <= DEBOUNCE_THRESHOLD_SECS;
 
                     // We have _at most_ one complete batch here.
-                    let updates = batching_tree.peek_next_updates(batch_size).await;
+                    let updates = batching_tree.peek_next_updates(batch_size);
 
                     // If there are not enough identities to insert at this
                     // stage we can wait. The timer will ensure that the API
@@ -291,13 +294,13 @@ impl IdentityCommitter {
 
         // Grab the initial conditions before the updates are applied to the tree.
         let start_index = updates[0].leaf_index;
-        let pre_root: U256 = batching_tree.get_root().await.into();
+        let pre_root: U256 = batching_tree.get_root().into();
         let mut commitments: Vec<U256> =
             updates.iter().map(|update| update.element.into()).collect();
 
         // Next we apply the updates, retrieving the merkle proofs after each step of
         // that process.
-        let mut merkle_proofs = batching_tree.apply_next_updates(updates.len()).await;
+        let mut merkle_proofs = batching_tree.apply_next_updates(updates.len());
 
         // Grab some variables for sizes to make querying easier.
         let batch_size = identity_manager.batch_size();
@@ -325,7 +328,7 @@ impl IdentityCommitter {
             commitments.append(&mut vec![U256::zero(); padding]);
 
             for i in start_index..(start_index + padding) {
-                let (_, proof) = batching_tree.get_proof(i).await;
+                let (_, proof) = batching_tree.get_proof(i);
                 merkle_proofs.push(proof);
             }
         }
@@ -343,7 +346,7 @@ impl IdentityCommitter {
 
         // With the updates applied we can grab the value of the tree's new root and
         // build our identities for sending to the identity manager.
-        let post_root: U256 = batching_tree.get_root().await.into();
+        let post_root: U256 = batching_tree.get_root().into();
         let identity_commitments: Vec<Identity> = commitments
             .iter()
             .zip(merkle_proofs)
@@ -377,7 +380,7 @@ impl IdentityCommitter {
         database
             .mark_identities_submitted_to_contract(identity_keys.as_slice())
             .await?;
-        mined_tree.apply_next_updates(updates.len()).await;
+        mined_tree.apply_next_updates(updates.len());
 
         Ok(())
     }

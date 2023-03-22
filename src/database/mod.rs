@@ -425,6 +425,8 @@ mod test {
         db.insert_identity_if_does_not_exist(&identities[0]).await?;
         db.insert_pending_root(&roots[0], &identities[0], 0).await?;
 
+        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
+
         // Invalid root returns None
         assert!(db.get_root_state(&roots[1]).await?.is_none());
 

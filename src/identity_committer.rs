@@ -13,11 +13,8 @@ use tokio::{
 use tracing::{debug, info, instrument, warn};
 
 use crate::{
-    contracts::SharedIdentityManager,
-    database::Database,
-    ethereum::write::TransactionId,
-    identity_tree::TreeState,
-    utils::{spawn_or_abort, spawn_with_exp_backoff},
+    contracts::SharedIdentityManager, database::Database, ethereum::write::TransactionId,
+    identity_tree::TreeState, utils::spawn_with_exp_backoff,
 };
 
 mod tasks;
@@ -141,8 +138,8 @@ impl IdentityCommitter {
         let (wake_up_sender, wake_up_receiver) = mpsc::channel(1);
         let (pending_identities_sender, pending_identities_receiver) = mpsc::channel(1);
 
-        // We need to maintain mutable access to this receiver from multiple invocations
-        // of this task
+        // We need to maintain mutable access to these receivers from multiple
+        // invocations of this task
         let wake_up_receiver = Arc::new(Mutex::new(wake_up_receiver));
         let pending_identities_receiver = Arc::new(Mutex::new(pending_identities_receiver));
 

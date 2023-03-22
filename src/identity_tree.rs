@@ -221,7 +221,7 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
             if let Some(next) = next {
                 next.get_data().rebuild_on(self.tree.derived());
             }
-            info!("Tree versions rebuilt")
+            info!("Tree versions rebuilt");
         }
     }
 }
@@ -365,7 +365,7 @@ impl<V: Version> TreeVersion<V> {
 impl TreeVersion<Latest> {
     /// Appends a batch of updates to the tree. This method makes sure it only
     /// applies the updates past `next_leaf`, leaving older leaves untouched.
-    pub async fn append_many_fresh_with_intermediate_roots<'t>(
+    pub fn append_many_fresh_with_intermediate_roots<'t>(
         &self,
         updates: &'t [TreeUpdate],
     ) -> Vec<(&'t TreeUpdate, Hash)> {

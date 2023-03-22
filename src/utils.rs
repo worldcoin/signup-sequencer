@@ -73,6 +73,11 @@ pub fn u256_to_f64(value: U256) -> f64 {
     value.to_string().parse::<f64>().unwrap()
 }
 
+/// Enables a pattern of updating a value with a function that takes ownership
+/// and returns a new version of the value. This is akin to `mem::replace`, but
+/// allows more flexibility.
+/// This call is unsafe if `modifier` panics. Therefore, all callers must ensure
+/// that it does not happen.
 pub fn replace_with<T>(value: &mut T, modifier: impl FnOnce(T) -> T) {
     unsafe {
         let v = ptr::read(value);

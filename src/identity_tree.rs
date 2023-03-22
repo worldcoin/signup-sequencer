@@ -14,6 +14,7 @@ use semaphore::{
 };
 use serde::Serialize;
 use thiserror::Error;
+use tracing::info;
 
 pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -214,11 +215,13 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
     /// `TreeVersion#get_data()` may be held at the time of calling this.
     fn garbage_collect(&mut self) {
         if self.metadata.count_since_last_flatten >= self.metadata.flatten_threshold {
+            info!("Flattening threshold reached, rebuilding tree versions");
             self.metadata.count_since_last_flatten = 0;
             let next = &self.next;
             if let Some(next) = next {
                 next.get_data().rebuild_on(self.tree.derived());
             }
+            info!("Tree versions rebuilt")
         }
     }
 }
@@ -226,7 +229,7 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
 impl TreeVersionData<lazy_merkle_tree::Derived> {
     /// Reapplies all changes of the given tree. This is only used for garbage
     /// collection – `tree` will usually be a more densely stored version of the
-    /// base tree.
+    /// base tree, unless we're already inserting past the dense prefix.
     fn rebuild_on(&mut self, mut tree: PoseidonTree<lazy_merkle_tree::Derived>) {
         for update in &self.metadata.diff {
             tree = tree.update(update.leaf_index, &update.element);

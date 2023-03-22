@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
 use ethers::types::U256;
 use once_cell::sync::Lazy;
-use prometheus::{register_gauge, Gauge};
+use prometheus::{linear_buckets, register_gauge, register_histogram, Gauge, Histogram};
 use tokio::{
     select,
     sync::{broadcast, mpsc, mpsc::error::TrySendError, RwLock},
@@ -37,6 +37,15 @@ pub struct PendingIdentities {
 
 static PENDING_IDENTITIES: Lazy<Gauge> = Lazy::new(|| {
     register_gauge!("pending_identities", "Identities not submitted on-chain").unwrap()
+});
+
+static BATCH_SIZES: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "submitted_batch_sizes",
+        "Submitted batch size",
+        linear_buckets(f64::from(1), f64::from(1), 100).unwrap()
+    )
+    .unwrap()
 });
 
 impl RunningInstance {
@@ -204,6 +213,11 @@ impl IdentityCommitter {
     async fn log_pending_identities_count(database: &Database) -> AnyhowResult<()> {
         let pending_identities = database.count_pending_identities().await?;
         PENDING_IDENTITIES.set(f64::from(pending_identities));
+        Ok(())
+    }
+
+    async fn log_batch_size(size: usize) -> AnyhowResult<()> {
+        BATCH_SIZES.observe(size as f64);
         Ok(())
     }
 

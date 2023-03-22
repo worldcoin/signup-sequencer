@@ -14,5 +14,8 @@ env:
   CREATE_GROUP_DEPTH: "20"
   BATCH_SIZE: 10
   TREE_DEPTH: 20
+  DENSE_TREE_PREFIX_DEPTH: 18
+  # This is way too low for any practical use, but we're trying to stress-test GC.
+  TREE_GC_THRESHOLD: 20
   BATCH_INSERTION_PROVER_URL: "https://semaphore-mtb.internal.stage-crypto.worldcoin.dev"
   IDENTITY_MANAGER_ADDRESS: "0x9D439D9504bF9f81CC0A8Bfe4Ce526e2DACD2F73"

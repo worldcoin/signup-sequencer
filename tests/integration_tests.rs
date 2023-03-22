@@ -229,6 +229,10 @@ async fn insert_identity_and_proofs() {
         &format!("{batch_size}"),
         "--batch-timeout-seconds",
         "10",
+        "--dense-tree-prefix-depth",
+        "10",
+        "--tree-gc-threshold",
+        "1",
     ])
     .expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");

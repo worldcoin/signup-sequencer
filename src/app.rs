@@ -17,6 +17,7 @@ use crate::{
     identity_committer::IdentityCommitter,
     identity_tree::{
         CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeItem, TreeState,
+        TreeVersionReadOps,
     },
     prover,
     prover::batch_insertion::Prover as BatchInsertionProver,
@@ -74,6 +75,14 @@ pub struct Options {
     /// Timeout for the tree lock (seconds).
     #[clap(long, env, default_value = "120")]
     pub lock_timeout: u64,
+
+    /// The depth of the tree prefix that is vectorized.
+    #[clap(long, env, default_value = "20")]
+    pub dense_tree_prefix_depth: usize,
+
+    /// The number of updates to trigger garbage collection.
+    #[clap(long, env, default_value = "10000")]
+    pub tree_gc_threshold: usize,
 }
 
 pub struct App {
@@ -129,7 +138,9 @@ impl App {
         let tree_state = Self::initialize_tree(
             &database,
             // Poseidon tree depth is one more than the contract's tree depth
-            identity_manager.tree_depth() + 1,
+            identity_manager.tree_depth(),
+            options.dense_tree_prefix_depth,
+            options.tree_gc_threshold,
             identity_manager.initial_leaf_value(),
         )
         .await?;
@@ -167,18 +178,27 @@ impl App {
     async fn initialize_tree(
         database: &Database,
         tree_depth: usize,
+        dense_prefix_depth: usize,
+        gc_threshold: usize,
         initial_leaf_value: Hash,
     ) -> AnyhowResult<TreeState> {
-        let mut mined_builder = CanonicalTreeBuilder::new(tree_depth, initial_leaf_value);
+        let mut mined_builder = CanonicalTreeBuilder::new(
+            tree_depth,
+            dense_prefix_depth,
+            gc_threshold,
+            initial_leaf_value,
+        );
         let mined_items = database.get_commitments_by_status(Status::Mined).await?;
         for update in mined_items {
-            mined_builder.append(&update);
+            mined_builder.update(&update);
         }
-        let mined = mined_builder.seal();
-        let batching = mined.next_version().await;
-        let latest = batching.next_version().await;
+        let (mined, batching_builder) = mined_builder.seal();
+        let (batching, mut latest_builder) = batching_builder.seal_and_continue();
         let pending_items = database.get_commitments_by_status(Status::Pending).await?;
-        latest.append_many_fresh(&pending_items).await;
+        for update in pending_items {
+            latest_builder.update(&update);
+        }
+        let latest = latest_builder.seal();
         Ok(TreeState::new(mined, batching, latest))
     }
 
@@ -221,14 +241,12 @@ impl App {
 
         self.identity_committer.notify_queued().await;
 
-        Ok(InclusionProofResponse::from(
-            self.tree_state
-                .get_proof_for(&TreeItem {
-                    leaf_index: leaf_idx,
-                    status:     Status::Pending,
-                })
-                .await,
-        ))
+        Ok(InclusionProofResponse::from(self.tree_state.get_proof_for(
+            &TreeItem {
+                leaf_index: leaf_idx,
+                status:     Status::Pending,
+            },
+        )))
     }
 
     fn identity_is_reduced(&self, commitment: Hash) -> bool {
@@ -237,7 +255,7 @@ impl App {
 
     async fn sync_tree_to(&self, leaf_idx: usize) -> Result<(), ServerError> {
         let tree = self.tree_state.get_latest_tree();
-        let next_index = tree.next_leaf().await;
+        let next_index = tree.next_leaf();
         if leaf_idx < next_index {
             return Ok(()); // Someone sync'd first, we're up to date
         }
@@ -247,10 +265,7 @@ impl App {
             .get_updates_in_range(next_index, leaf_idx)
             .await?;
 
-        for (identity, tree_root) in tree
-            .append_many_fresh_with_intermediate_roots(&identities)
-            .await
-        {
+        for (identity, tree_root) in tree.append_many_fresh_with_intermediate_roots(&identities) {
             self.database
                 .insert_pending_root(&tree_root, &identity.element, identity.leaf_index)
                 .await?;
@@ -277,7 +292,7 @@ impl App {
             .await?
             .ok_or(ServerError::InvalidCommitment)?;
 
-        let proof = self.tree_state.get_proof_for(&item).await;
+        let proof = self.tree_state.get_proof_for(&item);
 
         Ok(InclusionProofResponse(proof))
     }

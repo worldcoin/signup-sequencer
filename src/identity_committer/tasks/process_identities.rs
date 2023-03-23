@@ -74,8 +74,6 @@ impl IdentityCommitter {
                         &updates
                     ).await?;
 
-                    Self::log_batch_size(updates.len()).await?;;
-
                     last_batch_time = SystemTime::now();
                 }
                 _ = wake_up_receiver.recv() => {
@@ -123,8 +121,6 @@ impl IdentityCommitter {
                         pending_identities_sender,
                         &updates
                     ).await?;
-
-                    Self::log_batch_size(updates.len()).await?;
 
                     // We've inserted the identities, so we want to ensure that
                     // we don't trigger again until either we get a full batch
@@ -281,6 +277,8 @@ impl IdentityCommitter {
             post_root,
             start_index,
         });
+
+        Self::log_batch_size(updates.len()).await?;
 
         Ok(())
     }

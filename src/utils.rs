@@ -1,23 +1,10 @@
-use std::{
-    future::Future,
-    ptr,
-    time::{Duration, Instant},
-};
+use std::{future::Future, ptr, time::Duration};
 
 use anyhow::{Error as EyreError, Result as AnyhowResult};
 use ethers::types::U256;
 use futures::FutureExt;
 use tokio::task::JoinHandle;
 use tracing::error;
-
-#[macro_export]
-macro_rules! require {
-    ($condition:expr, $err:expr) => {
-        if !$condition {
-            return Err($err);
-        }
-    };
-}
 
 pub trait Any<A> {
     fn any(self) -> AnyhowResult<A>;
@@ -47,7 +34,10 @@ where
     }
 }
 
-pub fn spawn_with_exp_backoff<S, F, T>(future_spawner: S) -> JoinHandle<T>
+pub fn spawn_monitored_with_backoff<S, F, T>(
+    future_spawner: S,
+    backoff_duration: Duration,
+) -> JoinHandle<T>
 where
     F: Future<Output = AnyhowResult<T>> + Send + 'static,
     S: Fn() -> F + Send + Sync + 'static,
@@ -55,11 +45,7 @@ where
 {
     // Run task in background, returning a handle.
     tokio::spawn(async move {
-        let mut backoff = 0;
-
         loop {
-            let start_time = Instant::now();
-
             let future = future_spawner();
 
             // Wrap in `AssertUnwindSafe` so we can call `FuturesExt::catch_unwind` on it.
@@ -77,17 +63,7 @@ where
                         std::process::abort();
                     }
 
-                    let duration = exp_backoff_duration(backoff);
-
-                    // If the task took longer than the duration we would sleep
-                    //
-                    if start_time.elapsed() > duration {
-                        backoff = 0;
-                    }
-
-                    backoff += 1;
-
-                    tokio::time::sleep(duration).await;
+                    tokio::time::sleep(backoff_duration).await;
                 }
                 Err(e) => {
                     error!("Task panicked: {:?}", e);
@@ -96,15 +72,11 @@ where
                         std::process::abort();
                     }
 
-                    tokio::time::sleep(exp_backoff_duration(backoff)).await;
+                    tokio::time::sleep(backoff_duration).await;
                 }
             }
         }
     })
-}
-
-fn exp_backoff_duration(backoff: u32) -> Duration {
-    Duration::from_secs(2u64.pow(backoff))
 }
 
 /// Enables a pattern of updating a value with a function that takes ownership
@@ -170,25 +142,28 @@ mod tests {
             let can_finish = can_finish.clone();
             let triggered_error = triggered_error.clone();
 
-            spawn_with_exp_backoff(move || {
-                let can_finish = can_finish.clone();
-                let triggered_error = triggered_error.clone();
+            spawn_monitored_with_backoff(
+                move || {
+                    let can_finish = can_finish.clone();
+                    let triggered_error = triggered_error.clone();
 
-                async move {
-                    let can_finish = can_finish.load(Ordering::SeqCst);
+                    async move {
+                        let can_finish = can_finish.load(Ordering::SeqCst);
 
-                    if can_finish {
-                        Ok(())
-                    } else {
-                        triggered_error.store(true, Ordering::SeqCst);
+                        if can_finish {
+                            Ok(())
+                        } else {
+                            triggered_error.store(true, Ordering::SeqCst);
 
-                        // Sleep a little to free up the executor
-                        tokio::time::sleep(Duration::from_millis(20)).await;
+                            // Sleep a little to free up the executor
+                            tokio::time::sleep(Duration::from_millis(20)).await;
 
-                        panic!("Panicking!");
+                            panic!("Panicking!");
+                        }
                     }
-                }
-            })
+                },
+                Duration::from_secs_f32(0.2),
+            )
         };
 
         println!("Sleeping for 1 second");
@@ -203,7 +178,7 @@ mod tests {
         triggered_error.store(false, Ordering::SeqCst);
 
         println!("Waiting for task to finish");
-        tokio::time::timeout(Duration::from_secs(1), handle).await?;
+        drop(tokio::time::timeout(Duration::from_secs(1), handle).await?);
 
         let has_triggered_error = triggered_error.load(Ordering::SeqCst);
         // There is no code path that allows as to store false on the triggered error

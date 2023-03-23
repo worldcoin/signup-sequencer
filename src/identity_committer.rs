@@ -255,9 +255,9 @@ impl IdentityCommitter {
         Ok(())
     }
 
-    async fn log_batch_size(size: usize) -> AnyhowResult<()> {
+    #[allow(clippy::cast_precision_loss)]
+    fn log_batch_size(size: usize) {
         BATCH_SIZES.observe(size as f64);
-        Ok(())
     }
 
     pub async fn notify_queued(&self) {

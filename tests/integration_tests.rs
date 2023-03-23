@@ -51,6 +51,9 @@ use url::{Host, Url};
 /// and that it will eventually succeed if the prover becomes available again.
 #[tokio::test]
 async fn unavailable_prover() -> anyhow::Result<()> {
+    init_tracing_subscriber();
+    info!("Starting unavailable prover test");
+
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
@@ -134,6 +137,8 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     prover_mock.set_availability(true).await;
     // and wait until the processing thread spins up again
     tokio::time::sleep(Duration::from_secs(10)).await;
+
+    println!("Prover has been reenabled");
 
     // Test that the identities have been inserted and processed
     test_inclusion_proof(
@@ -856,11 +861,7 @@ async fn spawn_mock_chain(initial_root: U256, batch_size: usize) -> anyhow::Resu
         bytecode_bytes.clone(),
         client.clone(),
     );
-    let verifier = verifier_factory
-        .deploy(())?
-        .confirmations(0usize)
-        .send()
-        .await?;
+    let verifier = verifier_factory.deploy(())?.confirmations(0usize).send();
 
     // The rest of the contracts can be deployed to the mock chain normally.
     let mock_state_bridge_factory =
@@ -868,24 +869,33 @@ async fn spawn_mock_chain(initial_root: U256, batch_size: usize) -> anyhow::Resu
     let mock_state_bridge = mock_state_bridge_factory
         .deploy(())?
         .confirmations(0usize)
-        .send()
-        .await?;
+        .send();
 
     let mock_verifier_factory =
         load_and_build_contract("./sol/SequencerVerifier.json", client.clone())?;
     let mock_verifier = mock_verifier_factory
         .deploy(())?
         .confirmations(0usize)
-        .send()
-        .await?;
+        .send();
 
     let unimplemented_verifier_factory =
         load_and_build_contract("./sol/UnimplementedTreeVerifier.json", client.clone())?;
     let unimplemented_verifier = unimplemented_verifier_factory
         .deploy(())?
         .confirmations(0usize)
-        .send()
-        .await?;
+        .send();
+
+    let (verifier, mock_state_bridge, mock_verifier, unimplemented_verifier) = tokio::join!(
+        verifier,
+        mock_state_bridge,
+        mock_verifier,
+        unimplemented_verifier
+    );
+
+    let verifier = verifier?;
+    let mock_state_bridge = mock_state_bridge?;
+    let mock_verifier = mock_verifier?;
+    let unimplemented_verifier = unimplemented_verifier?;
 
     let verifier_lookup_table_factory =
         load_and_build_contract("./sol/VerifierLookupTable.json", client.clone())?;
@@ -893,21 +903,26 @@ async fn spawn_mock_chain(initial_root: U256, batch_size: usize) -> anyhow::Resu
         .clone()
         .deploy((batch_size as u64, mock_verifier.address()))?
         .confirmations(0usize)
-        .send()
-        .await?;
+        .send();
+
     let update_verifiers = verifier_lookup_table_factory
         .deploy((batch_size as u64, unimplemented_verifier.address()))?
         .confirmations(0usize)
-        .send()
-        .await?;
+        .send();
 
     let identity_manager_impl_factory =
         load_and_build_contract("./sol/WorldIDIdentityManagerImplV1.json", client.clone())?;
     let identity_manager_impl = identity_manager_impl_factory
         .deploy(())?
         .confirmations(0usize)
-        .send()
-        .await?;
+        .send();
+
+    let (insert_verifiers, update_verifiers, identity_manager_impl) =
+        tokio::join!(insert_verifiers, update_verifiers, identity_manager_impl);
+
+    let insert_verifiers = insert_verifiers?;
+    let update_verifiers = update_verifiers?;
+    let identity_manager_impl = identity_manager_impl?;
 
     let identity_manager_factory =
         load_and_build_contract("./sol/WorldIDIdentityManager.json", client.clone())?;

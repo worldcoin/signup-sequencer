@@ -1,10 +1,9 @@
-use chrono::Utc;
 use std::{
     str::FromStr,
     sync::{Arc, Mutex, MutexGuard},
 };
 
-use crate::utils;
+use chrono::Utc;
 use semaphore::{
     lazy_merkle_tree,
     lazy_merkle_tree::LazyMerkleTree,
@@ -198,7 +197,7 @@ where
 
 impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
     fn update(&mut self, leaf_index: usize, element: Hash) {
-        utils::replace_with(&mut self.tree, |tree| {
+        take_mut::take(&mut self.tree, |tree| {
             tree.update_with_mutation(leaf_index, &element)
         });
         self.next_leaf = leaf_index + 1;

@@ -203,7 +203,7 @@ mod tests {
         triggered_error.store(false, Ordering::SeqCst);
 
         println!("Waiting for task to finish");
-        await_with_timeout(handle, Duration::from_secs(1)).await?;
+        tokio::time::timeout(Duration::from_secs(1), handle).await?;
 
         let has_triggered_error = triggered_error.load(Ordering::SeqCst);
         // There is no code path that allows as to store false on the triggered error
@@ -211,13 +211,5 @@ mod tests {
         assert!(!has_triggered_error);
 
         Ok(())
-    }
-
-    #[track_caller]
-    async fn await_with_timeout<T>(future: impl Future<Output = T>, timeout: Duration) -> T {
-        tokio::select! {
-            res = future => res,
-            _ = tokio::time::sleep(timeout) => panic!("Timeout out")
-        }
     }
 }

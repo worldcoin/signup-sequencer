@@ -62,12 +62,12 @@ jobs:
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --locked --features "bench, mimalloc" --all-targets
+          args: --locked --features "mimalloc" --all-targets
       - name: Check docs
         uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --locked --features "bench, mimalloc" --no-deps --document-private-items
+          args: --locked --features "mimalloc" --no-deps --document-private-items
 
   test:
     name: Test
@@ -99,12 +99,12 @@ jobs:
       # have it just print `--help`.
       - name: Build tests
         run: |
-          cargo nextest run --workspace --locked --features "bench, mimalloc" --all-targets --no-run
-          cargo test --workspace --locked --features "bench, mimalloc" --doc -- --help
+          cargo nextest run --workspace --locked --features "mimalloc" --all-targets --no-run
+          cargo test --workspace --locked --features "mimalloc" --doc -- --help
       - name: Run tests
         run: |
           cargo nextest run --workspace  --locked --features "mimalloc" --all-targets --no-fail-fast --no-capture
-          cargo test --workspace --locked --features "bench, mimalloc" --doc -- --nocapture
+          cargo test --workspace --locked --features "mimalloc" --doc -- --nocapture
 
   codecov:
     # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
@@ -140,12 +140,12 @@ jobs:
           version: nightly
       - name: Build tests with coverage
         run: |
-          cargo nextest run --workspace --locked --features "bench, mimalloc" --all-targets --no-run
-          cargo test --workspace --locked --features "bench, mimalloc" --doc --no-fail-fast -- --help
+          cargo nextest run --workspace --locked --features "mimalloc" --all-targets --no-run
+          cargo test --workspace --locked --features "mimalloc" --doc --no-fail-fast -- --help
       - name: Run tests with coverage
         run: |
           cargo nextest run --workspace --locked --features "mimalloc" --all-targets --no-fail-fast --no-capture
-          cargo test --workspace --locked --features "bench, mimalloc" --doc --no-fail-fast
+          cargo test --workspace --locked --features "mimalloc" --doc --no-fail-fast
       - name: Merge execution traces
         run: cargo profdata -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata
       - name: Export to lcov format for codecov
@@ -157,7 +157,7 @@ jobs:
             $(
               for file in
                 $(
-                  cargo test --locked --features "bench, mimalloc" --all-targets
+                  cargo test --locked --features "mimalloc" --all-targets
                     --no-fail-fast --no-run --message-format=json
                     | jq -r "select(.profile.test == true) | .filenames[]"
                     | grep -v dSYM -

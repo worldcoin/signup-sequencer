@@ -91,17 +91,19 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
+      - name: Install cargo-nextest
+        run: cargo install cargo-nextest --locked
       # Cargo doc test is not included in `--all-targets`
       # See <https://github.com/rust-lang/cargo/issues/6669>
       # Cargo doc test also doesn't support `--no-run`, so we run it but
       # have it just print `--help`.
       - name: Build tests
         run: |
-          cargo test --locked --features "bench, mimalloc" --all-targets --no-run
+          cargo nextest run --locked --features "bench, mimalloc" --all-targets --no-run
           cargo test --locked --features "bench, mimalloc" --doc -- --help
       - name: Run tests
         run: |
-          cargo test --locked --features "bench, mimalloc" --all-targets -- --nocapture
+          cargo nextest run --locked --features "mimalloc" --all-targets --no-fail-fast --no-capture
           cargo test --locked --features "bench, mimalloc" --doc -- --nocapture
 
   codecov:
@@ -130,17 +132,19 @@ jobs:
           key: cache-v2
       - name: Install cargo-binutils
         run: cargo install cargo-binutils
+      - name: Install cargo-nextest
+        run: cargo install cargo-nextest --locked
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
       - name: Build tests with coverage
         run: |
-          cargo test --locked --features "bench, mimalloc" --all-targets --no-fail-fast --no-run
+          cargo nextest run --locked --features "bench, mimalloc" --all-targets --no-run
           cargo test --locked --features "bench, mimalloc" --doc --no-fail-fast -- --help
       - name: Run tests with coverage
         run: |
-          cargo test --locked --features "bench, mimalloc" --all-targets --no-fail-fast -- --nocapture
+          cargo nextest run --locked --features "mimalloc" --all-targets --no-fail-fast --no-capture
           cargo test --locked --features "bench, mimalloc" --doc --no-fail-fast
       - name: Merge execution traces
         run: cargo profdata -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata

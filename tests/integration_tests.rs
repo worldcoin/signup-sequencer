@@ -613,6 +613,7 @@ async fn test_verify_proof(
 }
 
 #[instrument(skip_all)]
+#[track_caller]
 async fn test_inclusion_proof(
     uri: &str,
     client: &Client<HttpConnector>,

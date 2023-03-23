@@ -5577,6 +5577,7 @@ dependencies = [
  "serde_json",
  "serial_test",
  "sqlx",
+ "take_mut",
  "tempfile",
  "test-case",
  "thiserror",
@@ -5919,6 +5920,12 @@ dependencies = [
  "syn",
  "unicode-xid",
 ]
+
+[[package]]
+name = "take_mut"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f764005d11ee5f36500a149ace24e00e3da98b0158b3e2d53a7495660d3f4d60"
 
 [[package]]
 name = "tap"

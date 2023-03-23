@@ -1,4 +1,4 @@
-use std::{future::Future, ptr, time::Duration};
+use std::{future::Future, time::Duration};
 
 use anyhow::{Error as EyreError, Result as AnyhowResult};
 use ethers::types::U256;
@@ -77,19 +77,6 @@ where
             }
         }
     })
-}
-
-/// Enables a pattern of updating a value with a function that takes ownership
-/// and returns a new version of the value. This is akin to `mem::replace`, but
-/// allows more flexibility.
-/// This call is unsafe if `modifier` panics. Therefore, all callers must ensure
-/// that it does not happen.
-pub fn replace_with<T>(value: &mut T, modifier: impl FnOnce(T) -> T) {
-    unsafe {
-        let v = ptr::read(value);
-        let v = modifier(v);
-        ptr::write(value, v);
-    }
 }
 
 #[cfg(not(feature = "oz-provider"))]

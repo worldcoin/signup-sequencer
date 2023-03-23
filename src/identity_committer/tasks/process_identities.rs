@@ -281,6 +281,8 @@ impl IdentityCommitter {
             start_index,
         });
 
+        Self::log_batch_size(updates.len()).await?;
+
         Ok(())
     }
 }

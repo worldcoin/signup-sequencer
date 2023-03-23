@@ -15,8 +15,6 @@ use serde::Serialize;
 use thiserror::Error;
 use tracing::info;
 
-use crate::utils;
-
 pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
@@ -199,7 +197,7 @@ where
 
 impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
     fn update(&mut self, leaf_index: usize, element: Hash) {
-        utils::replace_with(&mut self.tree, |tree| {
+        take_mut::take(&mut self.tree, |tree| {
             tree.update_with_mutation(leaf_index, &element)
         });
         self.next_leaf = leaf_index + 1;

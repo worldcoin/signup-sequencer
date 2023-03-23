@@ -11,7 +11,13 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, prover_mock) = spawn_deps(initial_root, 3).await?;
+    #[allow(clippy::cast_possible_truncation)]
+    let tree_depth: u8 = SUPPORTED_DEPTH as u8;
+    let batch_size = 3;
+
+    let (mock_chain, db_container, prover_mock) =
+        spawn_deps(initial_root, batch_size, tree_depth).await?;
+    let identity_manager = mock_chain.identity_manager.clone();
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
@@ -25,12 +31,16 @@ async fn validate_proofs() -> anyhow::Result<()> {
         "--database-max-connections",
         "1",
         "--tree-depth",
-        "20",
+        &format!("{tree_depth}"),
+        "--batch-timeout-seconds",
+        "1",
+        "--batch-size",
+        &format!("{batch_size}"),
     ])
     .expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
-    options.app.contracts.identity_manager_address = mock_chain.identity_manager_address;
+    options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
     options.app.ethereum.read_options.confirmation_blocks_delay = 2;
     options.app.ethereum.read_options.ethereum_provider =
         Url::parse(&mock_chain.anvil.endpoint()).expect("Failed to parse ganache endpoint");
@@ -92,6 +102,19 @@ async fn validate_proofs() -> anyhow::Result<()> {
     )
     .await;
 
+    test_inclusion_proof(&uri, &client, 0, &mut ref_tree, &TEST_LEAVES[0], false).await;
+
+    test_verify_proof_on_chain(
+        &identity_manager,
+        root,
+        signal_hash,
+        nullifier_hash,
+        external_nullifier_hash,
+        proof,
+    )
+    .await
+    .expect("Proof should verify correctly on chain.");
+
     // INVALID PROOF
 
     let invalid_nullifier_hash = generate_nullifier_hash(&IDENTITIES[1], external_nullifier_hash);
@@ -107,6 +130,17 @@ async fn validate_proofs() -> anyhow::Result<()> {
         Some("invalid semaphore proof"),
     )
     .await;
+
+    test_verify_proof_on_chain(
+        &identity_manager,
+        root,
+        signal_hash,
+        invalid_nullifier_hash,
+        external_nullifier_hash,
+        proof,
+    )
+    .await
+    .expect_err("Proof verified on chain when it shouldn't have.");
 
     // IDENTITY NOT IN TREE
 
@@ -135,6 +169,17 @@ async fn validate_proofs() -> anyhow::Result<()> {
     )
     .await;
 
+    test_verify_proof_on_chain(
+        &identity_manager,
+        root,
+        signal_hash,
+        new_nullifier_hash,
+        external_nullifier_hash,
+        proof,
+    )
+    .await
+    .expect_err("Proof verified on chain when it shouldn't have.");
+
     // UNKNOWN ROOT
 
     let new_root = ref_tree.root();
@@ -150,6 +195,17 @@ async fn validate_proofs() -> anyhow::Result<()> {
         Some("invalid root"),
     )
     .await;
+
+    test_verify_proof_on_chain(
+        &identity_manager,
+        new_root,
+        signal_hash,
+        new_nullifier_hash,
+        external_nullifier_hash,
+        proof,
+    )
+    .await
+    .expect_err("Proof verified on chain when it shouldn't have.");
 
     // Shutdown the app properly for the final time
     shutdown();

@@ -46,10 +46,11 @@ pub mod prelude {
     pub use super::{
         abi as ContractAbi, generate_reference_proof_json, generate_test_identities,
         init_tracing_subscriber, prover_mock::ProverService, spawn_app, spawn_deps,
-        test_inclusion_proof, test_insert_identity, test_verify_proof,
+        test_inclusion_proof, test_insert_identity, test_verify_proof, test_verify_proof_on_chain,
     };
 }
 
+use ethers::contract::Contract;
 use std::{
     fs::File,
     io::BufReader,
@@ -66,7 +67,7 @@ pub async fn test_verify_proof(
     client: &Client<HttpConnector>,
     root: Field,
     signal_hash: Field,
-    nullifer_hash: Field,
+    nullifier_hash: Field,
     external_nullifier_hash: Field,
     proof: protocol::Proof,
     expected_failure: Option<&str>,
@@ -74,7 +75,7 @@ pub async fn test_verify_proof(
     let body = construct_verify_proof_body(
         root,
         signal_hash,
-        nullifer_hash,
+        nullifier_hash,
         external_nullifier_hash,
         proof,
     );
@@ -103,8 +104,41 @@ pub async fn test_verify_proof(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
-#[track_caller]
+pub async fn test_verify_proof_on_chain(
+    identity_manager: &SpecialisedContract,
+    root: Field,
+    signal_hash: Field,
+    nullifier_hash: Field,
+    external_nullifier_hash: Field,
+    proof: protocol::Proof,
+) -> anyhow::Result<()> {
+    let root_tok: U256 = root.into();
+    let signal_hash_tok: U256 = signal_hash.into();
+    let nullifier_hash_tok: U256 = nullifier_hash.into();
+    let external_nullifier_hash_tok: U256 = external_nullifier_hash.into();
+    let proof_tok: [U256; 8] = match proof {
+        protocol::Proof(ar, bs, krs) => {
+            [ar.0, ar.1, bs.0[0], bs.0[1], bs.1[0], bs.1[1], krs.0, krs.1]
+        }
+    };
+    let method = identity_manager.method::<_, ()>(
+        "verifyProof",
+        (
+            root_tok,
+            signal_hash_tok,
+            nullifier_hash_tok,
+            external_nullifier_hash_tok,
+            proof_tok,
+        ),
+    )?;
+    method.call().await?;
+
+    Ok(())
+}
+
+#[instrument(skip_all)]
 pub async fn test_inclusion_proof(
     uri: &str,
     client: &Client<HttpConnector>,
@@ -279,8 +313,9 @@ struct CompiledContract {
 pub async fn spawn_deps(
     initial_root: U256,
     batch_size: usize,
+    tree_depth: u8,
 ) -> anyhow::Result<(MockChain, DockerContainerGuard, ProverService)> {
-    let chain = spawn_mock_chain(initial_root, batch_size);
+    let chain = spawn_mock_chain(initial_root, batch_size, tree_depth);
     let db_container = spawn_db();
     let prover = spawn_mock_prover();
 
@@ -296,13 +331,17 @@ async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {
 }
 
 pub struct MockChain {
-    pub anvil:                    AnvilInstance,
-    pub private_key:              H256,
-    pub identity_manager_address: Address,
+    pub anvil:            AnvilInstance,
+    pub private_key:      H256,
+    pub identity_manager: SpecialisedContract,
 }
 
 #[instrument(skip_all)]
-async fn spawn_mock_chain(initial_root: U256, batch_size: usize) -> anyhow::Result<MockChain> {
+async fn spawn_mock_chain(
+    initial_root: U256,
+    batch_size: usize,
+    tree_depth: u8,
+) -> anyhow::Result<MockChain> {
     let chain = Anvil::new().block_time(2u64).spawn();
     let private_key = H256::from_slice(&chain.keys()[0].to_be_bytes());
 
@@ -328,17 +367,24 @@ async fn spawn_mock_chain(initial_root: U256, batch_size: usize) -> anyhow::Resu
         .send()
         .await?;
 
-    let verifier_path = "./sol/Verifier.json";
+    let verifier_path = "./sol/SemaphoreVerifier.json";
     let verifier_file =
         File::open(verifier_path).unwrap_or_else(|_| panic!("Failed to open `{verifier_path}`"));
     let verifier_contract_json: CompiledContract =
         serde_json::from_reader(BufReader::new(verifier_file))
             .unwrap_or_else(|_| panic!("Could not parse the compiled contract at {verifier_path}"));
     let mut verifier_bytecode_object: BytecodeObject = verifier_contract_json.bytecode.object;
-    verifier_bytecode_object.link_fully_qualified("Pairing.sol:Pairing", pairing_library.address());
+    verifier_bytecode_object
+        .link_fully_qualified(
+            "lib/semaphore/packages/contracts/contracts/base/Pairing.sol:Pairing",
+            pairing_library.address(),
+        )
+        .resolve()
+        .unwrap();
     if verifier_bytecode_object.is_unlinked() {
         panic!("Could not link the Pairing library into the Verifier.");
     }
+
     let bytecode_bytes = verifier_bytecode_object.as_bytes().unwrap_or_else(|| {
         panic!("Could not parse the bytecode for the contract at {verifier_path}")
     });
@@ -347,7 +393,7 @@ async fn spawn_mock_chain(initial_root: U256, batch_size: usize) -> anyhow::Resu
         bytecode_bytes.clone(),
         client.clone(),
     );
-    let verifier = verifier_factory.deploy(())?.confirmations(0usize).send();
+    let semaphore_verifier = verifier_factory.deploy(())?.confirmations(0usize).send();
 
     // The rest of the contracts can be deployed to the mock chain normally.
     let mock_state_bridge_factory =
@@ -371,14 +417,14 @@ async fn spawn_mock_chain(initial_root: U256, batch_size: usize) -> anyhow::Resu
         .confirmations(0usize)
         .send();
 
-    let (verifier, mock_state_bridge, mock_verifier, unimplemented_verifier) = tokio::join!(
-        verifier,
+    let (semaphore_verifier, mock_state_bridge, mock_verifier, unimplemented_verifier) = tokio::join!(
+        semaphore_verifier,
         mock_state_bridge,
         mock_verifier,
         unimplemented_verifier
     );
 
-    let verifier = verifier?;
+    let semaphore_verifier = semaphore_verifier?;
     let mock_state_bridge = mock_state_bridge?;
     let mock_verifier = mock_verifier?;
     let unimplemented_verifier = unimplemented_verifier?;
@@ -416,12 +462,13 @@ async fn spawn_mock_chain(initial_root: U256, batch_size: usize) -> anyhow::Resu
     let enable_state_bridge = true;
     let identity_manager_impl_address = identity_manager_impl.address();
     let init_call_data = ContractAbi::InitializeCall {
+        tree_depth,
         initial_root,
         batch_insertion_verifiers: insert_verifiers.address(),
         batch_update_verifiers: update_verifiers.address(),
-        semaphore_verifier: verifier.address(),
+        semaphore_verifier: semaphore_verifier.address(),
         enable_state_bridge,
-        initial_state_bridge_proxy_address: state_bridge_address,
+        state_bridge: state_bridge_address,
     };
     let init_call_encoded: Bytes = Bytes::from(init_call_data.encode());
 
@@ -431,10 +478,16 @@ async fn spawn_mock_chain(initial_root: U256, batch_size: usize) -> anyhow::Resu
         .send()
         .await?;
 
+    let identity_manager: SpecialisedContract = Contract::new(
+        identity_manager_contract.address(),
+        ContractAbi::BATCHINGCONTRACT_ABI.clone(),
+        client.clone(),
+    );
+
     Ok(MockChain {
         anvil: chain,
         private_key,
-        identity_manager_address: identity_manager_contract.address(),
+        identity_manager,
     })
 }
 
@@ -444,10 +497,11 @@ async fn spawn_mock_prover() -> anyhow::Result<ProverService> {
     Ok(mock_prover_service)
 }
 
-type SharableClient =
-    Arc<NonceManagerMiddleware<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>>>;
-type SpecialisedFactory =
-    ContractFactory<NonceManagerMiddleware<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>>>;
+type SpecialisedClient =
+    NonceManagerMiddleware<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>>;
+type SharableClient = Arc<SpecialisedClient>;
+type SpecialisedFactory = ContractFactory<SpecialisedClient>;
+type SpecialisedContract = Contract<SpecialisedClient>;
 
 fn load_and_build_contract(
     path: impl Into<String>,

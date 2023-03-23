@@ -13,8 +13,11 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     let initial_root: U256 = ref_tree.root().into();
 
     let batch_size: usize = 3;
+    #[allow(clippy::cast_possible_truncation)]
+    let tree_depth: u8 = SUPPORTED_DEPTH as u8;
 
-    let (mock_chain, db_container, prover_mock) = spawn_deps(initial_root, batch_size).await?;
+    let (mock_chain, db_container, prover_mock) =
+        spawn_deps(initial_root, batch_size, tree_depth).await?;
     prover_mock.set_availability(false).await;
 
     let port = db_container.port();
@@ -28,7 +31,7 @@ async fn unavailable_prover() -> anyhow::Result<()> {
         "--database-max-connections",
         "1",
         "--tree-depth",
-        "20",
+        &format!("{tree_depth}"),
         "--batch-size",
         &format!("{batch_size}"),
         "--batch-timeout-seconds",
@@ -42,7 +45,7 @@ async fn unavailable_prover() -> anyhow::Result<()> {
 
     options.server.server = Url::parse("http://127.0.0.1:0/")?;
 
-    options.app.contracts.identity_manager_address = mock_chain.identity_manager_address;
+    options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
     options.app.ethereum.read_options.confirmation_blocks_delay = 2;
     options.app.ethereum.read_options.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint())?;
 

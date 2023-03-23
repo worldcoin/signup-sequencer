@@ -114,6 +114,8 @@ mod tests {
 
     #[cfg(not(feature = "oz-provider"))]
     mod u256_to_f64_tests {
+        #![allow(clippy::float_cmp)]
+
         use hex_literal::hex;
         use test_case::test_case;
 
@@ -126,15 +128,15 @@ mod tests {
             u256_to_f64(U256::from(v))
         }
 
-        #[test_case(hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF") => 115792089237316195423570985008687907853269984665640564039457584007913129639935.0)]
-        #[test_case(hex!("0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF") => 7237005577332262213973186563042994240829374041602535252466099000494570602495.0)]
+        #[test_case(hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF") => 115_792_089_237_316_195_423_570_985_008_687_907_853_269_984_665_640_564_039_457_584_007_913_129_639_935.0)]
+        #[test_case(hex!("0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF") => 7_237_005_577_332_262_213_973_186_563_042_994_240_829_374_041_602_535_252_466_099_000_494_570_602_495.0)]
         fn test_u256_to_f64_large(v: [u8; 32]) -> f64 {
             u256_to_f64(U256::from(v))
         }
     }
 
     #[tokio::test]
-    async fn exp_backoff_test() -> anyhow::Result<()> {
+    async fn spawn_monitored_test() -> anyhow::Result<()> {
         let can_finish = Arc::new(AtomicBool::new(false));
         let triggered_error = Arc::new(AtomicBool::new(false));
 

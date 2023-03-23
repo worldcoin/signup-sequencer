@@ -1,10 +1,9 @@
-use chrono::Utc;
 use std::{
     str::FromStr,
     sync::{Arc, Mutex, MutexGuard},
 };
 
-use crate::utils;
+use chrono::Utc;
 use semaphore::{
     lazy_merkle_tree,
     lazy_merkle_tree::LazyMerkleTree,
@@ -15,6 +14,8 @@ use semaphore::{
 use serde::Serialize;
 use thiserror::Error;
 use tracing::info;
+
+use crate::utils;
 
 pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -365,6 +366,7 @@ impl<V: Version> TreeVersion<V> {
 impl TreeVersion<Latest> {
     /// Appends a batch of updates to the tree. This method makes sure it only
     /// applies the updates past `next_leaf`, leaving older leaves untouched.
+    #[must_use]
     pub fn append_many_fresh_with_intermediate_roots<'t>(
         &self,
         updates: &'t [TreeUpdate],

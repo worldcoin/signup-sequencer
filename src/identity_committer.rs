@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Result as AnyhowResult};
 use clap::Parser;
@@ -14,10 +14,13 @@ use tracing::{debug, info, instrument, warn};
 
 use crate::{
     contracts::SharedIdentityManager, database::Database, ethereum::write::TransactionId,
-    identity_tree::TreeState, utils::spawn_with_exp_backoff,
+    identity_tree::TreeState, utils::spawn_monitored_with_backoff,
 };
 
 mod tasks;
+
+const PROCESS_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
+const MINE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 
 struct RunningInstance {
     process_identities_handle: JoinHandle<()>,
@@ -144,45 +147,47 @@ impl IdentityCommitter {
         let pending_identities_receiver = Arc::new(Mutex::new(pending_identities_receiver));
 
         let process_identities_handle = {
-            let pending_identities_sender = pending_identities_sender.clone();
             let database = self.database.clone();
             let identity_manager = self.identity_manager.clone();
             let batch_tree = self.tree_state.get_batching_tree();
             let timeout = self.batch_insert_timeout_secs;
             let shutdown_sender = shutdown_sender.clone();
 
-            crate::utils::spawn_with_exp_backoff(move || {
-                let wake_up_receiver = wake_up_receiver.clone();
-                let pending_identities_sender = pending_identities_sender.clone();
-                let batch_tree = batch_tree.clone();
-                let database = database.clone();
-                let identity_manager = identity_manager.clone();
-                let shutdown_sender = shutdown_sender.clone();
+            crate::utils::spawn_monitored_with_backoff(
+                move || {
+                    let wake_up_receiver = wake_up_receiver.clone();
+                    let pending_identities_sender = pending_identities_sender.clone();
+                    let batch_tree = batch_tree.clone();
+                    let database = database.clone();
+                    let identity_manager = identity_manager.clone();
+                    let shutdown_sender = shutdown_sender.clone();
 
-                async move {
-                    let mut wake_up_receiver = wake_up_receiver.lock().await;
-                    let mut shutdown_receiver = shutdown_sender.subscribe();
+                    async move {
+                        let mut wake_up_receiver = wake_up_receiver.lock().await;
+                        let mut shutdown_receiver = shutdown_sender.subscribe();
 
-                    select! {
-                        result = Self::process_identities(
-                            &database,
-                            &identity_manager,
-                            &batch_tree,
-                            &mut wake_up_receiver,
-                            &pending_identities_sender,
-                            timeout
-                        ) => {
-                            result?;
+                        select! {
+                            result = Self::process_identities(
+                                &database,
+                                &identity_manager,
+                                &batch_tree,
+                                &mut wake_up_receiver,
+                                &pending_identities_sender,
+                                timeout
+                            ) => {
+                                result?;
+                            }
+                            _ = shutdown_receiver.recv() => {
+                                info!("Woke up by shutdown signal,exiting.");
+                                return Ok(());
+                            }
                         }
-                        _ = shutdown_receiver.recv() => {
-                            info!("Woke up by shutdown signal,exiting.");
-                            return Ok(());
-                        }
+
+                        Ok(())
                     }
-
-                    Ok(())
-                }
-            })
+                },
+                PROCESS_IDENTITIES_BACKOFF,
+            )
         };
 
         let mine_identities_handle = {
@@ -192,35 +197,39 @@ impl IdentityCommitter {
             let identity_manager = self.identity_manager.clone();
             let mined_tree = self.tree_state.get_mined_tree();
 
-            spawn_with_exp_backoff(move || {
-                let shutdown_sender = shutdown_sender.clone();
-                let pending_identities_receiver = pending_identities_receiver.clone();
+            spawn_monitored_with_backoff(
+                move || {
+                    let shutdown_sender = shutdown_sender.clone();
+                    let pending_identities_receiver = pending_identities_receiver.clone();
 
-                let database = database.clone();
-                let identity_manager = identity_manager.clone();
-                let mined_tree = mined_tree.clone();
+                    let database = database.clone();
+                    let identity_manager = identity_manager.clone();
+                    let mined_tree = mined_tree.clone();
 
-                async move {
-                    let mut pending_identities_receiver = pending_identities_receiver.lock().await;
-                    let mut shutdown_receiver = shutdown_sender.subscribe();
+                    async move {
+                        let mut pending_identities_receiver =
+                            pending_identities_receiver.lock().await;
+                        let mut shutdown_receiver = shutdown_sender.subscribe();
 
-                    select! {
-                        result = Self::mine_identities(
-                            &database,
-                            &identity_manager,
-                            &mined_tree,
-                            &mut pending_identities_receiver,
-                        ) => {
-                            result?;
+                        select! {
+                            result = Self::mine_identities(
+                                &database,
+                                &identity_manager,
+                                &mined_tree,
+                                &mut pending_identities_receiver,
+                            ) => {
+                                result?;
+                            }
+                            _ = shutdown_receiver.recv() => {
+                                info!("Woke up by shutdown signal, exiting.");
+                                return Ok(());
+                            }
                         }
-                        _ = shutdown_receiver.recv() => {
-                            info!("Woke up by shutdown signal, exiting.");
-                            return Ok(());
-                        }
+                        Ok(())
                     }
-                    Ok(())
-                }
-            })
+                },
+                MINE_IDENTITIES_BACKOFF,
+            )
         };
 
         *instance = Some(RunningInstance {

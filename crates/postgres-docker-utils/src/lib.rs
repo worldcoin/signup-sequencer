@@ -36,10 +36,9 @@ impl Drop for DockerContainerGuard {
 /// Note that we're using sync code here so we'll block the executor - but this
 /// is fine, because the spawned container will still run in the background.
 pub async fn setup() -> anyhow::Result<DockerContainerGuard> {
-    let container_id = run_cmd_to_output(&format!(
-        "docker run --rm -d -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432 postgres",
-    ))
-    .context("Starting the Postgres container")?;
+    let container_id =
+        run_cmd_to_output("docker run --rm -d -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432 postgres")
+            .context("Starting the Postgres container")?;
 
     let exposed_port = run_cmd_to_output(&format!("docker container port {container_id} 5432"))
         .context("Fetching container exposed port")?;
@@ -54,7 +53,7 @@ pub async fn setup() -> anyhow::Result<DockerContainerGuard> {
 }
 
 fn run_cmd_to_output(cmd_str: &str) -> anyhow::Result<String> {
-    let args: Vec<_> = cmd_str.split(" ").collect();
+    let args: Vec<_> = cmd_str.split(' ').collect();
     let mut command = Command::new(args[0]);
 
     for arg in &args[1..] {
@@ -80,12 +79,12 @@ fn run_cmd(cmd_str: &str) -> anyhow::Result<()> {
 }
 
 fn parse_exposed_port(s: &str) -> anyhow::Result<u16> {
-    let parts: Vec<_> = s.split(":").collect();
+    let parts: Vec<_> = s.split(':').collect();
 
-    Ok(parts[1]
+    parts[1]
         .trim()
         .parse()
-        .with_context(|| format!("Parsing `{s}`"))?)
+        .with_context(|| format!("Parsing `{s}`"))
 }
 
 #[cfg(test)]

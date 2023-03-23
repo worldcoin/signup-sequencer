@@ -66,6 +66,38 @@ paths:
               schema:
                 description: 'A human-readable explanation of the error condition'
                 type: 'string'
+  /verifySemaphoreProof:
+    post:
+      summary: Verifies a Semaphore proof
+      requestBody:
+        description: VerifySemaphoreProof request object
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifySemaphoreProofRequest"
+      responses:
+        '200':
+          description: Valid proof response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifySemaphoreProofResponse"
+        '400':
+          description: Invalid proof or root not found
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 'invalid root'
+        '500':
+          description: Prover error
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 'prover errorroot'
+
 components:
   schemas:
     IdentityCommitment:
@@ -98,3 +130,56 @@ components:
     InclusionProofStatus:
       type: string
       enum: [ 'pending', 'mined', 'confirmed' ]
+    SemaphoreProof:
+      type: array
+      items:
+        oneOf:
+          - $ref: '#/components/schemas/G1'
+          - $ref: '#/components/schemas/G2'
+      minItems: 3
+      maxItems: 3
+    G1:
+      type: array
+      items:
+        $ref: '#/components/schemas/FieldElement'
+      minItems: 2
+      maxItems: 2
+    G2:
+      type: array
+      items:
+        $ref: '#/components/schemas/G1'
+      minItems: 2
+      maxItems: 2
+    VerifySemaphoreProofRequest:
+      type: object
+      properties:
+        root:
+          $ref: '#/components/schemas/FieldElement'
+        signal_hash:
+          $ref: '#/components/schemas/FieldElement'
+        nullifier_hash:
+          $ref: '#/components/schemas/FieldElement'
+        external_nullifier_hash:
+          $ref: '#/components/schemas/FieldElement'
+        proof:
+          $ref: '#/components/schemas/SemaphoreProof'
+      required:
+        - root
+        - signal_hash
+        - nullifier_hash
+        - external_nullifier_hash
+        - proof
+    VerifySemaphoreProofResponse:
+      type: object
+      properties:
+        root:
+          type: string
+        status:
+          $ref: '#/components/schemas/InclusionProofStatus'
+        pending_valid_as_of:
+          type: string
+          format: date-time
+        mined_valid_as_of:
+          type: string
+          format: date-time
+          nullable: true

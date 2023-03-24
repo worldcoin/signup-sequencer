@@ -36,9 +36,7 @@ impl IdentityCommitter {
             // With this done, all that remains is to mark them as submitted to the
             // blockchain in the source-of-truth database, and also update the mined tree to
             // agree with the database and chain.
-            database
-                .mark_identities_submitted_to_contract(&post_root.into(), identity_keys.as_slice())
-                .await?;
+            database.mark_root_as_mined(&post_root.into()).await?;
 
             info!(start_index, ?pre_root, ?post_root, "Batch mined");
 

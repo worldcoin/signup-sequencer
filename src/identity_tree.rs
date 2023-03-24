@@ -40,7 +40,7 @@ pub struct TreeItem {
     pub leaf_index: usize,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Pending,

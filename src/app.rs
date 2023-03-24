@@ -127,7 +127,8 @@ impl App {
         let root_hash = identity_manager.latest_root().await?;
         let root_hash = root_hash.into();
 
-        database.mark_root_submitted_to_contract(&root_hash).await?;
+
+        database.mark_root_as_mined(&root_hash).await?;
 
         let tree_state = Self::initialize_tree(
             &database,
@@ -261,7 +262,7 @@ impl App {
 
         for (identity, tree_root) in tree.append_many_fresh_with_intermediate_roots(&identities) {
             self.database
-                .insert_pending_root(&tree_root, &identity.element, identity.leaf_index)
+                .insert_pending_root(&tree_root, identity.leaf_index)
                 .await?;
         }
 

@@ -96,7 +96,7 @@ paths:
             text/plain:
               schema:
                 type: string
-                example: 'prover errorroot'
+                example: 'prover error'
 
 components:
   schemas:

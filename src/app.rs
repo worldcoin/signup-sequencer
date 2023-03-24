@@ -127,8 +127,11 @@ impl App {
         let root_hash = identity_manager.latest_root().await?;
         let root_hash = root_hash.into();
 
-
-        database.mark_root_as_mined(&root_hash).await?;
+        // We don't store the initial root in the database, so we have to skip this step
+        // if the db is empty
+        if !database.is_empty().await? {
+            database.mark_root_as_mined(&root_hash).await?;
+        }
 
         let tree_state = Self::initialize_tree(
             &database,

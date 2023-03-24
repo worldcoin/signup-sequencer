@@ -6,9 +6,11 @@
 
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
-use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
-use sqlx::pool::PoolOptions;
-use sqlx::{Executor, Pool, Postgres, Row};
+use sqlx::{
+    migrate::{Migrate, MigrateDatabase, Migrator},
+    pool::PoolOptions,
+    Executor, Pool, Postgres, Row,
+};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;
@@ -121,6 +123,18 @@ impl Database {
         }
 
         Ok(Self { pool })
+    }
+
+    pub async fn is_empty(&self) -> Result<bool, Error> {
+        let query = sqlx::query(
+            r#"
+                SELECT COUNT(*) FROM identities
+            "#,
+        );
+
+        let count = self.pool.fetch_one(query).await?.get::<i64, _>(0);
+
+        Ok(count == 0)
     }
 
     pub async fn insert_identity_if_does_not_exist(
@@ -408,6 +422,17 @@ mod test {
 
     fn mock_identities(n: usize) -> Vec<Field> {
         (1..=n).map(Field::from).collect()
+    }
+
+    #[tokio::test]
+    async fn is_empty() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let is_empty = db.is_empty().await?;
+
+        assert!(is_empty, "Db should be empty");
+
+        Ok(())
     }
 
     #[tokio::test]

@@ -57,7 +57,7 @@ where
                 // Task succeeded or is shutting down gracefully
                 Ok(Ok(t)) => return t,
                 Ok(Err(e)) => {
-                    error!("Task failed: {:?}", e);
+                    error!("Task failed: {e:?}");
 
                     if cli_batteries::is_shutting_down() {
                         std::process::abort();
@@ -66,7 +66,7 @@ where
                     tokio::time::sleep(backoff_duration).await;
                 }
                 Err(e) => {
-                    error!("Task panicked: {:?}", e);
+                    error!("Task panicked: {e:?}");
 
                     if cli_batteries::is_shutting_down() {
                         std::process::abort();

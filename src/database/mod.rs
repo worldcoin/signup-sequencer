@@ -64,7 +64,12 @@ impl Database {
         info!(url = %&options.database, ?version, "Connected to database");
 
         // Run migrations if requested.
-        let latest = MIGRATOR.migrations.last().unwrap().version;
+        let latest = MIGRATOR
+            .migrations
+            .last()
+            .expect("Missing migrations")
+            .version;
+
         if options.database_migrate {
             info!(url = %&options.database, "Running migrations");
             MIGRATOR.run(&pool).await?;
@@ -419,6 +424,8 @@ mod test {
         let roots = (1..5).map(Field::from).collect::<Vec<_>>();
         db.insert_identity_if_does_not_exist(&identities[0]).await?;
         db.insert_pending_root(&roots[0], &identities[0], 0).await?;
+
+        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
 
         // Invalid root returns None
         assert!(db.get_root_state(&roots[1]).await?.is_none());

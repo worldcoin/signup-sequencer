@@ -15,7 +15,7 @@ impl IdentityCommitter {
         database: &Database,
         identity_manager: &IdentityManager,
         mined_tree: &TreeVersion<Canonical>,
-        mut pending_identities_receiver: mpsc::Receiver<PendingIdentities>,
+        pending_identities_receiver: &mut mpsc::Receiver<PendingIdentities>,
     ) -> AnyhowResult<()> {
         loop {
             let Some(pending_identity) = pending_identities_receiver.recv().await else {

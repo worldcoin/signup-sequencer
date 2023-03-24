@@ -1,442 +1,67 @@
 #![cfg(not(feature = "oz-provider"))]
+// We include this module in multiple in multiple integration
+// test crates - so some code may not be used in some cases
+#![allow(dead_code)]
 
-mod abi;
+pub mod abi;
 mod prover_mock;
+
+pub mod prelude {
+    pub use std::time::Duration;
+
+    pub use anyhow::Context;
+    pub use clap::Parser;
+    pub use cli_batteries::{reset_shutdown, shutdown};
+    pub use ethers::{
+        abi::{AbiEncode, Address},
+        core::{abi::Abi, k256::ecdsa::SigningKey, rand},
+        prelude::{
+            artifacts::{Bytecode, BytecodeObject},
+            ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
+            SignerMiddleware, Wallet,
+        },
+        providers::Middleware,
+        types::{Bytes, H256, U256},
+        utils::{Anvil, AnvilInstance},
+    };
+    pub use hyper::{client::HttpConnector, Body, Client, Request};
+    pub use once_cell::sync::Lazy;
+    pub use postgres_docker_utils::DockerContainerGuard;
+    pub use semaphore::{
+        hash_to_field,
+        identity::Identity,
+        merkle_tree::{self, Branch},
+        poseidon_tree::{PoseidonHash, PoseidonTree},
+        protocol::{self, generate_nullifier_hash, generate_proof},
+        Field, SUPPORTED_DEPTH,
+    };
+    pub use serde::{Deserialize, Serialize};
+    pub use serde_json::json;
+    pub use signup_sequencer::{app::App, identity_tree::Hash, server, Options};
+    pub use tokio::{spawn, task::JoinHandle};
+    pub use tracing::{error, info, instrument};
+    pub use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
+    pub use url::{Host, Url};
+
+    pub use super::{
+        abi as ContractAbi, generate_reference_proof_json, generate_test_identities,
+        init_tracing_subscriber, prover_mock::ProverService, spawn_app, spawn_deps,
+        test_inclusion_proof, test_insert_identity, test_verify_proof,
+    };
+}
 
 use std::{
     fs::File,
     io::BufReader,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     sync::Arc,
-    time::Duration,
 };
 
-use clap::Parser;
-use cli_batteries::{reset_shutdown, shutdown};
-use ethers::{
-    abi::{AbiEncode, Address},
-    core::{abi::Abi, k256::ecdsa::SigningKey, rand},
-    prelude::{
-        artifacts::{Bytecode, BytecodeObject},
-        ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
-        SignerMiddleware, Wallet,
-    },
-    providers::Middleware,
-    types::{Bytes, H256, U256},
-    utils::{Anvil, AnvilInstance},
-};
-use hyper::{client::HttpConnector, Body, Client, Request};
-use once_cell::sync::Lazy;
-use semaphore::{
-    hash_to_field,
-    identity::Identity,
-    merkle_tree::{self, Branch},
-    poseidon_tree::{PoseidonHash, PoseidonTree},
-    protocol::{self, generate_nullifier_hash, generate_proof},
-    Field, SUPPORTED_DEPTH,
-};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use tokio::{spawn, task::JoinHandle};
-use tracing::{error, info, instrument};
-use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
-use url::{Host, Url};
-
-use abi as ContractAbi;
-use signup_sequencer::{app::App, identity_tree::Hash, server, Options};
-
-#[tokio::test]
-#[serial_test::serial]
-async fn validate_proofs() {
-    // Initialize logging for the test.
-    init_tracing_subscriber();
-    info!("Starting integration test");
-
-    let db_container = postgres_docker_utils::setup().await.unwrap();
-    let port = db_container.port();
-    let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
-
-    let mut options = Options::try_parse_from([
-        "signup-sequencer",
-        "--identity-manager-address",
-        "0x0000000000000000000000000000000000000000", // placeholder, updated below
-        "--database",
-        &db_url,
-        "--database-max-connections",
-        "1",
-        "--tree-depth",
-        "20",
-    ])
-    .expect("Failed to create options");
-    options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
-
-    let mut ref_tree = PoseidonTree::new(
-        SUPPORTED_DEPTH + 1,
-        options.app.contracts.initial_leaf_value,
-    );
-    let initial_root: U256 = ref_tree.root().into();
-    let (chain, private_key, identity_manager_address, prover_mock) =
-        spawn_mock_chain(initial_root, 3)
-            .await
-            .expect("Failed to spawn mock chain");
-
-    options.app.contracts.identity_manager_address = identity_manager_address;
-    options.app.ethereum.read_options.confirmation_blocks_delay = 2;
-    options.app.ethereum.read_options.ethereum_provider =
-        Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
-    options.app.ethereum.write_options.signing_key = private_key;
-
-    let (app, local_addr) = spawn_app(options.clone())
-        .await
-        .expect("Failed to spawn app.");
-
-    let uri = "http://".to_owned() + &local_addr.to_string();
-    let client = Client::new();
-
-    static IDENTITIES: Lazy<Vec<Identity>> = Lazy::new(|| {
-        vec![
-            Identity::from_secret(b"test_f0f0", None),
-            Identity::from_secret(b"test_f1f1", None),
-            Identity::from_secret(b"test_f2f2", None),
-        ]
-    });
-
-    static TEST_LEAVES: Lazy<Vec<Field>> =
-        Lazy::new(|| IDENTITIES.iter().map(|id| id.commitment()).collect());
-
-    let signal_hash = hash_to_field(b"signal_hash");
-    let external_nullifier_hash = hash_to_field(b"external_hash");
-
-    // HAPPY PATH
-
-    // generate identity
-    let (merkle_proof, root) =
-        test_insert_identity(&uri, &client, &mut ref_tree, &TEST_LEAVES, 0).await;
-
-    // simulate client generating a proof
-    let nullifier_hash = generate_nullifier_hash(&IDENTITIES[0], external_nullifier_hash);
-
-    let proof = generate_proof(
-        &IDENTITIES[0],
-        &merkle_proof,
-        external_nullifier_hash,
-        signal_hash,
-    )
-    .unwrap();
-
-    test_verify_proof(
-        &uri,
-        &client,
-        root,
-        signal_hash,
-        nullifier_hash,
-        external_nullifier_hash,
-        proof,
-        None,
-    )
-    .await;
-
-    // INVALID PROOF
-
-    let invalid_nullifier_hash = generate_nullifier_hash(&IDENTITIES[1], external_nullifier_hash);
-
-    test_verify_proof(
-        &uri,
-        &client,
-        root,
-        signal_hash,
-        invalid_nullifier_hash,
-        external_nullifier_hash,
-        proof,
-        Some("invalid semaphore proof"),
-    )
-    .await;
-
-    // IDENTITY NOT IN TREE
-
-    ref_tree.set(1, TEST_LEAVES[1]);
-
-    // simulate client generating a proof
-    let new_nullifier_hash = generate_nullifier_hash(&IDENTITIES[1], external_nullifier_hash);
-
-    let new_proof = generate_proof(
-        &IDENTITIES[1],
-        &merkle_proof,
-        external_nullifier_hash,
-        signal_hash,
-    )
-    .unwrap();
-
-    test_verify_proof(
-        &uri,
-        &client,
-        root,
-        signal_hash,
-        new_nullifier_hash,
-        external_nullifier_hash,
-        new_proof,
-        Some("invalid semaphore proof"),
-    )
-    .await;
-
-    // UNKNOWN ROOT
-
-    let new_root = ref_tree.root();
-
-    test_verify_proof(
-        &uri,
-        &client,
-        new_root,
-        signal_hash,
-        new_nullifier_hash,
-        external_nullifier_hash,
-        new_proof,
-        Some("invalid root"),
-    )
-    .await;
-
-    // Shutdown the app properly for the final time
-    shutdown();
-    app.await.unwrap();
-    prover_mock.stop();
-    reset_shutdown();
-}
-
-#[tokio::test]
-#[serial_test::serial]
-async fn insert_identity_and_proofs() {
-    // Initialize logging for the test.
-    init_tracing_subscriber();
-    info!("Starting integration test");
-
-    let db_container = postgres_docker_utils::setup().await.unwrap();
-    let port = db_container.port();
-    let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
-
-    let batch_size: usize = 3;
-
-    let mut options = Options::try_parse_from([
-        "signup-sequencer",
-        "--identity-manager-address",
-        "0x0000000000000000000000000000000000000000", // placeholder, updated below
-        "--database",
-        &db_url,
-        "--database-max-connections",
-        "1",
-        "--tree-depth",
-        "20",
-        "--batch-size",
-        &format!("{batch_size}"),
-        "--batch-timeout-seconds",
-        "10",
-        "--dense-tree-prefix-depth",
-        "10",
-        "--tree-gc-threshold",
-        "1",
-    ])
-    .expect("Failed to create options");
-    options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
-
-    let mut ref_tree = PoseidonTree::new(
-        SUPPORTED_DEPTH + 1,
-        options.app.contracts.initial_leaf_value,
-    );
-    let initial_root: U256 = ref_tree.root().into();
-    let (chain, private_key, identity_manager_address, prover_mock) =
-        spawn_mock_chain(initial_root, batch_size)
-            .await
-            .expect("Failed to spawn mock chain");
-
-    options.app.contracts.identity_manager_address = identity_manager_address;
-    options.app.ethereum.read_options.confirmation_blocks_delay = 2;
-    options.app.ethereum.read_options.ethereum_provider =
-        Url::parse(&chain.endpoint()).expect("Failed to parse ganache endpoint");
-    options.app.ethereum.write_options.signing_key = private_key;
-
-    let (app, local_addr) = spawn_app(options.clone())
-        .await
-        .expect("Failed to spawn app.");
-
-    let test_identities = generate_test_identities(batch_size * 3);
-    let identities_ref: Vec<Field> = test_identities
-        .iter()
-        .map(|i| Hash::from_str_radix(i, 16).unwrap())
-        .collect();
-
-    let uri = "http://".to_owned() + &local_addr.to_string();
-    let client = Client::new();
-
-    // Check that we can get inclusion proofs for things that already exist in the
-    // database and on chain.
-    test_inclusion_proof(
-        &uri,
-        &client,
-        0,
-        &mut ref_tree,
-        &options.app.contracts.initial_leaf_value,
-        true,
-    )
-    .await;
-    test_inclusion_proof(
-        &uri,
-        &client,
-        1,
-        &mut ref_tree,
-        &options.app.contracts.initial_leaf_value,
-        true,
-    )
-    .await;
-
-    // Insert enough identities to trigger an batch to be sent to the blockchain
-    // based on the current batch size of 3.
-    test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 0).await;
-    test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 1).await;
-    test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 2).await;
-
-    // Check that we can get their inclusion proofs back.
-    test_inclusion_proof(
-        &uri,
-        &client,
-        0,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[0], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-    test_inclusion_proof(
-        &uri,
-        &client,
-        1,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[1], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-    test_inclusion_proof(
-        &uri,
-        &client,
-        2,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[2], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-
-    // Insert too few identities to trigger a batch, and then force the timeout to
-    // complete and submit a partial batch to the chain.
-    test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 3).await;
-    test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 4).await;
-    tokio::time::pause();
-    tokio::time::resume();
-
-    // Check that we can also get these inclusion proofs back.
-    test_inclusion_proof(
-        &uri,
-        &client,
-        3,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[3], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-    test_inclusion_proof(
-        &uri,
-        &client,
-        4,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[4], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-
-    // Shutdown the app and reset the mock shutdown, allowing us to test the
-    // behaviour with saved data.
-    info!("Stopping the app for testing purposes");
-    shutdown();
-    app.await.unwrap();
-    reset_shutdown();
-
-    // Test loading the state from a file when the on-chain contract has the state.
-    let (app, local_addr) = spawn_app(options.clone())
-        .await
-        .expect("Failed to spawn app.");
-    let uri = "http://".to_owned() + &local_addr.to_string();
-
-    // Check that we can still get inclusion proofs for identities we know to have
-    // been inserted previously. Here we check the first and last ones we inserted.
-    test_inclusion_proof(
-        &uri,
-        &client,
-        0,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[0], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-    test_inclusion_proof(
-        &uri,
-        &client,
-        4,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[4], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-
-    // Shutdown the app and reset the mock shutdown, allowing us to test the
-    // behaviour with the saved tree.
-    info!("Stopping the app for testing purposes");
-    shutdown();
-    app.await.unwrap();
-    reset_shutdown();
-
-    // Test loading the state from the saved tree when the on-chain contract has the
-    // state.
-    let (app, local_addr) = spawn_app(options.clone())
-        .await
-        .expect("Failed to spawn app.");
-    let uri = "http://".to_owned() + &local_addr.to_string();
-
-    // Check that we can still get inclusion proofs for identities we know to have
-    // been inserted previously. Here we check the first and last ones we inserted.
-    test_inclusion_proof(
-        &uri,
-        &client,
-        0,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[0], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-    test_inclusion_proof(
-        &uri,
-        &client,
-        4,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[4], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-
-    // Shutdown the app properly for the final time
-    shutdown();
-    app.await.unwrap();
-    prover_mock.stop();
-    reset_shutdown();
-}
+use self::prelude::*;
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
-async fn test_verify_proof(
+pub async fn test_verify_proof(
     uri: &str,
     client: &Client<HttpConnector>,
     root: Field,
@@ -479,7 +104,8 @@ async fn test_verify_proof(
 }
 
 #[instrument(skip_all)]
-async fn test_inclusion_proof(
+#[track_caller]
+pub async fn test_inclusion_proof(
     uri: &str,
     client: &Client<HttpConnector>,
     leaf_index: usize,
@@ -497,10 +123,12 @@ async fn test_inclusion_proof(
             .header("Content-Type", "application/json")
             .body(body)
             .expect("Failed to create inclusion proof hyper::Body");
+
         let mut response = client
             .request(req)
             .await
             .expect("Failed to execute request.");
+
         if expect_failure {
             assert!(!response.status().is_success());
             return;
@@ -538,7 +166,7 @@ async fn test_inclusion_proof(
 }
 
 #[instrument(skip_all)]
-async fn test_insert_identity(
+pub async fn test_insert_identity(
     uri: &str,
     client: &Client<HttpConnector>,
     ref_tree: &mut PoseidonTree,
@@ -615,7 +243,7 @@ fn construct_verify_proof_body(
 }
 
 #[instrument(skip_all)]
-async fn spawn_app(options: Options) -> anyhow::Result<(JoinHandle<()>, SocketAddr)> {
+pub async fn spawn_app(options: Options) -> anyhow::Result<(JoinHandle<()>, SocketAddr)> {
     let app = App::new(options.app).await.expect("Failed to create App");
 
     let ip: IpAddr = match options.server.server.host() {
@@ -648,11 +276,33 @@ struct CompiledContract {
     bytecode: Bytecode,
 }
 
-#[instrument(skip_all)]
-async fn spawn_mock_chain(
+pub async fn spawn_deps(
     initial_root: U256,
     batch_size: usize,
-) -> anyhow::Result<(AnvilInstance, H256, Address, prover_mock::Service)> {
+) -> anyhow::Result<(MockChain, DockerContainerGuard, ProverService)> {
+    let chain = spawn_mock_chain(initial_root, batch_size);
+    let db_container = spawn_db();
+    let prover = spawn_mock_prover();
+
+    let (chain, db_container, prover) = tokio::join!(chain, db_container, prover);
+
+    Ok((chain?, db_container?, prover?))
+}
+
+async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {
+    let db_container = postgres_docker_utils::setup().await.unwrap();
+
+    Ok(db_container)
+}
+
+pub struct MockChain {
+    pub anvil:                    AnvilInstance,
+    pub private_key:              H256,
+    pub identity_manager_address: Address,
+}
+
+#[instrument(skip_all)]
+async fn spawn_mock_chain(initial_root: U256, batch_size: usize) -> anyhow::Result<MockChain> {
     let chain = Anvil::new().block_time(2u64).spawn();
     let private_key = H256::from_slice(&chain.keys()[0].to_be_bytes());
 
@@ -697,11 +347,7 @@ async fn spawn_mock_chain(
         bytecode_bytes.clone(),
         client.clone(),
     );
-    let verifier = verifier_factory
-        .deploy(())?
-        .confirmations(0usize)
-        .send()
-        .await?;
+    let verifier = verifier_factory.deploy(())?.confirmations(0usize).send();
 
     // The rest of the contracts can be deployed to the mock chain normally.
     let mock_state_bridge_factory =
@@ -709,24 +355,33 @@ async fn spawn_mock_chain(
     let mock_state_bridge = mock_state_bridge_factory
         .deploy(())?
         .confirmations(0usize)
-        .send()
-        .await?;
+        .send();
 
     let mock_verifier_factory =
         load_and_build_contract("./sol/SequencerVerifier.json", client.clone())?;
     let mock_verifier = mock_verifier_factory
         .deploy(())?
         .confirmations(0usize)
-        .send()
-        .await?;
+        .send();
 
     let unimplemented_verifier_factory =
         load_and_build_contract("./sol/UnimplementedTreeVerifier.json", client.clone())?;
     let unimplemented_verifier = unimplemented_verifier_factory
         .deploy(())?
         .confirmations(0usize)
-        .send()
-        .await?;
+        .send();
+
+    let (verifier, mock_state_bridge, mock_verifier, unimplemented_verifier) = tokio::join!(
+        verifier,
+        mock_state_bridge,
+        mock_verifier,
+        unimplemented_verifier
+    );
+
+    let verifier = verifier?;
+    let mock_state_bridge = mock_state_bridge?;
+    let mock_verifier = mock_verifier?;
+    let unimplemented_verifier = unimplemented_verifier?;
 
     let verifier_lookup_table_factory =
         load_and_build_contract("./sol/VerifierLookupTable.json", client.clone())?;
@@ -734,21 +389,26 @@ async fn spawn_mock_chain(
         .clone()
         .deploy((batch_size as u64, mock_verifier.address()))?
         .confirmations(0usize)
-        .send()
-        .await?;
+        .send();
+
     let update_verifiers = verifier_lookup_table_factory
         .deploy((batch_size as u64, unimplemented_verifier.address()))?
         .confirmations(0usize)
-        .send()
-        .await?;
+        .send();
 
     let identity_manager_impl_factory =
         load_and_build_contract("./sol/WorldIDIdentityManagerImplV1.json", client.clone())?;
     let identity_manager_impl = identity_manager_impl_factory
         .deploy(())?
         .confirmations(0usize)
-        .send()
-        .await?;
+        .send();
+
+    let (insert_verifiers, update_verifiers, identity_manager_impl) =
+        tokio::join!(insert_verifiers, update_verifiers, identity_manager_impl);
+
+    let insert_verifiers = insert_verifiers?;
+    let update_verifiers = update_verifiers?;
+    let identity_manager_impl = identity_manager_impl?;
 
     let identity_manager_factory =
         load_and_build_contract("./sol/WorldIDIdentityManager.json", client.clone())?;
@@ -771,15 +431,17 @@ async fn spawn_mock_chain(
         .send()
         .await?;
 
-    let mock_url: String = "0.0.0.0:3001".into();
-    let mock_prover_service = prover_mock::Service::new(mock_url).await?;
-
-    Ok((
-        chain,
+    Ok(MockChain {
+        anvil: chain,
         private_key,
-        identity_manager_contract.address(),
-        mock_prover_service,
-    ))
+        identity_manager_address: identity_manager_contract.address(),
+    })
+}
+
+async fn spawn_mock_prover() -> anyhow::Result<ProverService> {
+    let mock_prover_service = prover_mock::ProverService::new().await?;
+
+    Ok(mock_prover_service)
 }
 
 type SharableClient =
@@ -817,7 +479,7 @@ fn load_and_build_contract(
 ///
 /// Set the `QUIET_MODE` environment variable to reduce the complexity of the
 /// log output.
-fn init_tracing_subscriber() {
+pub fn init_tracing_subscriber() {
     let quiet_mode = std::env::var("QUIET_MODE").is_ok();
     let result = if quiet_mode {
         tracing_subscriber::fmt()
@@ -838,7 +500,7 @@ fn init_tracing_subscriber() {
     }
 }
 
-fn generate_reference_proof_json(
+pub fn generate_reference_proof_json(
     ref_tree: &PoseidonTree,
     leaf_idx: usize,
     status: &str,
@@ -870,17 +532,16 @@ fn generate_reference_proof_json(
 /// would be used in reality. This is both to make them easier to generate and
 /// to ensure that we do not run afoul of the element numeric limit for the
 /// snark scalar field.
-fn generate_test_identities(identity_count: usize) -> Vec<String> {
-    let prefix_regex = regex::Regex::new(r"^0x").unwrap();
+pub fn generate_test_identities(identity_count: usize) -> Vec<String> {
     let mut identities = vec![];
+
     for _ in 0..identity_count {
         // Generate the identities using the just the last 64 bits (of 256) has so we're
         // guaranteed to be less than SNARK_SCALAR_FIELD.
         let bytes: [u8; 32] = U256::from(rand::random::<u64>()).into();
-        let identity_string: String = bytes.encode_hex();
-        let no_prefix = prefix_regex.replace(&identity_string, "").to_string();
+        let identity_string: String = hex::encode(bytes);
 
-        identities.push(no_prefix);
+        identities.push(identity_string);
     }
 
     identities

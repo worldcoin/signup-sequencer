@@ -208,6 +208,21 @@ impl IdentityManager {
         Ok(pending_identities)
     }
 
+    /// Waits until all the pending transactions have been mined or failed
+    #[instrument(level = "debug", skip_all)]
+    pub async fn await_clean_slate(&self) -> anyhow::Result<()> {
+        // Await for all pending transactions
+        let pending_identities = self.fetch_pending_identities().await?;
+
+        for pending_identity_tx in pending_identities {
+            // Ignores the result of each transaction - we only care about a clean slate in
+            // terms of pending transactions
+            drop(self.mine_identities(pending_identity_tx).await);
+        }
+
+        Ok(())
+    }
+
     #[instrument(level = "debug", skip_all)]
     pub async fn assert_latest_root(&self, root: Field) -> anyhow::Result<()> {
         let latest_root = self.abi.latest_root().call().await?;

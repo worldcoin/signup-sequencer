@@ -1,13 +1,18 @@
-use axum::{routing::post, Json, Router};
-use axum_server::Handle;
-use ethers::{types::U256, utils::keccak256};
-use semaphore::poseidon_tree::{Branch, Proof as TreeProof};
-use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
     mem::size_of,
-    net::SocketAddr,
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    sync::Arc,
 };
+
+use anyhow::Context;
+use axum::{extract::State, routing::post, Json, Router};
+use axum_server::Handle;
+use ethers::{types::U256, utils::keccak256};
+use hyper::StatusCode;
+use semaphore::poseidon_tree::{Branch, Proof as TreeProof};
+use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 
 /// A representation of an error from the prover.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,22 +89,44 @@ impl ProveResponse {
 }
 
 /// The mock prover service.
-pub struct Service {
-    server: Handle,
+pub struct ProverService {
+    server:  Handle,
+    inner:   Arc<Mutex<Prover>>,
+    address: SocketAddr,
 }
 
-impl Service {
+struct Prover {
+    is_unavailable: bool,
+}
+
+impl ProverService {
     /// Returns a new instance of the mock prover service, serving at the
     /// provided `url`.
     ///
     /// It provides only a single endpoint for now, `/prove` in order to match
     /// the full service (`semaphore-mtb`). This can be extended in the future
     /// if needed.
-    pub async fn new(url: String) -> anyhow::Result<Self> {
-        let prove = |Json(input): Json<ProofInput>| async move { Json(Self::prove(input)) };
-        let app = Router::new().route("/prove", post(prove));
+    pub async fn new() -> anyhow::Result<Self> {
+        async fn prove(
+            State(state): State<Arc<Mutex<Prover>>>,
+            Json(input): Json<ProofInput>,
+        ) -> Result<Json<ProveResponse>, StatusCode> {
+            let state = state.lock().await;
 
-        let addr: SocketAddr = url.parse()?;
+            state.prove(input).map(Json)
+        }
+
+        let inner = Arc::new(Mutex::new(Prover {
+            is_unavailable: false,
+        }));
+        let state = inner.clone();
+
+        let app = Router::new().route("/prove", post(prove)).with_state(state);
+
+        // We use a random port here so that we can run multiple tests in many
+        // threads/tasks
+        let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0));
+
         let server = Handle::new();
         let serverside_handle = server.clone();
         let service = app.into_make_service();
@@ -109,34 +136,47 @@ impl Service {
                 .handle(serverside_handle)
                 .serve(service)
                 .await
-                .unwrap();
+                .expect("Failed to bind server");
         });
 
-        let service = Self { server };
+        let address = server.listening().await.context("Failed to bind server")?;
+
+        let service = Self {
+            server,
+            inner,
+            address,
+        };
+
         Ok(service)
+    }
+
+    pub fn url(&self) -> String {
+        format!("http://{}", self.address)
+    }
+
+    pub async fn set_availability(&self, availability: bool) {
+        let mut inner = self.inner.lock().await;
+        inner.is_unavailable = availability;
     }
 
     /// Shuts down the server and frees up the socket that it was using.
     pub fn stop(self) {
         self.server.shutdown();
     }
+}
 
-    /// Performs the 'proof' operation on the provided `input`.
-    ///
-    /// Note that this does _not_ implement the full ZK proof system as done by
-    /// `semaphore-mtb`. Instead, it just verifies that the provided merkle
-    /// proofs are correct, which is sufficient when combined with the mock
-    /// verifier used by the mock chain.
-    ///
-    /// In order to save effort and reduce the surface for bugs, the proof
-    /// verification logic from `semaphore-rs` is reused.
-    fn prove(input: ProofInput) -> ProveResponse {
+impl Prover {
+    fn prove(&self, input: ProofInput) -> Result<ProveResponse, StatusCode> {
+        if self.is_unavailable {
+            return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+
         // Calculate the input hash based on the prover parameters.
         let input_hash = Self::calculate_identity_registration_input_hash(&input);
 
         // If the hashes aren't the same something's wrong so we return an error.
         if input_hash != input.input_hash {
-            return ProveResponse::failure("42", "Input hash mismatch.");
+            return Ok(ProveResponse::failure("42", "Input hash mismatch."));
         }
 
         // Next we verify the merkle proofs.
@@ -160,12 +200,15 @@ impl Service {
 
         // If the final root doesn't match the post root something's broken so we error.
         if last_root != input.post_root {
-            return ProveResponse::failure("43", "Merkle proof verification failure.");
+            return Ok(ProveResponse::failure(
+                "43",
+                "Merkle proof verification failure.",
+            ));
         }
 
         // If we succeed in verifying, the output should be correlated with the input,
         // so we use the input_hash as part of it.
-        ProveResponse::success([
+        Ok(ProveResponse::success([
             "0x2".into(),
             input_hash,
             "0x2413396a2af3add6fbe8137cfe7657917e31a5cdab0b7d1d645bd5eeb47ba601".into(),
@@ -174,7 +217,7 @@ impl Service {
             "0x14932600f53a1ceb11d79a7bdd9688a2f8d1919176f257f132587b2b3274c41e".into(),
             "0x13d7b19c7b67bf5d3adf2ac2d3885fd5d49435b6069c0656939cd1fb7bef9dc9".into(),
             "0x142e14f90c49c79b4edf5f6b7acbcdb0b0f376a4311fc036f1006679bd53ca9e".into(),
-        ])
+        ]))
     }
 
     /// Reconstructs the proof with directions as required by `semaphore-rs`.

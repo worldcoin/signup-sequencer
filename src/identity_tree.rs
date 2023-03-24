@@ -364,6 +364,7 @@ impl<V: Version> TreeVersion<V> {
 impl TreeVersion<Latest> {
     /// Appends a batch of updates to the tree. This method makes sure it only
     /// applies the updates past `next_leaf`, leaving older leaves untouched.
+    #[must_use]
     pub fn append_many_fresh_with_intermediate_roots<'t>(
         &self,
         updates: &'t [TreeUpdate],

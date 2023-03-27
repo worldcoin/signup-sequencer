@@ -9,12 +9,12 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     init_tracing_subscriber();
     info!("Starting unavailable prover test");
 
-    let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
+    let tree_depth: u8 = 20;
+
+    let mut ref_tree = PoseidonTree::new(tree_depth as usize + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let batch_size: usize = 3;
-    #[allow(clippy::cast_possible_truncation)]
-    let tree_depth: u8 = SUPPORTED_DEPTH as u8;
 
     let (mock_chain, db_container, prover_mock) =
         spawn_deps(initial_root, batch_size, tree_depth).await?;

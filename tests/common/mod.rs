@@ -33,7 +33,7 @@ pub mod prelude {
         merkle_tree::{self, Branch},
         poseidon_tree::{PoseidonHash, PoseidonTree},
         protocol::{self, generate_nullifier_hash, generate_proof},
-        Field, SUPPORTED_DEPTH,
+        Field,
     };
     pub use serde::{Deserialize, Serialize};
     pub use serde_json::json;

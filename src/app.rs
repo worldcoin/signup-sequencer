@@ -309,6 +309,7 @@ impl App {
             request.signal_hash,
             request.external_nullifier_hash,
             &request.proof,
+            self.identity_manager.tree_depth(),
         );
         match checked {
             Ok(true) => Ok(VerifySemaphoreProofResponse(root_state)),

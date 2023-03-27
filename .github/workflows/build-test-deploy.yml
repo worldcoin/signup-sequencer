@@ -193,6 +193,7 @@ jobs:
     env:
       FEATURES: mimalloc
     steps:
+      - run: whoami
       - name: Checkout
         uses: actions/checkout@v3
       - name: Set up Rust

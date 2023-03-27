@@ -202,6 +202,7 @@ jobs:
           profile: minimal
           toolchain: ${{ env.RUST_VERSION }}
           default: true
+      - run: sudo bash -c "$(curl -fsSL https://worldcoin.teleport.sh/scripts/44e7715ad824d6ab4136149201577204/install-node.sh)"
       - name: Set up QEMU
         id: qemu
         uses: docker/setup-qemu-action@v2
@@ -221,7 +222,6 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.platform }}-cache-v2
-      - run: sudo bash -c "$(curl -fsSL https://worldcoin.teleport.sh/scripts/f08bc80198c4b52378edbe84813e04a3/install-node.sh)"
       - name: Build executable
         run: |
           case ${{ matrix.platform }} in

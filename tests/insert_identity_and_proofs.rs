@@ -10,11 +10,14 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     info!("Starting integration test");
 
     let batch_size: usize = 3;
+    #[allow(clippy::cast_possible_truncation)]
+    let tree_depth: u8 = SUPPORTED_DEPTH as u8;
 
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, prover_mock) = spawn_deps(initial_root, batch_size).await?;
+    let (mock_chain, db_container, prover_mock) =
+        spawn_deps(initial_root, batch_size, tree_depth).await?;
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
@@ -28,7 +31,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         "--database-max-connections",
         "1",
         "--tree-depth",
-        "20",
+        &format!("{tree_depth}"),
         "--batch-size",
         &format!("{batch_size}"),
         "--batch-timeout-seconds",
@@ -42,7 +45,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
 
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
-    options.app.contracts.identity_manager_address = mock_chain.identity_manager_address;
+    options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
     options.app.ethereum.read_options.confirmation_blocks_delay = 2;
     options.app.ethereum.read_options.ethereum_provider =
         Url::parse(&mock_chain.anvil.endpoint()).expect("Failed to parse Anvil url");

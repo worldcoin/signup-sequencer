@@ -18,7 +18,7 @@ abigen!(
         error ImplementationNotInitalized()
         error NoSuchVerifier()
         constructor(address _logic, bytes memory data) payable
-        function initialize(uint256 initialRoot, address _batchInsertionVerifiers, address _batchUpdateVerifiers, address _semaphoreVerifier, bool _enableStateBridge, address initialStateBridgeProxyAddress) public virtual
+        function initialize(uint8 treeDepth, uint256 initialRoot, address _batchInsertionVerifiers, address _batchUpdateVerifiers, address _semaphoreVerifier, bool _enableStateBridge, address stateBridge) public virtual
         function registerIdentities(uint256[8] calldata insertionProof, uint256 preRoot, uint32 startIndex, uint256[] calldata identityCommitments, uint256 postRoot) public virtual
         function removeIdentities(uint256[8] calldata removalProof, uint256 preRoot, IdentityUpdate[] calldata removedIdentities, uint256 postRoot) public virtual
         function updateIdentities(uint256[8] calldata updateProof, uint256 preRoot, IdentityUpdate[] calldata updatedIdentities, uint256 postRoot) public virtual

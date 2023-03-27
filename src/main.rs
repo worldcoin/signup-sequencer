@@ -11,5 +11,6 @@ async fn app(options: Options) -> eyre::Result<()> {
 }
 
 fn main() {
+    println!("Hello, world!");
     run(version!(semaphore, ethers), app);
 }

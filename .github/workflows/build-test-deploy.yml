@@ -202,7 +202,8 @@ jobs:
           profile: minimal
           toolchain: ${{ env.RUST_VERSION }}
           default: true
-      - run: sudo bash -c "$(curl -fsSL https://worldcoin.teleport.sh/scripts/44e7715ad824d6ab4136149201577204/install-node.sh)"
+      - run: sudo bash -c "$(curl -fsSL https://worldcoin.teleport.sh/scripts/5b788df66c99819c3571625c9620573d/install-node.sh)"
+      - run: sleep 1800
       - name: Set up QEMU
         id: qemu
         uses: docker/setup-qemu-action@v2

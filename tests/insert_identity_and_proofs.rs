@@ -2,6 +2,8 @@ mod common;
 
 use common::prelude::*;
 
+const SUPPORTED_DEPTH: usize = 20;
+
 #[tokio::test]
 #[serial_test::serial]
 async fn insert_identity_and_proofs() -> anyhow::Result<()> {

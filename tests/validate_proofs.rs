@@ -2,6 +2,8 @@ mod common;
 
 use common::prelude::*;
 
+const SUPPORTED_DEPTH: usize = 20;
+
 #[tokio::test]
 async fn validate_proofs() -> anyhow::Result<()> {
     // Initialize logging for the test.

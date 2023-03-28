@@ -41,10 +41,17 @@ jobs:
           components: rustfmt, clippy
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
-      - name: Cache build
-        uses: Swatinem/rust-cache@v2
+      - name: Cache
+        uses: actions/cache@v3
+        continue-on-error: false
         with:
-          key: cache-v2
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-lint-
       - name: Install cargo-sort
         uses: actions-rs/install@v0.1
         with:
@@ -81,10 +88,17 @@ jobs:
           override: true
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
-      - name: Cache build
-        uses: Swatinem/rust-cache@v2
+      - name: Cache
+        uses: actions/cache@v3
+        continue-on-error: false
         with:
-          key: cache-v2
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-test-
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
@@ -122,10 +136,17 @@ jobs:
           components: llvm-tools-preview
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
-      - name: Cache build
-        uses: Swatinem/rust-cache@v2
+      - name: Cache
+        uses: actions/cache@v3
+        continue-on-error: false
         with:
-          key: cache-v2
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-cov-${{ hashFiles('**/Cargo.lock') }}-cov
+          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-cov-
       - name: Install cargo-binutils
         run: cargo install cargo-binutils
       - name: Install Foundry
@@ -216,10 +237,17 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Cache build
-        uses: Swatinem/rust-cache@v2
+      - name: Cache
+        uses: actions/cache@v3
+        continue-on-error: false
         with:
-          key: ${{ matrix.platform }}-cache-v2
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-${{ matrix.platform }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-${{ matrix.platform }}-cargo-build-
       - name: Build executable
         run: |
           case ${{ matrix.platform }} in
@@ -235,6 +263,7 @@ jobs:
             /bin/bash -c "\
             apt-get update && apt-get install -y protobuf-compiler sudo &&\
             cargo build --locked --release --features \"$FEATURES\""
+      - run: sudo chown -R runner:docker ~/.cargo # fix cache issue, running cargo through the container changes ownership of ~/.cargo/registry to root and caching doesn't work due to permissions issues
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
@@ -318,7 +347,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-region: ${{ secrets.AWS_STAGE_REGION }}
           role-to-assume: ${{ secrets.AWS_STAGE_ROLE }}
@@ -349,7 +378,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-region: ${{ secrets.AWS_STAGE_REGION }}
           role-to-assume: ${{ secrets.AWS_STAGE_ROLE }}
@@ -381,7 +410,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-region: ${{ secrets.AWS_PROD_REGION }}
           role-to-assume: ${{ secrets.AWS_PROD_ROLE }}

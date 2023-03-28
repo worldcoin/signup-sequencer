@@ -265,7 +265,7 @@ jobs:
             cargo build --locked --release --features \"$FEATURES\""
       - run: sudo chown -R runner:docker ~/.cargo # fix cache issue, running cargo through the container changes ownership of ~/.cargo/registry to root and caching doesn't work due to permissions issues
       - name: Build and push
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           context: .
           platforms: linux/${{ matrix.platform }}

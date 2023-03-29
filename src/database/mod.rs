@@ -6,9 +6,11 @@
 
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
-use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
-use sqlx::pool::PoolOptions;
-use sqlx::{Executor, Pool, Postgres, Row};
+use sqlx::{
+    migrate::{Migrate, MigrateDatabase, Migrator},
+    pool::PoolOptions,
+    Executor, Pool, Postgres, Row,
+};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;

@@ -162,12 +162,13 @@ impl Database {
         let query = sqlx::query(
             r#"
             INSERT INTO root_history(root, leaf_index, status, pending_as_of)
-            VALUES($1, $2, 'pending', CURRENT_TIMESTAMP)
+            VALUES($1, $2, $3, CURRENT_TIMESTAMP)
             ON CONFLICT (root) DO NOTHING;
             "#,
         )
         .bind(root)
-        .bind(leaf_index as i64);
+        .bind(leaf_index as i64)
+        .bind(<&str>::from(Status::Pending));
 
         tx.execute(query).await?;
 
@@ -213,12 +214,13 @@ impl Database {
         let update_root_history_query = sqlx::query(
             r#"
             UPDATE root_history
-            SET status = 'mined', mined_at = CURRENT_TIMESTAMP
+            SET status = $2, mined_at = CURRENT_TIMESTAMP
             WHERE leaf_index <= $1
-            AND   status <> 'mined'
+            AND   status <> $2
             "#,
         )
-        .bind(root_leaf_index);
+        .bind(root_leaf_index)
+        .bind(<&str>::from(Status::Mined));
 
         tx.execute(update_root_history_query).await?;
 

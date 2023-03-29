@@ -6,11 +6,9 @@
 
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
-use sqlx::{
-    migrate::{Migrate, MigrateDatabase, Migrator},
-    pool::PoolOptions,
-    Executor, Pool, Postgres, Row,
-};
+use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
+use sqlx::pool::PoolOptions;
+use sqlx::{Executor, Pool, Postgres, Row};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;
@@ -352,10 +350,9 @@ impl Database {
     pub async fn count_pending_identities(&self) -> Result<i32, Error> {
         let query = sqlx::query(
             r#"
-                SELECT COUNT(i.leaf_index) as pending
-                FROM identities i
-                INNER JOIN root_history r ON i.leaf_index = r.leaf_index
-                WHERE r.status = $1
+            SELECT COUNT(*) as pending
+            FROM root_history
+            WHERE status = $1
             "#,
         )
         .bind(<&str>::from(Status::Pending));

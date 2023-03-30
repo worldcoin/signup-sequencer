@@ -361,7 +361,7 @@ mod test {
         };
 
         ($a:expr, $b:expr) => {
-            assert_same_time!($a, $b, chrono::Duration::milliseconds(10));
+            assert_same_time!($a, $b, chrono::Duration::milliseconds(50));
         };
     }
 

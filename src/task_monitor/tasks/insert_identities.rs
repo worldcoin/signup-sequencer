@@ -94,7 +94,7 @@ async fn insert_identities(
         let next_leaf = latest_tree.next_leaf();
 
         assert!(
-            next_leaf != next_db_index,
+            next_leaf == next_db_index,
             "Database and tree are out of sync. Next leaf index in tree is: {}, in database: {}",
             next_leaf,
             next_db_index

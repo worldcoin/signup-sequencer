@@ -129,7 +129,7 @@ impl App {
 
         // We don't store the initial root in the database, so we have to skip this step
         // if the db is empty
-        if !database.is_empty().await? {
+        if !database.has_no_identities().await? {
             database.mark_root_as_mined(&root_hash).await?;
         }
 

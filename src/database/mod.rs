@@ -1,8 +1,4 @@
-#![allow(
-    clippy::cast_sign_loss,
-    clippy::cast_possible_truncation,
-    clippy::needless_range_loop
-)]
+#![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
@@ -125,7 +121,7 @@ impl Database {
         Ok(Self { pool })
     }
 
-    pub async fn is_empty(&self) -> Result<bool, Error> {
+    pub async fn has_no_identities(&self) -> Result<bool, Error> {
         let query = sqlx::query(
             r#"
                 SELECT COUNT(*) FROM identities
@@ -388,7 +384,7 @@ mod test {
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {
             assert!(
-                $a - $b < $diff,
+                abs_duration($a - $b) < $diff,
                 "Difference between {} and {} is larger than {:?}",
                 $a,
                 $b,
@@ -399,6 +395,10 @@ mod test {
         ($a:expr, $b:expr) => {
             assert_same_time!($a, $b, chrono::Duration::milliseconds(10));
         };
+    }
+
+    fn abs_duration(x: chrono::Duration) -> chrono::Duration {
+        chrono::Duration::milliseconds(x.num_milliseconds().abs())
     }
 
     async fn setup_db() -> anyhow::Result<(Database, DockerContainerGuard)> {
@@ -426,10 +426,10 @@ mod test {
     }
 
     #[tokio::test]
-    async fn is_empty() -> anyhow::Result<()> {
+    async fn has_no_identities() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
-        let is_empty = db.is_empty().await?;
+        let is_empty = db.has_no_identities().await?;
 
         assert!(is_empty, "Db should be empty");
 
@@ -505,18 +505,18 @@ mod test {
 
         db.mark_root_as_mined(&roots[2]).await?;
 
-        for root_index in 0..3 {
+        for root in roots.iter().take(3) {
             let root = db
-                .get_root_state(&roots[root_index])
+                .get_root_state(root)
                 .await?
                 .context("Fetching root state")?;
 
             assert_eq!(root.status, Status::Mined);
         }
 
-        for root_index in 3..5 {
+        for root in roots.iter().skip(3).take(2) {
             let root = db
-                .get_root_state(&roots[root_index])
+                .get_root_state(root)
                 .await?
                 .context("Fetching root state")?;
 

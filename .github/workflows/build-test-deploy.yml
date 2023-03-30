@@ -8,8 +8,7 @@ on:
   push
 
 env:
-  RUST_VERSION: "1.65"
-  NIGHTLY_VERSION: nightly-2022-11-04
+  CACHE_KEY_PREFIX: ${{ runner.os }}-${{hashFiles('./rust-toolchain.toml')}}-${{ hashFiles('**/Cargo.lock') }}
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
@@ -36,9 +35,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: ${{ env.NIGHTLY_VERSION }}
-          override: true
-          components: rustfmt, clippy
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
       - name: Cache
@@ -50,8 +46,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-lint-
+          key: ${{ env.CACHE_KEY_PREFIX }}-cargo-lint
       - name: Install cargo-sort
         uses: actions-rs/install@v0.1
         with:
@@ -84,8 +79,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: ${{ env.NIGHTLY_VERSION }}
-          override: true
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
       - name: Cache
@@ -97,8 +90,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-test-
+          key: ${{ env.CACHE_KEY_PREFIX }}-cargo-test
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
@@ -131,9 +123,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: ${{ env.NIGHTLY_VERSION }}
-          override: true
-          components: llvm-tools-preview
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
       - name: Cache
@@ -145,8 +134,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-cov-${{ hashFiles('**/Cargo.lock') }}-cov
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-cov-
+          key: ${{ env.CACHE_KEY_PREFIX }}-cargo-cov
       - name: Install cargo-binutils
         run: cargo install cargo-binutils
       - name: Install Foundry
@@ -190,21 +178,6 @@ jobs:
           fail_ci_if_error: true
           verbose: true
 
-  # security_audit:
-  #   name: Dependency Security Audit
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - name: Set up Rust
-  #       uses: actions-rs/toolchain@v1
-  #       with:
-  #         profile: minimal
-  #         toolchain: ${{ env.RUST_VERSION }}
-  #         default: true
-  #     - uses: actions-rs/audit-check@v1
-  #       with:
-  #         token: ${{ secrets.GITHUB_TOKEN }}
-
   build_and_push:
     name: Build image
     runs-on: ubuntu-latest
@@ -220,7 +193,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: ${{ env.RUST_VERSION }}
           default: true
       - name: Set up QEMU
         id: qemu
@@ -237,33 +209,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Cache
-        uses: actions/cache@v3
-        continue-on-error: false
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-${{ matrix.platform }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-${{ matrix.platform }}-cargo-build-
-      - name: Build executable
-        run: |
-          case ${{ matrix.platform }} in
-            amd64) ARCH=x86_64 ;;
-            arm64) ARCH=aarch64 ;;
-            *) false
-          esac
-          docker run --rm \
-            -v "$(pwd)":/src \
-            -v $HOME/.cargo:/usr/local/cargo \
-            -v /usr/local/cargo/bin \
-            ghcr.io/recmo/rust-static-build:$RUST_VERSION-$ARCH \
-            /bin/bash -c "\
-            apt-get update && apt-get install -y protobuf-compiler sudo &&\
-            cargo build --locked --release --features \"$FEATURES\""
-      - run: sudo chown -R runner:docker ~/.cargo # fix cache issue, running cargo through the container changes ownership of ~/.cargo/registry to root and caching doesn't work due to permissions issues
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
@@ -273,7 +218,7 @@ jobs:
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: BIN=${{ env.BIN }}
+          build-args: BIN=${{ env.BIN }},TARGET_ARCH=${{ matrix.platform }}
       - name: Test image
         run:
           docker run --pull always --platform linux/${{ matrix.platform }} --rm $IMAGE_ID-${{ matrix.platform }} --version

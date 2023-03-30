@@ -1,29 +1,67 @@
-FROM rust:1.67 as build-env
+################################### Prepare the recipe ###################################
+FROM rust:1.68 as builder
+
+ARG BIN=rust-app
+
 WORKDIR /src
 
+# Install cargo-chef
+RUN cargo install cargo-chef
+
+# cargo-chef requires all the Cargo.toml files and Cargo.lock
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+############################# Build dependencies from the recipe #############################
+FROM rust:1.68 as oven
+
+ARG TARGET_ARCH=x86_64
+
+WORKDIR /src
+
+# Copy cargo-chef from builder
+COPY --from=builder /usr/local/cargo/bin/cargo-chef /usr/local/cargo/bin/cargo-chef
+
+# Install deps
 RUN apt-get update &&\
     apt-get install -y libssl-dev texinfo libcap2-bin &&\
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-ARG BIN=rust-app
+COPY --from=builder /src/recipe.json recipe.json
+RUN rustup target add ${TARGET_ARCH}-unknown-linux-musl
+RUN cargo chef cook --release --target=${TARGET_ARCH}-unknown-linux-musl --recipe-path recipe.json
 
-# Copy over all releases
-COPY ./target ./target
+################################### Build the application ###################################
+FROM rust:1.68 as build-env
 
-# Select the binary for currenct architecture
-RUN cp ./target/$(uname -m)-unknown-linux-musl/release/${BIN} ./bin
+ARG TARGET_ARCH=x86_64
 
-# Set capabilities
-RUN setcap cap_net_bind_service=+ep ./bin
+WORKDIR /src
+
+# Install deps
+RUN apt-get update &&\
+    apt-get install -y libssl-dev texinfo libcap2-bin &&\
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+COPY . .
+COPY --from=oven /src/target target
+COPY --from=oven /usr/local/cargo /usr/local/cargo
+
+# Build the binary
+RUN cargo build --release --target=${TARGET_ARCH}-unknown-linux-musl
+
+RUN cp ./target/${TARGET_ARCH}-unknown-linux-musl/release/${BIN} ./bin
 
 # Make sure it runs
 RUN ./bin --version
 
+# Set capabilities
+RUN setcap cap_net_bind_service=+ep ./bin
+
 # Fetch latest certificates
 RUN update-ca-certificates --verbose
 
-################################################################################
-# Create minimal docker image for our app
+################################### Minimal docker image ###################################
 FROM scratch
 
 # Drop priviliges

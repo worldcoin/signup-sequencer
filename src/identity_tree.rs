@@ -40,7 +40,7 @@ pub struct TreeItem {
     pub leaf_index: usize,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Pending,
@@ -146,6 +146,12 @@ where
     /// Gets the current tree root.
     fn get_root(&self) -> Hash {
         self.tree.root()
+    }
+
+    /// Gets the proof of the given leaf index element
+    fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
+        let proof = self.tree.proof(leaf);
+        (self.tree.root(), proof)
     }
 
     /// Returns _up to_ `maximum_update_count` updates that are to be applied to
@@ -351,7 +357,7 @@ where
 
     fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
         let tree = self.get_data();
-        (tree.tree.root(), tree.tree.proof(leaf))
+        tree.get_proof(leaf)
     }
 }
 
@@ -362,25 +368,25 @@ impl<V: Version> TreeVersion<V> {
 }
 
 impl TreeVersion<Latest> {
-    /// Appends a batch of updates to the tree. This method makes sure it only
-    /// applies the updates past `next_leaf`, leaving older leaves untouched.
+    /// Appends many identities to the tree, returns a list with the root, proof
+    /// of inclusion and leaf index
     #[must_use]
-    pub fn append_many_fresh_with_intermediate_roots<'t>(
-        &self,
-        updates: &'t [TreeUpdate],
-    ) -> Vec<(&'t TreeUpdate, Hash)> {
+    pub fn append_many(&self, identities: &[Hash]) -> Vec<(Hash, Proof, usize)> {
         let mut data = self.get_data();
         let next_leaf = data.next_leaf;
-        updates
-            .iter()
-            .filter(|update| update.leaf_index >= next_leaf)
-            .map(|update| {
-                data.update(update.leaf_index, update.element);
-                let root = data.get_root();
 
-                (update, root)
-            })
-            .collect()
+        let mut output = Vec::with_capacity(identities.len());
+
+        for (idx, identity) in identities.iter().enumerate() {
+            let leaf_index = next_leaf + idx;
+
+            data.update(leaf_index, *identity);
+            let (root, proof) = data.get_proof(leaf_index);
+
+            output.push((root, proof, leaf_index));
+        }
+
+        output
     }
 }
 

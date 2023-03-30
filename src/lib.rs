@@ -6,10 +6,10 @@ pub mod app;
 mod contracts;
 mod database;
 mod ethereum;
-mod identity_committer;
 pub mod identity_tree;
 mod prover;
 pub mod server;
+mod task_monitor;
 mod utils;
 
 use std::sync::Arc;

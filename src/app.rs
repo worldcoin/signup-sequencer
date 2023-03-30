@@ -16,15 +16,15 @@ use crate::{
     contracts::{IdentityManager, SharedIdentityManager},
     database::{self, Database},
     ethereum::{self, Ethereum},
-    identity_committer,
-    identity_committer::{
-        tasks::insert_identities::{IdentityInsert, OnInsertComplete},
-        TaskMonitor,
-    },
     identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
     prover,
     prover::batch_insertion::Prover as BatchInsertionProver,
     server::{Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
+    task_monitor,
+    task_monitor::{
+        tasks::insert_identities::{IdentityInsert, OnInsertComplete},
+        TaskMonitor,
+    },
 };
 
 #[derive(Serialize)]
@@ -69,7 +69,7 @@ pub struct Options {
     pub prover: prover::Options,
 
     #[clap(flatten)]
-    pub committer: identity_committer::Options,
+    pub committer: task_monitor::Options,
 
     /// Block number to start syncing from
     #[clap(long, env, default_value = "0")]

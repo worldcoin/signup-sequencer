@@ -7,8 +7,8 @@ use tracing::{info, instrument, warn};
 use crate::{
     contracts::{IdentityManager, SharedIdentityManager},
     database::Database,
-    identity_committer::{PendingIdentities, TaskMonitor},
     identity_tree::{Canonical, TreeVersion, TreeWithNextVersion},
+    task_monitor::{PendingIdentities, TaskMonitor},
 };
 
 pub struct MineIdentities {

@@ -16,11 +16,11 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::{
     contracts::{IdentityManager, SharedIdentityManager},
     database::Database,
-    identity_committer::{PendingIdentities, TaskMonitor},
     identity_tree::{
         Intermediate, TreeUpdate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
     },
     prover::batch_insertion::Identity,
+    task_monitor::{PendingIdentities, TaskMonitor},
 };
 
 /// The number of seconds either side of the timer tick to treat as enough to

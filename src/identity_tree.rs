@@ -121,7 +121,7 @@ impl AllowedTreeVersionMarker for lazy_merkle_tree::Derived {
 /// Underlying data structure for a tree version. It holds the tree itself, the
 /// next leaf (only used in the latest tree), a pointer to the next version (if
 /// exists) and the metadata specified by the version marker.
-pub struct TreeVersionData<V: AllowedTreeVersionMarker> {
+struct TreeVersionData<V: AllowedTreeVersionMarker> {
     tree:      PoseidonTree<V>,
     next_leaf: usize,
     next:      Option<TreeVersion<AnyDerived>>,
@@ -129,7 +129,7 @@ pub struct TreeVersionData<V: AllowedTreeVersionMarker> {
 }
 
 /// Basic operations that should be available for all tree versions.
-pub trait BasicTreeOps {
+trait BasicTreeOps {
     /// Updates the tree with the given element at the given leaf index.
     fn update(&mut self, leaf_index: usize, element: Hash);
     /// Notifies the tree that it was changed and can perform garbage
@@ -144,12 +144,12 @@ where
     Self: BasicTreeOps,
 {
     /// Gets the current tree root.
-    pub fn get_root(&self) -> Hash {
+    fn get_root(&self) -> Hash {
         self.tree.root()
     }
 
     /// Gets the proof of the given leaf index element
-    pub fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
+    fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
         let proof = self.tree.proof(leaf);
         (self.tree.root(), proof)
     }
@@ -368,57 +368,25 @@ impl<V: Version> TreeVersion<V> {
 }
 
 impl TreeVersion<Latest> {
-    /// Appends a batch of updates to the tree. This method makes sure it only
-    /// applies the updates past `next_leaf`, leaving older leaves untouched.
+    /// Appends many identities to the tree, returns a list with the root, proof
+    /// of inclusion and leaf index
     #[must_use]
-    pub fn append_many_fresh_with_intermediate_roots<'t>(
-        &self,
-        updates: &'t [TreeUpdate],
-    ) -> Vec<(&'t TreeUpdate, Hash)> {
-        let mut data = self.get_data();
-        let next_leaf = data.next_leaf;
-        updates
-            .iter()
-            .filter(|update| update.leaf_index >= next_leaf)
-            .map(|update| {
-                data.update(update.leaf_index, update.element);
-                let root = data.get_root();
-
-                (update, root)
-            })
-            .collect()
-    }
-
-    #[must_use]
-    pub fn append_many_new_identities<'t>(
-        &self,
-        identities: impl Iterator<Item = Hash> + 't,
-    ) -> Vec<(TreeUpdate, Hash)> {
+    pub fn append_many(&self, identities: &[Hash]) -> Vec<(Hash, Proof, usize)> {
         let mut data = self.get_data();
         let next_leaf = data.next_leaf;
 
-        identities
-            .enumerate()
-            .map(|(idx, identity)| {
-                let leaf_index = next_leaf + idx;
-                data.update(leaf_index, identity);
-                let root = data.get_root();
+        let mut output = Vec::with_capacity(identities.len());
 
-                (
-                    TreeUpdate {
-                        leaf_index,
-                        element: identity,
-                    },
-                    root,
-                )
-            })
-            .collect()
-    }
+        for (idx, identity) in identities.iter().enumerate() {
+            let leaf_index = next_leaf + idx;
 
-    pub fn lock_for_update(
-        &self,
-    ) -> std::sync::MutexGuard<TreeVersionData<lazy_merkle_tree::Derived>> {
-        self.get_data()
+            data.update(leaf_index, *identity);
+            let (root, proof) = data.get_proof(leaf_index);
+
+            output.push((root, proof, leaf_index));
+        }
+
+        output
     }
 }
 

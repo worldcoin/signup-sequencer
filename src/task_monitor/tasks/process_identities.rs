@@ -129,7 +129,7 @@ async fn process_identities(
                 last_batch_time = SystemTime::now();
             }
             _ = wake_up_receiver.recv() => {
-                debug!("Identity batch insertion woken due to request.");
+                tracing::trace!("Identity batch insertion woken due to request.");
 
                 // Capture the time difference since the last batch, and compute
                 // whether we want to insert anyway. We do this if the difference
@@ -158,7 +158,7 @@ async fn process_identities(
                 if updates.len() < batch_size && !should_process_anyway {
                     // We do not reset the timer here as we may want to
                     // insert anyway soon.
-                    debug!(
+                    tracing::trace!(
                         "Pending identities ({}) is less than batch size ({}). Waiting.",
                         updates.len(),
                         batch_size

@@ -6,9 +6,7 @@ use tracing::{error, instrument, warn};
 
 use crate::{
     database::Database,
-    identity_tree::{
-        BasicTreeOps, Hash, InclusionProof, Latest, Status, TreeVersion, TreeVersionReadOps,
-    },
+    identity_tree::{Hash, InclusionProof, Latest, Status, TreeVersion, TreeVersionReadOps},
 };
 
 pub enum OnInsertComplete {
@@ -100,29 +98,26 @@ async fn insert_identities(
             next_db_index
         );
 
-        let mut to_be_inserted = vec![];
+        let (identities, on_completes): (Vec<_>, Vec<_>) = identities
+            .into_iter()
+            .map(|insert| (insert.identity, insert.on_complete))
+            .unzip();
 
-        {
-            let mut tree = latest_tree.lock_for_update();
+        let data = latest_tree.append_many(&identities);
 
-            for (idx, identity_insert) in identities.into_iter().enumerate() {
-                let identity = identity_insert.identity;
-                let on_complete = identity_insert.on_complete;
+        assert_eq!(
+            data.len(),
+            identities.len(),
+            "Length mismatch when appending identities to tree"
+        );
 
-                let leaf_index = next_leaf + idx;
-                tree.update(leaf_index, identity);
+        let items = three_way_zip(
+            data.into_iter(),
+            identities.into_iter(),
+            on_completes.into_iter(),
+        );
 
-                let (root, proof) = tree.get_proof(leaf_index);
-
-                // We must first update the tree and only then update the database
-                // because we're locking a non-async mutex.
-                // And such mutexes cannot be used across .awaits
-                to_be_inserted.push((root, proof, leaf_index, identity, on_complete));
-            }
-        }
-
-        // TODO: Do it in bulk?
-        for (root, proof, leaf_index, identity, on_complete) in to_be_inserted {
+        for ((root, proof, leaf_index), identity, on_complete) in items {
             database
                 .insert_pending_identity(leaf_index, &identity, &root)
                 .await?;
@@ -148,4 +143,12 @@ async fn insert_identities(
     }
 
     Ok(())
+}
+
+fn three_way_zip<A, B, C>(
+    a: impl Iterator<Item = A>,
+    b: impl Iterator<Item = B>,
+    c: impl Iterator<Item = C>,
+) -> impl Iterator<Item = (A, B, C)> {
+    a.zip(b).zip(c).map(|((a, b), c)| (a, b, c))
 }

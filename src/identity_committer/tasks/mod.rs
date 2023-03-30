@@ -1,2 +1,3 @@
-mod mine_identities;
-mod process_identities;
+pub mod insert_identities;
+pub mod mine_identities;
+pub mod process_identities;

@@ -128,6 +128,8 @@ pub enum Error {
     Elapsed(#[from] tokio::time::error::Elapsed),
     #[error("prover error")]
     ProverError,
+    #[error("Failed to insert identity")]
+    FailedToInsert,
     #[error(transparent)]
     Other(#[from] EyreError),
 }
@@ -318,9 +320,10 @@ pub async fn bind_from_listener(
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use hyper::{Request, StatusCode};
     use serde_json::json;
+
+    use super::*;
 
     // TODO: Fix test
     // #[tokio::test]

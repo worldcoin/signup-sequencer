@@ -122,51 +122,34 @@ impl Database {
     }
 
     pub async fn has_no_identities(&self) -> Result<bool, Error> {
-        let query = sqlx::query(
-            r#"
-                SELECT COUNT(*) FROM identities
-            "#,
-        );
+        let query = sqlx::query(r#"SELECT COUNT(*) FROM identities"#);
 
         let count = self.pool.fetch_one(query).await?.get::<i64, _>(0);
 
         Ok(count == 0)
     }
 
-    pub async fn insert_identity_if_does_not_exist(
+    pub async fn insert_pending_identity(
         &self,
+        leaf_index: usize,
         identity: &Hash,
-    ) -> Result<Option<usize>, Error> {
-        let query = sqlx::query(
-            r#"
-            INSERT INTO identities (commitment, leaf_index)
-            VALUES ($1, (SELECT COALESCE(MAX(leaf_index) + 1, 0) FROM identities))
-            ON CONFLICT DO NOTHING
-            RETURNING leaf_index;
-            "#,
-        )
-        .bind(identity);
-
-        let row = self.pool.fetch_optional(query).await?;
-
-        Ok(row.map(|row| row.get::<i64, _>(0) as usize))
-    }
-
-    pub async fn insert_pending_root(&self, root: &Hash, leaf_index: usize) -> Result<(), Error> {
+        root: &Hash,
+    ) -> Result<(), Error> {
         let mut tx = self.pool.begin().await?;
 
-        let query = sqlx::query(
+        let insert_pending_identity_query = sqlx::query(
             r#"
-            INSERT INTO root_history(root, leaf_index, status, pending_as_of)
-            VALUES($1, $2, $3, CURRENT_TIMESTAMP)
+            INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of)
+            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
             ON CONFLICT (root) DO NOTHING;
             "#,
         )
-        .bind(root)
         .bind(leaf_index as i64)
+        .bind(identity)
+        .bind(root)
         .bind(<&str>::from(Status::Pending));
 
-        tx.execute(query).await?;
+        tx.execute(insert_pending_identity_query).await?;
 
         tx.commit().await?;
 
@@ -179,7 +162,7 @@ impl Database {
     ) -> Result<Option<usize>, Error> {
         let root_leaf_index_query = sqlx::query(
             r#"
-            SELECT leaf_index FROM root_history WHERE root = $1
+            SELECT leaf_index FROM identities WHERE root = $1
             "#,
         )
         .bind(root);
@@ -209,7 +192,7 @@ impl Database {
 
         let update_root_history_query = sqlx::query(
             r#"
-            UPDATE root_history
+            UPDATE identities
             SET status = $2, mined_at = CURRENT_TIMESTAMP
             WHERE leaf_index <= $1
             AND   status <> $2
@@ -225,34 +208,21 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_updates_in_range(
-        &self,
-        from_index: usize,
-        to_index: usize,
-    ) -> Result<Vec<TreeUpdate>, Error> {
+    pub async fn get_next_leaf_index(&self) -> Result<usize, Error> {
         let query = sqlx::query(
             r#"
-            SELECT commitment, leaf_index
-            FROM identities
-            WHERE leaf_index >= $1 AND leaf_index <= $2
-            ORDER BY leaf_index ASC;
+            SELECT leaf_index FROM identities
+            ORDER BY leaf_index DESC
+            LIMIT 1
             "#,
-        )
-        .bind(from_index as i64)
-        .bind(to_index as i64);
+        );
 
-        let rows = self.pool.fetch_all(query).await?;
-        rows.iter()
-            .map(|row| {
-                let element = row.get::<Hash, _>(0);
-                let leaf_index = row.get::<i64, _>(1) as usize;
+        let row = self.pool.fetch_optional(query).await?;
 
-                Ok(TreeUpdate {
-                    leaf_index,
-                    element,
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
+        let Some(row) = row else { return Ok(0) };
+        let leaf_index = row.get::<i64, _>(0);
+
+        Ok((leaf_index + 1) as usize)
     }
 
     pub async fn get_identity_leaf_index(
@@ -261,10 +231,9 @@ impl Database {
     ) -> Result<Option<TreeItem>, Error> {
         let query = sqlx::query(
             r#"
-            SELECT i.leaf_index, r.status
-            FROM identities i
-            INNER JOIN root_history r ON i.leaf_index = r.leaf_index
-            WHERE i.commitment = $1
+            SELECT leaf_index, status
+            FROM identities
+            WHERE commitment = $1
             LIMIT 1;
             "#,
         )
@@ -290,11 +259,10 @@ impl Database {
     ) -> Result<Vec<TreeUpdate>, Error> {
         let query = sqlx::query(
             r#"
-            SELECT i.leaf_index, i.commitment
-            FROM identities i
-            INNER JOIN root_history r ON i.leaf_index = r.leaf_index
-            WHERE r.status = $1
-            ORDER BY i.leaf_index ASC;
+            SELECT leaf_index, commitment
+            FROM identities
+            WHERE status = $1
+            ORDER BY leaf_index ASC;
             "#,
         )
         .bind(<&str>::from(status));
@@ -319,7 +287,7 @@ impl Database {
                 status,
                 pending_as_of as pending_valid_as_of,
                 mined_at as mined_valid_as_of
-            FROM root_history
+            FROM identities
             WHERE root = $1;
             "#,
         )
@@ -349,7 +317,7 @@ impl Database {
         let query = sqlx::query(
             r#"
             SELECT COUNT(*) as pending
-            FROM root_history
+            FROM identities
             WHERE status = $1
             "#,
         )
@@ -437,53 +405,21 @@ mod test {
     }
 
     #[tokio::test]
-    async fn insert_identity() -> anyhow::Result<()> {
+    async fn get_last_leaf_index() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
-        let identities = mock_identities(2);
+        let identities = mock_identities(1);
+        let roots = mock_roots(1);
 
-        let index = db
-            .insert_identity_if_does_not_exist(&identities[0])
-            .await?
-            .context("Failed to insert first identity")?;
+        let next_leaf_index = db.get_next_leaf_index().await?;
 
-        assert_eq!(index, 0);
+        assert_eq!(next_leaf_index, 0, "Db should contain not leaf indexes");
 
-        let index = db
-            .insert_identity_if_does_not_exist(&identities[1])
-            .await?
-            .context("Failed to insert second identity")?;
+        db.insert_pending_identity(0, &identities[0], &roots[0])
+            .await?;
 
-        assert_eq!(index, 1);
-
-        let index = db.insert_identity_if_does_not_exist(&identities[0]).await?;
-
-        assert!(index.is_none(), "Identity already exists");
-
-        let pending_identities = db.count_pending_identities().await?;
-        assert_eq!(
-            pending_identities, 0,
-            "Identities are not yey pending without associated roots"
-        );
-
-        let updates = db.get_updates_in_range(0, 1).await?;
-        assert_eq!(updates.len(), 2, "Should have two updates");
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn insert_root_without_identity() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
-
-        let root = Field::from(1);
-
-        let res = db.insert_pending_root(&root, 0).await;
-
-        assert!(
-            res.is_err(),
-            "Should have failed to insert pending root with missing associated identity"
-        );
+        let next_leaf_index = db.get_next_leaf_index().await?;
+        assert_eq!(next_leaf_index, 1);
 
         Ok(())
     }
@@ -496,11 +432,9 @@ mod test {
         let roots = mock_roots(5);
 
         for i in 0..5 {
-            db.insert_identity_if_does_not_exist(&identities[i])
+            db.insert_pending_identity(i, &identities[i], &roots[i])
                 .await
                 .context("Inserting identity")?;
-
-            db.insert_pending_root(&roots[i], i).await?;
         }
 
         db.mark_root_as_mined(&roots[2]).await?;
@@ -539,15 +473,12 @@ mod test {
         let identities = mock_identities(5);
         let roots = mock_roots(5);
 
-        db.insert_identity_if_does_not_exist(&identities[0])
-            .await
-            .context("Inserting identity")?;
-
         let root = db.get_root_state(&roots[0]).await?;
 
         assert!(root.is_none(), "Root should not exist");
 
-        db.insert_pending_root(&roots[0], 0).await?;
+        db.insert_pending_identity(0, &identities[0], &roots[0])
+            .await?;
 
         let root = db
             .get_root_state(&roots[0])
@@ -600,11 +531,9 @@ mod test {
         let roots = mock_roots(5);
 
         for i in 0..5 {
-            db.insert_identity_if_does_not_exist(&identities[i])
+            db.insert_pending_identity(i, &identities[i], &roots[i])
                 .await
                 .context("Inserting identity")?;
-
-            db.insert_pending_root(&roots[i], i).await?;
         }
 
         db.mark_root_as_mined(&roots[2]).await?;
@@ -634,13 +563,9 @@ mod test {
         let identities = mock_identities(5);
         let roots = mock_roots(5);
 
-        db.insert_identity_if_does_not_exist(&identities[0])
+        db.insert_pending_identity(0, &identities[0], &roots[0])
             .await
             .context("Inserting identity 1")?;
-
-        db.insert_pending_root(&roots[0], 0)
-            .await
-            .context("Inserting pending root 1")?;
 
         tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
 
@@ -653,10 +578,13 @@ mod test {
         assert!(matches!(root_item.status, Status::Pending));
         assert!(root_item.mined_valid_as_of.is_none());
 
-        // Inserting a new pending root sets invalidation time for the previous root
-        db.insert_identity_if_does_not_exist(&identities[1]).await?;
-        db.insert_identity_if_does_not_exist(&identities[2]).await?;
-        db.insert_pending_root(&roots[1], 2).await?;
+        // Inserting a new pending root sets invalidation time for the
+        // previous root
+        db.insert_pending_identity(1, &identities[1], &roots[1])
+            .await?;
+        db.insert_pending_identity(2, &identities[2], &roots[2])
+            .await?;
+
         let root_1_inserted_at = Utc::now();
 
         tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
@@ -674,10 +602,8 @@ mod test {
         assert_same_time!(root_item_1.pending_valid_as_of, root_1_inserted_at);
 
         // Test mined roots
-        db.insert_identity_if_does_not_exist(&identities[3]).await?;
-        db.insert_pending_root(&roots[2], 3)
-            .await
-            .context("Inserting pending root")?;
+        db.insert_pending_identity(3, &identities[3], &roots[3])
+            .await?;
 
         db.mark_root_as_mined(&roots[0])
             .await

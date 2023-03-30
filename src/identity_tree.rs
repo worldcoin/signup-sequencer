@@ -121,7 +121,7 @@ impl AllowedTreeVersionMarker for lazy_merkle_tree::Derived {
 /// Underlying data structure for a tree version. It holds the tree itself, the
 /// next leaf (only used in the latest tree), a pointer to the next version (if
 /// exists) and the metadata specified by the version marker.
-struct TreeVersionData<V: AllowedTreeVersionMarker> {
+pub struct TreeVersionData<V: AllowedTreeVersionMarker> {
     tree:      PoseidonTree<V>,
     next_leaf: usize,
     next:      Option<TreeVersion<AnyDerived>>,
@@ -129,7 +129,7 @@ struct TreeVersionData<V: AllowedTreeVersionMarker> {
 }
 
 /// Basic operations that should be available for all tree versions.
-trait BasicTreeOps {
+pub trait BasicTreeOps {
     /// Updates the tree with the given element at the given leaf index.
     fn update(&mut self, leaf_index: usize, element: Hash);
     /// Notifies the tree that it was changed and can perform garbage
@@ -144,8 +144,14 @@ where
     Self: BasicTreeOps,
 {
     /// Gets the current tree root.
-    fn get_root(&self) -> Hash {
+    pub fn get_root(&self) -> Hash {
         self.tree.root()
+    }
+
+    /// Gets the proof of the given leaf index element
+    pub fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
+        let proof = self.tree.proof(leaf);
+        (self.tree.root(), proof)
     }
 
     /// Returns _up to_ `maximum_update_count` updates that are to be applied to
@@ -351,7 +357,7 @@ where
 
     fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
         let tree = self.get_data();
-        (tree.tree.root(), tree.tree.proof(leaf))
+        tree.get_proof(leaf)
     }
 }
 
@@ -381,6 +387,38 @@ impl TreeVersion<Latest> {
                 (update, root)
             })
             .collect()
+    }
+
+    #[must_use]
+    pub fn append_many_new_identities<'t>(
+        &self,
+        identities: impl Iterator<Item = Hash> + 't,
+    ) -> Vec<(TreeUpdate, Hash)> {
+        let mut data = self.get_data();
+        let next_leaf = data.next_leaf;
+
+        identities
+            .enumerate()
+            .map(|(idx, identity)| {
+                let leaf_index = next_leaf + idx;
+                data.update(leaf_index, identity);
+                let root = data.get_root();
+
+                (
+                    TreeUpdate {
+                        leaf_index,
+                        element: identity,
+                    },
+                    root,
+                )
+            })
+            .collect()
+    }
+
+    pub fn lock_for_update(
+        &self,
+    ) -> std::sync::MutexGuard<TreeVersionData<lazy_merkle_tree::Derived>> {
+        self.get_data()
     }
 }
 

@@ -5,7 +5,10 @@ use clap::Parser;
 use hyper::StatusCode;
 use semaphore::protocol::verify_proof;
 use serde::Serialize;
-use tokio::try_join;
+use tokio::{
+    sync::{mpsc, oneshot},
+    try_join,
+};
 use tracing::{info, instrument, warn};
 
 use crate::{
@@ -14,11 +17,11 @@ use crate::{
     database::{self, Database},
     ethereum::{self, Ethereum},
     identity_committer,
-    identity_committer::IdentityCommitter,
-    identity_tree::{
-        CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeItem, TreeState,
-        TreeVersionReadOps,
+    identity_committer::{
+        tasks::insert_identities::{IdentityInsert, OnInsertComplete},
+        TaskMonitor,
     },
+    identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
     prover,
     prover::batch_insertion::Prover as BatchInsertionProver,
     server::{Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
@@ -86,11 +89,12 @@ pub struct Options {
 }
 
 pub struct App {
-    database:           Arc<Database>,
-    identity_manager:   SharedIdentityManager,
-    identity_committer: Arc<IdentityCommitter>,
-    tree_state:         TreeState,
-    snark_scalar_field: Hash,
+    database:                 Arc<Database>,
+    identity_manager:         SharedIdentityManager,
+    identity_committer:       Arc<TaskMonitor>,
+    tree_state:               TreeState,
+    snark_scalar_field:       Hash,
+    insert_identities_sender: mpsc::Sender<IdentityInsert>,
 }
 
 impl App {
@@ -143,7 +147,7 @@ impl App {
         )
         .await?;
 
-        let identity_committer = Arc::new(IdentityCommitter::new(
+        let identity_committer = Arc::new(TaskMonitor::new(
             database.clone(),
             identity_manager.clone(),
             tree_state.clone(),
@@ -158,6 +162,9 @@ impl App {
         )
         .expect("This should just parse.");
 
+        // Process to push new identities to Ethereum
+        let insert_identities_sender = identity_committer.start().await;
+
         // Sync with chain on start up
         let app = Self {
             database,
@@ -165,10 +172,8 @@ impl App {
             identity_committer,
             tree_state,
             snark_scalar_field,
+            insert_identities_sender,
         };
-
-        // Process to push new identities to Ethereum
-        app.identity_committer.start().await;
 
         Ok(app)
     }
@@ -224,52 +229,31 @@ impl App {
             return Err(ServerError::UnreducedCommitment);
         }
 
-        let insertion_result = self
-            .database
-            .insert_identity_if_does_not_exist(&commitment)
-            .await?;
+        let (tx, rx) = oneshot::channel();
+        self.insert_identities_sender
+            .send(IdentityInsert {
+                identity:    commitment,
+                on_complete: tx,
+            })
+            .await
+            .map_err(|_| ServerError::FailedToInsert)?;
 
-        let Some(leaf_idx) = insertion_result else {
-            warn!(?commitment, "Pending identity already exists.");
+        let inclusion_proof = rx.await.map_err(|_| ServerError::FailedToInsert)?;
 
-            return Err(ServerError::DuplicateCommitment);
+        let inclusion_proof = match inclusion_proof {
+            OnInsertComplete::DuplicateCommitment => {
+                warn!(?commitment, "Pending identity already exists.");
+
+                return Err(ServerError::DuplicateCommitment);
+            }
+            OnInsertComplete::Proof(inclusion_proof) => inclusion_proof,
         };
 
-        self.sync_tree_to(leaf_idx).await?;
-
-        self.identity_committer.notify_queued().await;
-
-        Ok(InclusionProofResponse::from(self.tree_state.get_proof_for(
-            &TreeItem {
-                leaf_index: leaf_idx,
-                status:     Status::Pending,
-            },
-        )))
+        Ok(InclusionProofResponse::from(inclusion_proof))
     }
 
     fn identity_is_reduced(&self, commitment: Hash) -> bool {
         commitment.lt(&self.snark_scalar_field)
-    }
-
-    async fn sync_tree_to(&self, leaf_idx: usize) -> Result<(), ServerError> {
-        let tree = self.tree_state.get_latest_tree();
-        let next_index = tree.next_leaf();
-        if leaf_idx < next_index {
-            return Ok(()); // Someone sync'd first, we're up to date
-        }
-
-        let identities = self
-            .database
-            .get_updates_in_range(next_index, leaf_idx)
-            .await?;
-
-        for (identity, tree_root) in tree.append_many_fresh_with_intermediate_roots(&identities) {
-            self.database
-                .insert_pending_root(&tree_root, identity.leaf_index)
-                .await?;
-        }
-
-        Ok(())
     }
 
     /// # Errors

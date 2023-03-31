@@ -221,7 +221,6 @@ async fn commit_identities(
     let mut merkle_proofs = batching_tree.apply_next_updates(updates.len());
 
     // Grab some variables for sizes to make querying easier.
-    let batch_size = identity_manager.max_batch_size();
     let commitment_count = updates.len();
 
     // If these aren't equal then something has gone terribly wrong and is a
@@ -231,6 +230,9 @@ async fn commit_identities(
         merkle_proofs.len(),
         "Number of identities does not match the number of merkle proofs."
     );
+
+    let prover = identity_manager.get_suitable_prover(commitment_count)?;
+    let batch_size = prover.batch_size();
 
     // The verifier and prover can only work with a given batch size, so we need to
     // ensure that our batches match that size. We do this by padding with
@@ -281,14 +283,21 @@ async fn commit_identities(
         })
         .collect();
 
+    identity_manager.validate_merkle_proofs(&identity_commitments)?;
+
     // We prepare the proof before reserving a slot in the pending identities
-    let proof = identity_manager
-        .prepare_proof(start_index, pre_root, post_root, &identity_commitments)
-        .await
-        .map_err(|e| {
-            error!(?e, "Failed to prepare proof.");
-            e
-        })?;
+    let proof = IdentityManager::prepare_proof(
+        prover,
+        start_index,
+        pre_root,
+        post_root,
+        &identity_commitments,
+    )
+    .await
+    .map_err(|e| {
+        error!(?e, "Failed to prepare proof.");
+        e
+    })?;
 
     // This channel's capacity provides us with a natural back-pressure mechanism
     // to ensure that we don't overwhelm the identity manager with too many

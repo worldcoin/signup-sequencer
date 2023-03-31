@@ -18,6 +18,7 @@ async fn unavailable_prover() -> anyhow::Result<()> {
 
     let (mock_chain, db_container, prover_mock) =
         spawn_deps(initial_root, batch_size, tree_depth).await?;
+
     prover_mock.set_availability(false).await;
 
     let port = db_container.port();

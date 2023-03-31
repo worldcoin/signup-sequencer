@@ -10,6 +10,7 @@ use ethers::{types::U256, utils::keccak256};
 use once_cell::sync::Lazy;
 use prometheus::{exponential_buckets, register_histogram, Histogram};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, info};
 use url::Url;
 
 pub use crate::prover::batch_insertion::identity::Identity;
@@ -83,6 +84,10 @@ impl Prover {
         Ok(mtb)
     }
 
+    pub fn batch_size(&self) -> usize {
+        self.batch_size
+    }
+
     /// Generates a proof term for the provided identity insertions into the
     /// merkle tree.
     ///
@@ -127,6 +132,8 @@ impl Prover {
             merkle_proofs,
         };
 
+        info!("Sending request to prover at url: {}", self.target_url);
+
         let request = self
             .client
             .post(self.target_url.join(MTB_PROVE_ENDPOINT)?)
@@ -136,9 +143,12 @@ impl Prover {
 
         let prover_proving_time_timer = PROVER_PROVING_TIME.start_timer();
         let proof_term = self.client.execute(request).await?;
+        let proof_term = proof_term.error_for_status()?;
         prover_proving_time_timer.observe_duration();
 
         let json = proof_term.text().await?;
+
+        debug!("json = {json}");
 
         let Ok(proof) = serde_json::from_str::<Proof>(&json) else {
             let error: ProverError = serde_json::from_str(&json)?;

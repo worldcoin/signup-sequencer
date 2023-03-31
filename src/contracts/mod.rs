@@ -15,7 +15,11 @@ use tracing::{error, info, instrument};
 use self::abi::BatchingContract as ContractAbi;
 use crate::{
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
-    prover::{batch_insertion::Identity, proof::Proof, ProverMap},
+    prover::{
+        batch_insertion::{Identity, Prover},
+        proof::Proof,
+        ProverMap,
+    },
 };
 
 /// Configuration options for the component responsible for interacting with the
@@ -120,16 +124,9 @@ impl IdentityManager {
         self.initial_leaf_value
     }
 
-    #[instrument(level = "debug", skip_all)]
-    pub async fn prepare_proof(
-        &self,
-        start_index: usize,
-        pre_root: U256,
-        post_root: U256,
-        identity_commitments: &[Identity],
-    ) -> anyhow::Result<Proof> {
-        // We also can't proceed unless the merkle proofs match the known tree depth.
-        // Things will break if we do.
+    /// Validates that merkle proofs are of the correct length against tree
+    /// depth
+    pub fn validate_merkle_proofs(&self, identity_commitments: &[Identity]) -> anyhow::Result<()> {
         for id in identity_commitments {
             if id.merkle_proof.len() != self.tree_depth {
                 return Err(anyhow!(format!(
@@ -140,14 +137,37 @@ impl IdentityManager {
             }
         }
 
+        Ok(())
+    }
+
+    pub fn get_suitable_prover(&self, num_identities: usize) -> anyhow::Result<&Prover> {
+        let prover = self
+            .prover_map
+            .get(num_identities)
+            .ok_or_else(|| anyhow!("No available prover for batch size: {num_identities}"))?;
+
+        Ok(prover)
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    pub async fn prepare_proof(
+        prover: &Prover,
+        start_index: usize,
+        pre_root: U256,
+        post_root: U256,
+        identity_commitments: &[Identity],
+    ) -> anyhow::Result<Proof> {
         let batch_size = identity_commitments.len();
 
         let actual_start_index: u32 = start_index.try_into()?;
 
-        let proof_data: Proof = self
-            .prover_map
-            .get(batch_size)
-            .ok_or_else(|| anyhow!("No available prover for batch size: {batch_size}"))?
+        info!(
+            "Sending {} identities to prover of batch size {}",
+            batch_size,
+            prover.batch_size()
+        );
+
+        let proof_data: Proof = prover
             .generate_proof(
                 actual_start_index,
                 pre_root,

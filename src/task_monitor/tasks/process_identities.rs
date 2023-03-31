@@ -82,7 +82,7 @@ async fn process_identities(
     identity_manager.await_clean_slate().await?;
 
     info!("Starting identity processor.");
-    let batch_size = identity_manager.batch_size();
+    let batch_size = identity_manager.max_batch_size();
 
     // We start a timer and force it to perform one initial tick to avoid an
     // immediate trigger.
@@ -221,7 +221,7 @@ async fn commit_identities(
     let mut merkle_proofs = batching_tree.apply_next_updates(updates.len());
 
     // Grab some variables for sizes to make querying easier.
-    let batch_size = identity_manager.batch_size();
+    let batch_size = identity_manager.max_batch_size();
     let commitment_count = updates.len();
 
     // If these aren't equal then something has gone terribly wrong and is a

@@ -5,21 +5,17 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use clap::Parser;
-use ethers::{
-    providers::Middleware,
-    types::{Address, U256},
-};
+use ethers::providers::Middleware;
+use ethers::types::{Address, U256};
 use semaphore::Field;
 use tracing::{error, info, instrument};
 
 use self::abi::BatchingContract as ContractAbi;
-use crate::{
-    ethereum::{write::TransactionId, Ethereum, ReadProvider},
-    prover::{
-        batch_insertion::{Identity, Prover as BatchInsertionProver},
-        proof::Proof,
-    },
-};
+use crate::ethereum::write::TransactionId;
+use crate::ethereum::{Ethereum, ReadProvider};
+use crate::prover::batch_insertion::Identity;
+use crate::prover::proof::Proof;
+use crate::prover::ProverMap;
 
 /// Configuration options for the component responsible for interacting with the
 /// contract.
@@ -51,7 +47,7 @@ pub struct Options {
 #[derive(Clone, Debug)]
 pub struct IdentityManager {
     ethereum:           Ethereum,
-    prover:             BatchInsertionProver,
+    prover_map:         ProverMap,
     abi:                ContractAbi<ReadProvider>,
     initial_leaf_value: Field,
     tree_depth:         usize,
@@ -62,7 +58,7 @@ impl IdentityManager {
     pub async fn new(
         options: Options,
         ethereum: Ethereum,
-        batch_insertion_prover: BatchInsertionProver,
+        prover_map: ProverMap,
     ) -> anyhow::Result<Self>
     where
         Self: Sized,
@@ -99,7 +95,7 @@ impl IdentityManager {
 
         let identity_manager = Self {
             ethereum,
-            prover: batch_insertion_prover,
+            prover_map,
             abi,
             initial_leaf_value,
             tree_depth,
@@ -114,8 +110,8 @@ impl IdentityManager {
     }
 
     #[must_use]
-    pub const fn batch_size(&self) -> usize {
-        self.prover.batch_size()
+    pub fn max_batch_size(&self) -> usize {
+        self.prover_map.max_batch_size()
     }
 
     #[must_use]
@@ -143,10 +139,14 @@ impl IdentityManager {
             }
         }
 
+        let batch_size = identity_commitments.len();
+
         let actual_start_index: u32 = start_index.try_into()?;
 
         let proof_data: Proof = self
-            .prover
+            .prover_map
+            .get(batch_size)
+            .ok_or_else(|| anyhow!("No available prover for batch size: {batch_size}"))?
             .generate_proof(
                 actual_start_index,
                 pre_root,

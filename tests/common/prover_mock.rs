@@ -163,6 +163,16 @@ impl ProverService {
     pub fn stop(self) {
         self.server.shutdown();
     }
+
+    /// Produces an arg string that's compatible with this prover
+    ///
+    /// e.g. `[{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}]`
+    pub fn arg_string(&self) -> String {
+        format!(
+            r#"[{{"url": "{}","batch_size": 3,"timeout_s": 30}}]"#,
+            self.url()
+        )
+    }
 }
 
 impl Prover {

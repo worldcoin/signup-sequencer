@@ -34,10 +34,10 @@ async fn validate_proofs() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
+        "--prover-urls",
+        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         "1",
-        "--batch-size",
-        &format!("{batch_size}"),
     ])
     .expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
@@ -47,12 +47,6 @@ async fn validate_proofs() -> anyhow::Result<()> {
     options.app.ethereum.read_options.ethereum_provider =
         Url::parse(&mock_chain.anvil.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.ethereum.write_options.signing_key = mock_chain.private_key;
-
-    options
-        .app
-        .prover
-        .batch_insertion
-        .batch_insertion_prover_url = prover_mock.url();
 
     let (app, local_addr) = spawn_app(options.clone())
         .await

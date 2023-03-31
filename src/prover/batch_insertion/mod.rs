@@ -1,11 +1,12 @@
 mod identity;
 
-use std::fmt::{Display, Formatter};
-use std::mem::size_of;
-use std::time::Duration;
+use std::{
+    fmt::{Display, Formatter},
+    mem::size_of,
+    time::Duration,
+};
 
-use ethers::types::U256;
-use ethers::utils::keccak256;
+use ethers::{types::U256, utils::keccak256};
 use once_cell::sync::Lazy;
 use prometheus::{exponential_buckets, register_histogram, Histogram};
 use serde::{Deserialize, Serialize};
@@ -147,11 +148,6 @@ impl Prover {
         total_proving_time_timer.observe_duration();
 
         Ok(proof)
-    }
-
-    /// Get the size of the batches that the prover is intended to operate on.
-    pub const fn batch_size(&self) -> usize {
-        self.batch_size
     }
 }
 
@@ -482,8 +478,7 @@ mod test {
 pub mod mock {
     use std::net::SocketAddr;
 
-    use axum::routing::post;
-    use axum::{Json, Router};
+    use axum::{routing::post, Json, Router};
     use axum_server::Handle;
 
     use super::*;

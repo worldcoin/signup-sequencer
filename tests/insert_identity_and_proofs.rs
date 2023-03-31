@@ -34,8 +34,8 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--batch-size",
-        &format!("{batch_size}"),
+        "--prover-urls",
+        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         "10",
         "--dense-tree-prefix-depth",
@@ -53,12 +53,6 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         Url::parse(&mock_chain.anvil.endpoint()).expect("Failed to parse Anvil url");
 
     options.app.ethereum.write_options.signing_key = mock_chain.private_key;
-
-    options
-        .app
-        .prover
-        .batch_insertion
-        .batch_insertion_prover_url = prover_mock.url();
 
     let (app, local_addr) = spawn_app(options.clone())
         .await

@@ -32,8 +32,8 @@ async fn unavailable_prover() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--batch-size",
-        &format!("{batch_size}"),
+        "--prover-urls",
+        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         "10",
         "--dense-tree-prefix-depth",
@@ -50,12 +50,6 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     options.app.ethereum.read_options.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint())?;
 
     options.app.ethereum.write_options.signing_key = mock_chain.private_key;
-
-    options
-        .app
-        .prover
-        .batch_insertion
-        .batch_insertion_prover_url = prover_mock.url();
 
     let (app, local_addr) = spawn_app(options.clone())
         .await

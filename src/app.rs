@@ -5,27 +5,20 @@ use clap::Parser;
 use hyper::StatusCode;
 use semaphore::protocol::verify_proof;
 use serde::Serialize;
-use tokio::{
-    sync::{mpsc, oneshot},
-    try_join,
-};
+use tokio::sync::{mpsc, oneshot};
 use tracing::{info, instrument, warn};
 
-use crate::{
-    contracts,
-    contracts::{IdentityManager, SharedIdentityManager},
-    database::{self, Database},
-    ethereum::{self, Ethereum},
-    identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
-    prover,
-    prover::batch_insertion::Prover as BatchInsertionProver,
-    server::{Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
-    task_monitor,
-    task_monitor::{
-        tasks::insert_identities::{IdentityInsert, OnInsertComplete},
-        TaskMonitor,
-    },
+use crate::contracts::{IdentityManager, SharedIdentityManager};
+use crate::database::{self, Database};
+use crate::ethereum::{self, Ethereum};
+use crate::identity_tree::{
+    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState,
 };
+use crate::prover::batch_insertion::Prover as BatchInsertionProver;
+use crate::server::{Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest};
+use crate::task_monitor::tasks::insert_identities::{IdentityInsert, OnInsertComplete};
+use crate::task_monitor::TaskMonitor;
+use crate::{contracts, prover, task_monitor};
 
 #[derive(Serialize)]
 #[serde(transparent)]
@@ -104,25 +97,23 @@ impl App {
     /// `options.storage_file` is not accessible.
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
-        // Connect to Ethereum and Database
-        let (database, identity_manager) = {
-            let db = Database::new(options.database);
-            let prover = BatchInsertionProver::new(&options.prover.batch_insertion)?;
+        let ethereum = Ethereum::new(options.ethereum);
+        let db = Database::new(options.database);
+        let provers = options
+            .prover
+            .prover_urls
+            .0
+            .into_iter()
+            .map(|bi| BatchInsertionProver::new(&bi))
+            .collect::<Result<Vec<_>, _>>()?;
 
-            let eth = async move {
-                let ethereum = Ethereum::new(options.ethereum).await?;
+        let (ethereum, db) = tokio::try_join!(ethereum, db)?;
 
-                let identity_manager =
-                    IdentityManager::new(options.contracts, ethereum.clone(), prover).await?;
+        let identity_manager =
+            IdentityManager::new(options.contracts, ethereum.clone(), provers[0].clone()).await?;
 
-                Ok(Arc::new(identity_manager))
-            };
-
-            // Connect to both in parallel
-            try_join!(db, eth)?
-        };
-
-        let database = Arc::new(database);
+        let identity_manager = Arc::new(identity_manager);
+        let database = Arc::new(db);
 
         // Await for all pending transactions
         identity_manager.await_clean_slate().await?;

@@ -1,13 +1,11 @@
 mod identity;
 
-use std::{
-    fmt::{Display, Formatter},
-    mem::size_of,
-    time::Duration,
-};
+use std::fmt::{Display, Formatter};
+use std::mem::size_of;
+use std::time::Duration;
 
-use clap::Parser;
-use ethers::{types::U256, utils::keccak256};
+use ethers::types::U256;
+use ethers::utils::keccak256;
 use once_cell::sync::Lazy;
 use prometheus::{exponential_buckets, register_histogram, Histogram};
 use serde::{Deserialize, Serialize};
@@ -39,22 +37,18 @@ static PROVER_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
 
 /// Configuration options for the component responsible for interacting with the
 /// prover service.
-#[derive(Clone, Debug, PartialEq, Eq, Parser)]
-#[group(skip)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Options {
     /// The URL at which to contact the semaphore prover service for proof
     /// generation.
-    #[clap(long, env, default_value = "http://localhost:3001")]
-    pub batch_insertion_prover_url: String,
+    pub url: String,
 
     /// The number of seconds to wait before timing out the transaction.
-    #[clap(long, env, default_value = "30")]
-    pub batch_insertion_prover_timeout: u64,
+    pub timeout_s: u64,
 
     // TODO Add and query a prover `info` endpoint instead.
     /// The batch size that the prover is set up to work with. This must match
     /// the deployed prover.
-    #[clap(long, env, default_value = "50")]
     pub batch_size: usize,
 }
 
@@ -72,8 +66,8 @@ impl Prover {
     /// # Arguments
     /// - `options`: The prover configuration options.
     pub fn new(options: &Options) -> anyhow::Result<Self> {
-        let target_url = Url::parse(&options.batch_insertion_prover_url)?;
-        let timeout_duration = Duration::from_secs(options.batch_insertion_prover_timeout);
+        let target_url = Url::parse(&options.url)?;
+        let timeout_duration = Duration::from_secs(options.timeout_s);
         let batch_size = options.batch_size;
         let client = reqwest::Client::builder()
             .connect_timeout(timeout_duration)
@@ -245,9 +239,9 @@ mod test {
         let mock_service = mock::Service::new(mock_url.clone()).await?;
 
         let options = Options {
-            batch_insertion_prover_url:     "http://localhost:3001".into(),
-            batch_insertion_prover_timeout: 30,
-            batch_size:                     3,
+            url:        "http://localhost:3001".into(),
+            timeout_s:  30,
+            batch_size: 3,
         };
         let mtb = Prover::new(&options).unwrap();
         let input_data = get_default_proof_input();
@@ -276,9 +270,9 @@ mod test {
         let mock_service = mock::Service::new(mock_url.clone()).await?;
 
         let options = Options {
-            batch_insertion_prover_url:     "http://localhost:3002".into(),
-            batch_insertion_prover_timeout: 30,
-            batch_size:                     3,
+            url:        "http://localhost:3002".into(),
+            timeout_s:  30,
+            batch_size: 3,
         };
         let mtb = Prover::new(&options).unwrap();
         let mut input_data = get_default_proof_input();
@@ -303,9 +297,9 @@ mod test {
     #[tokio::test]
     async fn prover_should_error_if_batch_size_wrong() -> anyhow::Result<()> {
         let options = Options {
-            batch_insertion_prover_url:     "http://localhost:3002".into(),
-            batch_insertion_prover_timeout: 30,
-            batch_size:                     10,
+            url:        "http://localhost:3002".into(),
+            timeout_s:  30,
+            batch_size: 10,
         };
         let mtb = Prover::new(&options).unwrap();
         let input_data = get_default_proof_input();
@@ -488,7 +482,8 @@ mod test {
 pub mod mock {
     use std::net::SocketAddr;
 
-    use axum::{routing::post, Json, Router};
+    use axum::routing::post;
+    use axum::{Json, Router};
     use axum_server::Handle;
 
     use super::*;

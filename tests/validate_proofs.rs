@@ -101,7 +101,7 @@ async fn validate_proofs() -> anyhow::Result<()> {
     )
     .await;
 
-    test_inclusion_proof(&uri, &client, 0, &mut ref_tree, &TEST_LEAVES[0], false).await;
+    test_inclusion_proof(&uri, &client, 0, &ref_tree, &TEST_LEAVES[0], false).await;
 
     test_verify_proof_on_chain(
         &identity_manager,

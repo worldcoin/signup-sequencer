@@ -93,9 +93,10 @@ async fn multi_prover() -> anyhow::Result<()> {
     tokio::time::sleep(Duration::from_secs(batch_timeout_seconds)).await;
 
     // Identities should have been inserted and processed
-    for i in 0..batch_size_3 {
-        test_inclusion_proof(&uri, &client, i, &mut ref_tree, &identities_ref[i], false).await;
+    for (i, identity) in identities_ref.iter().enumerate().take(batch_size_3) {
+        test_inclusion_proof(&uri, &client, i, &ref_tree, identity, false).await;
     }
+
     // Now re re-enable the larger prover and disable the smaller one
     prover_mock_batch_size_10.set_availability(true).await;
     prover_mock_batch_size_3.set_availability(false).await;
@@ -117,7 +118,7 @@ async fn multi_prover() -> anyhow::Result<()> {
             &uri,
             &client,
             offset + i,
-            &mut ref_tree,
+            &ref_tree,
             &identities_ref[i + offset],
             false,
         )

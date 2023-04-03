@@ -417,7 +417,7 @@ where
     }
 
     fn apply_next_updates(&self, update_count: usize) {
-        self.get_data().apply_next_updates(update_count)
+        self.get_data().apply_next_updates(update_count);
     }
 }
 

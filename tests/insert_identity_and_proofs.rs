@@ -75,7 +75,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         0,
-        &mut ref_tree,
+        &ref_tree,
         &options.app.contracts.initial_leaf_value,
         true,
     )
@@ -84,7 +84,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         1,
-        &mut ref_tree,
+        &ref_tree,
         &options.app.contracts.initial_leaf_value,
         true,
     )
@@ -101,7 +101,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         0,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -111,7 +111,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         1,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[1], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -121,7 +121,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         2,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[2], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -140,7 +140,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         3,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[3], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -150,7 +150,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         4,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[4], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -176,7 +176,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         0,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -186,7 +186,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         4,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[4], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -213,7 +213,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         0,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -223,7 +223,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         4,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[4], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,

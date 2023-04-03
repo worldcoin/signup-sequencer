@@ -16,8 +16,10 @@ async fn unavailable_prover() -> anyhow::Result<()> {
 
     let batch_size: usize = 3;
 
-    let (mock_chain, db_container, prover_mock) =
-        spawn_deps(initial_root, batch_size, tree_depth).await?;
+    let (mock_chain, db_container, prover_map) =
+        spawn_deps(initial_root, &[batch_size], tree_depth).await?;
+
+    let prover_mock = &prover_map[&batch_size];
 
     prover_mock.set_availability(false).await;
 
@@ -91,7 +93,7 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     // and wait until the processing thread spins up again
     tokio::time::sleep(Duration::from_secs(10)).await;
 
-    println!("Prover has been reenabled");
+    info!("Prover has been reenabled");
 
     // Test that the identities have been inserted and processed
     test_inclusion_proof(
@@ -127,7 +129,9 @@ async fn unavailable_prover() -> anyhow::Result<()> {
 
     shutdown();
     app.await?;
-    prover_mock.stop();
+    for (_, prover) in prover_map.into_iter() {
+        prover.stop();
+    }
     reset_shutdown();
 
     Ok(())

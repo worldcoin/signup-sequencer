@@ -18,8 +18,10 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, prover_mock) =
-        spawn_deps(initial_root, batch_size, tree_depth).await?;
+    let (mock_chain, db_container, prover_map) =
+        spawn_deps(initial_root, &[batch_size], tree_depth).await?;
+
+    let prover_mock = &prover_map[&batch_size];
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
@@ -231,7 +233,9 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     // Shutdown the app properly for the final time
     shutdown();
     app.await.unwrap();
-    prover_mock.stop();
+    for (_, prover) in prover_map.into_iter() {
+        prover.stop();
+    }
     reset_shutdown();
 
     Ok(())

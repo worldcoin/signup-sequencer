@@ -53,9 +53,12 @@ pub mod prelude {
 }
 
 use std::{
+    collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     sync::Arc,
 };
+
+use futures::{stream::FuturesUnordered, StreamExt};
 
 use self::{
     chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract},
@@ -314,16 +317,32 @@ struct CompiledContract {
 
 pub async fn spawn_deps(
     initial_root: U256,
-    batch_size: usize,
+    batch_sizes: &[usize],
     tree_depth: u8,
-) -> anyhow::Result<(MockChain, DockerContainerGuard, ProverService)> {
-    let chain = spawn_mock_chain(initial_root, batch_size, tree_depth);
+) -> anyhow::Result<(
+    MockChain,
+    DockerContainerGuard,
+    HashMap<usize, ProverService>,
+)> {
+    let chain = spawn_mock_chain(initial_root, batch_sizes, tree_depth);
     let db_container = spawn_db();
-    let prover = spawn_mock_prover(batch_size);
 
-    let (chain, db_container, prover) = tokio::join!(chain, db_container, prover);
+    let prover_futures = FuturesUnordered::new();
+    for batch_size in batch_sizes {
+        prover_futures.push(spawn_mock_prover(*batch_size));
+    }
 
-    Ok((chain?, db_container?, prover?))
+    let (chain, db_container, provers) =
+        tokio::join!(chain, db_container, prover_futures.collect::<Vec<_>>());
+
+    let provers = provers.into_iter().collect::<Result<Vec<_>, _>>()?;
+
+    let prover_map = provers
+        .into_iter()
+        .map(|prover| (prover.batch_size(), prover))
+        .collect();
+
+    Ok((chain?, db_container?, prover_map))
 }
 
 async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {

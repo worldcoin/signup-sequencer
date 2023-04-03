@@ -12,7 +12,7 @@ use ethers::{
     types::{Bytes, H256, U256},
     utils::{Anvil, AnvilInstance},
 };
-use tracing::instrument;
+use tracing::{info, instrument};
 
 use super::{abi as ContractAbi, CompiledContract};
 
@@ -27,7 +27,7 @@ pub struct MockChain {
 #[instrument(skip_all)]
 pub async fn spawn_mock_chain(
     initial_root: U256,
-    batch_size: usize,
+    batch_sizes: &[usize],
     tree_depth: u8,
 ) -> anyhow::Result<MockChain> {
     let chain = Anvil::new().block_time(2u64).spawn();
@@ -119,14 +119,17 @@ pub async fn spawn_mock_chain(
 
     let verifier_lookup_table_factory =
         load_and_build_contract("./sol/VerifierLookupTable.json", client.clone())?;
+
+    let first_batch_size = batch_sizes[0];
+
     let insert_verifiers = verifier_lookup_table_factory
         .clone()
-        .deploy((batch_size as u64, mock_verifier.address()))?
+        .deploy((first_batch_size as u64, mock_verifier.address()))?
         .confirmations(0usize)
         .send();
 
     let update_verifiers = verifier_lookup_table_factory
-        .deploy((batch_size as u64, unimplemented_verifier.address()))?
+        .deploy((first_batch_size as u64, unimplemented_verifier.address()))?
         .confirmations(0usize)
         .send();
 
@@ -144,6 +147,20 @@ pub async fn spawn_mock_chain(
     let insert_verifiers = insert_verifiers?;
     let update_verifiers = update_verifiers?;
     let identity_manager_impl = identity_manager_impl?;
+
+    // TODO: This is sequential but could be parallelized.
+    // but for now it's only multiple batch sizes for one test so I don't wanna do
+    // it now.
+    for batch_size in &batch_sizes[1..] {
+        let batch_size = *batch_size as u64;
+
+        info!("Adding verifier for batch size {}", batch_size);
+        insert_verifiers
+            .method::<_, ()>("addVerifier", (batch_size, mock_verifier.address()))?
+            .send()
+            .await?
+            .await?;
+    }
 
     let identity_manager_factory =
         load_and_build_contract("./sol/WorldIDIdentityManager.json", client.clone())?;

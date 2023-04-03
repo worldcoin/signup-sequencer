@@ -19,10 +19,11 @@ async fn multi_prover() -> anyhow::Result<()> {
     let batch_size_3: usize = 3;
     let batch_size_10: usize = 10;
 
-    let (mock_chain, db_container, prover_mock_batch_size_3) =
-        spawn_deps(initial_root, batch_size_3, tree_depth).await?;
+    let (mock_chain, db_container, prover_map) =
+        spawn_deps(initial_root, &[batch_size_3, batch_size_10], tree_depth).await?;
 
-    let prover_mock_batch_size_10 = spawn_mock_prover(batch_size_10).await?;
+    let prover_mock_batch_size_3 = &prover_map[&batch_size_3];
+    let prover_mock_batch_size_10 = &prover_map[&batch_size_10];
 
     let prover_arg_string = format!(
         "[{},{}]",
@@ -125,8 +126,9 @@ async fn multi_prover() -> anyhow::Result<()> {
 
     shutdown();
     app.await?;
-    prover_mock_batch_size_3.stop();
-    prover_mock_batch_size_10.stop();
+    for (_, prover) in prover_map.into_iter() {
+        prover.stop();
+    }
     reset_shutdown();
 
     Ok(())

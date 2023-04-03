@@ -164,6 +164,10 @@ impl ProverService {
         self.server.shutdown();
     }
 
+    pub fn batch_size(&self) -> usize {
+        self.batch_size
+    }
+
     /// Produces an arg string that's compatible with this prover - can be used
     /// as is in the CLI args
     ///

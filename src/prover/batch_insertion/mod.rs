@@ -132,8 +132,6 @@ impl Prover {
             merkle_proofs,
         };
 
-        info!("Sending request to prover at url: {}", self.target_url);
-
         let request = self
             .client
             .post(self.target_url.join(MTB_PROVE_ENDPOINT)?)
@@ -147,8 +145,6 @@ impl Prover {
         prover_proving_time_timer.observe_duration();
 
         let json = proof_term.text().await?;
-
-        debug!("json = {json}");
 
         let Ok(proof) = serde_json::from_str::<Proof>(&json) else {
             let error: ProverError = serde_json::from_str(&json)?;

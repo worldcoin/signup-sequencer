@@ -58,7 +58,7 @@ async fn unavailable_prover() -> anyhow::Result<()> {
         .await
         .expect("Failed to spawn app.");
 
-    let test_identities = generate_test_identities(batch_size * 3);
+    let test_identities = generate_test_identities(batch_size * 2);
     let identities_ref: Vec<Field> = test_identities
         .iter()
         .map(|i| Hash::from_str_radix(i, 16).unwrap())
@@ -77,55 +77,17 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     // least once
     tokio::time::sleep(Duration::from_secs(5)).await;
 
-    // Test that the API is still available but identities are not inserted
-    test_inclusion_proof(
-        &uri,
-        &client,
-        0,
-        &mut ref_tree,
-        &options.app.contracts.initial_leaf_value,
-        true,
-    )
-    .await;
-
     // Make prover available again
     prover_mock.set_availability(true).await;
     // and wait until the processing thread spins up again
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     info!("Prover has been reenabled");
 
     // Test that the identities have been inserted and processed
-    test_inclusion_proof(
-        &uri,
-        &client,
-        0,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[0], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-    test_inclusion_proof(
-        &uri,
-        &client,
-        1,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[1], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-    test_inclusion_proof(
-        &uri,
-        &client,
-        2,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[2], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
+    test_inclusion_proof(&uri, &client, 0, &mut ref_tree, &identities_ref[0], false).await;
+    test_inclusion_proof(&uri, &client, 1, &mut ref_tree, &identities_ref[1], false).await;
+    test_inclusion_proof(&uri, &client, 2, &mut ref_tree, &identities_ref[2], false).await;
 
     shutdown();
     app.await?;

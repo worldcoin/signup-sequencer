@@ -148,7 +148,7 @@ pub async fn test_inclusion_proof(
     uri: &str,
     client: &Client<HttpConnector>,
     leaf_index: usize,
-    ref_tree: &mut PoseidonTree,
+    ref_tree: &PoseidonTree,
     leaf: &Hash,
     expect_failure: bool,
 ) {

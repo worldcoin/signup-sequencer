@@ -17,7 +17,7 @@ use crate::{
     contracts::{IdentityManager, SharedIdentityManager},
     database::Database,
     identity_tree::{
-        Intermediate, TreeUpdate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
+        Intermediate, TreeUpdateWithTree, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
     },
     prover::batch_insertion::Identity,
     task_monitor::{PendingIdentities, TaskMonitor},
@@ -190,7 +190,7 @@ async fn commit_identities(
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
     pending_identities_sender: &mpsc::Sender<PendingIdentities>,
-    updates: &[TreeUpdate],
+    updates: &[TreeUpdateWithTree],
 ) -> AnyhowResult<()> {
     TaskMonitor::log_pending_identities_count(database).await?;
 
@@ -201,24 +201,42 @@ async fn commit_identities(
     debug!("Starting identity commit for {} identities.", updates.len());
 
     // Sanity check that the insertions are to consecutive leaves in the tree.
-    let mut last_index = updates.first().expect("Updates is non empty.").leaf_index;
+    let mut last_index = updates
+        .first()
+        .expect("Updates is non empty.")
+        .update
+        .leaf_index;
+
     for update in updates[1..].iter() {
         assert_eq!(
             last_index + 1,
-            update.leaf_index,
+            update.update.leaf_index,
             "Identities are not consecutive leaves in the tree."
         );
-        last_index = update.leaf_index;
+        last_index = update.update.leaf_index;
     }
 
     // Grab the initial conditions before the updates are applied to the tree.
-    let start_index = updates[0].leaf_index;
+    let start_index = updates[0].update.leaf_index;
     let pre_root: U256 = batching_tree.get_root().into();
-    let mut commitments: Vec<U256> = updates.iter().map(|update| update.element.into()).collect();
+    let mut commitments: Vec<U256> = updates
+        .iter()
+        .map(|update| update.update.element.into())
+        .collect();
+
+    let latest_tree_from_updates = updates.last().expect("Updates is non empty.").tree.clone();
 
     // Next we apply the updates, retrieving the merkle proofs after each step of
     // that process.
-    let mut merkle_proofs = batching_tree.apply_next_updates(updates.len());
+    // TODO: Change to operator on an immutable version of the tree
+    let mut merkle_proofs: Vec<_> = updates
+        .iter()
+        .map(|update_with_tree| {
+            update_with_tree
+                .tree
+                .proof(update_with_tree.update.leaf_index)
+        })
+        .collect();
 
     // Grab some variables for sizes to make querying easier.
     let commitment_count = updates.len();
@@ -242,13 +260,14 @@ async fn commit_identities(
         let start_index = updates
             .last()
             .expect("Already confirmed to exist.")
+            .update
             .leaf_index
             + 1;
         let padding = batch_size - commitment_count;
         commitments.append(&mut vec![U256::zero(); padding]);
 
         for i in start_index..(start_index + padding) {
-            let (_, proof) = batching_tree.get_proof(i);
+            let proof = latest_tree_from_updates.proof(i);
             merkle_proofs.push(proof);
         }
     }
@@ -266,7 +285,7 @@ async fn commit_identities(
 
     // With the updates applied we can grab the value of the tree's new root and
     // build our identities for sending to the identity manager.
-    let post_root: U256 = batching_tree.get_root().into();
+    let post_root: U256 = latest_tree_from_updates.root().into();
     let identity_commitments: Vec<Identity> = commitments
         .iter()
         .zip(merkle_proofs)
@@ -327,7 +346,10 @@ async fn commit_identities(
             e
         })?;
 
-    let identity_keys: Vec<usize> = updates.iter().map(|update| update.leaf_index).collect();
+    let identity_keys: Vec<usize> = updates
+        .iter()
+        .map(|update| update.update.leaf_index)
+        .collect();
 
     // The transaction will be awaited on asynchronously
     permit.send(PendingIdentities {
@@ -337,6 +359,9 @@ async fn commit_identities(
         post_root,
         start_index,
     });
+
+    // Update the batching tree only after submitting the identities to the chain
+    batching_tree.apply_next_updates(updates.len());
 
     TaskMonitor::log_batch_size(updates.len());
 

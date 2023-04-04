@@ -1,7 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Result as AnyhowResult;
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 use tracing::{error, instrument, warn};
 
 use crate::{
@@ -23,7 +23,7 @@ pub struct InsertIdentities {
     database:          Arc<Database>,
     latest_tree:       TreeVersion<Latest>,
     identity_receiver: Arc<Mutex<mpsc::Receiver<IdentityInsert>>>,
-    wake_up_sender:    mpsc::Sender<()>,
+    wake_up_notify:    Arc<Notify>,
 }
 
 impl InsertIdentities {
@@ -31,13 +31,13 @@ impl InsertIdentities {
         database: Arc<Database>,
         latest_tree: TreeVersion<Latest>,
         identity_receiver: Arc<Mutex<mpsc::Receiver<IdentityInsert>>>,
-        wake_up_sender: mpsc::Sender<()>,
+        wake_up_notify: Arc<Notify>,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
             latest_tree,
             identity_receiver,
-            wake_up_sender,
+            wake_up_notify,
         })
     }
 
@@ -48,7 +48,7 @@ impl InsertIdentities {
             &self.database,
             &self.latest_tree,
             &mut identity_receiver,
-            &self.wake_up_sender,
+            &self.wake_up_notify,
         )
         .await
     }
@@ -59,7 +59,7 @@ async fn insert_identities(
     database: &Database,
     latest_tree: &TreeVersion<Latest>,
     identity_receiver: &mut mpsc::Receiver<IdentityInsert>,
-    wake_up_sender: &mpsc::Sender<()>,
+    wake_up_notify: &Notify,
 ) -> AnyhowResult<()> {
     loop {
         let Some(first_identity) = identity_receiver.recv().await else {
@@ -137,9 +137,7 @@ async fn insert_identities(
         }
 
         // Notify the identity processing task, that there are new identities
-        if wake_up_sender.send(()).await.is_err() {
-            error!("Failed to wake up identity committer");
-        }
+        wake_up_notify.notify_one();
     }
 
     Ok(())

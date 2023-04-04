@@ -6,7 +6,7 @@ use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{linear_buckets, register_gauge, register_histogram, Gauge, Histogram};
 use tokio::{
-    sync::{broadcast, mpsc, Mutex, RwLock},
+    sync::{broadcast, mpsc, Mutex, Notify, RwLock},
     task::JoinHandle,
 };
 use tracing::{info, instrument, warn};
@@ -128,13 +128,13 @@ impl TaskMonitor {
         // We could use the second element of the tuple as `mut shutdown_receiver`,
         // but for symmetry's sake we create it for every task with `.subscribe()`
         let (shutdown_sender, _) = broadcast::channel(1);
-        let (wake_up_sender, wake_up_receiver) = mpsc::channel(1);
         let (pending_identities_sender, pending_identities_receiver) = mpsc::channel(1);
         let (insert_identities_sender, insert_identities_receiver) = mpsc::channel(1);
 
+        let wake_up_notify = Arc::new(Notify::new());
+
         // We need to maintain mutable access to these receivers from multiple
         // invocations of this task
-        let wake_up_receiver = Arc::new(Mutex::new(wake_up_receiver));
         let pending_identities_receiver = Arc::new(Mutex::new(pending_identities_receiver));
         let insert_identities_receiver = Arc::new(Mutex::new(insert_identities_receiver));
 
@@ -163,7 +163,7 @@ impl TaskMonitor {
             self.tree_state.get_batching_tree(),
             self.batch_insert_timeout_secs,
             pending_identities_sender,
-            wake_up_receiver,
+            wake_up_notify.clone(),
         );
 
         let process_identities_handle = crate::utils::spawn_monitored_with_backoff(
@@ -179,7 +179,7 @@ impl TaskMonitor {
             self.database.clone(),
             self.tree_state.get_latest_tree(),
             insert_identities_receiver,
-            wake_up_sender,
+            wake_up_notify,
         );
 
         let insert_identities_handle = crate::utils::spawn_monitored_with_backoff(

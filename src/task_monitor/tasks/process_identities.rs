@@ -177,6 +177,9 @@ async fn process_identities(
                 // or the timer ticks.
                 timer.reset();
                 last_batch_time = SystemTime::now();
+
+                // We want to check if there's a full batch available immediately
+                wake_up_notify.notify_one();
             }
         }
     }

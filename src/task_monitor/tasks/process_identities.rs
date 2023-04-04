@@ -8,7 +8,7 @@ use ethers::types::U256;
 use semaphore::poseidon_tree::Branch;
 use tokio::{
     select,
-    sync::{mpsc, Mutex},
+    sync::{mpsc, Notify},
     time,
 };
 use tracing::{debug, error, info, instrument, warn};
@@ -33,7 +33,7 @@ pub struct ProcessIdentities {
     batching_tree:             TreeVersion<Intermediate>,
     batch_insert_timeout_secs: u64,
     pending_identities_sender: mpsc::Sender<PendingIdentities>,
-    wake_up_receiver:          Arc<Mutex<mpsc::Receiver<()>>>,
+    wake_up_notify:            Arc<Notify>,
 }
 
 impl ProcessIdentities {
@@ -43,7 +43,7 @@ impl ProcessIdentities {
         batching_tree: TreeVersion<Intermediate>,
         batch_insert_timeout_secs: u64,
         pending_identities_sender: mpsc::Sender<PendingIdentities>,
-        wake_up_receiver: Arc<Mutex<mpsc::Receiver<()>>>,
+        wake_up_notify: Arc<Notify>,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
@@ -51,18 +51,16 @@ impl ProcessIdentities {
             batching_tree,
             batch_insert_timeout_secs,
             pending_identities_sender,
-            wake_up_receiver,
+            wake_up_notify,
         })
     }
 
     pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
-        let mut wake_up_receiver = self.wake_up_receiver.lock().await;
-
         process_identities(
             &self.database,
             &self.identity_manager,
             &self.batching_tree,
-            &mut wake_up_receiver,
+            &self.wake_up_notify,
             &self.pending_identities_sender,
             self.batch_insert_timeout_secs,
         )
@@ -74,7 +72,7 @@ async fn process_identities(
     database: &Database,
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
-    wake_up_receiver: &mut mpsc::Receiver<()>,
+    wake_up_notify: &Notify,
     pending_identities_sender: &mpsc::Sender<PendingIdentities>,
     timeout_secs: u64,
 ) -> AnyhowResult<()> {
@@ -128,7 +126,7 @@ async fn process_identities(
 
                 last_batch_time = SystemTime::now();
             }
-            _ = wake_up_receiver.recv() => {
+            _ = wake_up_notify.notified() => {
                 tracing::trace!("Identity batch insertion woken due to request.");
 
                 // Capture the time difference since the last batch, and compute

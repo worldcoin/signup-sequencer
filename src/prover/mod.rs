@@ -45,13 +45,9 @@ impl ProverMap {
 impl<P> ProverMap<P> {
     /// Get the smallest prover that can handle the given batch size.
     pub fn get(&self, batch_size: usize) -> Option<&P> {
-        self.0.iter().find_map(|(size, prover)| {
-            if batch_size <= *size {
-                Some(prover)
-            } else {
-                None
-            }
-        })
+        self.0
+            .iter()
+            .find_map(|(size, prover)| (batch_size <= *size).then_some(prover))
     }
 
     pub fn max_batch_size(&self) -> usize {

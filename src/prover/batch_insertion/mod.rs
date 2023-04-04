@@ -10,7 +10,6 @@ use ethers::{types::U256, utils::keccak256};
 use once_cell::sync::Lazy;
 use prometheus::{exponential_buckets, register_histogram, Histogram};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
 use url::Url;
 
 pub use crate::prover::batch_insertion::identity::Identity;

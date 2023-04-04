@@ -99,13 +99,13 @@ pub struct CanonicalTreeMetadata {
 /// Additional data held by any derived tree version. Includes the list of
 /// updates performed since previous version.
 pub struct DerivedTreeMetadata {
-    diff: Vec<TreeUpdateWithTree>,
+    diff: Vec<AppliedTreeUpdate>,
 }
 
 #[derive(Clone)]
-pub struct TreeUpdateWithTree {
+pub struct AppliedTreeUpdate {
     pub update: TreeUpdate,
-    pub tree:   PoseidonTree<Derived>,
+    pub result: PoseidonTree<Derived>,
 }
 
 /// Trait used to associate a version marker with its metadata type.
@@ -138,6 +138,9 @@ struct TreeVersionData<V: AllowedTreeVersionMarker> {
 trait BasicTreeOps {
     /// Updates the tree with the given element at the given leaf index.
     fn update(&mut self, leaf_index: usize, element: Hash);
+
+    fn apply_diffs(&mut self, diffs: Vec<AppliedTreeUpdate>);
+
     /// Notifies the tree that it was changed and can perform garbage
     /// collection. This is version-specific and it is up to the implementer to
     /// decide how to handle this signal.
@@ -162,7 +165,7 @@ where
 
     /// Returns _up to_ `maximum_update_count` updates that are to be applied to
     /// the tree.
-    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<TreeUpdateWithTree> {
+    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
         let Some(next) = self.next.as_ref() else { return Vec::new(); };
 
         let next = next.get_data();
@@ -183,24 +186,11 @@ where
             // Acquire the exclusive write lock on the next version.
             let mut next = next.get_data();
 
-            let updates: Vec<&TreeUpdate> = next
-                .metadata
-                .diff
-                .iter()
-                .map(|u| &u.update)
-                .take(update_count)
-                .collect();
+            let num_updates = std::cmp::min(next.metadata.diff.len(), update_count);
 
-            for update in &updates {
-                self.update(update.leaf_index, update.element);
-            }
+            let applied_updates: Vec<_> = next.metadata.diff.drain(..num_updates).collect();
 
-            // Remove only the updates that have been consumed, which may be all of them.
-            next.metadata.diff = if next.metadata.diff.len() > updates.len() {
-                Vec::from(&next.metadata.diff[updates.len()..])
-            } else {
-                vec![]
-            }
+            self.apply_diffs(applied_updates);
         }
 
         self.garbage_collect();
@@ -214,6 +204,13 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
         });
         self.next_leaf = leaf_index + 1;
         self.metadata.count_since_last_flatten += 1;
+    }
+
+    fn apply_diffs(&mut self, diffs: Vec<AppliedTreeUpdate>) {
+        for applied_update in &diffs {
+            let update = &applied_update.update;
+            self.update(update.leaf_index, update.element);
+        }
     }
 
     /// Garbage collection for the canonical tree version. It rewrites all
@@ -241,7 +238,7 @@ impl TreeVersionData<lazy_merkle_tree::Derived> {
     fn rebuild_on(&mut self, mut tree: PoseidonTree<lazy_merkle_tree::Derived>) {
         for update in &mut self.metadata.diff {
             tree = tree.update(update.update.leaf_index, &update.update.element);
-            update.tree = tree.clone();
+            update.result = tree.clone();
         }
         self.tree = tree;
         let next = &self.next;
@@ -258,13 +255,24 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Derived> {
         self.tree = updated_tree.clone();
 
         self.next_leaf = leaf_index + 1;
-        self.metadata.diff.push(TreeUpdateWithTree {
+        self.metadata.diff.push(AppliedTreeUpdate {
             update: TreeUpdate {
                 leaf_index,
                 element,
             },
-            tree:   updated_tree,
+            result: updated_tree,
         });
+    }
+
+    fn apply_diffs(&mut self, mut diffs: Vec<AppliedTreeUpdate>) {
+        let last = diffs.last().cloned();
+
+        self.metadata.diff.append(&mut diffs);
+
+        if let Some(last) = last {
+            self.tree = last.result.clone();
+            self.next_leaf = last.update.leaf_index + 1;
+        }
     }
 
     fn garbage_collect(&mut self) {}
@@ -403,7 +411,7 @@ impl TreeVersion<Latest> {
 /// Public API for working with versions that have a successor. Such versions
 /// only allow peeking and applying updates from the successor.
 pub trait TreeWithNextVersion {
-    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<TreeUpdateWithTree>;
+    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate>;
     fn apply_next_updates(&self, update_count: usize);
 }
 
@@ -412,7 +420,7 @@ where
     V: HasNextVersion,
     TreeVersionData<<V as Version>::TreeVersion>: BasicTreeOps,
 {
-    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<TreeUpdateWithTree> {
+    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
         self.get_data().peek_next_updates(maximum_update_count)
     }
 

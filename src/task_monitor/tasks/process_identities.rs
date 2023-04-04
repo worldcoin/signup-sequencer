@@ -17,7 +17,7 @@ use crate::{
     contracts::{IdentityManager, SharedIdentityManager},
     database::Database,
     identity_tree::{
-        Intermediate, TreeUpdateWithTree, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
+        AppliedTreeUpdate, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
     },
     prover::batch_insertion::Identity,
     task_monitor::{PendingIdentities, TaskMonitor},
@@ -190,7 +190,7 @@ async fn commit_identities(
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
     pending_identities_sender: &mpsc::Sender<PendingIdentities>,
-    updates: &[TreeUpdateWithTree],
+    updates: &[AppliedTreeUpdate],
 ) -> AnyhowResult<()> {
     TaskMonitor::log_pending_identities_count(database).await?;
 
@@ -224,16 +224,19 @@ async fn commit_identities(
         .map(|update| update.update.element.into())
         .collect();
 
-    let latest_tree_from_updates = updates.last().expect("Updates is non empty.").tree.clone();
+    let latest_tree_from_updates = updates
+        .last()
+        .expect("Updates is non empty.")
+        .result
+        .clone();
 
-    // Next we apply the updates, retrieving the merkle proofs after each step of
-    // that process.
-    // TODO: Change to operator on an immutable version of the tree
+    // Next get merkle proofs for each update - note the proofs are acquired from
+    // intermediate versions of the tree
     let mut merkle_proofs: Vec<_> = updates
         .iter()
         .map(|update_with_tree| {
             update_with_tree
-                .tree
+                .result
                 .proof(update_with_tree.update.leaf_index)
         })
         .collect();

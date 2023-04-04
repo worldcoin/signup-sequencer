@@ -16,8 +16,9 @@ use self::abi::BatchingContract as ContractAbi;
 use crate::{
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
     prover::{
-        batch_insertion::{Identity, Prover as BatchInsertionProver},
+        batch_insertion::{Identity, Prover},
         proof::Proof,
+        ProverMap,
     },
 };
 
@@ -51,7 +52,7 @@ pub struct Options {
 #[derive(Clone, Debug)]
 pub struct IdentityManager {
     ethereum:           Ethereum,
-    prover:             BatchInsertionProver,
+    prover_map:         ProverMap,
     abi:                ContractAbi<ReadProvider>,
     initial_leaf_value: Field,
     tree_depth:         usize,
@@ -62,7 +63,7 @@ impl IdentityManager {
     pub async fn new(
         options: Options,
         ethereum: Ethereum,
-        batch_insertion_prover: BatchInsertionProver,
+        prover_map: ProverMap,
     ) -> anyhow::Result<Self>
     where
         Self: Sized,
@@ -99,7 +100,7 @@ impl IdentityManager {
 
         let identity_manager = Self {
             ethereum,
-            prover: batch_insertion_prover,
+            prover_map,
             abi,
             initial_leaf_value,
             tree_depth,
@@ -114,8 +115,8 @@ impl IdentityManager {
     }
 
     #[must_use]
-    pub const fn batch_size(&self) -> usize {
-        self.prover.batch_size()
+    pub fn max_batch_size(&self) -> usize {
+        self.prover_map.max_batch_size()
     }
 
     #[must_use]
@@ -123,16 +124,9 @@ impl IdentityManager {
         self.initial_leaf_value
     }
 
-    #[instrument(level = "debug", skip_all)]
-    pub async fn prepare_proof(
-        &self,
-        start_index: usize,
-        pre_root: U256,
-        post_root: U256,
-        identity_commitments: &[Identity],
-    ) -> anyhow::Result<Proof> {
-        // We also can't proceed unless the merkle proofs match the known tree depth.
-        // Things will break if we do.
+    /// Validates that merkle proofs are of the correct length against tree
+    /// depth
+    pub fn validate_merkle_proofs(&self, identity_commitments: &[Identity]) -> anyhow::Result<()> {
         for id in identity_commitments {
             if id.merkle_proof.len() != self.tree_depth {
                 return Err(anyhow!(format!(
@@ -143,10 +137,37 @@ impl IdentityManager {
             }
         }
 
+        Ok(())
+    }
+
+    pub fn get_suitable_prover(&self, num_identities: usize) -> anyhow::Result<&Prover> {
+        let prover = self
+            .prover_map
+            .get(num_identities)
+            .ok_or_else(|| anyhow!("No available prover for batch size: {num_identities}"))?;
+
+        Ok(prover)
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    pub async fn prepare_proof(
+        prover: &Prover,
+        start_index: usize,
+        pre_root: U256,
+        post_root: U256,
+        identity_commitments: &[Identity],
+    ) -> anyhow::Result<Proof> {
+        let batch_size = identity_commitments.len();
+
         let actual_start_index: u32 = start_index.try_into()?;
 
-        let proof_data: Proof = self
-            .prover
+        info!(
+            "Sending {} identities to prover of batch size {}",
+            batch_size,
+            prover.batch_size()
+        );
+
+        let proof_data: Proof = prover
             .generate_proof(
                 actual_start_index,
                 pre_root,

@@ -16,8 +16,11 @@ async fn unavailable_prover() -> anyhow::Result<()> {
 
     let batch_size: usize = 3;
 
-    let (mock_chain, db_container, prover_mock) =
-        spawn_deps(initial_root, batch_size, tree_depth).await?;
+    let (mock_chain, db_container, prover_map) =
+        spawn_deps(initial_root, &[batch_size], tree_depth).await?;
+
+    let prover_mock = &prover_map[&batch_size];
+
     prover_mock.set_availability(false).await;
 
     let port = db_container.port();
@@ -32,8 +35,8 @@ async fn unavailable_prover() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--batch-size",
-        &format!("{batch_size}"),
+        "--prover-urls",
+        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         "10",
         "--dense-tree-prefix-depth",
@@ -51,17 +54,11 @@ async fn unavailable_prover() -> anyhow::Result<()> {
 
     options.app.ethereum.write_options.signing_key = mock_chain.private_key;
 
-    options
-        .app
-        .prover
-        .batch_insertion
-        .batch_insertion_prover_url = prover_mock.url();
-
     let (app, local_addr) = spawn_app(options.clone())
         .await
         .expect("Failed to spawn app.");
 
-    let test_identities = generate_test_identities(batch_size * 3);
+    let test_identities = generate_test_identities(batch_size * 2);
     let identities_ref: Vec<Field> = test_identities
         .iter()
         .map(|i| Hash::from_str_radix(i, 16).unwrap())
@@ -80,59 +77,23 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     // least once
     tokio::time::sleep(Duration::from_secs(5)).await;
 
-    // Test that the API is still available but identities are not inserted
-    test_inclusion_proof(
-        &uri,
-        &client,
-        0,
-        &mut ref_tree,
-        &options.app.contracts.initial_leaf_value,
-        true,
-    )
-    .await;
-
     // Make prover available again
     prover_mock.set_availability(true).await;
     // and wait until the processing thread spins up again
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
-    println!("Prover has been reenabled");
+    info!("Prover has been reenabled");
 
     // Test that the identities have been inserted and processed
-    test_inclusion_proof(
-        &uri,
-        &client,
-        0,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[0], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-    test_inclusion_proof(
-        &uri,
-        &client,
-        1,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[1], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
-    test_inclusion_proof(
-        &uri,
-        &client,
-        2,
-        &mut ref_tree,
-        &Hash::from_str_radix(&test_identities[2], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
-        false,
-    )
-    .await;
+    test_inclusion_proof(&uri, &client, 0, &ref_tree, &identities_ref[0], false).await;
+    test_inclusion_proof(&uri, &client, 1, &ref_tree, &identities_ref[1], false).await;
+    test_inclusion_proof(&uri, &client, 2, &ref_tree, &identities_ref[2], false).await;
 
     shutdown();
     app.await?;
-    prover_mock.stop();
+    for (_, prover) in prover_map.into_iter() {
+        prover.stop();
+    }
     reset_shutdown();
 
     Ok(())

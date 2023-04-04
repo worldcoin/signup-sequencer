@@ -5,10 +5,7 @@ use clap::Parser;
 use hyper::StatusCode;
 use semaphore::protocol::verify_proof;
 use serde::Serialize;
-use tokio::{
-    sync::{mpsc, oneshot},
-    try_join,
-};
+use tokio::sync::{mpsc, oneshot};
 use tracing::{info, instrument, warn};
 
 use crate::{
@@ -18,7 +15,7 @@ use crate::{
     ethereum::{self, Ethereum},
     identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
     prover,
-    prover::batch_insertion::Prover as BatchInsertionProver,
+    prover::ProverMap,
     server::{Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
     task_monitor,
     task_monitor::{
@@ -104,25 +101,17 @@ impl App {
     /// `options.storage_file` is not accessible.
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
-        // Connect to Ethereum and Database
-        let (database, identity_manager) = {
-            let db = Database::new(options.database);
-            let prover = BatchInsertionProver::new(&options.prover.batch_insertion)?;
+        let ethereum = Ethereum::new(options.ethereum);
+        let db = Database::new(options.database);
+        let prover_map = ProverMap::new(&options.prover)?;
 
-            let eth = async move {
-                let ethereum = Ethereum::new(options.ethereum).await?;
+        let (ethereum, db) = tokio::try_join!(ethereum, db)?;
 
-                let identity_manager =
-                    IdentityManager::new(options.contracts, ethereum.clone(), prover).await?;
+        let identity_manager =
+            IdentityManager::new(options.contracts, ethereum.clone(), prover_map).await?;
 
-                Ok(Arc::new(identity_manager))
-            };
-
-            // Connect to both in parallel
-            try_join!(db, eth)?
-        };
-
-        let database = Arc::new(database);
+        let identity_manager = Arc::new(identity_manager);
+        let database = Arc::new(db);
 
         // Await for all pending transactions
         identity_manager.await_clean_slate().await?;

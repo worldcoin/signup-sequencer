@@ -90,13 +90,14 @@ impl ProveResponse {
 
 /// The mock prover service.
 pub struct ProverService {
-    server:  Handle,
-    inner:   Arc<Mutex<Prover>>,
-    address: SocketAddr,
+    server:     Handle,
+    inner:      Arc<Mutex<Prover>>,
+    address:    SocketAddr,
+    batch_size: usize,
 }
 
 struct Prover {
-    is_unavailable: bool,
+    is_available: bool,
 }
 
 impl ProverService {
@@ -106,7 +107,7 @@ impl ProverService {
     /// It provides only a single endpoint for now, `/prove` in order to match
     /// the full service (`semaphore-mtb`). This can be extended in the future
     /// if needed.
-    pub async fn new() -> anyhow::Result<Self> {
+    pub async fn new(batch_size: usize) -> anyhow::Result<Self> {
         async fn prove(
             State(state): State<Arc<Mutex<Prover>>>,
             Json(input): Json<ProofInput>,
@@ -116,9 +117,7 @@ impl ProverService {
             state.prove(input).map(Json)
         }
 
-        let inner = Arc::new(Mutex::new(Prover {
-            is_unavailable: false,
-        }));
+        let inner = Arc::new(Mutex::new(Prover { is_available: true }));
         let state = inner.clone();
 
         let app = Router::new().route("/prove", post(prove)).with_state(state);
@@ -145,6 +144,7 @@ impl ProverService {
             server,
             inner,
             address,
+            batch_size,
         };
 
         Ok(service)
@@ -156,18 +156,42 @@ impl ProverService {
 
     pub async fn set_availability(&self, availability: bool) {
         let mut inner = self.inner.lock().await;
-        inner.is_unavailable = availability;
+        inner.is_available = availability;
     }
 
     /// Shuts down the server and frees up the socket that it was using.
     pub fn stop(self) {
         self.server.shutdown();
     }
+
+    pub fn batch_size(&self) -> usize {
+        self.batch_size
+    }
+
+    /// Produces an arg string that's compatible with this prover - can be used
+    /// as is in the CLI args
+    ///
+    /// e.g. `[{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}]`
+    pub fn arg_string(&self) -> String {
+        format!("[{}]", self.arg_string_single())
+    }
+
+    /// Produces an arg string that's compatible with this prover - needs to be
+    /// wrapped in an array
+    ///
+    /// e.g. `{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}`
+    pub fn arg_string_single(&self) -> String {
+        format!(
+            r#"{{"url": "{}","batch_size": {},"timeout_s": 30}}"#,
+            self.url(),
+            self.batch_size
+        )
+    }
 }
 
 impl Prover {
     fn prove(&self, input: ProofInput) -> Result<ProveResponse, StatusCode> {
-        if self.is_unavailable {
+        if !self.is_available {
             return Err(StatusCode::SERVICE_UNAVAILABLE);
         }
 

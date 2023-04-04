@@ -17,8 +17,11 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let tree_depth: u8 = SUPPORTED_DEPTH as u8;
     let batch_size = 3;
 
-    let (mock_chain, db_container, prover_mock) =
-        spawn_deps(initial_root, batch_size, tree_depth).await?;
+    let (mock_chain, db_container, prover_map) =
+        spawn_deps(initial_root, &[batch_size], tree_depth).await?;
+
+    let prover_mock = &prover_map[&batch_size];
+
     let identity_manager = mock_chain.identity_manager.clone();
 
     let port = db_container.port();
@@ -34,10 +37,10 @@ async fn validate_proofs() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
+        "--prover-urls",
+        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         "1",
-        "--batch-size",
-        &format!("{batch_size}"),
     ])
     .expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
@@ -47,12 +50,6 @@ async fn validate_proofs() -> anyhow::Result<()> {
     options.app.ethereum.read_options.ethereum_provider =
         Url::parse(&mock_chain.anvil.endpoint()).expect("Failed to parse ganache endpoint");
     options.app.ethereum.write_options.signing_key = mock_chain.private_key;
-
-    options
-        .app
-        .prover
-        .batch_insertion
-        .batch_insertion_prover_url = prover_mock.url();
 
     let (app, local_addr) = spawn_app(options.clone())
         .await
@@ -104,7 +101,7 @@ async fn validate_proofs() -> anyhow::Result<()> {
     )
     .await;
 
-    test_inclusion_proof(&uri, &client, 0, &mut ref_tree, &TEST_LEAVES[0], false).await;
+    test_inclusion_proof(&uri, &client, 0, &ref_tree, &TEST_LEAVES[0], false).await;
 
     test_verify_proof_on_chain(
         &identity_manager,
@@ -212,7 +209,9 @@ async fn validate_proofs() -> anyhow::Result<()> {
     // Shutdown the app properly for the final time
     shutdown();
     app.await.unwrap();
-    prover_mock.stop();
+    for (_, prover) in prover_map.into_iter() {
+        prover.stop();
+    }
     reset_shutdown();
 
     Ok(())

@@ -18,8 +18,10 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, prover_mock) =
-        spawn_deps(initial_root, batch_size, tree_depth).await?;
+    let (mock_chain, db_container, prover_map) =
+        spawn_deps(initial_root, &[batch_size], tree_depth).await?;
+
+    let prover_mock = &prover_map[&batch_size];
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
@@ -34,8 +36,8 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--batch-size",
-        &format!("{batch_size}"),
+        "--prover-urls",
+        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         "10",
         "--dense-tree-prefix-depth",
@@ -53,12 +55,6 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         Url::parse(&mock_chain.anvil.endpoint()).expect("Failed to parse Anvil url");
 
     options.app.ethereum.write_options.signing_key = mock_chain.private_key;
-
-    options
-        .app
-        .prover
-        .batch_insertion
-        .batch_insertion_prover_url = prover_mock.url();
 
     let (app, local_addr) = spawn_app(options.clone())
         .await
@@ -79,7 +75,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         0,
-        &mut ref_tree,
+        &ref_tree,
         &options.app.contracts.initial_leaf_value,
         true,
     )
@@ -88,7 +84,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         1,
-        &mut ref_tree,
+        &ref_tree,
         &options.app.contracts.initial_leaf_value,
         true,
     )
@@ -105,7 +101,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         0,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -115,7 +111,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         1,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[1], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -125,7 +121,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         2,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[2], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -144,7 +140,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         3,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[3], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -154,7 +150,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         4,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[4], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -180,7 +176,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         0,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -190,7 +186,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         4,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[4], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -217,7 +213,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         0,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -227,7 +223,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         &uri,
         &client,
         4,
-        &mut ref_tree,
+        &ref_tree,
         &Hash::from_str_radix(&test_identities[4], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
@@ -237,7 +233,9 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     // Shutdown the app properly for the final time
     shutdown();
     app.await.unwrap();
-    prover_mock.stop();
+    for (_, prover) in prover_map.into_iter() {
+        prover.stop();
+    }
     reset_shutdown();
 
     Ok(())

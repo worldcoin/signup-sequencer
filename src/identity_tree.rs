@@ -6,7 +6,7 @@ use std::{
 use chrono::Utc;
 use semaphore::{
     lazy_merkle_tree,
-    lazy_merkle_tree::LazyMerkleTree,
+    lazy_merkle_tree::{Derived, LazyMerkleTree},
     merkle_tree::Hasher,
     poseidon_tree::{PoseidonHash, Proof},
     Field,
@@ -99,7 +99,13 @@ pub struct CanonicalTreeMetadata {
 /// Additional data held by any derived tree version. Includes the list of
 /// updates performed since previous version.
 pub struct DerivedTreeMetadata {
-    diff: Vec<TreeUpdate>,
+    diff: Vec<AppliedTreeUpdate>,
+}
+
+#[derive(Clone)]
+pub struct AppliedTreeUpdate {
+    pub update: TreeUpdate,
+    pub result: PoseidonTree<Derived>,
 }
 
 /// Trait used to associate a version marker with its metadata type.
@@ -132,6 +138,9 @@ struct TreeVersionData<V: AllowedTreeVersionMarker> {
 trait BasicTreeOps {
     /// Updates the tree with the given element at the given leaf index.
     fn update(&mut self, leaf_index: usize, element: Hash);
+
+    fn apply_diffs(&mut self, diffs: Vec<AppliedTreeUpdate>);
+
     /// Notifies the tree that it was changed and can perform garbage
     /// collection. This is version-specific and it is up to the implementer to
     /// decide how to handle this signal.
@@ -156,48 +165,35 @@ where
 
     /// Returns _up to_ `maximum_update_count` updates that are to be applied to
     /// the tree.
-    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<TreeUpdate> {
-        self.next.as_ref().map_or_else(Vec::new, |next| {
-            let next = next.get_data();
-            next.metadata
-                .diff
-                .iter()
-                .take(maximum_update_count)
-                .cloned()
-                .collect()
-        })
+    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
+        let Some(next) = self.next.as_ref() else { return Vec::new(); };
+
+        let next = next.get_data();
+        next.metadata
+            .diff
+            .iter()
+            .take(maximum_update_count)
+            .cloned()
+            .collect()
     }
 
     /// Applies the next _up to_ `update_count` updates, returning the merkle
     /// tree proofs obtained after each apply.
-    fn apply_next_updates(&mut self, update_count: usize) -> Vec<Proof> {
-        let mut proofs: Vec<Proof> = vec![];
-        if let Some(next) = self.next.clone() {
-            {
-                // Acquire the exclusive write lock on the next version.
-                let mut next = next.get_data();
+    fn apply_next_updates(&mut self, update_count: usize) {
+        let Some(next) = self.next.clone() else { return; };
 
-                // Get the updates to be applied and apply them sequentially. It is very
-                // important that we record the merkle proof after each step as they depend on
-                // each other.
-                let updates: Vec<&TreeUpdate> =
-                    next.metadata.diff.iter().take(update_count).collect();
-                for update in &updates {
-                    self.update(update.leaf_index, update.element);
-                    let proof = self.tree.proof(update.leaf_index);
-                    proofs.push(proof);
-                }
+        {
+            // Acquire the exclusive write lock on the next version.
+            let mut next = next.get_data();
 
-                // Remove only the updates that have been consumed, which may be all of them.
-                next.metadata.diff = if next.metadata.diff.len() > updates.len() {
-                    Vec::from(&next.metadata.diff[updates.len()..])
-                } else {
-                    vec![]
-                }
-            }
-            self.garbage_collect();
+            let num_updates = std::cmp::min(next.metadata.diff.len(), update_count);
+
+            let applied_updates: Vec<_> = next.metadata.diff.drain(..num_updates).collect();
+
+            self.apply_diffs(applied_updates);
         }
-        proofs
+
+        self.garbage_collect();
     }
 }
 
@@ -208,6 +204,13 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
         });
         self.next_leaf = leaf_index + 1;
         self.metadata.count_since_last_flatten += 1;
+    }
+
+    fn apply_diffs(&mut self, diffs: Vec<AppliedTreeUpdate>) {
+        for applied_update in &diffs {
+            let update = &applied_update.update;
+            self.update(update.leaf_index, update.element);
+        }
     }
 
     /// Garbage collection for the canonical tree version. It rewrites all
@@ -232,12 +235,10 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
 }
 
 impl TreeVersionData<lazy_merkle_tree::Derived> {
-    /// Reapplies all changes of the given tree. This is only used for garbage
-    /// collection – `tree` will usually be a more densely stored version of the
-    /// base tree, unless we're already inserting past the dense prefix.
     fn rebuild_on(&mut self, mut tree: PoseidonTree<lazy_merkle_tree::Derived>) {
-        for update in &self.metadata.diff {
-            tree = tree.update(update.leaf_index, &update.element);
+        for update in &mut self.metadata.diff {
+            tree = tree.update(update.update.leaf_index, &update.update.element);
+            update.result = tree.clone();
         }
         self.tree = tree;
         let next = &self.next;
@@ -249,12 +250,29 @@ impl TreeVersionData<lazy_merkle_tree::Derived> {
 
 impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Derived> {
     fn update(&mut self, leaf_index: usize, element: Hash) {
-        self.tree = self.tree.update(leaf_index, &element);
+        let updated_tree = self.tree.update(leaf_index, &element);
+
+        self.tree = updated_tree.clone();
+
         self.next_leaf = leaf_index + 1;
-        self.metadata.diff.push(TreeUpdate {
-            leaf_index,
-            element,
+        self.metadata.diff.push(AppliedTreeUpdate {
+            update: TreeUpdate {
+                leaf_index,
+                element,
+            },
+            result: updated_tree,
         });
+    }
+
+    fn apply_diffs(&mut self, mut diffs: Vec<AppliedTreeUpdate>) {
+        let last = diffs.last().cloned();
+
+        self.metadata.diff.append(&mut diffs);
+
+        if let Some(last) = last {
+            self.tree = last.result.clone();
+            self.next_leaf = last.update.leaf_index + 1;
+        }
     }
 
     fn garbage_collect(&mut self) {}
@@ -393,8 +411,8 @@ impl TreeVersion<Latest> {
 /// Public API for working with versions that have a successor. Such versions
 /// only allow peeking and applying updates from the successor.
 pub trait TreeWithNextVersion {
-    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<TreeUpdate>;
-    fn apply_next_updates(&self, update_count: usize) -> Vec<Proof>;
+    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate>;
+    fn apply_next_updates(&self, update_count: usize);
 }
 
 impl<V> TreeWithNextVersion for TreeVersion<V>
@@ -402,12 +420,12 @@ where
     V: HasNextVersion,
     TreeVersionData<<V as Version>::TreeVersion>: BasicTreeOps,
 {
-    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<TreeUpdate> {
+    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
         self.get_data().peek_next_updates(maximum_update_count)
     }
 
-    fn apply_next_updates(&self, update_count: usize) -> Vec<Proof> {
-        self.get_data().apply_next_updates(update_count)
+    fn apply_next_updates(&self, update_count: usize) {
+        self.get_data().apply_next_updates(update_count);
     }
 }
 

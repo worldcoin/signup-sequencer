@@ -127,7 +127,7 @@ impl App {
         .root();
 
         // We don't store the initial root in the database, so we have to skip this step
-        // if the db is empty
+        // if the contract root hash is equal to initial root hash
         if root_hash != initial_root_hash {
             database.mark_root_as_mined(&root_hash).await?;
         }

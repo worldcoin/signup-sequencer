@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use hyper::StatusCode;
-use semaphore::{poseidon_tree::LazyPoseidonTree, protocol::verify_proof, Field};
+use semaphore::{poseidon_tree::LazyPoseidonTree, protocol::verify_proof};
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, instrument, warn};

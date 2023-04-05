@@ -121,8 +121,9 @@ impl Database {
         Ok(Self { pool })
     }
 
-    pub async fn has_no_identities(&self) -> Result<bool, Error> {
-        let query = sqlx::query(r#"SELECT COUNT(*) FROM identities"#);
+    pub async fn has_no_mined_identities(&self) -> Result<bool, Error> {
+        let query = sqlx::query(r#"SELECT COUNT(*) FROM identities WHERE status = $1"#)
+            .bind(<&str>::from(Status::Mined));
 
         let count = self.pool.fetch_one(query).await?.get::<i64, _>(0);
 
@@ -397,7 +398,7 @@ mod test {
     async fn has_no_identities() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
-        let is_empty = db.has_no_identities().await?;
+        let is_empty = db.has_no_mined_identities().await?;
 
         assert!(is_empty, "Db should be empty");
 

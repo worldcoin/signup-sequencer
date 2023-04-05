@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use hyper::StatusCode;
-use semaphore::protocol::verify_proof;
+use semaphore::{poseidon_tree::LazyPoseidonTree, protocol::verify_proof, Field};
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, instrument, warn};
@@ -120,9 +120,15 @@ impl App {
         let root_hash = identity_manager.latest_root().await?;
         let root_hash = root_hash.into();
 
+        let initial_root_hash = LazyPoseidonTree::new(
+            identity_manager.tree_depth(),
+            identity_manager.initial_leaf_value(),
+        )
+        .root();
+
         // We don't store the initial root in the database, so we have to skip this step
-        // if the db is empty
-        if !database.has_no_mined_identities().await? {
+        // if the contract root hash is equal to initial root hash
+        if root_hash != initial_root_hash {
             database.mark_root_as_mined(&root_hash).await?;
         }
 

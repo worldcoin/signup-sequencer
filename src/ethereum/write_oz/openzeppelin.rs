@@ -181,10 +181,11 @@ impl OzRelay {
         Ok(TransactionId(tx_id))
     }
 
-    pub async fn mine_transaction(&self, tx_id: TransactionId) -> Result<(), TxError> {
-        self.mine_transaction_id(tx_id.0.as_str()).await?;
-
-        Ok(())
+    pub async fn mine_transaction(
+        &self,
+        tx_id: TransactionId,
+    ) -> Result<RelayerTransactionBase, TxError> {
+        Ok(self.mine_transaction_id(tx_id.0.as_str()).await?)
     }
 
     pub async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {

@@ -81,6 +81,12 @@ pub struct Options {
     /// batch of identities to the chain, even if the batch is not full.
     #[clap(long, env, default_value = "180")]
     pub batch_timeout_seconds: u64,
+
+    /// How many identities can be held in the API insertion queue at any given
+    /// time Past this limit the API request will block until the queue has
+    /// space for the insertion.
+    #[clap(long, env, default_value = "100")]
+    pub insert_identities_capacity: usize,
 }
 
 /// A worker that commits identities to the blockchain.
@@ -94,11 +100,12 @@ pub struct TaskMonitor {
     /// when shutdown is called we want to be able to gracefully
     /// await the join handles - which requires ownership of the handle and by
     /// extension the instance.
-    instance:                  RwLock<Option<RunningInstance>>,
-    database:                  Arc<Database>,
-    identity_manager:          SharedIdentityManager,
-    tree_state:                TreeState,
-    batch_insert_timeout_secs: u64,
+    instance:                   RwLock<Option<RunningInstance>>,
+    database:                   Arc<Database>,
+    identity_manager:           SharedIdentityManager,
+    tree_state:                 TreeState,
+    batch_insert_timeout_secs:  u64,
+    insert_identities_capacity: usize,
 }
 
 impl TaskMonitor {
@@ -109,12 +116,14 @@ impl TaskMonitor {
         options: &Options,
     ) -> Self {
         let batch_insert_timeout_secs = options.batch_timeout_seconds;
+        let insert_identities_capacity = options.insert_identities_capacity;
         Self {
             instance: RwLock::new(None),
             database,
             identity_manager: contracts,
             tree_state,
             batch_insert_timeout_secs,
+            insert_identities_capacity,
         }
     }
 
@@ -129,9 +138,13 @@ impl TaskMonitor {
         // but for symmetry's sake we create it for every task with `.subscribe()`
         let (shutdown_sender, _) = broadcast::channel(1);
         let (pending_identities_sender, pending_identities_receiver) = mpsc::channel(1);
-        let (insert_identities_sender, insert_identities_receiver) = mpsc::channel(1);
+        let (insert_identities_sender, insert_identities_receiver) =
+            mpsc::channel(self.insert_identities_capacity);
 
         let wake_up_notify = Arc::new(Notify::new());
+        // Immediately notify so we can start processing if we have pending identities
+        // in the database
+        wake_up_notify.notify_one();
 
         // We need to maintain mutable access to these receivers from multiple
         // invocations of this task

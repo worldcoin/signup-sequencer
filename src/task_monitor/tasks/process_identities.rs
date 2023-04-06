@@ -125,6 +125,9 @@ async fn process_identities(
                 ).await?;
 
                 last_batch_time = SystemTime::now();
+
+                // Also wake up if woken up due to a tick
+                wake_up_notify.notify_one();
             }
             _ = wake_up_notify.notified() => {
                 tracing::trace!("Identity batch insertion woken due to request.");

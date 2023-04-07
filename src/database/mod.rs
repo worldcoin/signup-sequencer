@@ -182,18 +182,29 @@ impl Database {
 
         let root_leaf_index = root_leaf_index as i64;
 
-        let update_root_history_query = sqlx::query(
+        let update_previous_roots = sqlx::query(
             r#"
             UPDATE identities
-            SET status = $2, mined_at = CURRENT_TIMESTAMP
-            WHERE leaf_index <= $1
-            AND   status <> $2
+            SET    status = $2, mined_at = CURRENT_TIMESTAMP
+            WHERE  leaf_index <= $1
+            AND    status <> $2
             "#,
         )
         .bind(root_leaf_index)
         .bind(<&str>::from(Status::Mined));
 
-        tx.execute(update_root_history_query).await?;
+        let update_next_roots = sqlx::query(
+            r#"
+            UPDATE identities
+            SET    status = $2, mined_at = NULL
+            WHERE  leaf_index > $1
+            "#,
+        )
+        .bind(root_leaf_index)
+        .bind(<&str>::from(Status::Pending));
+
+        tx.execute(update_previous_roots).await?;
+        tx.execute(update_next_roots).await?;
 
         tx.commit().await?;
 
@@ -441,8 +452,51 @@ mod test {
         let pending_identities = db.count_pending_identities().await?;
         assert_eq!(
             pending_identities, 2,
-            "Identities are not yey pending without associated roots"
+            "There should be 2 pending identities"
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn mark_root_as_mined_marks_next_roots() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(5);
+        let roots = mock_roots(5);
+
+        for i in 0..5 {
+            db.insert_pending_identity(i, &identities[i], &roots[i])
+                .await
+                .context("Inserting identity")?;
+        }
+
+        // root[2] is somehow erroneously marked as mined
+        db.mark_root_as_mined(&roots[2]).await?;
+
+        // Later we correctly mark the previous root as mined
+        db.mark_root_as_mined(&roots[1]).await?;
+
+        for root in roots.iter().take(2) {
+            let root = db
+                .get_root_state(root)
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, Status::Mined);
+        }
+
+        for root in roots.iter().skip(2).take(3) {
+            let root = db
+                .get_root_state(root)
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, Status::Pending);
+        }
+
+        let pending_identities = db.count_pending_identities().await?;
+        assert_eq!(pending_identities, 3, "There should be 3 pending roots");
 
         Ok(())
     }

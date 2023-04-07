@@ -52,7 +52,7 @@ impl Ethereum {
 
         #[cfg(feature = "oz-provider")]
         let write_provider: Arc<dyn WriteProvider> =
-            Arc::new(write_oz::Provider::new(&options.write_options).await?);
+            Arc::new(write_oz::Provider::new(read_provider.clone(), &options.write_options).await?);
 
         Ok(Self {
             read_provider: Arc::new(read_provider),

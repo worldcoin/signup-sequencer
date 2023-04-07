@@ -15,7 +15,7 @@ use crate::{
     ethereum::{self, Ethereum},
     identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
     prover,
-    prover::ProverMap,
+    prover::batch_insertion::ProverMap,
     server::{Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
     task_monitor,
     task_monitor::{
@@ -63,7 +63,7 @@ pub struct Options {
     pub database: database::Options,
 
     #[clap(flatten)]
-    pub prover: prover::Options,
+    pub batch_provers: prover::batch_insertion::Options,
 
     #[clap(flatten)]
     pub committer: task_monitor::Options,
@@ -103,7 +103,7 @@ impl App {
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         let ethereum = Ethereum::new(options.ethereum);
         let db = Database::new(options.database);
-        let prover_map = ProverMap::new(&options.prover)?;
+        let prover_map = ProverMap::new(&options.batch_provers)?;
 
         let (ethereum, db) = tokio::try_join!(ethereum, db)?;
 

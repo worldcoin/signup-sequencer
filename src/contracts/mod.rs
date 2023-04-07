@@ -16,9 +16,8 @@ use self::abi::BatchingContract as ContractAbi;
 use crate::{
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
     prover::{
-        batch_insertion::{Identity, Prover},
+        batch_insertion::{Identity, Prover, ProverMap},
         proof::Proof,
-        ProverMap,
     },
 };
 
@@ -49,10 +48,10 @@ pub struct Options {
 
 /// A structure representing the interface to the batch-based identity manager
 /// contract.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct IdentityManager {
     ethereum:           Ethereum,
-    prover_map:         ProverMap,
+    prover_map:         Arc<ProverMap>,
     abi:                ContractAbi<ReadProvider>,
     initial_leaf_value: Field,
     tree_depth:         usize,
@@ -63,7 +62,7 @@ impl IdentityManager {
     pub async fn new(
         options: Options,
         ethereum: Ethereum,
-        prover_map: ProverMap,
+        prover_map_internal: ProverMap,
     ) -> anyhow::Result<Self>
     where
         Self: Sized,
@@ -97,6 +96,7 @@ impl IdentityManager {
 
         let initial_leaf_value = options.initial_leaf_value;
         let tree_depth = options.tree_depth;
+        let prover_map = Arc::new(prover_map_internal);
 
         let identity_manager = Self {
             ethereum,

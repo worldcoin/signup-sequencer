@@ -1,8 +1,11 @@
 mod identity;
+pub mod prover_map;
 
+use clap::Parser;
 use std::{
     fmt::{Display, Formatter},
     mem::size_of,
+    str::FromStr,
     time::Duration,
 };
 
@@ -12,7 +15,7 @@ use prometheus::{exponential_buckets, register_histogram, Histogram};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-pub use crate::prover::batch_insertion::identity::Identity;
+pub use crate::prover::batch_insertion::{identity::Identity, prover_map::ProverMap};
 use crate::prover::proof::Proof;
 
 /// The endpoint used for proving operations.
@@ -36,10 +39,24 @@ static PROVER_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
     .unwrap()
 });
 
+#[derive(Clone, Debug, PartialEq, Eq, Parser)]
+#[group(skip)]
+pub struct Options {
+    /// The options for configuring the batch insertion prover service.
+    ///
+    /// This should be a JSON array containing objects of the following format `{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}`
+    #[clap(
+        long,
+        env,
+        default_value = r#"[{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}]"#
+    )]
+    pub prover_urls: ProverOptionsWrapper,
+}
+
 /// Configuration options for the component responsible for interacting with the
 /// prover service.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Options {
+pub struct ProverConfiguration {
     /// The URL at which to contact the semaphore prover service for proof
     /// generation.
     pub url: String,
@@ -51,6 +68,17 @@ pub struct Options {
     /// The batch size that the prover is set up to work with. This must match
     /// the deployed prover.
     pub batch_size: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProverOptionsWrapper(pub Vec<ProverConfiguration>);
+
+impl FromStr for ProverOptionsWrapper {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s).map(ProverOptionsWrapper)
+    }
 }
 
 /// A representation of the connection to the MTB prover service.
@@ -66,7 +94,7 @@ impl Prover {
     ///
     /// # Arguments
     /// - `options`: The prover configuration options.
-    pub fn new(options: &Options) -> anyhow::Result<Self> {
+    pub fn new(options: &ProverConfiguration) -> anyhow::Result<Self> {
         let target_url = Url::parse(&options.url)?;
         let timeout_duration = Duration::from_secs(options.timeout_s);
         let batch_size = options.batch_size;
@@ -239,7 +267,7 @@ mod test {
         let mock_url: String = "0.0.0.0:3001".into();
         let mock_service = mock::Service::new(mock_url.clone()).await?;
 
-        let options = Options {
+        let options = ProverConfiguration {
             url:        "http://localhost:3001".into(),
             timeout_s:  30,
             batch_size: 3,
@@ -270,7 +298,7 @@ mod test {
         let mock_url: String = "0.0.0.0:3002".into();
         let mock_service = mock::Service::new(mock_url.clone()).await?;
 
-        let options = Options {
+        let options = ProverConfiguration {
             url:        "http://localhost:3002".into(),
             timeout_s:  30,
             batch_size: 3,
@@ -297,7 +325,7 @@ mod test {
 
     #[tokio::test]
     async fn prover_should_error_if_batch_size_wrong() -> anyhow::Result<()> {
-        let options = Options {
+        let options = ProverConfiguration {
             url:        "http://localhost:3002".into(),
             timeout_s:  30,
             batch_size: 10,

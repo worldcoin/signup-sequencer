@@ -26,13 +26,10 @@ RUN update-ca-certificates --verbose
 # Create minimal docker image for our app
 FROM gcr.io/distroless/static-debian11
 
+RUN groupadd -r -g 10001 app && useradd -r -g app -u 10001 app \
+    && chown app:app -R /app
 # Drop priviliges
 USER 10001:10001
-
-# Configure SSL CA certificates
-COPY --from=build-env --chown=0:10001 --chmod=040 \
-    /etc/ssl/certs/ca-certificates.crt /
-ENV SSL_CERT_FILE="/ca-certificates.crt"
 
 # Configure logging
 ENV LOG_FORMAT="json"
@@ -46,7 +43,7 @@ LABEL prometheus.io/port="9998"
 LABEL prometheus.io/path="/metrics"
 
 # Executable
-COPY --from=build-env --chown=0:10001 --chmod=010 /src/bin /bin
+COPY --from=build-env --chown=0:10001 --chmod=010 /src/bin /app/bin
 STOPSIGNAL SIGTERM
 HEALTHCHECK NONE
-ENTRYPOINT ["/bin"]
+ENTRYPOINT ["/app/bin"]

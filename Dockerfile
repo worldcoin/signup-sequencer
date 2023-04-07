@@ -24,7 +24,7 @@ RUN update-ca-certificates --verbose
 
 ################################################################################
 # Create minimal docker image for our app
-FROM scratch
+FROM gcr.io/distroless/static-debian11
 
 # Drop priviliges
 USER 10001:10001
@@ -46,7 +46,7 @@ LABEL prometheus.io/port="9998"
 LABEL prometheus.io/path="/metrics"
 
 # Executable
-COPY --from=build-env --chown=0:10001 --chmod=050 /src/bin /bin
+COPY --from=build-env --chown=0:10001 --chmod=010 /src/bin /bin
 STOPSIGNAL SIGTERM
 HEALTHCHECK NONE
 ENTRYPOINT ["/bin"]

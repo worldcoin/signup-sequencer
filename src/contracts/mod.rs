@@ -10,12 +10,17 @@ use ethers::{
     types::{Address, U256},
 };
 use semaphore::Field;
+use tokio::sync::RwLockReadGuard;
 use tracing::{error, info, instrument};
 
 use self::abi::BatchingContract as ContractAbi;
 use crate::{
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
-    prover::{batch_insertion, InsertionProverMap, Proof, ReadOnlyProver},
+    prover::{
+        batch_insertion,
+        map::{InsertionProverMap, ReadOnlyInsertionProver},
+        Proof, ReadOnlyProver,
+    },
     server::error::{Error as ServerError, Error},
 };
 
@@ -116,7 +121,7 @@ impl IdentityManager {
 
     #[must_use]
     pub async fn max_batch_size(&self) -> usize {
-        self.insertion_prover_map.max_batch_size()
+        self.insertion_prover_map.read().await.max_batch_size()
     }
 
     #[must_use]
@@ -146,19 +151,20 @@ impl IdentityManager {
     pub async fn get_suitable_prover(
         &self,
         num_identities: usize,
-    ) -> anyhow::Result<InsertionProver> {
-        let prover = self
-            .insertion_prover_map
-            .get(num_identities)
-            .await
-            .ok_or_else(|| anyhow!("No available prover for batch size: {num_identities}"))?;
+    ) -> anyhow::Result<ReadOnlyProver<batch_insertion::Prover>> {
+        let prover_map = self.insertion_prover_map.read().await;
 
-        Ok(prover)
+        match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
+            Ok(p) => anyhow::Ok(p),
+            Err(_) => Err(anyhow!(
+                "No available prover for batch size: {num_identities}"
+            )),
+        }
     }
 
     #[instrument(level = "debug", skip_all)]
     pub async fn prepare_proof(
-        prover: InsertionProver<'_>,
+        prover: ReadOnlyInsertionProver<'_>,
         start_index: usize,
         pre_root: U256,
         post_root: U256,
@@ -280,9 +286,6 @@ impl IdentityManager {
         batch_size: usize,
         timeout_seconds: usize,
     ) -> Result<(), ServerError> {
-        if self.insertion_prover_map.batch_size_exists(batch_size) {
-            return Err(Error::BatchSizeAlreadyExists);
-        }
         unimplemented!()
     }
 
@@ -290,12 +293,8 @@ impl IdentityManager {
     ///
     /// Will return `Err` if the batch size requested for removal doesn't exist
     /// in the prover map.
-    pub async fn remove_batch_size(&mut self, batch_size: usize) -> Result<(), ServerError> {
-        if (self.insertion_prover_map.remove(batch_size).await).is_none() {
-            return Err(ServerError::NoSuchBatchSize);
-        }
-
-        Ok(())
+    pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
+        unimplemented!()
     }
 }
 

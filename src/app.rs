@@ -15,7 +15,7 @@ use crate::{
     ethereum::{self, Ethereum},
     identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
     prover,
-    prover::InsertionProverMap,
+    prover::map::make_insertion_map,
     server::{error::Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
     task_monitor,
     task_monitor::{
@@ -103,7 +103,7 @@ impl App {
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         let ethereum = Ethereum::new(options.ethereum);
         let db = Database::new(options.database);
-        let insertion_prover_map = InsertionProverMap::new(&options.batch_provers)?;
+        let insertion_prover_map = make_insertion_map(&options.batch_provers)?;
 
         let (ethereum, db) = tokio::try_join!(ethereum, db)?;
 

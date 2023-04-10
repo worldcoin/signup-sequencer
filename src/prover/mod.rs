@@ -5,11 +5,11 @@
 //! the batch update proving service once that arrives.
 //!
 //! APIs are designed to be imported for use qualified (e.g.
-//! `batch_insertion::Prover`, `batch_insertion::ProverMap` and so on).
+//! `batch_insertion::Prover`, `batch_insertion::Identity` and so on).
 
 pub mod batch_insertion;
+pub mod map;
 pub mod proof;
-pub mod prover_map;
 
+pub use map::{InsertionProverMap, ProverMap, ReadOnlyProver};
 pub use proof::Proof;
-pub use prover_map::{InsertionProverMap, ProverMap, ReadOnlyProver, ReadWriteProver};

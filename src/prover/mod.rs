@@ -9,3 +9,7 @@
 
 pub mod batch_insertion;
 pub mod proof;
+pub mod prover_map;
+
+pub use proof::Proof;
+pub use prover_map::{InsertionProverMap, ProverMap, ReadOnlyProver, ReadWriteProver};

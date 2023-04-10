@@ -253,7 +253,9 @@ async fn commit_identities(
         "Number of identities does not match the number of merkle proofs."
     );
 
-    let prover = identity_manager.get_suitable_prover(commitment_count)?;
+    let prover = identity_manager
+        .get_suitable_prover(commitment_count)
+        .await?;
     let batch_size = prover.batch_size();
 
     // The verifier and prover can only work with a given batch size, so we need to

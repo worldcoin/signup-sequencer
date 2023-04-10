@@ -1,5 +1,4 @@
 mod identity;
-pub mod prover_map;
 
 use clap::Parser;
 use std::{
@@ -15,8 +14,8 @@ use prometheus::{exponential_buckets, register_histogram, Histogram};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-pub use crate::prover::batch_insertion::{identity::Identity, prover_map::ProverMap};
-use crate::prover::proof::Proof;
+pub use crate::prover::batch_insertion::identity::Identity;
+use crate::prover::Proof;
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";

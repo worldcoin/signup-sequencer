@@ -15,11 +15,11 @@ use tracing::{error, info, instrument};
 use self::abi::BatchingContract as ContractAbi;
 use crate::{
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
-    prover::{
-        batch_insertion::{Identity, Prover, ProverMap},
-        proof::Proof,
-    },
+    prover::{batch_insertion, InsertionProverMap, Proof, ReadOnlyProver},
 };
+
+/// The type of prover used for batch insertions.
+pub type InsertionProver<'a> = ReadOnlyProver<'a, batch_insertion::Prover>;
 
 /// Configuration options for the component responsible for interacting with the
 /// contract.
@@ -50,11 +50,11 @@ pub struct Options {
 /// contract.
 #[derive(Debug)]
 pub struct IdentityManager {
-    ethereum:           Ethereum,
-    prover_map:         Arc<ProverMap>,
-    abi:                ContractAbi<ReadProvider>,
-    initial_leaf_value: Field,
-    tree_depth:         usize,
+    ethereum:             Ethereum,
+    insertion_prover_map: Arc<InsertionProverMap>,
+    abi:                  ContractAbi<ReadProvider>,
+    initial_leaf_value:   Field,
+    tree_depth:           usize,
 }
 
 impl IdentityManager {
@@ -62,7 +62,7 @@ impl IdentityManager {
     pub async fn new(
         options: Options,
         ethereum: Ethereum,
-        prover_map_internal: ProverMap,
+        insertion_prover_mapping: InsertionProverMap,
     ) -> anyhow::Result<Self>
     where
         Self: Sized,
@@ -96,11 +96,11 @@ impl IdentityManager {
 
         let initial_leaf_value = options.initial_leaf_value;
         let tree_depth = options.tree_depth;
-        let prover_map = Arc::new(prover_map_internal);
+        let insertion_prover_map = Arc::new(insertion_prover_mapping);
 
         let identity_manager = Self {
             ethereum,
-            prover_map,
+            insertion_prover_map,
             abi,
             initial_leaf_value,
             tree_depth,
@@ -116,7 +116,7 @@ impl IdentityManager {
 
     #[must_use]
     pub fn max_batch_size(&self) -> usize {
-        self.prover_map.max_batch_size()
+        self.insertion_prover_map.max_batch_size()
     }
 
     #[must_use]
@@ -126,7 +126,10 @@ impl IdentityManager {
 
     /// Validates that merkle proofs are of the correct length against tree
     /// depth
-    pub fn validate_merkle_proofs(&self, identity_commitments: &[Identity]) -> anyhow::Result<()> {
+    pub fn validate_merkle_proofs(
+        &self,
+        identity_commitments: &[batch_insertion::Identity],
+    ) -> anyhow::Result<()> {
         for id in identity_commitments {
             if id.merkle_proof.len() != self.tree_depth {
                 return Err(anyhow!(format!(
@@ -140,10 +143,14 @@ impl IdentityManager {
         Ok(())
     }
 
-    pub fn get_suitable_prover(&self, num_identities: usize) -> anyhow::Result<&Prover> {
+    pub async fn get_suitable_prover(
+        &self,
+        num_identities: usize,
+    ) -> anyhow::Result<InsertionProver> {
         let prover = self
-            .prover_map
+            .insertion_prover_map
             .get(num_identities)
+            .await
             .ok_or_else(|| anyhow!("No available prover for batch size: {num_identities}"))?;
 
         Ok(prover)
@@ -151,11 +158,11 @@ impl IdentityManager {
 
     #[instrument(level = "debug", skip_all)]
     pub async fn prepare_proof(
-        prover: &Prover,
+        prover: InsertionProver<'_>,
         start_index: usize,
         pre_root: U256,
         post_root: U256,
-        identity_commitments: &[Identity],
+        identity_commitments: &[batch_insertion::Identity],
     ) -> anyhow::Result<Proof> {
         let batch_size = identity_commitments.len();
 
@@ -185,7 +192,7 @@ impl IdentityManager {
         start_index: usize,
         pre_root: U256,
         post_root: U256,
-        identity_commitments: Vec<Identity>,
+        identity_commitments: Vec<batch_insertion::Identity>,
         proof_data: Proof,
     ) -> anyhow::Result<TransactionId> {
         let actual_start_index: u32 = start_index.try_into()?;

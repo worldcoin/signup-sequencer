@@ -1,3 +1,5 @@
+pub mod error;
+
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     sync::Arc,
@@ -5,7 +7,7 @@ use std::{
 };
 
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
-use anyhow::{bail, ensure, Context, Error as EyreError, Result as AnyhowResult};
+use anyhow::{bail, ensure, Context, Result as AnyhowResult};
 use clap::Parser;
 use cli_batteries::{await_shutdown, trace_from_headers};
 use futures::Future;
@@ -19,12 +21,11 @@ use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
 use semaphore::{protocol::Proof, Field};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use thiserror::Error;
 use tokio::time::timeout;
 use tracing::{error, info, instrument, trace};
 use url::{Host, Url};
 
-use crate::{app::App, database, identity_tree::Hash};
+use crate::{app::App, identity_tree::Hash, server::error::Error};
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 #[group(skip)]
@@ -60,6 +61,18 @@ pub struct InsertCommitmentRequest {
     identity_commitment: Hash,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct AddBatchSizeRequest {
+    /// The URL of the prover for the provided batch size.
+    url:             String,
+    /// The batch size to add.
+    batch_size:      usize,
+    /// The timeout for communications with the prover service.
+    timeout_seconds: usize,
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
@@ -85,75 +98,6 @@ pub trait ToResponseCode {
 impl ToResponseCode for () {
     fn to_response_code(&self) -> StatusCode {
         StatusCode::OK
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("invalid http method")]
-    InvalidMethod,
-    #[error("invalid path")]
-    InvalidPath,
-    #[error("invalid content type")]
-    InvalidContentType,
-    #[error("invalid group id")]
-    InvalidGroupId,
-    #[error("invalid root")]
-    InvalidRoot,
-    #[error("invalid semaphore proof")]
-    InvalidProof,
-    #[error("provided identity index out of bounds")]
-    IndexOutOfBounds,
-    #[error("provided identity commitment not found")]
-    IdentityCommitmentNotFound,
-    #[error("provided identity commitment is invalid")]
-    InvalidCommitment,
-    #[error("provided identity commitment is not in reduced form")]
-    UnreducedCommitment,
-    #[error("provided identity commitment is already included")]
-    DuplicateCommitment,
-    #[error("Root mismatch between tree and contract.")]
-    RootMismatch,
-    #[error("invalid JSON request: {0}")]
-    InvalidSerialization(#[from] serde_json::Error),
-    #[error(transparent)]
-    Database(#[from] database::Error),
-    #[error(transparent)]
-    Hyper(#[from] hyper::Error),
-    #[error(transparent)]
-    Http(#[from] hyper::http::Error),
-    #[error("not semaphore manager")]
-    NotManager,
-    #[error(transparent)]
-    Elapsed(#[from] tokio::time::error::Elapsed),
-    #[error("prover error")]
-    ProverError,
-    #[error("Failed to insert identity")]
-    FailedToInsert,
-    #[error(transparent)]
-    Other(#[from] EyreError),
-}
-
-impl Error {
-    #[allow(clippy::enum_glob_use)]
-    fn to_response(&self) -> hyper::Response<Body> {
-        use Error::*;
-
-        let status_code = match self {
-            InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
-            InvalidPath => StatusCode::NOT_FOUND,
-            InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            IndexOutOfBounds
-            | IdentityCommitmentNotFound
-            | InvalidCommitment
-            | DuplicateCommitment
-            | InvalidSerialization(_) => StatusCode::BAD_REQUEST,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-        hyper::Response::builder()
-            .status(status_code)
-            .body(hyper::Body::from(self.to_string()))
-            .expect("Failed to convert error string into hyper::Body")
     }
 }
 
@@ -218,6 +162,16 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
             json_middleware(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
                 async move { app.insert_identity(request.identity_commitment).await }
+            })
+            .await
+        }
+        (&Method::POST, "/addBatchSize") => {
+            json_middleware(request, |request: AddBatchSizeRequest| {
+                let app = app.clone();
+                async move {
+                    app.add_batch_size(request.url, request.batch_size, request.timeout_seconds)
+                        .await
+                }
             })
             .await
         }

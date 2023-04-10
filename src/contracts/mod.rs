@@ -16,6 +16,7 @@ use self::abi::BatchingContract as ContractAbi;
 use crate::{
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
     prover::{batch_insertion, InsertionProverMap, Proof, ReadOnlyProver},
+    server::error::{Error as ServerError, Error},
 };
 
 /// The type of prover used for batch insertions.
@@ -51,7 +52,7 @@ pub struct Options {
 #[derive(Debug)]
 pub struct IdentityManager {
     ethereum:             Ethereum,
-    insertion_prover_map: Arc<InsertionProverMap>,
+    insertion_prover_map: InsertionProverMap,
     abi:                  ContractAbi<ReadProvider>,
     initial_leaf_value:   Field,
     tree_depth:           usize,
@@ -62,7 +63,7 @@ impl IdentityManager {
     pub async fn new(
         options: Options,
         ethereum: Ethereum,
-        insertion_prover_mapping: InsertionProverMap,
+        insertion_prover_map: InsertionProverMap,
     ) -> anyhow::Result<Self>
     where
         Self: Sized,
@@ -96,7 +97,6 @@ impl IdentityManager {
 
         let initial_leaf_value = options.initial_leaf_value;
         let tree_depth = options.tree_depth;
-        let insertion_prover_map = Arc::new(insertion_prover_mapping);
 
         let identity_manager = Self {
             ethereum,
@@ -115,7 +115,7 @@ impl IdentityManager {
     }
 
     #[must_use]
-    pub fn max_batch_size(&self) -> usize {
+    pub async fn max_batch_size(&self) -> usize {
         self.insertion_prover_map.max_batch_size()
     }
 
@@ -267,6 +267,35 @@ impl IdentityManager {
         let latest_root = self.abi.latest_root().call().await?;
 
         Ok(latest_root)
+    }
+
+    // TODO [Ara] Test that you cannot insert the same batch size more than once.
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the provided batch size already exists.
+    pub async fn add_batch_size(
+        &self,
+        url: impl Into<String>,
+        batch_size: usize,
+        timeout_seconds: usize,
+    ) -> Result<(), ServerError> {
+        if self.insertion_prover_map.batch_size_exists(batch_size) {
+            return Err(Error::BatchSizeAlreadyExists);
+        }
+        unimplemented!()
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the batch size requested for removal doesn't exist
+    /// in the prover map.
+    pub async fn remove_batch_size(&mut self, batch_size: usize) -> Result<(), ServerError> {
+        if (self.insertion_prover_map.remove(batch_size).await).is_none() {
+            return Err(ServerError::NoSuchBatchSize);
+        }
+
+        Ok(())
     }
 }
 

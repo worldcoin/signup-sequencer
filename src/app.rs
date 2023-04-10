@@ -5,18 +5,18 @@ use clap::Parser;
 use hyper::StatusCode;
 use semaphore::protocol::verify_proof;
 use serde::Serialize;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::{info, instrument, warn};
 
 use crate::{
     contracts,
-    contracts::{IdentityManager, SharedIdentityManager},
+    contracts::{IdentityManager, InsertionProver, SharedIdentityManager},
     database::{self, Database},
     ethereum::{self, Ethereum},
     identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
     prover,
     prover::InsertionProverMap,
-    server::{Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
+    server::{error::Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
     task_monitor,
     task_monitor::{
         tasks::insert_identities::{IdentityInsert, OnInsertComplete},
@@ -243,6 +243,20 @@ impl App {
 
     fn identity_is_reduced(&self, commitment: Hash) -> bool {
         commitment.lt(&self.snark_scalar_field)
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the provided batch size already exists.
+    pub async fn add_batch_size(
+        &self,
+        url: impl Into<String>,
+        batch_size: usize,
+        timeout_seconds: usize,
+    ) -> Result<(), ServerError> {
+        self.identity_manager
+            .add_batch_size(url, batch_size, timeout_seconds)
+            .await
     }
 
     /// # Errors

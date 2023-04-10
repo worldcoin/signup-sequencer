@@ -80,7 +80,7 @@ async fn process_identities(
     identity_manager.await_clean_slate().await?;
 
     info!("Starting identity processor.");
-    let batch_size = identity_manager.max_batch_size();
+    let batch_size = identity_manager.max_batch_size().await;
 
     // We start a timer and force it to perform one initial tick to avoid an
     // immediate trigger.

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::prover::batch_insertion;
 
@@ -23,8 +23,6 @@ pub struct ProverMap<P> {
     map: BTreeMap<usize, RwLock<P>>,
 }
 
-// TODO [Ara] Map from usize to RWLock'd P, allowing fine-grained access.
-
 impl<P> ProverMap<P> {
     /// Get the smallest prover that can handle the given batch size.
     pub async fn get(&self, batch_size: usize) -> Option<ReadOnlyProver<P>> {
@@ -37,8 +35,18 @@ impl<P> ProverMap<P> {
         None
     }
 
+    /// Removes the prover for the provided `batch_size` from the prover map.
+    pub async fn remove(&mut self, batch_size: usize) -> Option<P> {
+        // self.map.remove(&batch_size).map(|lock| lock.into_inner())
+        unimplemented!()
+    }
+
     pub fn max_batch_size(&self) -> usize {
         self.map.iter().next_back().map_or(0, |(size, _)| *size)
+    }
+
+    pub fn batch_size_exists(&self, batch_size: usize) -> bool {
+        self.map.contains_key(&batch_size)
     }
 }
 

@@ -70,7 +70,15 @@ pub struct AddBatchSizeRequest {
     /// The batch size to add.
     batch_size:      usize,
     /// The timeout for communications with the prover service.
-    timeout_seconds: usize,
+    timeout_seconds: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct RemoveBatchSizeRequest {
+    /// The batch size to remove from the prover map.
+    batch_size: usize,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -172,6 +180,13 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
                     app.add_batch_size(request.url, request.batch_size, request.timeout_seconds)
                         .await
                 }
+            })
+            .await
+        }
+        (&Method::POST, "/removeBatchSize") => {
+            json_middleware(request, |request: RemoveBatchSizeRequest| {
+                let app = app.clone();
+                async move { app.remove_batch_size(request.batch_size).await }
             })
             .await
         }

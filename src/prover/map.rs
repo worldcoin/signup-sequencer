@@ -1,8 +1,8 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 
 use crate::prover::batch_insertion;
 
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use tokio::sync::{RwLock, RwLockReadGuard};
 
 /// The type of a map containing a mapping from a usize to a locked item.
 type SharedProverMap<P> = RwLock<ProverMap<P>>;
@@ -32,9 +32,14 @@ impl<P> ProverMap<P> {
         None
     }
 
+    /// Registers the provided `prover` for the given `batch_size` in the map.
+    pub fn add(&mut self, batch_size: usize, prover: P) {
+        self.map.insert(batch_size, prover);
+    }
+
     /// Removes the prover for the provided `batch_size` from the prover map.
     pub fn remove(&mut self, batch_size: usize) -> Option<P> {
-        unimplemented!()
+        self.map.remove(&batch_size)
     }
 
     pub fn max_batch_size(&self) -> usize {

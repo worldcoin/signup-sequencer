@@ -18,14 +18,12 @@ use crate::{
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
     prover::{
         batch_insertion,
+        batch_insertion::ProverConfiguration,
         map::{InsertionProverMap, ReadOnlyInsertionProver},
         Proof, ReadOnlyProver,
     },
-    server::error::{Error as ServerError, Error},
+    server::error::Error as ServerError,
 };
-
-/// The type of prover used for batch insertions.
-pub type InsertionProver<'a> = ReadOnlyProver<'a, batch_insertion::Prover>;
 
 /// Configuration options for the component responsible for interacting with the
 /// contract.
@@ -275,8 +273,6 @@ impl IdentityManager {
         Ok(latest_root)
     }
 
-    // TODO [Ara] Test that you cannot insert the same batch size more than once.
-
     /// # Errors
     ///
     /// Will return `Err` if the provided batch size already exists.
@@ -284,9 +280,23 @@ impl IdentityManager {
         &self,
         url: impl Into<String>,
         batch_size: usize,
-        timeout_seconds: usize,
+        timeout_seconds: u64,
     ) -> Result<(), ServerError> {
-        unimplemented!()
+        let mut map = self.insertion_prover_map.write().await;
+
+        if map.batch_size_exists(batch_size) {
+            return Err(ServerError::BatchSizeAlreadyExists);
+        }
+
+        let prover = batch_insertion::Prover::new(&ProverConfiguration {
+            url: url.into(),
+            batch_size,
+            timeout_s: timeout_seconds,
+        })?;
+
+        map.add(batch_size, prover);
+
+        Ok(())
     }
 
     /// # Errors
@@ -294,7 +304,10 @@ impl IdentityManager {
     /// Will return `Err` if the batch size requested for removal doesn't exist
     /// in the prover map.
     pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
-        unimplemented!()
+        let mut map = self.insertion_prover_map.write().await;
+
+        map.remove(batch_size)
+            .map_or(Err(ServerError::NoSuchBatchSize), |_| Ok(()))
     }
 }
 

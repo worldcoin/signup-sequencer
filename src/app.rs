@@ -5,12 +5,12 @@ use clap::Parser;
 use hyper::StatusCode;
 use semaphore::protocol::verify_proof;
 use serde::Serialize;
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{mpsc, oneshot};
 use tracing::{info, instrument, warn};
 
 use crate::{
     contracts,
-    contracts::{IdentityManager, InsertionProver, SharedIdentityManager},
+    contracts::{IdentityManager, SharedIdentityManager},
     database::{self, Database},
     ethereum::{self, Ethereum},
     identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
@@ -252,11 +252,18 @@ impl App {
         &self,
         url: impl Into<String>,
         batch_size: usize,
-        timeout_seconds: usize,
+        timeout_seconds: u64,
     ) -> Result<(), ServerError> {
         self.identity_manager
             .add_batch_size(url, batch_size, timeout_seconds)
             .await
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the requested batch size does not exist.
+    pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
+        self.identity_manager.remove_batch_size(batch_size).await
     }
 
     /// # Errors

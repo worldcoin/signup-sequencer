@@ -59,6 +59,7 @@ use std::{
 };
 
 use futures::{stream::FuturesUnordered, StreamExt};
+use futures_util::TryStreamExt;
 
 use self::{
     chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract},
@@ -202,6 +203,58 @@ pub async fn test_inclusion_proof(
     let result_json = mined_json.expect("Failed to get mined response");
     let proof_json = generate_reference_proof_json(ref_tree, leaf_index, "mined");
     assert_eq!(result_json, proof_json);
+}
+
+#[instrument(skip_all)]
+pub async fn test_add_batch_size(
+    uri: impl Into<String>,
+    prover_url: impl Into<String>,
+    batch_size: u64,
+    client: &Client<HttpConnector>,
+) -> anyhow::Result<()> {
+    let prover_url_string: String = prover_url.into();
+    let body = Body::from(
+        json!({
+            "url": prover_url_string,
+            "batchSize": batch_size,
+            "timeoutSeconds": 3
+        })
+        .to_string(),
+    );
+    let request = Request::builder()
+        .method("POST")
+        .uri(uri.into() + "/addBatchSize")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create add batch size hyper::Body");
+
+    client
+        .request(request)
+        .await
+        .expect("Failed to execute request.");
+
+    Ok(())
+}
+
+#[instrument(skip_all)]
+pub async fn test_remove_batch_size(
+    uri: impl Into<String>,
+    batch_size: u64,
+    client: &Client<HttpConnector>,
+) -> anyhow::Result<()> {
+    let body = Body::from(json!({ "batchSize": batch_size }).to_string());
+    let request = Request::builder()
+        .method("POST")
+        .uri(uri.into() + "/removeBatchSize")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create remove batch size hyper::Body");
+    client
+        .request(request)
+        .await
+        .expect("Failed to execute request");
+
+    Ok(())
 }
 
 #[instrument(skip_all)]

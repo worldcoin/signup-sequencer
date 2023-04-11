@@ -24,15 +24,7 @@ RUN update-ca-certificates --verbose
 
 ################################################################################
 # Create minimal docker image for our app
-FROM scratch
-
-# Drop priviliges
-USER 10001:10001
-
-# Configure SSL CA certificates
-COPY --from=build-env --chown=0:10001 --chmod=040 \
-    /etc/ssl/certs/ca-certificates.crt /
-ENV SSL_CERT_FILE="/ca-certificates.crt"
+FROM gcr.io/distroless/base-debian11:nonroot
 
 # Configure logging
 ENV LOG_FORMAT="json"
@@ -46,7 +38,5 @@ LABEL prometheus.io/port="9998"
 LABEL prometheus.io/path="/metrics"
 
 # Executable
-COPY --from=build-env --chown=0:10001 --chmod=010 /src/bin /bin
-STOPSIGNAL SIGTERM
-HEALTHCHECK NONE
-ENTRYPOINT ["/bin"]
+COPY --from=build-env /src/bin /bin/signup-sequencer
+ENTRYPOINT ["/bin/signup-sequencer"]

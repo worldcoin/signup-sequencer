@@ -108,12 +108,13 @@ pub struct TaskMonitor {
     /// when shutdown is called we want to be able to gracefully
     /// await the join handles - which requires ownership of the handle and by
     /// extension the instance.
-    instance:                   RwLock<Option<RunningInstance>>,
-    database:                   Arc<Database>,
-    identity_manager:           SharedIdentityManager,
-    tree_state:                 TreeState,
-    batch_insert_timeout_secs:  u64,
-    insert_identities_capacity: usize,
+    instance:                    RwLock<Option<RunningInstance>>,
+    database:                    Arc<Database>,
+    identity_manager:            SharedIdentityManager,
+    tree_state:                  TreeState,
+    batch_insert_timeout_secs:   u64,
+    insert_identities_capacity:  usize,
+    pending_identities_capacity: usize,
 }
 
 impl TaskMonitor {
@@ -125,6 +126,8 @@ impl TaskMonitor {
     ) -> Self {
         let batch_insert_timeout_secs = options.batch_timeout_seconds;
         let insert_identities_capacity = options.insert_identities_capacity;
+        let pending_identities_capacity = options.pending_identities_capacity;
+
         Self {
             instance: RwLock::new(None),
             database,
@@ -132,6 +135,7 @@ impl TaskMonitor {
             tree_state,
             batch_insert_timeout_secs,
             insert_identities_capacity,
+            pending_identities_capacity,
         }
     }
 
@@ -145,7 +149,8 @@ impl TaskMonitor {
         // We could use the second element of the tuple as `mut shutdown_receiver`,
         // but for symmetry's sake we create it for every task with `.subscribe()`
         let (shutdown_sender, _) = broadcast::channel(1);
-        let (pending_identities_sender, pending_identities_receiver) = mpsc::channel(2);
+        let (pending_identities_sender, pending_identities_receiver) =
+            mpsc::channel(self.pending_identities_capacity);
         let (insert_identities_sender, insert_identities_receiver) =
             mpsc::channel(self.insert_identities_capacity);
 

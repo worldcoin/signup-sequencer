@@ -332,9 +332,6 @@ async fn commit_identities(
     // Additionally if the receiver is dropped this reserve call will also fail.
     let permit = pending_identities_sender.reserve().await?;
 
-    // Ensure that we are not going to submit based on an out of date root anyway.
-    identity_manager.assert_latest_root(pre_root.into()).await?;
-
     info!(start_index, ?pre_root, ?post_root, "Submitting batch");
 
     // With all the data prepared we can submit the identities to the on-chain

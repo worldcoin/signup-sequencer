@@ -13,7 +13,7 @@ use semaphore::{
 };
 use serde::Serialize;
 use thiserror::Error;
-use tracing::info;
+use tracing::{info, warn};
 
 pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -177,23 +177,35 @@ where
             .collect()
     }
 
-    /// Applies the next _up to_ `update_count` updates, returning the merkle
-    /// tree proofs obtained after each apply.
-    fn apply_next_updates(&mut self, update_count: usize) {
-        let Some(next) = self.next.clone() else { return; };
+    fn apply_updates_up_to(&mut self, root: Hash) -> usize {
+        let Some(next) = self.next.clone() else { return 0; };
 
+        let num_updates;
         {
             // Acquire the exclusive write lock on the next version.
             let mut next = next.get_data();
 
-            let num_updates = std::cmp::min(next.metadata.diff.len(), update_count);
+            let index_of_root = next
+                .metadata
+                .diff
+                .iter()
+                .position(|update| update.result.root() == root);
 
-            let applied_updates: Vec<_> = next.metadata.diff.drain(..num_updates).collect();
+            let Some(index_of_root) = index_of_root else {
+                warn!(?root, "Root not found in the diff");
+                return 0;
+            };
+
+            let applied_updates: Vec<_> = next.metadata.diff.drain(..=index_of_root).collect();
+
+            num_updates = applied_updates.len();
 
             self.apply_diffs(applied_updates);
         }
 
         self.garbage_collect();
+
+        num_updates
     }
 }
 
@@ -412,7 +424,7 @@ impl TreeVersion<Latest> {
 /// only allow peeking and applying updates from the successor.
 pub trait TreeWithNextVersion {
     fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate>;
-    fn apply_next_updates(&self, update_count: usize);
+    fn apply_updates_up_to(&self, root: Hash) -> usize;
 }
 
 impl<V> TreeWithNextVersion for TreeVersion<V>
@@ -424,8 +436,8 @@ where
         self.get_data().peek_next_updates(maximum_update_count)
     }
 
-    fn apply_next_updates(&self, update_count: usize) {
-        self.get_data().apply_next_updates(update_count);
+    fn apply_updates_up_to(&self, root: Hash) -> usize {
+        self.get_data().apply_updates_up_to(root)
     }
 }
 

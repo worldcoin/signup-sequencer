@@ -34,7 +34,6 @@ struct RunningInstance {
 
 #[derive(Debug, Clone)]
 pub struct PendingIdentities {
-    identity_keys:  Vec<usize>,
     transaction_id: TransactionId,
     pre_root:       U256,
     post_root:      U256,

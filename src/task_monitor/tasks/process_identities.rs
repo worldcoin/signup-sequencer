@@ -353,14 +353,8 @@ async fn commit_identities(
             e
         })?;
 
-    let identity_keys: Vec<usize> = updates
-        .iter()
-        .map(|update| update.update.leaf_index)
-        .collect();
-
     // The transaction will be awaited on asynchronously
     permit.send(PendingIdentities {
-        identity_keys,
         transaction_id,
         pre_root,
         post_root,
@@ -368,7 +362,7 @@ async fn commit_identities(
     });
 
     // Update the batching tree only after submitting the identities to the chain
-    batching_tree.apply_next_updates(updates.len());
+    batching_tree.apply_updates_up_to(post_root.into());
 
     TaskMonitor::log_batch_size(updates.len());
 

@@ -38,5 +38,5 @@ LABEL prometheus.io/port="9998"
 LABEL prometheus.io/path="/metrics"
 
 # Executable
-COPY --from=build-env --chmod=550 /src/bin /bin/signup-sequencer
+COPY --from=build-env --chown=65532:65532--chmod=550 /src/bin /bin/signup-sequencer
 ENTRYPOINT ["/bin/signup-sequencer"]

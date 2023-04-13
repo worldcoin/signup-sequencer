@@ -401,9 +401,14 @@ impl Provider {
             tx
         };
 
+        // Using pending block is a bit risky since we might end up assigning a nonce
+        // that will never get executed due to nonce gaps. But since this is
+        // only for development, it should be fine.
+        let block_id = Some(BlockId::Number(BlockNumber::Pending));
+
         // Fill in transaction
         self.inner
-            .fill_transaction(&mut tx, None)
+            .fill_transaction(&mut tx, block_id)
             .instrument(debug_span!("Fill in transaction"))
             .await
             .map_err(|error| {

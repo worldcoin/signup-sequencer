@@ -60,7 +60,6 @@ async fn mine_identities(
         };
 
         let PendingIdentities {
-            identity_keys,
             transaction_id,
             pre_root,
             post_root,
@@ -76,7 +75,15 @@ async fn mine_identities(
 
         info!(start_index, ?pre_root, ?post_root, "Batch mined");
 
-        mined_tree.apply_next_updates(identity_keys.len());
+        let updates_count = mined_tree.apply_updates_up_to(post_root.into());
+
+        info!(
+            start_index,
+            updates_count,
+            ?pre_root,
+            ?post_root,
+            "Tree updated"
+        );
 
         TaskMonitor::log_pending_identities_count(database).await?;
     }

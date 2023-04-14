@@ -39,4 +39,4 @@ LABEL prometheus.io/path="/metrics"
 
 # Executable
 COPY --from=build-env /src/bin /bin/app
-ENTRYPOINT ["/app"]
+ENTRYPOINT ["/bin/app"]

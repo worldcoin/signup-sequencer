@@ -5,6 +5,7 @@ use clap::Parser;
 use hyper::StatusCode;
 use semaphore::{poseidon_tree::LazyPoseidonTree, protocol::verify_proof};
 use serde::Serialize;
+use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, instrument, warn};
 
@@ -132,6 +133,7 @@ impl App {
             database.mark_root_as_mined(&root_hash).await?;
         }
 
+        let timer = Instant::now();
         let tree_state = Self::initialize_tree(
             &database,
             // Poseidon tree depth is one more than the contract's tree depth
@@ -141,6 +143,7 @@ impl App {
             identity_manager.initial_leaf_value(),
         )
         .await?;
+        info!("Tree state initialization took: {:?}", timer.elapsed());
 
         let identity_committer = Arc::new(TaskMonitor::new(
             database.clone(),

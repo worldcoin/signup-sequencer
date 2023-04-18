@@ -11,7 +11,7 @@ use ethers::{
 };
 use semaphore::Field;
 use tokio::sync::RwLockReadGuard;
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 
 use self::abi::BatchingContract as ContractAbi;
 use crate::{
@@ -117,7 +117,6 @@ impl IdentityManager {
         self.tree_depth
     }
 
-    #[must_use]
     pub async fn max_batch_size(&self) -> usize {
         self.insertion_prover_map.read().await.max_batch_size()
     }
@@ -305,6 +304,11 @@ impl IdentityManager {
     /// in the prover map.
     pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
         let mut map = self.insertion_prover_map.write().await;
+
+        if map.len() == 1 {
+            warn!("Attempting to remove the last batch size.");
+            return Err(ServerError::CannotRemoveLastBatchSize);
+        }
 
         map.remove(batch_size)
             .map_or(Err(ServerError::NoSuchBatchSize), |_| Ok(()))

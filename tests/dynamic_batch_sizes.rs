@@ -13,6 +13,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     info!("Starting integration test");
 
     let batch_size: usize = 3;
+    let second_batch_size: usize = 2;
     #[allow(clippy::cast_possible_truncation)]
     let tree_depth: u8 = SUPPORTED_DEPTH as u8;
 
@@ -20,7 +21,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let initial_root: U256 = ref_tree.root().into();
 
     let (mock_chain, db_container, prover_map) =
-        spawn_deps(initial_root, &[batch_size], tree_depth).await?;
+        spawn_deps(initial_root, &[batch_size, second_batch_size], tree_depth).await?;
 
     let prover_mock = &prover_map[&batch_size];
 
@@ -42,7 +43,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         "--prover-urls",
         &prover_mock.arg_string(),
         "--batch-timeout-seconds",
-        "10",
+        "3",
         "--dense-tree-prefix-depth",
         "10",
         "--tree-gc-threshold",
@@ -111,14 +112,16 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     .await;
 
     // Add a new prover for batch sizes of two.
-    let second_prover = spawn_mock_prover(2).await?;
-    test_add_batch_size(&uri, second_prover.url(), 2, &client)
+    let second_prover = spawn_mock_prover(second_batch_size).await?;
+    test_add_batch_size(&uri, second_prover.url(), second_batch_size as u64, &client)
         .await
         .expect("Failed to add batch size.");
 
     // Insert enough identities to trigger the lower batch size.
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 3).await;
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 4).await;
+    tokio::time::pause();
+    tokio::time::resume();
 
     // Check that we can also get these inclusion proofs back.
     test_inclusion_proof(
@@ -142,12 +145,10 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     )
     .await;
 
-    // Now we remove all batch sizes, which means there are no provers. This should
-    // succeed.
-    test_remove_batch_size(&uri, 2, &client).await?;
-    test_remove_batch_size(&uri, 3, &client).await?;
+    // Now if we remove the original prover, things should still work.
+    test_remove_batch_size(&uri, batch_size as u64, &client, false).await?;
 
-    // However, asking it to insert an identities at this point should fail.
+    // We should be able to insert less than a full batch successfully.
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 5).await;
     tokio::time::pause();
     tokio::time::resume();
@@ -159,7 +160,26 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         &ref_tree,
         &Hash::from_str_radix(&test_identities[5], 16)
             .expect("Failed to parse Hash from test leaf 0"),
-        true,
+        false,
+    )
+    .await;
+
+    // We should be unable to remove _all_ of the provers, however.
+    test_remove_batch_size(&uri, second_batch_size as u64, &client, true).await?;
+
+    // So we should still be able to run a batch.
+    test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 6).await;
+    tokio::time::pause();
+    tokio::time::resume();
+
+    test_inclusion_proof(
+        &uri,
+        &client,
+        6,
+        &ref_tree,
+        &Hash::from_str_radix(&test_identities[6], 16)
+            .expect("Failed to parse Hash from test leaf 0"),
+        false,
     )
     .await;
 

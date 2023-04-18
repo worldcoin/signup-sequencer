@@ -23,7 +23,7 @@ pub struct ProverMap<P> {
 impl<P> ProverMap<P> {
     /// Get the smallest prover that can handle the given batch size.
     pub fn get(&self, batch_size: usize) -> Option<&P> {
-        for (size, prover) in self.map.iter() {
+        for (size, prover) in &self.map {
             if batch_size <= *size {
                 return Some(prover);
             }
@@ -40,6 +40,10 @@ impl<P> ProverMap<P> {
     /// Removes the prover for the provided `batch_size` from the prover map.
     pub fn remove(&mut self, batch_size: usize) -> Option<P> {
         self.map.remove(&batch_size)
+    }
+
+    pub fn len(&self) -> usize {
+        self.map.len()
     }
 
     pub fn max_batch_size(&self) -> usize {

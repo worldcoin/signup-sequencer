@@ -48,6 +48,8 @@ pub enum Error {
     BatchSizeAlreadyExists,
     #[error("The requested batch size does not exist")]
     NoSuchBatchSize,
+    #[error("The last batch size cannot be removed")]
+    CannotRemoveLastBatchSize,
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

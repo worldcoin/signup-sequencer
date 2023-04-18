@@ -148,9 +148,8 @@ pub async fn spawn_mock_chain(
     let update_verifiers = update_verifiers?;
     let identity_manager_impl = identity_manager_impl?;
 
-    // TODO: This is sequential but could be parallelized.
-    // but for now it's only multiple batch sizes for one test so I don't wanna do
-    // it now.
+    // TODO: This is sequential but could be parallelized, but for now it's only
+    //   multiple batch sizes for one test so I don't wanna do it now.
     for batch_size in &batch_sizes[1..] {
         let batch_size = *batch_size as u64;
 

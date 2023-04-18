@@ -183,16 +183,27 @@ impl App {
         gc_threshold: usize,
         initial_leaf_value: Hash,
     ) -> AnyhowResult<TreeState> {
-        let mut mined_builder = CanonicalTreeBuilder::new(
+        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
+        let initial_leaves = if mined_items.is_empty() {
+            vec![]
+        } else {
+            mined_items.sort_by_key(|item| item.leaf_index);
+            let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
+            let mut leaves = vec![initial_leaf_value; max_leaf + 1];
+
+            for item in mined_items {
+                leaves[item.leaf_index] = item.element;
+            }
+
+            leaves
+        };
+        let mined_builder = CanonicalTreeBuilder::new(
             tree_depth,
             dense_prefix_depth,
             gc_threshold,
             initial_leaf_value,
+            &initial_leaves,
         );
-        let mined_items = database.get_commitments_by_status(Status::Mined).await?;
-        for update in mined_items {
-            mined_builder.update(&update);
-        }
         let (mined, batching_builder) = mined_builder.seal();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
         let pending_items = database.get_commitments_by_status(Status::Pending).await?;

@@ -1,4 +1,5 @@
 use std::{
+    cmp::min,
     str::FromStr,
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -513,22 +514,36 @@ impl CanonicalTreeBuilder {
         dense_prefix_depth: usize,
         flattening_threshold: usize,
         initial_leaf: Field,
+        initial_leaves: &[Field],
     ) -> Self {
-        let tree = PoseidonTree::<lazy_merkle_tree::Canonical>::new_with_dense_prefix(
-            tree_depth,
-            dense_prefix_depth,
-            &initial_leaf,
-        );
+        let initial_leaves_in_dense_count = min(initial_leaves.len(), 1 << dense_prefix_depth);
+        let (initial_leaves_in_dense, leftover_initial_leaves) =
+            initial_leaves.split_at(initial_leaves_in_dense_count);
+
+        let tree =
+            PoseidonTree::<lazy_merkle_tree::Canonical>::new_with_dense_prefix_with_initial_values(
+                tree_depth,
+                dense_prefix_depth,
+                &initial_leaf,
+                initial_leaves_in_dense,
+            );
         let metadata = CanonicalTreeMetadata {
             flatten_threshold:        flattening_threshold,
             count_since_last_flatten: 0,
         };
-        Self(TreeVersionData {
+        let mut builder = Self(TreeVersionData {
             tree,
-            next_leaf: 0,
+            next_leaf: initial_leaves_in_dense_count,
             metadata,
             next: None,
-        })
+        });
+        for (index, leaf) in leftover_initial_leaves.iter().enumerate() {
+            builder.update(&TreeUpdate {
+                leaf_index: index + initial_leaves_in_dense_count,
+                element:    *leaf,
+            });
+        }
+        builder
     }
 
     /// Updates a leaf in the resulting tree.

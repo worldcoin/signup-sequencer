@@ -1251,8 +1251,7 @@ dependencies = [
 [[package]]
 name = "cli-batteries"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e757bfd4ef769cd311a6d99962670b9cf32045ab6bebc9e6771b5dbe26ea5b78"
+source = "git+https://github.com/recmo/cli-batteries?rev=f82b7f95c649988f26f33671edbdb28dfdf2c3d0#f82b7f95c649988f26f33671edbdb28dfdf2c3d0"
 dependencies = [
  "ansi_term",
  "chrono",

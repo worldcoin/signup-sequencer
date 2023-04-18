@@ -31,11 +31,7 @@ pub struct Options {
     pub oz_api_secret: String,
 
     /// OpenZeppelin Defender API Secret
-    #[clap(
-        long,
-        env,
-        default_value = "0x30dcc24131223d4f8af69226e7b11b83e6a68b8b"
-    )]
+    #[clap(long, env)]
     pub oz_address: H160,
 
     /// For how long OpenZeppelin should track and retry the transaction (in

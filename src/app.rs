@@ -187,18 +187,14 @@ impl App {
         let initial_leaves = if mined_items.is_empty() {
             vec![]
         } else {
-            mined_items.sort_by(|a, b| a.leaf_index.cmp(&b.leaf_index));
+            mined_items.sort_by_key(|item| item.leaf_index);
             let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
             let mut leaves = vec![initial_leaf_value; max_leaf + 1];
-            let mut last_update = 0;
-            for i in 0..=max_leaf {
-                if i == mined_items[last_update].leaf_index {
-                    leaves[i] = mined_items[last_update].element;
-                    last_update += 1;
-                } else {
-                    leaves[i] = initial_leaf_value;
-                }
+
+            for item in mined_items {
+                leaves[item.leaf_index] = item.element;
             }
+
             leaves
         };
         let mined_builder = CanonicalTreeBuilder::new(

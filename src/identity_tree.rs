@@ -517,12 +517,8 @@ impl CanonicalTreeBuilder {
         initial_leaves: &[Field],
     ) -> Self {
         let initial_leaves_in_dense_count = min(initial_leaves.len(), 1 << dense_prefix_depth);
-        let initial_leaves_in_dense = &initial_leaves[..initial_leaves_in_dense_count];
-        let leftover_initial_leaves = if initial_leaves_in_dense.len() < initial_leaves.len() {
-            &initial_leaves[initial_leaves_in_dense_count..]
-        } else {
-            &[]
-        };
+        let (initial_leaves_in_dense, leftover_initial_leaves) =
+            initial_leaves.split_at(initial_leaves_in_dense_count);
 
         let tree =
             PoseidonTree::<lazy_merkle_tree::Canonical>::new_with_dense_prefix_with_initial_values(

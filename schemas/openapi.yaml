@@ -107,7 +107,6 @@ components:
           type: string
           pattern: '^[A-F0-9]{64}$'
       example:
-        groupId: 1
         identityCommitment: '0000F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2'
     FieldElement:
       type: string

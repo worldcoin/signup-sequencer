@@ -1,7 +1,7 @@
 openapi: 3.0.0
 info:
-  version: "1.0.0"
-  title: "signup-sequencer"
+  version: '1.0.0'
+  title: 'signup-sequencer'
   license:
     name: MIT
 servers:
@@ -11,61 +11,61 @@ paths:
     servers:
       - url: http://localhost:9998
     get:
-      summary: "Returns Prometheus application metrics"
+      summary: 'Returns Prometheus application metrics'
       responses:
-        "200":
-          description: "Sample response: Details about a user by ID"
+        '200':
+          description: 'Sample response: Details about a user by ID'
           content:
-            "application/text":
-              example: ""
+            'application/text':
+              example: ''
         default:
           description: Unexpected error
   /insertIdentity:
     post:
-      summary: "Queues an insertion of a new identity into the merkle tree"
+      summary: 'Queues an insertion of a new identity into the merkle tree'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/IdentityCommitment"
+              $ref: '#/components/schemas/IdentityCommitment'
       responses:
-        "200":
-          description: "Identity insert was successfully queued"
+        '200':
+          description: 'Identity insert was successfully queued'
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/InclusionProof"
-        "400":
-          description: "Invalid request"
+                $ref: '#/components/schemas/InclusionProof'
+        '400':
+          description: 'Invalid request'
           content:
             application/json:
               schema:
-                description: "A human-readable explanation of the error condition"
-                type: "string"
+                description: 'A human-readable explanation of the error condition'
+                type: 'string'
   /inclusionProof:
     post:
-      summary: "Get Merkle inclusion proof"
+      summary: 'Get Merkle inclusion proof'
       requestBody:
-        description: "details of the identity to get the inclusion proof for"
+        description: 'details of the identity to get the inclusion proof for'
         content:
-          "application/json":
+          'application/json':
             schema:
-              $ref: "#/components/schemas/IdentityCommitment"
+              $ref: '#/components/schemas/IdentityCommitment'
       responses:
-        "200":
-          description: "A Merkle inclusion proof for an already inserted commitment"
+        '200':
+          description: 'A Merkle inclusion proof for an already inserted commitment'
           content:
-            "application/json":
+            'application/json':
               schema:
-                $ref: "#/components/schemas/InclusionProof"
-        "400":
-          description: "Invalid request"
+                $ref: '#/components/schemas/InclusionProof'
+        '400':
+          description: 'Invalid request'
           content:
             application/json:
               schema:
-                description: "A human-readable explanation of the error condition"
-                type: "string"
+                description: 'A human-readable explanation of the error condition'
+                type: 'string'
   /verifySemaphoreProof:
     post:
       summary: Verifies a Semaphore proof
@@ -77,26 +77,26 @@ paths:
             schema:
               $ref: "#/components/schemas/VerifySemaphoreProofRequest"
       responses:
-        "200":
+        '200':
           description: Valid proof response
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/VerifySemaphoreProofResponse"
-        "400":
+        '400':
           description: Invalid proof or root not found
           content:
             text/plain:
               schema:
                 type: string
-                example: "invalid root"
-        "500":
+                example: 'invalid root'
+        '500':
           description: Prover error
           content:
             text/plain:
               schema:
                 type: string
-                example: "prover error"
+                example: 'prover error'
 
 components:
   schemas:
@@ -105,63 +105,63 @@ components:
       properties:
         identityCommitment:
           type: string
-          pattern: "^[A-F0-9]{64}$"
+          pattern: '^[A-F0-9]{64}$'
       example:
-        identityCommitment: "0000F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2"
+        identityCommitment: '0000F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2'
     FieldElement:
       type: string
-      pattern: "^0x[a-f0-9]{64}$"
+      pattern: '^0x[a-f0-9]{64}$'
     InclusionProof:
       type: object
       properties:
-        status: { $ref: "#/components/schemas/InclusionProofStatus" }
-        root: { $ref: "#/components/schemas/FieldElement" }
+        status: { $ref: '#/components/schemas/InclusionProofStatus' }
+        root: { $ref: '#/components/schemas/FieldElement' }
         proof:
           type: array
           items:
             oneOf:
               - type: object
                 properties:
-                  Left: { $ref: "#/components/schemas/FieldElement" }
+                  Left: { $ref: '#/components/schemas/FieldElement' }
               - type: object
                 properties:
-                  Right: { $ref: "#/components/schemas/FieldElement" }
+                  Right: { $ref: '#/components/schemas/FieldElement' }
     InclusionProofStatus:
       type: string
-      enum: ["pending", "mined", "confirmed"]
+      enum: [ 'pending', 'mined', 'confirmed' ]
     SemaphoreProof:
       type: array
       items:
         oneOf:
-          - $ref: "#/components/schemas/G1"
-          - $ref: "#/components/schemas/G2"
+          - $ref: '#/components/schemas/G1'
+          - $ref: '#/components/schemas/G2'
       minItems: 3
       maxItems: 3
     G1:
       type: array
       items:
-        $ref: "#/components/schemas/FieldElement"
+        $ref: '#/components/schemas/FieldElement'
       minItems: 2
       maxItems: 2
     G2:
       type: array
       items:
-        $ref: "#/components/schemas/G1"
+        $ref: '#/components/schemas/G1'
       minItems: 2
       maxItems: 2
     VerifySemaphoreProofRequest:
       type: object
       properties:
         root:
-          $ref: "#/components/schemas/FieldElement"
+          $ref: '#/components/schemas/FieldElement'
         signalHash:
-          $ref: "#/components/schemas/FieldElement"
+          $ref: '#/components/schemas/FieldElement'
         nullifierHash:
-          $ref: "#/components/schemas/FieldElement"
+          $ref: '#/components/schemas/FieldElement'
         externalNullifierHash:
-          $ref: "#/components/schemas/FieldElement"
+          $ref: '#/components/schemas/FieldElement'
         proof:
-          $ref: "#/components/schemas/SemaphoreProof"
+          $ref: '#/components/schemas/SemaphoreProof'
       required:
         - root
         - signalHash
@@ -174,7 +174,7 @@ components:
         root:
           type: string
         status:
-          $ref: "#/components/schemas/InclusionProofStatus"
+          $ref: '#/components/schemas/InclusionProofStatus'
         pendingValidAsOf:
           type: string
           format: date-time

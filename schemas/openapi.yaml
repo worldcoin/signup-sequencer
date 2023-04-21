@@ -154,19 +154,19 @@ components:
       properties:
         root:
           $ref: '#/components/schemas/FieldElement'
-        signal_hash:
+        signalHash:
           $ref: '#/components/schemas/FieldElement'
-        nullifier_hash:
+        nullifierHash:
           $ref: '#/components/schemas/FieldElement'
-        external_nullifier_hash:
+        externalNullifierHash:
           $ref: '#/components/schemas/FieldElement'
         proof:
           $ref: '#/components/schemas/SemaphoreProof'
       required:
         - root
-        - signal_hash
-        - nullifier_hash
-        - external_nullifier_hash
+        - signalHash
+        - nullifierHash
+        - externalNullifierHash
         - proof
     VerifySemaphoreProofResponse:
       type: object
@@ -175,10 +175,10 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/InclusionProofStatus'
-        pending_valid_as_of:
+        pendingValidAsOf:
           type: string
           format: date-time
-        mined_valid_as_of:
+        minedValidAsOf:
           type: string
           format: date-time
           nullable: true

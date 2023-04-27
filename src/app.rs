@@ -1,11 +1,10 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use hyper::StatusCode;
 use semaphore::{poseidon_tree::LazyPoseidonTree, protocol::verify_proof};
 use serde::Serialize;
-use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, instrument, warn};
 
@@ -37,7 +36,10 @@ impl From<InclusionProof> for InclusionProofResponse {
 
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
-        StatusCode::OK
+        match self.0.status {
+            Status::Pending => StatusCode::ACCEPTED,
+            Status::Mined => StatusCode::OK,
+        }
     }
 }
 

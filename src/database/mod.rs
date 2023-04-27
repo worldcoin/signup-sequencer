@@ -41,12 +41,14 @@ pub struct Database {
 impl Database {
     #[instrument(skip_all)]
     pub async fn new(options: Options) -> Result<Self, ErrReport> {
-        info!(url = %&options.database, "Connecting to database");
+        let mut redacted_db_url = options.database.clone();
+        _ = redacted_db_url.set_password(Some("********"));
+
+        info!(url = %&redacted_db_url, "Connecting to database");
 
         // Create database if requested and does not exist
         if options.database_migrate && !Any::database_exists(options.database.as_str()).await? {
-            warn!(url = %&options.database, "Database does not exist, creating
-        database");
+            warn!(url = %&redacted_db_url, "Database does not exist, creating database");
             Any::create_database(options.database.as_str()).await?;
         }
 
@@ -71,12 +73,12 @@ impl Database {
             .await
             .context("error getting database version")?
             .get::<String, _>(0);
-        info!(url = %&options.database, kind = ?pool.any_kind(), ?version, "Connected to database");
+        info!(url = %&redacted_db_url, kind = ?pool.any_kind(), ?version, "Connected to database");
 
         // Run migrations if requested.
         let latest = MIGRATOR.migrations.last().unwrap().version;
         if options.database_migrate {
-            info!(url = %&options.database, "Running migrations");
+            info!(url = %&redacted_db_url, "Running migrations");
             MIGRATOR.run(&pool).await?;
         }
 
@@ -85,7 +87,7 @@ impl Database {
         if let Some((version, dirty)) = pool.acquire().await?.version().await? {
             if dirty {
                 error!(
-                    url = %&options.database,
+                    url = %&redacted_db_url,
                     version,
                     expected = latest,
                     "Database is in incomplete migration state.",
@@ -93,7 +95,7 @@ impl Database {
                 return Err(anyhow!("Database is in incomplete migration state."));
             } else if version < latest {
                 error!(
-                    url = %&options.database,
+                    url = %&redacted_db_url,
                     version,
                     expected = latest,
                     "Database is not up to date, try rerunning with --database-migrate",
@@ -103,7 +105,7 @@ impl Database {
                 ));
             } else if version > latest {
                 error!(
-                    url = %&options.database,
+                    url = %&redacted_db_url,
                     version,
                     latest,
                     "Database version is newer than this version of the software, please update.",
@@ -113,13 +115,13 @@ impl Database {
                 ));
             }
             info!(
-                url = %&options.database,
+                url = %&redacted_db_url,
                 version,
                 latest,
                 "Database version is up to date.",
             );
         } else {
-            error!(url = %&options.database, "Could not get database version");
+            error!(url = %&redacted_db_url, "Could not get database version");
             return Err(anyhow!("Could not get database version."));
         }
 

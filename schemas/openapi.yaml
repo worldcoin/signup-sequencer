@@ -30,7 +30,7 @@ paths:
             schema:
               $ref: '#/components/schemas/IdentityCommitment'
       responses:
-        '200':
+        '202':
           description: 'Identity insert was successfully queued'
           content:
             application/json:
@@ -57,6 +57,12 @@ paths:
           description: 'A Merkle inclusion proof for an already inserted commitment'
           content:
             'application/json':
+              schema:
+                $ref: '#/components/schemas/InclusionProof'
+        '202':
+          description: 'A Merkle inclusion proof for a pending commitment'
+          content:
+            application/json:
               schema:
                 $ref: '#/components/schemas/InclusionProof'
         '400':

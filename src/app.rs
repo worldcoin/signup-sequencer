@@ -49,10 +49,7 @@ pub struct VerifySemaphoreProofResponse(RootItem);
 
 impl ToResponseCode for VerifySemaphoreProofResponse {
     fn to_response_code(&self) -> StatusCode {
-        match self.0.status {
-            Status::Pending => StatusCode::ACCEPTED,
-            Status::Mined => StatusCode::OK,
-        }
+        StatusCode::OK
     }
 }
 

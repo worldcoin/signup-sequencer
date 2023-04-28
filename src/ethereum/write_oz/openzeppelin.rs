@@ -43,8 +43,8 @@ impl OzRelay {
         Ok(Self {
             oz_api,
             transaction_validity: chrono::Duration::from_std(options.oz_transaction_validity)?,
-            send_timeout: Duration::from_secs(60),
-            mine_timeout: Duration::from_secs(60),
+            send_timeout: options.oz_send_timeout,
+            mine_timeout: options.oz_mine_timeout,
         })
     }
 

@@ -38,6 +38,12 @@ pub struct Options {
     /// seconds) Default: 7 days (7 * 24 * 60 * 60 = 604800 seconds)
     #[clap(long, env, value_parser=duration_from_str, default_value="604800")]
     pub oz_transaction_validity: Duration,
+
+    #[clap(long, env, value_parser=duration_from_str, default_value="60")]
+    pub oz_send_timeout: Duration,
+
+    #[clap(long, env, value_parser=duration_from_str, default_value="60")]
+    pub oz_mine_timeout: Duration,
 }
 
 #[derive(Debug)]

@@ -19,7 +19,7 @@ use crate::{
     prover::{
         batch_insertion,
         batch_insertion::ProverConfiguration,
-        map::{BatchSize, InsertionProverMap, ReadOnlyInsertionProver},
+        map::{InsertionProverMap, ReadOnlyInsertionProver},
         Proof, ReadOnlyProver,
     },
     server::error::Error as ServerError,
@@ -314,8 +314,12 @@ impl IdentityManager {
             .map_or(Err(ServerError::NoSuchBatchSize), |_| Ok(()))
     }
 
-    pub async fn list_batch_sizes(&self) -> Result<Vec<BatchSize>, ServerError> {
-        Ok(self.insertion_prover_map.read().await.as_batch_size_vec())
+    pub async fn list_batch_sizes(&self) -> Result<Vec<ProverConfiguration>, ServerError> {
+        Ok(self
+            .insertion_prover_map
+            .read()
+            .await
+            .as_configuration_vec())
     }
 }
 

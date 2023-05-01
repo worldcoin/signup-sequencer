@@ -1,8 +1,8 @@
-use serde::Serialize;
 use std::collections::BTreeMap;
 
 use crate::prover::batch_insertion;
 
+use crate::prover::batch_insertion::ProverConfiguration;
 use tokio::sync::{RwLock, RwLockReadGuard};
 
 /// The type of a map containing a mapping from a usize to a locked item.
@@ -57,10 +57,14 @@ impl<P> ProverMap<P> {
 }
 
 impl ProverMap<batch_insertion::Prover> {
-    pub fn as_batch_size_vec(&self) -> Vec<BatchSize> {
+    pub fn as_configuration_vec(&self) -> Vec<ProverConfiguration> {
         self.map
             .iter()
-            .map(|(k, v)| BatchSize::new(*k, v.url()))
+            .map(|(k, v)| ProverConfiguration {
+                url:        v.url(),
+                timeout_s:  v.timeout_s(),
+                batch_size: *k,
+            })
             .collect()
     }
 }
@@ -68,24 +72,6 @@ impl ProverMap<batch_insertion::Prover> {
 impl<P> From<BTreeMap<usize, P>> for ProverMap<P> {
     fn from(map: BTreeMap<usize, P>) -> Self {
         Self { map }
-    }
-}
-
-/// A representation of a batch size by configuration.
-#[derive(Serialize)]
-pub struct BatchSize {
-    batch_size: usize,
-    prover_url: String,
-}
-
-impl BatchSize {
-    pub fn new(batch_size: usize, url: impl ToString) -> Self {
-        let prover_url = url.to_string();
-
-        Self {
-            batch_size,
-            prover_url,
-        }
     }
 }
 

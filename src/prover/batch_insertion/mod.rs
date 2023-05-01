@@ -86,6 +86,7 @@ pub struct Prover {
     target_url: Url,
     client:     reqwest::Client,
     batch_size: usize,
+    timeout_s:  u64,
 }
 
 impl Prover {
@@ -96,6 +97,7 @@ impl Prover {
     pub fn new(options: &ProverConfiguration) -> anyhow::Result<Self> {
         let target_url = Url::parse(&options.url)?;
         let timeout_duration = Duration::from_secs(options.timeout_s);
+        let timeout_s = options.timeout_s;
         let batch_size = options.batch_size;
         let client = reqwest::Client::builder()
             .connect_timeout(timeout_duration)
@@ -105,6 +107,7 @@ impl Prover {
             target_url,
             client,
             batch_size,
+            timeout_s,
         };
 
         Ok(mtb)
@@ -112,6 +115,10 @@ impl Prover {
 
     pub fn batch_size(&self) -> usize {
         self.batch_size
+    }
+
+    pub fn timeout_s(&self) -> u64 {
+        self.timeout_s
     }
 
     /// Generates a proof term for the provided identity insertions into the

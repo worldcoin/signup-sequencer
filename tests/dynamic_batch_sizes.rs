@@ -138,12 +138,14 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         batch_size_json,
         json!([
             {
+                "url": second_prover.url() + "/",
+                "timeout_s": 3,
                 "batch_size": second_batch_size,
-                "prover_url": second_prover.url() + "/"
             },
             {
+                "url": prover_mock.url() + "/",
+                "timeout_s": 30,
                 "batch_size": batch_size,
-                "prover_url": prover_mock.url() + "/"
             }
         ])
     );

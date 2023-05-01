@@ -15,7 +15,7 @@ use crate::{
     ethereum::{self, Ethereum},
     identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
     prover,
-    prover::map::{make_insertion_map, BatchSize},
+    prover::{batch_insertion::ProverConfiguration, map::make_insertion_map},
     server::{error::Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
     task_monitor,
     task_monitor::{
@@ -42,10 +42,10 @@ impl ToResponseCode for InclusionProofResponse {
 
 #[derive(Serialize)]
 #[serde(transparent)]
-pub struct ListBatchSizesResponse(Vec<BatchSize>);
+pub struct ListBatchSizesResponse(Vec<ProverConfiguration>);
 
-impl From<Vec<BatchSize>> for ListBatchSizesResponse {
-    fn from(value: Vec<BatchSize>) -> Self {
+impl From<Vec<ProverConfiguration>> for ListBatchSizesResponse {
+    fn from(value: Vec<ProverConfiguration>) -> Self {
         Self(value)
     }
 }

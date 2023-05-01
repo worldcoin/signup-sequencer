@@ -15,7 +15,7 @@ use crate::{
     ethereum::{self, Ethereum},
     identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
     prover,
-    prover::map::make_insertion_map,
+    prover::map::{make_insertion_map, BatchSize},
     server::{error::Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
     task_monitor,
     task_monitor::{
@@ -35,6 +35,22 @@ impl From<InclusionProof> for InclusionProofResponse {
 }
 
 impl ToResponseCode for InclusionProofResponse {
+    fn to_response_code(&self) -> StatusCode {
+        StatusCode::OK
+    }
+}
+
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct ListBatchSizesResponse(Vec<BatchSize>);
+
+impl From<Vec<BatchSize>> for ListBatchSizesResponse {
+    fn from(value: Vec<BatchSize>) -> Self {
+        Self(value)
+    }
+}
+
+impl ToResponseCode for ListBatchSizesResponse {
     fn to_response_code(&self) -> StatusCode {
         StatusCode::OK
     }
@@ -250,7 +266,7 @@ impl App {
     /// Will return `Err` if the provided batch size already exists.
     pub async fn add_batch_size(
         &self,
-        url: impl Into<String>,
+        url: impl ToString,
         batch_size: usize,
         timeout_seconds: u64,
     ) -> Result<(), ServerError> {
@@ -264,6 +280,15 @@ impl App {
     /// Will return `Err` if the requested batch size does not exist.
     pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
         self.identity_manager.remove_batch_size(batch_size).await
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if something unknown went wrong.
+    pub async fn list_batch_sizes(&self) -> Result<ListBatchSizesResponse, ServerError> {
+        let batches = self.identity_manager.list_batch_sizes().await?;
+
+        Ok(ListBatchSizesResponse::from(batches))
     }
 
     /// # Errors

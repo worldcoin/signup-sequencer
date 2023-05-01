@@ -111,7 +111,7 @@ impl ToResponseCode for () {
 
 /// Parse a [`Request<Body>`] as JSON using Serde and handle using the provided
 /// method.
-async fn json_middleware<F, T, S, U>(
+async fn json_middleware_post<F, T, S, U>(
     request: Request<Body>,
     mut next: F,
 ) -> Result<Response<Body>, Error>
@@ -141,6 +141,23 @@ where
     Ok(response)
 }
 
+/// Handle a `GET` request using the provided function.
+async fn json_middleware_get<F, S, U>(mut next: F) -> Result<Response<Body>, Error>
+where
+    F: FnMut() -> S + Send,
+    S: Future<Output = Result<U, Error>> + Send,
+    U: Serialize + ToResponseCode,
+{
+    let response = next().await?;
+    let json = serde_json::to_string_pretty(&response)?;
+    let response = Response::builder()
+        .status(response.to_response_code())
+        .header(header::CONTENT_TYPE, CONTENT_JSON)
+        .body(Body::from(json))
+        .map_err(Error::Http)?;
+    Ok(response)
+}
+
 #[instrument(level="info", name="api_request", skip(app), fields(http.uri=%request.uri(), http.method=%request.method()))]
 async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
     trace_from_headers(request.headers());
@@ -153,28 +170,28 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
     // Route requests
     let result = match (request.method(), request.uri().path()) {
         (&Method::POST, "/verifySemaphoreProof") => {
-            json_middleware(request, |request: VerifySemaphoreProofRequest| {
+            json_middleware_post(request, |request: VerifySemaphoreProofRequest| {
                 let app = app.clone();
                 async move { app.verify_semaphore_proof(&request).await }
             })
             .await
         }
         (&Method::POST, "/inclusionProof") => {
-            json_middleware(request, |request: InclusionProofRequest| {
+            json_middleware_post(request, |request: InclusionProofRequest| {
                 let app = app.clone();
                 async move { app.inclusion_proof(&request.identity_commitment).await }
             })
             .await
         }
         (&Method::POST, "/insertIdentity") => {
-            json_middleware(request, |request: InsertCommitmentRequest| {
+            json_middleware_post(request, |request: InsertCommitmentRequest| {
                 let app = app.clone();
                 async move { app.insert_identity(request.identity_commitment).await }
             })
             .await
         }
         (&Method::POST, "/addBatchSize") => {
-            json_middleware(request, |request: AddBatchSizeRequest| {
+            json_middleware_post(request, |request: AddBatchSizeRequest| {
                 let app = app.clone();
                 async move {
                     app.add_batch_size(request.url, request.batch_size, request.timeout_seconds)
@@ -184,9 +201,16 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
             .await
         }
         (&Method::POST, "/removeBatchSize") => {
-            json_middleware(request, |request: RemoveBatchSizeRequest| {
+            json_middleware_post(request, |request: RemoveBatchSizeRequest| {
                 let app = app.clone();
                 async move { app.remove_batch_size(request.batch_size).await }
+            })
+            .await
+        }
+        (&Method::GET, "/listBatchSizes") => {
+            json_middleware_get(|| {
+                let app = app.clone();
+                async move { app.list_batch_sizes().await }
             })
             .await
         }

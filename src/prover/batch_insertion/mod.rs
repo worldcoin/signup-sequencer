@@ -181,6 +181,10 @@ impl Prover {
 
         Ok(proof)
     }
+
+    pub fn url(&self) -> String {
+        self.target_url.to_string()
+    }
 }
 
 /// Computes the input hash to the prover.

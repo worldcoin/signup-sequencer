@@ -2,6 +2,9 @@ mod common;
 
 use crate::common::{test_add_batch_size, test_remove_batch_size};
 use common::prelude::*;
+use hyper::Uri;
+
+use std::str::FromStr;
 
 const SUPPORTED_DEPTH: usize = 20;
 
@@ -117,9 +120,40 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         .await
         .expect("Failed to add batch size.");
 
+    // Query for the available provers.
+    let batch_sizes_uri: Uri =
+        Uri::from_str(&format!("{}/listBatchSizes", uri.as_str())).expect("Unable to parse URI.");
+    let mut batch_sizes = client
+        .get(batch_sizes_uri)
+        .await
+        .expect("Failed to execute get request");
+    let batch_sizes_bytes = hyper::body::to_bytes(batch_sizes.body_mut())
+        .await
+        .expect("Failed to get response bytes");
+    let batch_size_str = String::from_utf8(batch_sizes_bytes.into_iter().collect())
+        .expect("Failed to decode response");
+    let batch_size_json =
+        serde_json::from_str::<serde_json::Value>(&batch_size_str).expect("JSON wasn't decoded");
+    assert_eq!(
+        batch_size_json,
+        json!([
+            {
+                "batch_size": second_batch_size,
+                "prover_url": second_prover.url() + "/"
+            },
+            {
+                "batch_size": batch_size,
+                "prover_url": prover_mock.url() + "/"
+            }
+        ])
+    );
+
     // Insert enough identities to trigger the lower batch size.
+    prover_mock.set_availability(false).await;
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 3).await;
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 4).await;
+
+    // Force a timeout by resetting the tokio runtime's timer.
     tokio::time::pause();
     tokio::time::resume();
 

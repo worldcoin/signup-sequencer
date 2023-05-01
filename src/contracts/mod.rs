@@ -19,7 +19,7 @@ use crate::{
     prover::{
         batch_insertion,
         batch_insertion::ProverConfiguration,
-        map::{InsertionProverMap, ReadOnlyInsertionProver},
+        map::{BatchSize, InsertionProverMap, ReadOnlyInsertionProver},
         Proof, ReadOnlyProver,
     },
     server::error::Error as ServerError,
@@ -277,7 +277,7 @@ impl IdentityManager {
     /// Will return `Err` if the provided batch size already exists.
     pub async fn add_batch_size(
         &self,
-        url: impl Into<String>,
+        url: impl ToString,
         batch_size: usize,
         timeout_seconds: u64,
     ) -> Result<(), ServerError> {
@@ -288,7 +288,7 @@ impl IdentityManager {
         }
 
         let prover = batch_insertion::Prover::new(&ProverConfiguration {
-            url: url.into(),
+            url: url.to_string(),
             batch_size,
             timeout_s: timeout_seconds,
         })?;
@@ -312,6 +312,10 @@ impl IdentityManager {
 
         map.remove(batch_size)
             .map_or(Err(ServerError::NoSuchBatchSize), |_| Ok(()))
+    }
+
+    pub async fn list_batch_sizes(&self) -> Result<Vec<BatchSize>, ServerError> {
+        Ok(self.insertion_prover_map.read().await.as_batch_size_vec())
     }
 }
 

@@ -2,7 +2,7 @@
 # `act --container-architecture linux/amd64 -v -j build_and_push`
 # [act]: https://github.com/nektos/act
 
-name: Build, Test & Deploy
+name: Tests & linter
 
 on:
   push:

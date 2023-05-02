@@ -56,6 +56,7 @@ pub enum Error {
 
 impl Error {
     #[allow(clippy::enum_glob_use)]
+    #[must_use]
     pub fn to_response(&self) -> hyper::Response<Body> {
         use Error::*;
 

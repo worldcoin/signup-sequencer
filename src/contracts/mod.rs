@@ -310,8 +310,10 @@ impl IdentityManager {
             return Err(ServerError::CannotRemoveLastBatchSize);
         }
 
-        map.remove(batch_size)
-            .map_or(Err(ServerError::NoSuchBatchSize), |_| Ok(()))
+        match map.remove(batch_size) {
+            Some(_) => Ok(()),
+            None => Err(ServerError::NoSuchBatchSize),
+        }
     }
 
     pub async fn list_batch_sizes(&self) -> Result<Vec<ProverConfiguration>, ServerError> {

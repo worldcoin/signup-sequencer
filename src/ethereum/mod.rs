@@ -227,7 +227,7 @@ impl Ethereum {
         // the retry policy?
         let (provider, chain_id, eip1559) = {
             info!(
-                provider = %&options.ethereum_provider,
+                provider_domain = &options.ethereum_provider.domain(),
                 "Connecting to Ethereum"
             );
             let transport = Transport::new(options.ethereum_provider).await?;

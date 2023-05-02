@@ -69,6 +69,7 @@ pub async fn spawn_mock_chain(
         )
         .resolve()
         .unwrap();
+
     if verifier_bytecode_object.is_unlinked() {
         panic!("Could not link the Pairing library into the Verifier.");
     }

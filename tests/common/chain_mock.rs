@@ -62,10 +62,13 @@ pub async fn spawn_mock_chain(
     let verifier_path = "./sol/SemaphoreVerifier.json";
     let verifier_file =
         File::open(verifier_path).unwrap_or_else(|_| panic!("Failed to open `{verifier_path}`"));
+
     let verifier_contract_json: CompiledContract =
         serde_json::from_reader(BufReader::new(verifier_file))
             .unwrap_or_else(|_| panic!("Could not parse the compiled contract at {verifier_path}"));
+
     let mut verifier_bytecode_object: BytecodeObject = verifier_contract_json.bytecode.object;
+
     verifier_bytecode_object
         .link_fully_qualified(
             "lib/semaphore/packages/contracts/contracts/base/Pairing.sol:Pairing",
@@ -73,6 +76,7 @@ pub async fn spawn_mock_chain(
         )
         .resolve()
         .unwrap();
+
     if verifier_bytecode_object.is_unlinked() {
         panic!("Could not link the Pairing library into the Verifier.");
     }
@@ -80,16 +84,21 @@ pub async fn spawn_mock_chain(
     let bytecode_bytes = verifier_bytecode_object.as_bytes().unwrap_or_else(|| {
         panic!("Could not parse the bytecode for the contract at {verifier_path}")
     });
+
     let verifier_factory = ContractFactory::new(
         verifier_contract_json.abi,
         bytecode_bytes.clone(),
         client.clone(),
     );
+
+    info!("Deploying semaphore verifier");
     let semaphore_verifier = verifier_factory.deploy(())?.confirmations(0usize).send();
 
     // The rest of the contracts can be deployed to the mock chain normally.
     let mock_state_bridge_factory =
         load_and_build_contract("./sol/SimpleStateBridge.json", client.clone())?;
+
+    info!("Deploying mock state bridge");
     let mock_state_bridge = mock_state_bridge_factory
         .deploy(())?
         .confirmations(0usize)
@@ -97,6 +106,8 @@ pub async fn spawn_mock_chain(
 
     let mock_verifier_factory =
         load_and_build_contract("./sol/SequencerVerifier.json", client.clone())?;
+
+    info!("Deploying mock verifier");
     let mock_verifier = mock_verifier_factory
         .deploy(())?
         .confirmations(0usize)
@@ -104,6 +115,8 @@ pub async fn spawn_mock_chain(
 
     let unimplemented_verifier_factory =
         load_and_build_contract("./sol/UnimplementedTreeVerifier.json", client.clone())?;
+
+    info!("Deploying unimplemented verifier");
     let unimplemented_verifier = unimplemented_verifier_factory
         .deploy(())?
         .confirmations(0usize)
@@ -116,10 +129,16 @@ pub async fn spawn_mock_chain(
         unimplemented_verifier
     );
 
+    info!("Deploying stuff done!");
+
     let semaphore_verifier = semaphore_verifier?;
+    info!("semaphore!");
     let mock_state_bridge = mock_state_bridge?;
+    info!("mock state bridge!");
     let mock_verifier = mock_verifier?;
+    info!("mock verifier!");
     let unimplemented_verifier = unimplemented_verifier?;
+    info!("unimplemented verifier!");
 
     let verifier_lookup_table_factory =
         load_and_build_contract("./sol/VerifierLookupTable.json", client.clone())?;

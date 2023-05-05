@@ -139,13 +139,15 @@ pub async fn spawn_mock_chain(
         .clone()
         .deploy((first_batch_size as u64, mock_verifier.address()))?
         .confirmations(0usize)
-        .send();
+        .send()
+        .await?;
 
     info!("Spawning verifier update lookup table");
     let update_verifiers = verifier_lookup_table_factory
         .deploy((first_batch_size as u64, unimplemented_verifier.address()))?
         .confirmations(0usize)
-        .send();
+        .send()
+        .await?;
 
     let identity_manager_impl_factory =
         load_and_build_contract("./sol/WorldIDIdentityManagerImplV1.json", client.clone())?;
@@ -154,16 +156,8 @@ pub async fn spawn_mock_chain(
     let identity_manager_impl = identity_manager_impl_factory
         .deploy(())?
         .confirmations(0usize)
-        .send();
-
-    let (insert_verifiers, update_verifiers, identity_manager_impl) =
-        tokio::join!(insert_verifiers, update_verifiers, identity_manager_impl);
-
-    info!("Awaited all");
-
-    let insert_verifiers = insert_verifiers?;
-    let update_verifiers = update_verifiers?;
-    let identity_manager_impl = identity_manager_impl?;
+        .send()
+        .await?;
 
     info!("Spawning verifiers");
     // TODO: This is sequential but could be parallelized.

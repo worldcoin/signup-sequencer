@@ -146,8 +146,8 @@ impl Error {
             IndexOutOfBounds
             | IdentityCommitmentNotFound
             | InvalidCommitment
-            | DuplicateCommitment
             | InvalidSerialization(_) => StatusCode::BAD_REQUEST,
+            DuplicateCommitment => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         hyper::Response::builder()

@@ -92,7 +92,11 @@ pub async fn spawn_mock_chain(
     );
 
     info!("Deploying semaphore verifier");
-    let semaphore_verifier = verifier_factory.deploy(())?.confirmations(0usize).send();
+    let semaphore_verifier = verifier_factory
+        .deploy(())?
+        .confirmations(0usize)
+        .send()
+        .await?;
 
     // The rest of the contracts can be deployed to the mock chain normally.
     let mock_state_bridge_factory =
@@ -102,7 +106,8 @@ pub async fn spawn_mock_chain(
     let mock_state_bridge = mock_state_bridge_factory
         .deploy(())?
         .confirmations(0usize)
-        .send();
+        .send()
+        .await?;
 
     let mock_verifier_factory =
         load_and_build_contract("./sol/SequencerVerifier.json", client.clone())?;
@@ -111,7 +116,8 @@ pub async fn spawn_mock_chain(
     let mock_verifier = mock_verifier_factory
         .deploy(())?
         .confirmations(0usize)
-        .send();
+        .send()
+        .await?;
 
     let unimplemented_verifier_factory =
         load_and_build_contract("./sol/UnimplementedTreeVerifier.json", client.clone())?;
@@ -120,25 +126,8 @@ pub async fn spawn_mock_chain(
     let unimplemented_verifier = unimplemented_verifier_factory
         .deploy(())?
         .confirmations(0usize)
-        .send();
-
-    let (semaphore_verifier, mock_state_bridge, mock_verifier, unimplemented_verifier) = tokio::join!(
-        semaphore_verifier,
-        mock_state_bridge,
-        mock_verifier,
-        unimplemented_verifier
-    );
-
-    info!("Deploying stuff done!");
-
-    let semaphore_verifier = semaphore_verifier?;
-    info!("semaphore!");
-    let mock_state_bridge = mock_state_bridge?;
-    info!("mock state bridge!");
-    let mock_verifier = mock_verifier?;
-    info!("mock verifier!");
-    let unimplemented_verifier = unimplemented_verifier?;
-    info!("unimplemented verifier!");
+        .send()
+        .await?;
 
     let verifier_lookup_table_factory =
         load_and_build_contract("./sol/VerifierLookupTable.json", client.clone())?;

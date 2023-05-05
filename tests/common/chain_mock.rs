@@ -46,8 +46,6 @@ pub async fn spawn_mock_chain(
     let client = NonceManagerMiddleware::new(client, wallet.address());
     let client = Arc::new(client);
 
-    info!("Spawning the pairing library");
-
     // Loading the semaphore verifier contract is special as it requires replacing
     // the address of the Pairing library.
     let pairing_library_factory = load_and_build_contract("./sol/Pairing.json", client.clone())?;
@@ -56,8 +54,6 @@ pub async fn spawn_mock_chain(
         .confirmations(0usize)
         .send()
         .await?;
-
-    info!("Pairing library spawned");
 
     let verifier_path = "./sol/SemaphoreVerifier.json";
     let verifier_file =
@@ -91,7 +87,6 @@ pub async fn spawn_mock_chain(
         client.clone(),
     );
 
-    info!("Deploying semaphore verifier");
     let semaphore_verifier = verifier_factory
         .deploy(())?
         .confirmations(0usize)
@@ -102,7 +97,6 @@ pub async fn spawn_mock_chain(
     let mock_state_bridge_factory =
         load_and_build_contract("./sol/SimpleStateBridge.json", client.clone())?;
 
-    info!("Deploying mock state bridge");
     let mock_state_bridge = mock_state_bridge_factory
         .deploy(())?
         .confirmations(0usize)
@@ -112,7 +106,6 @@ pub async fn spawn_mock_chain(
     let mock_verifier_factory =
         load_and_build_contract("./sol/SequencerVerifier.json", client.clone())?;
 
-    info!("Deploying mock verifier");
     let mock_verifier = mock_verifier_factory
         .deploy(())?
         .confirmations(0usize)
@@ -122,7 +115,6 @@ pub async fn spawn_mock_chain(
     let unimplemented_verifier_factory =
         load_and_build_contract("./sol/UnimplementedTreeVerifier.json", client.clone())?;
 
-    info!("Deploying unimplemented verifier");
     let unimplemented_verifier = unimplemented_verifier_factory
         .deploy(())?
         .confirmations(0usize)
@@ -134,7 +126,6 @@ pub async fn spawn_mock_chain(
 
     let first_batch_size = batch_sizes[0];
 
-    info!("Spawning verifier insert lookup table");
     let insert_verifiers = verifier_lookup_table_factory
         .clone()
         .deploy((first_batch_size as u64, mock_verifier.address()))?
@@ -142,7 +133,6 @@ pub async fn spawn_mock_chain(
         .send()
         .await?;
 
-    info!("Spawning verifier update lookup table");
     let update_verifiers = verifier_lookup_table_factory
         .deploy((first_batch_size as u64, unimplemented_verifier.address()))?
         .confirmations(0usize)
@@ -152,17 +142,12 @@ pub async fn spawn_mock_chain(
     let identity_manager_impl_factory =
         load_and_build_contract("./sol/WorldIDIdentityManagerImplV1.json", client.clone())?;
 
-    info!("Spawning identity manager");
     let identity_manager_impl = identity_manager_impl_factory
         .deploy(())?
         .confirmations(0usize)
         .send()
         .await?;
 
-    info!("Spawning verifiers");
-    // TODO: This is sequential but could be parallelized.
-    // but for now it's only multiple batch sizes for one test so I don't wanna do
-    // it now.
     for batch_size in &batch_sizes[1..] {
         let batch_size = *batch_size as u64;
 
@@ -173,7 +158,6 @@ pub async fn spawn_mock_chain(
             .await?
             .await?;
     }
-    info!("Verifiers spawned");
 
     let identity_manager_factory =
         load_and_build_contract("./sol/WorldIDIdentityManager.json", client.clone())?;
@@ -192,14 +176,11 @@ pub async fn spawn_mock_chain(
     };
     let init_call_encoded: Bytes = Bytes::from(init_call_data.encode());
 
-    info!("Spawning identity manager");
     let identity_manager_contract = identity_manager_factory
         .deploy((identity_manager_impl_address, init_call_encoded))?
         .confirmations(0usize)
         .send()
         .await?;
-
-    info!("Identity manager spawned");
 
     let identity_manager: SpecialisedContract = Contract::new(
         identity_manager_contract.address(),

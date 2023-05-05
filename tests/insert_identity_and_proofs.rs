@@ -21,8 +21,6 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let (mock_chain, db_container, prover_map) =
         spawn_deps(initial_root, &[batch_size], tree_depth).await?;
 
-    info!("Dependencies have been spawned");
-
     let prover_mock = &prover_map[&batch_size];
 
     let port = db_container.port();
@@ -58,12 +56,9 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
 
     options.app.ethereum.write_options.signing_key = mock_chain.private_key;
 
-    info!("Spawning the app");
     let (app, local_addr) = spawn_app(options.clone())
         .await
         .expect("Failed to spawn app.");
-
-    info!("App spawned");
 
     let test_identities = generate_test_identities(batch_size * 3);
     let identities_ref: Vec<Field> = test_identities

@@ -298,6 +298,8 @@ impl App {
         Ok(ListBatchSizesResponse::from(batches))
     }
 
+    // TODO: Save batch size
+
     /// # Errors
     ///
     /// Will return `Err` if the provided index is out of bounds.

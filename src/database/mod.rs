@@ -346,6 +346,14 @@ impl Database {
             })
             .collect::<Vec<(u64, String, u64)>>())
     }
+
+    pub async fn write_prover(&self) -> Result<(), Error> {
+        unimplemented!()
+    }
+
+    pub async fn remove_prover(&self) -> Result<(), Error> {
+        unimplemented!()
+    }
 }
 
 #[derive(Debug, Error)]

@@ -325,6 +325,27 @@ impl Database {
         let result = self.pool.fetch_one(query).await?;
         Ok(result.get::<i64, _>(0) as i32)
     }
+
+    pub async fn get_prover_history(&self) -> Result<Vec<(u64, String, u64)>, Error> {
+        let query = sqlx::query(
+            r#"
+                SELECT batch_size, url, timeout_s
+                FROM provers
+            "#,
+        );
+
+        let result = self.pool.fetch_all(query).await?;
+
+        Ok(result
+            .iter()
+            .map(|row| {
+                let batch_size = row.get::<i64, _>(0) as u64;
+                let url = row.get::<String, _>(1);
+                let timeout_s = row.get::<i64, _>(2) as u64;
+                (batch_size, url, timeout_s)
+            })
+            .collect::<Vec<(u64, String, u64)>>())
+    }
 }
 
 #[derive(Debug, Error)]

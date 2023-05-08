@@ -323,6 +323,17 @@ impl IdentityManager {
             .await
             .as_configuration_vec())
     }
+
+    // Only way that add_batch_size can fail is if the batch_size already exists
+    // but that should not happen because this is called on app init
+    // also even if it errors with batch already existing, that shouldn't be a
+    // problem
+    pub async fn restore_prover_history(&self, provers: Vec<(u64, String, u64)>) {
+        for prover in provers {
+            self.add_batch_size(prover.1, prover.0 as usize, prover.2)
+                .await;
+        }
+    }
 }
 
 /// A type for an identity manager object that can be sent across threads.

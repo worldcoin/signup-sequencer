@@ -23,6 +23,7 @@ use crate::{
 };
 
 mod api_metrics_layer;
+mod extract_trace_layer;
 mod timeout_layer;
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
@@ -239,6 +240,7 @@ pub async fn bind_from_listener(
             serve_timeout,
             timeout_layer::middleware,
         ))
+        .layer(middleware::from_fn(extract_trace_layer::middleware))
         .with_state(app.clone());
 
     let server = axum::Server::from_tcp(listener)?

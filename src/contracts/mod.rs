@@ -277,7 +277,7 @@ impl IdentityManager {
     /// Will return `Err` if the provided batch size already exists.
     pub async fn add_batch_size(
         &self,
-        url: impl ToString,
+        url: &impl ToString,
         batch_size: usize,
         timeout_seconds: u64,
     ) -> Result<(), ServerError> {
@@ -330,7 +330,7 @@ impl IdentityManager {
     // problem
     pub async fn restore_prover_history(&self, provers: Vec<(u64, String, u64)>) {
         for prover in provers {
-            self.add_batch_size(prover.1, prover.0 as usize, prover.2)
+            self.add_batch_size(&prover.1, prover.0 as usize, prover.2)
                 .await;
         }
     }

@@ -347,12 +347,47 @@ impl Database {
             .collect::<Vec<(u64, String, u64)>>())
     }
 
-    pub async fn write_prover(&self) -> Result<(), Error> {
-        unimplemented!()
+    pub async fn write_prover(
+        &self,
+        batch_size: usize,
+        url: impl ToString,
+        timeout_seconds: u64,
+    ) -> Result<(), Error> {
+        let mut tx = self.pool.begin().await?;
+        let url = url.to_string();
+
+        let query = sqlx::query(
+            r#"
+                INSERT INTO provers (batch_size, url, timeout_s)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (batch_size)
+                DO UPDATE SET (url, timeout_s) = ($2, $3)
+            "#,
+        )
+        .bind(batch_size as i64)
+        .bind(url)
+        .bind(timeout_seconds as i64);
+
+        tx.execute(query).await?;
+        tx.commit().await?;
+
+        Ok(())
     }
 
-    pub async fn remove_prover(&self) -> Result<(), Error> {
-        unimplemented!()
+    pub async fn remove_prover(&self, batch_size: usize) -> Result<(), Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let query = sqlx::query(
+            r#"
+              DELETE FROM provers WHERE batch_size = $1  
+            "#,
+        )
+        .bind(batch_size as i64);
+
+        tx.execute(query).await?;
+        tx.commit().await?;
+
+        Ok(())
     }
 }
 

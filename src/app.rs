@@ -271,6 +271,7 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if the provided batch size already exists.
+    /// Will return `Err` if the batch size fails to write to database.
     pub async fn add_batch_size(
         &self,
         url: impl ToString,
@@ -278,15 +279,26 @@ impl App {
         timeout_seconds: u64,
     ) -> Result<(), ServerError> {
         self.identity_manager
-            .add_batch_size(url, batch_size, timeout_seconds)
-            .await
+            .add_batch_size(&url, batch_size, timeout_seconds)
+            .await?;
+
+        self.database
+            .write_prover(batch_size, url, timeout_seconds)
+            .await?;
+
+        Ok(())
     }
 
     /// # Errors
     ///
     /// Will return `Err` if the requested batch size does not exist.
+    /// Will return `Err` if batch size fails to be removed from database.
     pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
-        self.identity_manager.remove_batch_size(batch_size).await
+        self.identity_manager.remove_batch_size(batch_size).await?;
+
+        self.database.remove_prover(batch_size).await?;
+
+        Ok(())
     }
 
     /// # Errors
@@ -297,8 +309,6 @@ impl App {
 
         Ok(ListBatchSizesResponse::from(batches))
     }
-
-    // TODO: Save batch size
 
     /// # Errors
     ///

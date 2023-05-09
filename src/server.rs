@@ -8,14 +8,11 @@ use anyhow::{bail, ensure, Error as EyreError, Result as AnyhowResult};
 use axum::{extract::State, middleware, response::IntoResponse, routing::post, Json, Router};
 use clap::Parser;
 use cli_batteries::await_shutdown;
-use hyper::{Method, StatusCode};
+use hyper::StatusCode;
 use semaphore::{protocol::Proof, Field};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tower_http::{
-    cors::{Any, CorsLayer},
-    trace::TraceLayer,
-};
+use tower_http::trace::TraceLayer;
 use tracing::{error, instrument};
 use url::{Host, Url};
 
@@ -226,10 +223,6 @@ pub async fn main(app: Arc<App>, options: Options) -> AnyhowResult<()> {
 ///
 /// Will return `Err` if the provided `listener` address cannot be accessed or
 /// if the server fails to bind to the given address.
-///
-/// # Panics
-///
-/// Panics if the request handler exceeds the provided `serve_timeout`.
 pub async fn bind_from_listener(
     app: Arc<App>,
     serve_timeout: Duration,
@@ -240,13 +233,6 @@ pub async fn bind_from_listener(
         .route("/inclusionProof", post(inclusion_proof))
         .route("/insertIdentity", post(insert_identity))
         .layer(TraceLayer::new_for_http())
-        .layer(
-            // TODO: Configurable via the ENV or cli?
-            CorsLayer::new()
-                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers(Any)
-                .allow_origin(Any),
-        )
         // Custom layers
         .layer(middleware::from_fn(api_metrics_layer::middleware))
         .layer(middleware::from_fn_with_state(

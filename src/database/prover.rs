@@ -1,17 +1,10 @@
+use sqlx::FromRow;
+
 pub type Provers = Vec<Prover>;
 
+#[derive(FromRow)]
 pub struct Prover {
     pub url:        String,
-    pub batch_size: u64,
-    pub timeout_s:  u64,
-}
-
-impl Prover {
-    pub async fn new(url: impl ToString, batch_size: u64, timeout_s: u64) -> Prover {
-        Self {
-            url: url.to_string(),
-            batch_size,
-            timeout_s,
-        }
-    }
+    pub batch_size: i64,
+    pub timeout_s:  i64,
 }

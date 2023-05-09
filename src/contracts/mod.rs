@@ -15,7 +15,7 @@ use tracing::{error, info, instrument, warn};
 
 use self::abi::BatchingContract as ContractAbi;
 use crate::{
-    database::prover::{Prover, Provers},
+    database::prover::Provers,
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
     prover::{
         batch_insertion,
@@ -330,7 +330,11 @@ impl IdentityManager {
         let mut failed_prover_count: usize = 0;
         for prover in provers {
             if let Err(_) = self
-                .add_batch_size(&prover.url, prover.batch_size as usize, prover.timeout_s)
+                .add_batch_size(
+                    &prover.url,
+                    prover.batch_size as usize,
+                    prover.timeout_s as u64,
+                )
                 .await
             {
                 failed_prover_count += 1;

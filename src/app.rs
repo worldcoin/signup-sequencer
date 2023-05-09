@@ -129,12 +129,10 @@ impl App {
         let identity_manager = Arc::new(identity_manager);
         let database = Arc::new(db);
 
-        let prover_history = database.get_prover_history().await?;
+        let provers = database.get_provers().await?;
 
         // restore prover state from previus shutdown
-        identity_manager
-            .restore_prover_history(prover_history)
-            .await?;
+        identity_manager.restore_provers(provers).await?;
 
         // Await for all pending transactions
         identity_manager.await_clean_slate().await?;

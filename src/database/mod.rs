@@ -13,6 +13,8 @@ use url::Url;
 
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
+pub mod prover;
+
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 
@@ -326,7 +328,7 @@ impl Database {
         Ok(result.get::<i64, _>(0) as i32)
     }
 
-    pub async fn get_prover_history(&self) -> Result<Vec<(u64, String, u64)>, Error> {
+    pub async fn get_provers(&self) -> Result<prover::Provers, Error> {
         let query = sqlx::query(
             r#"
                 SELECT batch_size, url, timeout_s
@@ -342,9 +344,13 @@ impl Database {
                 let batch_size = row.get::<i64, _>(0) as u64;
                 let url = row.get::<String, _>(1);
                 let timeout_s = row.get::<i64, _>(2) as u64;
-                (batch_size, url, timeout_s)
+                prover::Prover {
+                    url,
+                    batch_size,
+                    timeout_s,
+                }
             })
-            .collect::<Vec<(u64, String, u64)>>())
+            .collect::<prover::Provers>())
     }
 
     pub async fn write_prover(

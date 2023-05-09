@@ -15,6 +15,7 @@ use tracing::{error, info, instrument, warn};
 
 use self::abi::BatchingContract as ContractAbi;
 use crate::{
+    database::prover::{Prover, Provers},
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
     prover::{
         batch_insertion,
@@ -325,14 +326,11 @@ impl IdentityManager {
     }
 
     // TODO: Create a type for provers
-    pub async fn restore_prover_history(
-        &self,
-        provers: Vec<(u64, String, u64)>,
-    ) -> Result<(), ServerError> {
+    pub async fn restore_provers(&self, provers: Provers) -> Result<(), ServerError> {
         let mut failed_prover_count: usize = 0;
         for prover in provers {
             if let Err(_) = self
-                .add_batch_size(&prover.1, prover.0 as usize, prover.2)
+                .add_batch_size(&prover.url, prover.batch_size as usize, prover.timeout_s)
                 .await
             {
                 failed_prover_count += 1;

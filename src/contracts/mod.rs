@@ -324,13 +324,14 @@ impl IdentityManager {
             .as_configuration_vec())
     }
 
+    // TODO: Create a type for provers
     pub async fn restore_prover_history(
         &self,
         provers: Vec<(u64, String, u64)>,
     ) -> Result<(), ServerError> {
         let mut failed_prover_count: usize = 0;
         for prover in provers {
-            if let Err(e) = self
+            if let Err(_) = self
                 .add_batch_size(&prover.1, prover.0 as usize, prover.2)
                 .await
             {

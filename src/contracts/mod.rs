@@ -325,17 +325,20 @@ impl IdentityManager {
             .as_configuration_vec())
     }
 
-    // TODO: Create a type for provers
+    // set clippy to allow truncation and sign_loss is probably okay here
+    // since batch_size should never be negative
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub async fn restore_provers(&self, provers: Provers) -> Result<(), ServerError> {
         let mut failed_prover_count: usize = 0;
         for prover in provers {
-            if let Err(_) = self
+            if self
                 .add_batch_size(
                     &prover.url,
                     prover.batch_size as usize,
                     prover.timeout_s as u64,
                 )
                 .await
+                .is_err()
             {
                 failed_prover_count += 1;
             }

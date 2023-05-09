@@ -134,7 +134,7 @@ impl App {
         // restore prover state from previus shutdown
         identity_manager
             .restore_prover_history(prover_history)
-            .await;
+            .await?;
 
         // Await for all pending transactions
         identity_manager.await_clean_slate().await?;

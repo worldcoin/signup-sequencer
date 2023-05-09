@@ -50,6 +50,8 @@ pub enum Error {
     NoSuchBatchSize,
     #[error("The last batch size cannot be removed")]
     CannotRemoveLastBatchSize,
+    #[error("Some provers have failed to be restored ({0}).")]
+    ProverRestoreError(usize),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

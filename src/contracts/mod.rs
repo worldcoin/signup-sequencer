@@ -324,15 +324,24 @@ impl IdentityManager {
             .as_configuration_vec())
     }
 
-    // Only way that add_batch_size can fail is if the batch_size already exists
-    // but that should not happen because this is called on app init
-    // also even if it errors with batch already existing, that shouldn't be a
-    // problem
-    pub async fn restore_prover_history(&self, provers: Vec<(u64, String, u64)>) {
+    pub async fn restore_prover_history(
+        &self,
+        provers: Vec<(u64, String, u64)>,
+    ) -> Result<(), ServerError> {
+        let mut failed_prover_count: usize = 0;
         for prover in provers {
-            self.add_batch_size(&prover.1, prover.0 as usize, prover.2)
-                .await;
+            if let Err(e) = self
+                .add_batch_size(&prover.1, prover.0 as usize, prover.2)
+                .await
+            {
+                failed_prover_count += 1;
+            }
         }
+
+        if failed_prover_count > 0 {
+            return Err(ServerError::ProverRestoreError(failed_prover_count));
+        }
+        Ok(())
     }
 }
 

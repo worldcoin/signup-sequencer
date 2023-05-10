@@ -15,7 +15,6 @@ use tracing::{error, info, instrument, warn};
 
 use self::abi::BatchingContract as ContractAbi;
 use crate::{
-    database::prover::Provers,
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
     prover::{
         batch_insertion,
@@ -325,29 +324,8 @@ impl IdentityManager {
             .as_configuration_vec())
     }
 
-    // set clippy to allow truncation and sign_loss is probably okay here
-    // since batch_size should never be negative
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    pub async fn restore_provers(&self, provers: Provers) -> Result<(), ServerError> {
-        let mut failed_prover_count: usize = 0;
-        for prover in provers {
-            if self
-                .add_batch_size(
-                    &prover.url,
-                    prover.batch_size as usize,
-                    prover.timeout_s as u64,
-                )
-                .await
-                .is_err()
-            {
-                failed_prover_count += 1;
-            }
-        }
-
-        if failed_prover_count > 0 {
-            return Err(ServerError::ProverRestoreError(failed_prover_count));
-        }
-        Ok(())
+    pub async fn has_provers(&self) -> bool {
+        self.insertion_prover_map.read().await.len() > 0
     }
 }
 

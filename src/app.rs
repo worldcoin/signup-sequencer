@@ -119,20 +119,17 @@ impl App {
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         let ethereum = Ethereum::new(options.ethereum);
         let db = Database::new(options.database);
-        let insertion_prover_map = make_insertion_map(&options.batch_provers)?;
 
         let (ethereum, db) = tokio::try_join!(ethereum, db)?;
 
+        let database = Arc::new(db);
+        let provers = database.get_provers().await?;
+
+        let insertion_prover_map = make_insertion_map(&options.batch_provers, provers)?;
         let identity_manager =
             IdentityManager::new(options.contracts, ethereum.clone(), insertion_prover_map).await?;
 
         let identity_manager = Arc::new(identity_manager);
-        let database = Arc::new(db);
-
-        let provers = database.get_provers().await?;
-
-        // restore prover state from previous shutdown
-        identity_manager.restore_provers(provers).await?;
 
         // Await for all pending transactions
         identity_manager.await_clean_slate().await?;
@@ -229,6 +226,11 @@ impl App {
         if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
+        }
+
+        if !self.identity_manager.has_provers().await {
+            warn!(?commitment, "Identity Manager has no provers.");
+            return Err(ServerError::NoProversOnIdInsert);
         }
 
         if !self.identity_is_reduced(commitment) {

@@ -52,6 +52,8 @@ pub enum Error {
     CannotRemoveLastBatchSize,
     #[error("Some provers have failed to be restored ({0}).")]
     ProverRestoreError(usize),
+    #[error("Identity Manager had no provers on point of identity insertion.")]
+    NoProversOnIdInsert,
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

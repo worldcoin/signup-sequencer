@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub use crate::prover::batch_insertion::identity::Identity;
-use crate::prover::Proof;
+use crate::{database::prover::Prover as DbProver, prover::Proof};
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";
@@ -111,6 +111,22 @@ impl Prover {
         };
 
         Ok(mtb)
+    }
+
+    pub fn from_db_prover(db_prover: DbProver) -> anyhow::Result<Self> {
+        let target_url = Url::parse(&db_prover.url)?;
+        let timeout_duration = Duration::from_secs(db_prover.timeout_s);
+        let client = reqwest::Client::builder()
+            .connect_timeout(timeout_duration)
+            .https_only(false)
+            .build()?;
+
+        Ok(Self {
+            target_url,
+            client,
+            batch_size: db_prover.batch_size,
+            timeout_s: db_prover.timeout_s,
+        })
     }
 
     pub fn batch_size(&self) -> usize {
@@ -282,7 +298,7 @@ mod test {
             timeout_s:  30,
             batch_size: 3,
         };
-        let mtb = Prover::new(&options).unwrap();
+        let mtb = Prover::new(options).unwrap();
         let input_data = get_default_proof_input();
         let identities: Vec<Identity> = extract_identities_from(&input_data);
 
@@ -313,7 +329,7 @@ mod test {
             timeout_s:  30,
             batch_size: 3,
         };
-        let mtb = Prover::new(&options).unwrap();
+        let mtb = Prover::new(options).unwrap();
         let mut input_data = get_default_proof_input();
         let identities = extract_identities_from(&input_data);
         input_data.post_root = U256::from(2);
@@ -340,7 +356,7 @@ mod test {
             timeout_s:  30,
             batch_size: 10,
         };
-        let mtb = Prover::new(&options).unwrap();
+        let mtb = Prover::new(options).unwrap();
         let input_data = get_default_proof_input();
         let identities = extract_identities_from(&input_data);
 

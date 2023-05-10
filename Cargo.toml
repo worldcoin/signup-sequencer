@@ -23,12 +23,6 @@ oz-provider = ["oz-api"]
 bench = ["criterion", "proptest"]
 mimalloc = ["cli-batteries/mimalloc"]
 
-[[bench]]
-name = "criterion"
-harness = false
-path = "criterion.rs"
-required-features = ["bench", "proptest"]
-
 [dependencies]
 anyhow = { version = "1.0.68" }
 async-stream = "0.3.3"

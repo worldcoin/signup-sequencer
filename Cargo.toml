@@ -23,12 +23,6 @@ oz-provider = ["oz-api"]
 bench = ["criterion", "proptest"]
 mimalloc = ["cli-batteries/mimalloc"]
 
-[[bench]]
-name = "criterion"
-harness = false
-path = "criterion.rs"
-required-features = ["bench", "proptest"]
-
 [dependencies]
 anyhow = { version = "1.0.68" }
 async-stream = "0.3.3"
@@ -60,6 +54,7 @@ take_mut = "0.2.2"
 tempfile = "3.3.0"
 thiserror = "1.0"
 tokio = { version = "1.17", features = ["signal", "macros", "rt", "sync", "time", "rt-multi-thread", "tracing", "test-util"] }
+tower-http = { version = "0.4.0", features = ["trace", "cors"] }
 tracing = "0.1"
 tracing-futures = "0.2"
 url = "2.2"

@@ -131,7 +131,7 @@ impl App {
 
         let provers = database.get_provers().await?;
 
-        // restore prover state from previus shutdown
+        // restore prover state from previous shutdown
         identity_manager.restore_provers(provers).await?;
 
         // Await for all pending transactions

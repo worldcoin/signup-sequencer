@@ -50,8 +50,6 @@ pub enum Error {
     NoSuchBatchSize,
     #[error("The last batch size cannot be removed")]
     CannotRemoveLastBatchSize,
-    #[error("Some provers have failed to be restored ({0}).")]
-    ProverRestoreError(usize),
     #[error("Identity Manager had no provers on point of identity insertion.")]
     NoProversOnIdInsert,
     #[error(transparent)]

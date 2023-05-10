@@ -298,7 +298,7 @@ mod test {
             timeout_s:  30,
             batch_size: 3,
         };
-        let mtb = Prover::new(options).unwrap();
+        let mtb = Prover::new(&options).unwrap();
         let input_data = get_default_proof_input();
         let identities: Vec<Identity> = extract_identities_from(&input_data);
 
@@ -329,7 +329,7 @@ mod test {
             timeout_s:  30,
             batch_size: 3,
         };
-        let mtb = Prover::new(options).unwrap();
+        let mtb = Prover::new(&options).unwrap();
         let mut input_data = get_default_proof_input();
         let identities = extract_identities_from(&input_data);
         input_data.post_root = U256::from(2);
@@ -356,7 +356,7 @@ mod test {
             timeout_s:  30,
             batch_size: 10,
         };
-        let mtb = Prover::new(options).unwrap();
+        let mtb = Prover::new(&options).unwrap();
         let input_data = get_default_proof_input();
         let identities = extract_identities_from(&input_data);
 

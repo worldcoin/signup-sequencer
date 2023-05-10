@@ -96,7 +96,7 @@ pub fn make_insertion_map(
         for prover in db_provers {
             map.insert(
                 prover.batch_size,
-                batch_insertion::Prover::from_db_prover(prover)?,
+                batch_insertion::Prover::from_db_prover(&prover)?,
             );
         }
     }

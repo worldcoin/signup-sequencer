@@ -113,7 +113,7 @@ impl Prover {
         Ok(mtb)
     }
 
-    pub fn from_db_prover(db_prover: DbProver) -> anyhow::Result<Self> {
+    pub fn from_db_prover(db_prover: &DbProver) -> anyhow::Result<Self> {
         let target_url = Url::parse(&db_prover.url)?;
         let timeout_duration = Duration::from_secs(db_prover.timeout_s);
         let client = reqwest::Client::builder()

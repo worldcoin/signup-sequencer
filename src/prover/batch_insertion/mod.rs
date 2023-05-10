@@ -113,6 +113,8 @@ impl Prover {
         Ok(mtb)
     }
 
+    /// Creates a new batch insertion prover from the prover taken from the
+    /// database
     pub fn from_db_prover(db_prover: &DbProver) -> anyhow::Result<Self> {
         let target_url = Url::parse(&db_prover.url)?;
         let timeout_duration = Duration::from_secs(db_prover.timeout_s);

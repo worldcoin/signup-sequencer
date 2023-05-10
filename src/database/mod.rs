@@ -359,7 +359,6 @@ impl Database {
         url: impl ToString,
         timeout_seconds: u64,
     ) -> Result<(), Error> {
-        let mut tx = self.pool.begin().await?;
         let url = url.to_string();
 
         let query = sqlx::query(
@@ -374,15 +373,12 @@ impl Database {
         .bind(url)
         .bind(timeout_seconds as i64);
 
-        tx.execute(query).await?;
-        tx.commit().await?;
+        self.pool.execute(query).await?;
 
         Ok(())
     }
 
     pub async fn remove_prover(&self, batch_size: usize) -> Result<(), Error> {
-        let mut tx = self.pool.begin().await?;
-
         let query = sqlx::query(
             r#"
               DELETE FROM provers WHERE batch_size = $1  
@@ -390,8 +386,7 @@ impl Database {
         )
         .bind(batch_size as i64);
 
-        tx.execute(query).await?;
-        tx.commit().await?;
+        self.pool.execute(query).await?;
 
         Ok(())
     }

@@ -229,7 +229,10 @@ impl App {
         }
 
         if !self.identity_manager.has_provers().await {
-            warn!(?commitment, "Identity Manager has no provers.");
+            warn!(
+                ?commitment,
+                "Identity Manager has no provers. Add provers with /addBatchSize request."
+            );
             return Err(ServerError::NoProversOnIdInsert);
         }
 

@@ -286,7 +286,7 @@ impl App {
             .await?;
 
         self.database
-            .write_prover(batch_size, url, timeout_seconds)
+            .insert_prover_configuration(batch_size, url, timeout_seconds)
             .await?;
 
         Ok(())

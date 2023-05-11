@@ -353,7 +353,7 @@ impl Database {
             .collect::<prover::Provers>())
     }
 
-    pub async fn write_prover(
+    pub async fn insert_prover_configuration(
         &self,
         batch_size: usize,
         url: impl ToString,

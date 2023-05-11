@@ -344,7 +344,7 @@ impl Database {
                 let batch_size = row.get::<i64, _>(0) as usize;
                 let url = row.get::<String, _>(1);
                 let timeout_s = row.get::<i64, _>(2) as u64;
-                prover::Prover {
+                prover::ProverConfiguration {
                     url,
                     batch_size,
                     timeout_s,

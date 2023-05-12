@@ -31,7 +31,7 @@ axum = "0.6.4"
 axum-server = "0.4.4"
 chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "4.0", features = ["derive"] }
-cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "f82b7f95c649988f26f33671edbdb28dfdf2c3d0", features = ["signals", "prometheus", "metered-allocator", "otlp"] }
+cli-batteries = { git = "https://github.com/Dzejkop/cli-batteries", rev = "67e97ca85a64e3df7ecd09900c5c81fbbcaf6b36", features = ["signals", "prometheus", "metered-allocator", "otlp", "datadog"] }
 cognitoauth = { git = "https://github.com/lucdew/cognito-srp-auth.git" }
 criterion = { version = "0.4", optional = true, features = ["async_tokio"] } # For `bench`
 ethers = { version = "1.0.0", features = ["ws", "ipc", "openssl", "abigen"] }
@@ -54,7 +54,7 @@ take_mut = "0.2.2"
 tempfile = "3.3.0"
 thiserror = "1.0"
 tokio = { version = "1.17", features = ["signal", "macros", "rt", "sync", "time", "rt-multi-thread", "tracing", "test-util"] }
-tower-http = { version = "0.4.0", features = ["trace", "cors"] }
+tower-http = { version = "0.3.4", features = ["trace", "cors"] }
 tracing = "0.1"
 tracing-futures = "0.2"
 url = "2.2"
@@ -63,7 +63,7 @@ url = "2.2"
 # `cargo update --package primitive-types@0.12.1 --precise 0.11.1`
 
 [dev-dependencies]
-cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "f82b7f95c649988f26f33671edbdb28dfdf2c3d0", features = ["mock-shutdown"] }
+cli-batteries = { git = "https://github.com/Dzejkop/cli-batteries", rev = "67e97ca85a64e3df7ecd09900c5c81fbbcaf6b36", features = ["mock-shutdown"] }
 hex = "0.4.3"
 hex-literal = "0.3"
 maplit = "1.0.2"
@@ -77,7 +77,7 @@ tracing-subscriber = "0.3.11"
 tracing-test = "0.2"
 
 [build-dependencies]
-cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "f82b7f95c649988f26f33671edbdb28dfdf2c3d0" }
+cli-batteries = { git = "https://github.com/Dzejkop/cli-batteries", rev = "67e97ca85a64e3df7ecd09900c5c81fbbcaf6b36" }
 
 [profile.release]
 panic = "abort"

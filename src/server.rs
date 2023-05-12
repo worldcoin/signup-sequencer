@@ -12,8 +12,8 @@ use hyper::StatusCode;
 use semaphore::{protocol::Proof, Field};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tower_http::trace::TraceLayer;
-use tracing::{error, instrument};
+use tower_http::trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer};
+use tracing::{error, info, Level};
 use url::{Host, Url};
 
 use crate::{
@@ -150,7 +150,6 @@ impl IntoResponse for Error {
     }
 }
 
-#[instrument(level = "info", skip_all)]
 async fn inclusion_proof(
     State(app): State<Arc<App>>,
     Json(inclusion_proof_request): Json<InclusionProofRequest>,
@@ -162,7 +161,6 @@ async fn inclusion_proof(
     Ok(Json(result))
 }
 
-#[instrument(level = "info", skip_all)]
 async fn insert_identity(
     State(app): State<Arc<App>>,
     Json(insert_identity_request): Json<InsertCommitmentRequest>,
@@ -174,7 +172,6 @@ async fn insert_identity(
     Ok(Json(result))
 }
 
-#[instrument(level = "info", skip_all)]
 async fn verify_semaphore_proof(
     State(app): State<Arc<App>>,
     Json(verify_semaphore_proof_request): Json<VerifySemaphoreProofRequest>,
@@ -212,6 +209,7 @@ pub async fn main(app: Arc<App>, options: Options) -> AnyhowResult<()> {
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
+    info!("Will listen on {}", addr);
     let listener = TcpListener::bind(addr)?;
 
     let serve_timeout = Duration::from_secs(options.serve_timeout);
@@ -233,13 +231,17 @@ pub async fn bind_from_listener(
         .route("/verifySemaphoreProof", post(verify_semaphore_proof))
         .route("/inclusionProof", post(inclusion_proof))
         .route("/insertIdentity", post(insert_identity))
-        .layer(TraceLayer::new_for_http())
-        // Custom layers
         .layer(middleware::from_fn(api_metrics_layer::middleware))
         .layer(middleware::from_fn_with_state(
             serve_timeout,
             timeout_layer::middleware,
         ))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .on_request(DefaultOnRequest::new().level(Level::INFO))
+                .on_response(DefaultOnResponse::new().level(Level::INFO)),
+        )
         .layer(middleware::from_fn(extract_trace_layer::middleware))
         .with_state(app.clone());
 

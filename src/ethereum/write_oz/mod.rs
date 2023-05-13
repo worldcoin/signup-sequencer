@@ -44,6 +44,9 @@ pub struct Options {
 
     #[clap(long, env, value_parser=duration_from_str, default_value="60")]
     pub oz_mine_timeout: Duration,
+
+    #[clap(long, env)]
+    pub oz_gas_limit: Option<u64>,
 }
 
 #[derive(Debug)]

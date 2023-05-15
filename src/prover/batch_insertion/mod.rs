@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub use crate::prover::batch_insertion::identity::Identity;
-use crate::prover::Proof;
+use crate::{database::prover::ProverConfiguration as DbProverConfiguration, prover::Proof};
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";
@@ -111,6 +111,24 @@ impl Prover {
         };
 
         Ok(mtb)
+    }
+
+    /// Creates a new batch insertion prover from the prover taken from the
+    /// database
+    pub fn from_prover_conf(prover_conf: &DbProverConfiguration) -> anyhow::Result<Self> {
+        let target_url = Url::parse(&prover_conf.url)?;
+        let timeout_duration = Duration::from_secs(prover_conf.timeout_s);
+        let client = reqwest::Client::builder()
+            .connect_timeout(timeout_duration)
+            .https_only(false)
+            .build()?;
+
+        Ok(Self {
+            target_url,
+            client,
+            batch_size: prover_conf.batch_size,
+            timeout_s: prover_conf.timeout_s,
+        })
     }
 
     pub fn batch_size(&self) -> usize {

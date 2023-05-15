@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::prover::batch_insertion;
+use crate::{database::prover, prover::batch_insertion};
 
 use crate::prover::batch_insertion::ProverConfiguration;
 use tokio::sync::{RwLock, RwLockReadGuard};
@@ -82,15 +82,15 @@ pub type InsertionProverMap = SharedProverMap<batch_insertion::Prover>;
 pub type ReadOnlyInsertionProver<'a> = ReadOnlyProver<'a, batch_insertion::Prover>;
 
 /// Builds an insertion prover map from the provided configuration.
-pub fn make_insertion_map(
-    options: &batch_insertion::Options,
-) -> anyhow::Result<InsertionProverMap> {
+pub fn make_insertion_map(db_provers: prover::Provers) -> anyhow::Result<InsertionProverMap> {
     let mut map = BTreeMap::new();
 
-    for url in &options.prover_urls.0 {
-        map.insert(url.batch_size, batch_insertion::Prover::new(url)?);
+    for prover in db_provers {
+        map.insert(
+            prover.batch_size,
+            batch_insertion::Prover::from_prover_conf(&prover)?,
+        );
     }
-
     let insertion_map = ProverMap::from(map);
 
     Ok(RwLock::new(insertion_map))

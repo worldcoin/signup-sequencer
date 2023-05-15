@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
@@ -11,11 +11,16 @@ use tracing::{info, instrument, warn};
 use crate::{
     contracts,
     contracts::{IdentityManager, SharedIdentityManager},
-    database::{self, Database},
+    database::{
+        self,
+        prover::{ProverConfiguration as DbProverConf, Provers},
+        Database,
+    },
     ethereum::{self, Ethereum},
     identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
-    prover,
-    prover::{batch_insertion::ProverConfiguration, map::make_insertion_map},
+    prover::{
+        self, batch_insertion, batch_insertion::ProverConfiguration, map::make_insertion_map,
+    },
     server::{error::Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
     task_monitor,
     task_monitor::{
@@ -119,15 +124,20 @@ impl App {
     pub async fn new(options: Options) -> AnyhowResult<Self> {
         let ethereum = Ethereum::new(options.ethereum);
         let db = Database::new(options.database);
-        let insertion_prover_map = make_insertion_map(&options.batch_provers)?;
 
         let (ethereum, db) = tokio::try_join!(ethereum, db)?;
 
+        let database = Arc::new(db);
+        let mut provers = database.get_provers().await?;
+        let non_inserted_provers = Self::merge_env_provers(options.batch_provers, &mut provers);
+
+        database.insert_provers(non_inserted_provers).await?;
+
+        let insertion_prover_map = make_insertion_map(provers)?;
         let identity_manager =
             IdentityManager::new(options.contracts, ethereum.clone(), insertion_prover_map).await?;
 
         let identity_manager = Arc::new(identity_manager);
-        let database = Arc::new(db);
 
         // Await for all pending transactions
         identity_manager.await_clean_slate().await?;
@@ -226,6 +236,14 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
+        if !self.identity_manager.has_provers().await {
+            warn!(
+                ?commitment,
+                "Identity Manager has no provers. Add provers with /addBatchSize request."
+            );
+            return Err(ServerError::NoProversOnIdInsert);
+        }
+
         if !self.identity_is_reduced(commitment) {
             warn!(
                 ?commitment,
@@ -257,6 +275,30 @@ impl App {
         Ok(InclusionProofResponse::from(inclusion_proof))
     }
 
+    fn merge_env_provers(
+        options: batch_insertion::Options,
+        existing_provers: &mut Provers,
+    ) -> Provers {
+        let options_set: HashSet<DbProverConf> = options
+            .prover_urls
+            .0
+            .into_iter()
+            .map(|opt| DbProverConf {
+                url:        opt.url,
+                batch_size: opt.batch_size,
+                timeout_s:  opt.timeout_s,
+            })
+            .collect();
+
+        let env_provers: HashSet<_> = options_set.difference(existing_provers).cloned().collect();
+
+        for unique in &env_provers {
+            existing_provers.insert(unique.clone());
+        }
+
+        env_provers
+    }
+
     fn identity_is_reduced(&self, commitment: Hash) -> bool {
         commitment.lt(&self.snark_scalar_field)
     }
@@ -264,6 +306,7 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if the provided batch size already exists.
+    /// Will return `Err` if the batch size fails to write to database.
     pub async fn add_batch_size(
         &self,
         url: impl ToString,
@@ -271,15 +314,26 @@ impl App {
         timeout_seconds: u64,
     ) -> Result<(), ServerError> {
         self.identity_manager
-            .add_batch_size(url, batch_size, timeout_seconds)
-            .await
+            .add_batch_size(&url, batch_size, timeout_seconds)
+            .await?;
+
+        self.database
+            .insert_prover_configuration(batch_size, url, timeout_seconds)
+            .await?;
+
+        Ok(())
     }
 
     /// # Errors
     ///
     /// Will return `Err` if the requested batch size does not exist.
+    /// Will return `Err` if batch size fails to be removed from database.
     pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
-        self.identity_manager.remove_batch_size(batch_size).await
+        self.identity_manager.remove_batch_size(batch_size).await?;
+
+        self.database.remove_prover(batch_size).await?;
+
+        Ok(())
     }
 
     /// # Errors

@@ -29,6 +29,7 @@ pub struct OzRelay {
     transaction_validity: chrono::Duration,
     send_timeout:         Duration,
     mine_timeout:         Duration,
+    gas_limit:            Option<u64>,
 }
 
 impl OzRelay {
@@ -45,6 +46,7 @@ impl OzRelay {
             transaction_validity: chrono::Duration::from_std(options.oz_transaction_validity)?,
             send_timeout: options.oz_send_timeout,
             mine_timeout: options.oz_mine_timeout,
+            gas_limit: options.oz_gas_limit,
         })
     }
 
@@ -125,7 +127,9 @@ impl OzRelay {
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
         let mut tx = tx.clone();
-        tx.set_gas(1_000_000);
+        if let Some(gas_limit) = self.gas_limit {
+            tx.set_gas(gas_limit);
+        }
 
         if only_once {
             info!("checking if can resubmit");

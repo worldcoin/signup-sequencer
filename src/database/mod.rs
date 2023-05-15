@@ -387,8 +387,6 @@ impl Database {
             return Ok(());
         }
 
-        warn!("PROVERS: {:?}", provers);
-
         let mut query_builder = sqlx::QueryBuilder::new(
             r#"
                   INSERT INTO provers (batch_size, url, timeout_s)  

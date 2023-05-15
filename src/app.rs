@@ -129,8 +129,7 @@ impl App {
 
         let database = Arc::new(db);
         let mut provers = database.get_provers().await?;
-        let non_inserted_provers =
-            Self::merge_env_provers(options.batch_provers, &mut provers).await;
+        let non_inserted_provers = Self::merge_env_provers(options.batch_provers, &mut provers);
 
         database.insert_provers(non_inserted_provers).await?;
 
@@ -276,7 +275,7 @@ impl App {
         Ok(InclusionProofResponse::from(inclusion_proof))
     }
 
-    async fn merge_env_provers(
+    fn merge_env_provers(
         options: batch_insertion::Options,
         existing_provers: &mut Provers,
     ) -> Provers {
@@ -291,11 +290,11 @@ impl App {
             })
             .collect();
 
-        let env_provers: HashSet<_> = options_set.difference(&existing_provers).cloned().collect();
+        let env_provers: HashSet<_> = options_set.difference(existing_provers).cloned().collect();
 
-        env_provers.iter().for_each(|unique| {
+        for unique in &env_provers {
             existing_provers.insert(unique.clone());
-        });
+        }
 
         env_provers
     }

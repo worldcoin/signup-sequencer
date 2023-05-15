@@ -115,7 +115,7 @@ impl Prover {
 
     /// Creates a new batch insertion prover from the prover taken from the
     /// database
-    pub fn from_db_prover(prover_conf: &DbProverConfiguration) -> anyhow::Result<Self> {
+    pub fn from_prover_conf(prover_conf: &DbProverConfiguration) -> anyhow::Result<Self> {
         let target_url = Url::parse(&prover_conf.url)?;
         let timeout_duration = Duration::from_secs(prover_conf.timeout_s);
         let client = reqwest::Client::builder()

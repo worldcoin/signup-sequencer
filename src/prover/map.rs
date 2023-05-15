@@ -82,25 +82,15 @@ pub type InsertionProverMap = SharedProverMap<batch_insertion::Prover>;
 pub type ReadOnlyInsertionProver<'a> = ReadOnlyProver<'a, batch_insertion::Prover>;
 
 /// Builds an insertion prover map from the provided configuration.
-pub fn make_insertion_map(
-    options: &batch_insertion::Options,
-    db_provers: prover::Provers,
-) -> anyhow::Result<InsertionProverMap> {
+pub fn make_insertion_map(db_provers: prover::Provers) -> anyhow::Result<InsertionProverMap> {
     let mut map = BTreeMap::new();
 
-    if db_provers.is_empty() {
-        for url in &options.prover_urls.0 {
-            map.insert(url.batch_size, batch_insertion::Prover::new(url)?);
-        }
-    } else {
-        for prover in db_provers {
-            map.insert(
-                prover.batch_size,
-                batch_insertion::Prover::from_db_prover(&prover)?,
-            );
-        }
+    for prover in db_provers {
+        map.insert(
+            prover.batch_size,
+            batch_insertion::Prover::from_prover_conf(&prover)?,
+        );
     }
-
     let insertion_map = ProverMap::from(map);
 
     Ok(RwLock::new(insertion_map))

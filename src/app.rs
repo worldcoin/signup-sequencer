@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
@@ -11,11 +11,16 @@ use tracing::{info, instrument, warn};
 use crate::{
     contracts,
     contracts::{IdentityManager, SharedIdentityManager},
-    database::{self, Database},
+    database::{
+        self,
+        prover::{ProverConfiguration as DbProverConf, Provers},
+        Database,
+    },
     ethereum::{self, Ethereum},
     identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
-    prover,
-    prover::{batch_insertion::ProverConfiguration, map::make_insertion_map},
+    prover::{
+        self, batch_insertion, batch_insertion::ProverConfiguration, map::make_insertion_map,
+    },
     server::{error::Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
     task_monitor,
     task_monitor::{
@@ -123,9 +128,13 @@ impl App {
         let (ethereum, db) = tokio::try_join!(ethereum, db)?;
 
         let database = Arc::new(db);
-        let provers = database.get_provers().await?;
+        let mut provers = database.get_provers().await?;
+        let non_inserted_provers =
+            Self::merge_env_provers(options.batch_provers, &mut provers).await;
 
-        let insertion_prover_map = make_insertion_map(&options.batch_provers, provers)?;
+        database.insert_provers(non_inserted_provers).await?;
+
+        let insertion_prover_map = make_insertion_map(provers)?;
         let identity_manager =
             IdentityManager::new(options.contracts, ethereum.clone(), insertion_prover_map).await?;
 
@@ -265,6 +274,30 @@ impl App {
         };
 
         Ok(InclusionProofResponse::from(inclusion_proof))
+    }
+
+    async fn merge_env_provers(
+        options: batch_insertion::Options,
+        existing_provers: &mut Provers,
+    ) -> Provers {
+        let options_set: HashSet<DbProverConf> = options
+            .prover_urls
+            .0
+            .into_iter()
+            .map(|opt| DbProverConf {
+                url:        opt.url,
+                batch_size: opt.batch_size,
+                timeout_s:  opt.timeout_s,
+            })
+            .collect();
+
+        let env_provers: HashSet<_> = options_set.difference(&existing_provers).cloned().collect();
+
+        env_provers.iter().for_each(|unique| {
+            existing_provers.insert(unique.clone());
+        });
+
+        env_provers
     }
 
     fn identity_is_reduced(&self, commitment: Hash) -> bool {

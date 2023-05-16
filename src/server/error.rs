@@ -1,4 +1,6 @@
 use crate::database;
+use anyhow::Error as EyreError;
+use axum::response::IntoResponse;
 use hyper::{Body, StatusCode};
 use thiserror::Error;
 
@@ -53,7 +55,7 @@ pub enum Error {
     #[error("Identity Manager had no provers on point of identity insertion.")]
     NoProversOnIdInsert,
     #[error(transparent)]
-    Other(#[from] anyhow::Error),
+    Other(#[from] EyreError),
 }
 
 impl Error {
@@ -77,5 +79,35 @@ impl Error {
             .status(status_code)
             .body(hyper::Body::from(self.to_string()))
             .expect("Failed to convert error string into hyper::Body")
+    }
+}
+
+impl Error {
+    fn to_status_code(&self) -> StatusCode {
+        match self {
+            Self::InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
+            Self::InvalidPath => StatusCode::NOT_FOUND,
+            Self::InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            Self::IndexOutOfBounds
+            | Self::IdentityCommitmentNotFound
+            | Self::InvalidCommitment
+            | Self::InvalidSerialization(_) => StatusCode::BAD_REQUEST,
+            Self::DuplicateCommitment => StatusCode::CONFLICT,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+impl IntoResponse for Error {
+    fn into_response(self) -> axum::response::Response {
+        let status_code = self.to_status_code();
+
+        let body = if let Self::Other(err) = self {
+            format!("{err:?}")
+        } else {
+            self.to_string()
+        };
+
+        (status_code, body).into_response()
     }
 }

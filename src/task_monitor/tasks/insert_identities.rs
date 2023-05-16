@@ -68,16 +68,34 @@ async fn insert_identities(
         };
 
         // Get as many identities to commit in bulk
-        let mut commitments = HashSet::new();
-        commitments.insert(first_identity.identity);
         let mut identities = vec![first_identity];
-
         while let Ok(identity) = identity_receiver.try_recv() {
-            if commitments.contains(&identity.identity)
-                || database
-                    .get_identity_leaf_index(&identity.identity)
-                    .await?
-                    .is_some()
+            identities.push(identity);
+        }
+
+        // Dedup
+        let mut commitments_set = HashSet::new();
+        let mut deduped = Vec::with_capacity(identities.len());
+
+        for identity in identities {
+            if commitments_set.contains(&identity.identity) {
+                identity
+                    .on_complete
+                    .send(OnInsertComplete::DuplicateCommitment)
+                    .ok();
+            } else {
+                commitments_set.insert(identity.identity);
+                deduped.push(identity);
+            }
+        }
+
+        // Validate the identities are not in the database
+        let mut identities = Vec::with_capacity(deduped.len());
+        for identity in deduped {
+            if database
+                .get_identity_leaf_index(&identity.identity)
+                .await?
+                .is_some()
             {
                 identity
                     .on_complete

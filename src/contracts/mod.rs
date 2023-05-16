@@ -255,17 +255,6 @@ impl IdentityManager {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn assert_latest_root(&self, root: Field) -> anyhow::Result<()> {
-        let latest_root = self.abi.latest_root().call().await?;
-        let processed_root: U256 = root.into();
-        if processed_root == latest_root {
-            Ok(())
-        } else {
-            Err(anyhow::Error::msg(format!("{root} is not latest root.",)))
-        }
-    }
-
-    #[instrument(level = "debug", skip_all)]
     pub async fn latest_root(&self) -> anyhow::Result<U256> {
         let latest_root = self.abi.latest_root().call().await?;
 

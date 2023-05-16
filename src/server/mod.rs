@@ -6,30 +6,37 @@ use std::{
     time::Duration,
 };
 
-use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
-use anyhow::{bail, ensure, Context, Result as AnyhowResult};
-use clap::Parser;
-use cli_batteries::{await_shutdown, trace_from_headers};
-use futures::Future;
-use hyper::{
-    body::Buf,
-    header,
-    service::{make_service_fn, service_fn},
-    Body, Method, Request, Response, Server, StatusCode,
+use anyhow::{bail, ensure, Result as AnyhowResult};
+use axum::{
+    extract::State,
+    middleware,
+    routing::{get, post},
+    Json, Router,
 };
-use once_cell::sync::Lazy;
-use prometheus::{register_int_counter_vec, IntCounterVec};
+use clap::Parser;
+use cli_batteries::await_shutdown;
+use hyper::StatusCode;
 use semaphore::{protocol::Proof, Field};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use tokio::time::timeout;
-use tracing::{error, info, instrument, trace};
+use serde::{Deserialize, Serialize};
+use tower_http::trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer};
+use tracing::{info, Level};
 use url::{Host, Url};
 
-use crate::{app::App, identity_tree::Hash, server::error::Error};
+use crate::{
+    app::{App, InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofResponse},
+    identity_tree::Hash,
+};
+
+use error::Error;
+
+mod api_metrics_layer;
+mod extract_trace_layer;
+mod timeout_layer;
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 #[group(skip)]
 pub struct Options {
+    // TODO: This should be a `SocketAddr`. It makes no sense for us to allow a full on URL here
     /// API Server url
     #[clap(long, env, default_value = "http://127.0.0.1:8080/")]
     pub server: Url,
@@ -38,21 +45,6 @@ pub struct Options {
     #[clap(long, env, default_value = "300")]
     pub serve_timeout: u64,
 }
-
-static REQUESTS: Lazy<Counter> =
-    Lazy::new(|| register_counter!(opts!("api_requests", "Number of requests received.")).unwrap());
-static STATUS: Lazy<IntCounterVec> = Lazy::new(|| {
-    register_int_counter_vec!(
-        "api_response_status",
-        "The API responses by status code.",
-        &["status_code"]
-    )
-    .unwrap()
-});
-static LATENCY: Lazy<Histogram> = Lazy::new(|| {
-    register_histogram!("api_latency_seconds", "The API latency in seconds.").unwrap()
-});
-const CONTENT_JSON: &str = "application/json";
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -109,126 +101,63 @@ impl ToResponseCode for () {
     }
 }
 
-/// Parse a [`Request<Body>`] as JSON using Serde and handle using the provided
-/// method.
-async fn json_middleware_post<F, T, S, U>(
-    request: Request<Body>,
-    mut next: F,
-) -> Result<Response<Body>, Error>
-where
-    T: DeserializeOwned + Send,
-    F: FnMut(T) -> S + Send,
-    S: Future<Output = Result<U, Error>> + Send,
-    U: Serialize + ToResponseCode,
-{
-    let valid_content_type = request
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .map_or(false, |content_type| content_type == CONTENT_JSON);
-    if !valid_content_type {
-        return Err(Error::InvalidContentType);
-    }
-    let body = hyper::body::aggregate(request).await?;
-    let request = serde_json::from_reader(body.reader())?;
-    let response = next(request).await?;
-    let json = serde_json::to_string_pretty(&response)?;
-    let response = Response::builder()
-        .status(response.to_response_code())
-        .header(header::CONTENT_TYPE, CONTENT_JSON)
-        // No need to include cache-control since POST is not cached by default.
-        .body(Body::from(json))
-        .map_err(Error::Http)?;
-    Ok(response)
+async fn inclusion_proof(
+    State(app): State<Arc<App>>,
+    Json(inclusion_proof_request): Json<InclusionProofRequest>,
+) -> Result<Json<InclusionProofResponse>, Error> {
+    let result = app
+        .inclusion_proof(&inclusion_proof_request.identity_commitment)
+        .await?;
+
+    Ok(Json(result))
 }
 
-/// Handle a `GET` request using the provided function.
-async fn json_middleware_get<F, S, U>(mut next: F) -> Result<Response<Body>, Error>
-where
-    F: FnMut() -> S + Send,
-    S: Future<Output = Result<U, Error>> + Send,
-    U: Serialize + ToResponseCode,
-{
-    let response = next().await?;
-    let json = serde_json::to_string_pretty(&response)?;
-    let response = Response::builder()
-        .status(response.to_response_code())
-        .header(header::CONTENT_TYPE, CONTENT_JSON)
-        .body(Body::from(json))
-        .map_err(Error::Http)?;
-    Ok(response)
+async fn insert_identity(
+    State(app): State<Arc<App>>,
+    Json(insert_identity_request): Json<InsertCommitmentRequest>,
+) -> Result<Json<InclusionProofResponse>, Error> {
+    let result = app
+        .insert_identity(insert_identity_request.identity_commitment)
+        .await?;
+
+    Ok(Json(result))
 }
 
-#[instrument(level="info", name="api_request", skip(app), fields(http.uri=%request.uri(), http.method=%request.method()))]
-async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
-    trace_from_headers(request.headers());
+async fn verify_semaphore_proof(
+    State(app): State<Arc<App>>,
+    Json(verify_semaphore_proof_request): Json<VerifySemaphoreProofRequest>,
+) -> Result<Json<VerifySemaphoreProofResponse>, Error> {
+    let result = app
+        .verify_semaphore_proof(&verify_semaphore_proof_request)
+        .await?;
 
-    // Measure and log request
-    let _timer = LATENCY.start_timer(); // Observes on drop
-    REQUESTS.inc();
-    trace!(url = %request.uri(), "Receiving request");
-
-    // Route requests
-    let result = match (request.method(), request.uri().path()) {
-        (&Method::POST, "/verifySemaphoreProof") => {
-            json_middleware_post(request, |request: VerifySemaphoreProofRequest| {
-                let app = app.clone();
-                async move { app.verify_semaphore_proof(&request).await }
-            })
-            .await
-        }
-        (&Method::POST, "/inclusionProof") => {
-            json_middleware_post(request, |request: InclusionProofRequest| {
-                let app = app.clone();
-                async move { app.inclusion_proof(&request.identity_commitment).await }
-            })
-            .await
-        }
-        (&Method::POST, "/insertIdentity") => {
-            json_middleware_post(request, |request: InsertCommitmentRequest| {
-                let app = app.clone();
-                async move { app.insert_identity(request.identity_commitment).await }
-            })
-            .await
-        }
-        (&Method::POST, "/addBatchSize") => {
-            json_middleware_post(request, |request: AddBatchSizeRequest| {
-                let app = app.clone();
-                async move {
-                    app.add_batch_size(request.url, request.batch_size, request.timeout_seconds)
-                        .await
-                }
-            })
-            .await
-        }
-        (&Method::POST, "/removeBatchSize") => {
-            json_middleware_post(request, |request: RemoveBatchSizeRequest| {
-                let app = app.clone();
-                async move { app.remove_batch_size(request.batch_size).await }
-            })
-            .await
-        }
-        (&Method::GET, "/listBatchSizes") => {
-            json_middleware_get(|| {
-                let app = app.clone();
-                async move { app.list_batch_sizes().await }
-            })
-            .await
-        }
-        (&Method::POST, _) => Err(Error::InvalidPath),
-        _ => Err(Error::InvalidMethod),
-    };
-    let response = result.unwrap_or_else(|err| {
-        error!(%err, "Error handling request");
-        err.to_response()
-    });
-
-    // Measure result and return
-    STATUS
-        .with_label_values(&[response.status().as_str()])
-        .inc();
-    Ok(response)
+    Ok(Json(result))
 }
 
+async fn add_batch_size(
+    State(app): State<Arc<App>>,
+    Json(req): Json<AddBatchSizeRequest>,
+) -> Result<(), Error> {
+    app.add_batch_size(req.url, req.batch_size, req.timeout_seconds)
+        .await?;
+
+    Ok(())
+}
+async fn remove_batch_size(
+    State(app): State<Arc<App>>,
+    Json(req): Json<RemoveBatchSizeRequest>,
+) -> Result<(), Error> {
+    app.remove_batch_size(req.batch_size).await?;
+
+    Ok(())
+}
+async fn list_batch_sizes(
+    State(app): State<Arc<App>>,
+) -> Result<Json<ListBatchSizesResponse>, Error> {
+    let result = app.list_batch_sizes().await?;
+
+    Ok(Json(result))
+}
 /// # Errors
 ///
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
@@ -245,6 +174,7 @@ pub async fn main(app: Arc<App>, options: Options) -> AnyhowResult<()> {
         "Only / is supported in {}",
         options.server
     );
+
     let ip: IpAddr = match options.server.host() {
         Some(Host::Ipv4(ip)) => ip.into(),
         Some(Host::Ipv6(ip)) => ip.into(),
@@ -254,6 +184,7 @@ pub async fn main(app: Arc<App>, options: Options) -> AnyhowResult<()> {
     let port = options.server.port().unwrap_or(9998);
     let addr = SocketAddr::new(ip, port);
 
+    info!("Will listen on {}", addr);
     let listener = TcpListener::bind(addr)?;
 
     let serve_timeout = Duration::from_secs(options.serve_timeout);
@@ -266,108 +197,37 @@ pub async fn main(app: Arc<App>, options: Options) -> AnyhowResult<()> {
 ///
 /// Will return `Err` if the provided `listener` address cannot be accessed or
 /// if the server fails to bind to the given address.
-///
-/// # Panics
-///
-/// Panics if the request handler exceeds the provided `serve_timeout`.
 pub async fn bind_from_listener(
     app: Arc<App>,
     serve_timeout: Duration,
     listener: TcpListener,
 ) -> AnyhowResult<()> {
-    let local_addr = listener.local_addr()?;
-    let make_svc = make_service_fn(move |_| {
-        // Clone here as `make_service_fn` is called for every connection
-        let app = app.clone();
-        let serve_timeout = serve_timeout;
+    let router = Router::new()
+        .route("/verifySemaphoreProof", post(verify_semaphore_proof))
+        .route("/inclusionProof", post(inclusion_proof))
+        .route("/insertIdentity", post(insert_identity))
+        .route("/addBatchSize", post(add_batch_size))
+        .route("/removeBatchSize", post(remove_batch_size))
+        .route("/listBatchSizes", get(list_batch_sizes))
+        .layer(middleware::from_fn(api_metrics_layer::middleware))
+        .layer(middleware::from_fn_with_state(
+            serve_timeout,
+            timeout_layer::middleware,
+        ))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .on_request(DefaultOnRequest::new().level(Level::INFO))
+                .on_response(DefaultOnResponse::new().level(Level::INFO)),
+        )
+        .layer(middleware::from_fn(extract_trace_layer::middleware))
+        .with_state(app.clone());
 
-        async move {
-            Ok::<_, hyper::Error>(service_fn(move |req| {
-                // Clone here as `service_fn` is called for every request
-                let app = app.clone();
-                let serve_timeout = serve_timeout;
-
-                async move {
-                    timeout(serve_timeout, route(req, app))
-                        .await
-                        .unwrap_or_else(|err| {
-                            error!(?err, timeout = ?serve_timeout, "Timeout while handling request");
-
-                            panic!("Sequencer may be stalled, terminating.")
-                        })
-                }
-            }))
-        }
-    });
-
-    let server = Server::from_tcp(listener)
-        .context("Failed to bind address")?
-        .serve(make_svc)
+    let server = axum::Server::from_tcp(listener)?
+        .serve(router.into_make_service())
         .with_graceful_shutdown(await_shutdown());
 
-    info!(url = %local_addr, "Server listening");
-
     server.await?;
+
     Ok(())
-}
-
-#[cfg(test)]
-mod test {
-    use hyper::{Request, StatusCode};
-    use serde_json::json;
-
-    use super::*;
-
-    // TODO: Fix test
-    // #[tokio::test]
-    async fn _test_inclusion_proof() {
-        let options = crate::app::Options::try_parse_from([""]).unwrap();
-        let app = Arc::new(App::new(options).await.unwrap());
-        let body = Body::from(
-            json!({
-                "identityIndex": 0,
-            })
-            .to_string(),
-        );
-        let request = Request::builder()
-            .method("POST")
-            .uri("/inclusionProof")
-            .header("Content-Type", "application/json")
-            .body(body)
-            .unwrap();
-        let res = route(request, app).await.unwrap();
-        assert_eq!(res.status(), StatusCode::OK);
-        // TODO deserialize proof and compare results
-    }
-}
-
-#[cfg(feature = "bench")]
-#[allow(unused_imports)]
-#[doc(hidden)]
-pub mod bench {
-    use criterion::{black_box, Criterion};
-    use hyper::body::to_bytes;
-
-    use super::*;
-    use crate::bench::runtime;
-
-    pub fn group(_c: &mut Criterion) {
-        //     bench_hello_world(c);
-    }
-
-    // fn bench_hello_world(c: &mut Criterion) {
-    //     let app = Arc::new(App::new(2));
-    //     let request = CommitmentRequest {
-    //         identity_commitment:
-    // "24C94355810D659EEAA9E0B9E21F831493B50574AA2D3205F0AAB779E2864623"
-    //             .to_string(),
-    //     };
-    //     c.bench_function("bench_insert_identity", |b| {
-    //         b.to_async(runtime()).iter(|| async {
-    //             let response =
-    // app.insert_identity(request.clone()).await.unwrap();             let
-    // bytes = to_bytes(response.into_body()).await.unwrap();
-    // drop(black_box(bytes));         });
-    //     });
-    // }
 }

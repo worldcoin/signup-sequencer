@@ -29,6 +29,7 @@ pub struct OzRelay {
     transaction_validity: chrono::Duration,
     send_timeout:         Duration,
     mine_timeout:         Duration,
+    gas_limit:            Option<u64>,
 }
 
 impl OzRelay {
@@ -43,8 +44,9 @@ impl OzRelay {
         Ok(Self {
             oz_api,
             transaction_validity: chrono::Duration::from_std(options.oz_transaction_validity)?,
-            send_timeout: Duration::from_secs(60),
-            mine_timeout: Duration::from_secs(60),
+            send_timeout: options.oz_send_timeout,
+            mine_timeout: options.oz_mine_timeout,
+            gas_limit: options.oz_gas_limit,
         })
     }
 
@@ -125,7 +127,9 @@ impl OzRelay {
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
         let mut tx = tx.clone();
-        tx.set_gas(1_000_000);
+        if let Some(gas_limit) = self.gas_limit {
+            tx.set_gas(gas_limit);
+        }
 
         if only_once {
             info!("checking if can resubmit");
@@ -181,10 +185,11 @@ impl OzRelay {
         Ok(TransactionId(tx_id))
     }
 
-    pub async fn mine_transaction(&self, tx_id: TransactionId) -> Result<(), TxError> {
-        self.mine_transaction_id(tx_id.0.as_str()).await?;
-
-        Ok(())
+    pub async fn mine_transaction(
+        &self,
+        tx_id: TransactionId,
+    ) -> Result<RelayerTransactionBase, TxError> {
+        Ok(self.mine_transaction_id(tx_id.0.as_str()).await?)
     }
 
     pub async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {

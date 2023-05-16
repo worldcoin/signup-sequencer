@@ -58,10 +58,13 @@ pub async fn spawn_mock_chain(
     let verifier_path = "./sol/SemaphoreVerifier.json";
     let verifier_file =
         File::open(verifier_path).unwrap_or_else(|_| panic!("Failed to open `{verifier_path}`"));
+
     let verifier_contract_json: CompiledContract =
         serde_json::from_reader(BufReader::new(verifier_file))
             .unwrap_or_else(|_| panic!("Could not parse the compiled contract at {verifier_path}"));
+
     let mut verifier_bytecode_object: BytecodeObject = verifier_contract_json.bytecode.object;
+
     verifier_bytecode_object
         .link_fully_qualified(
             "lib/semaphore/packages/contracts/contracts/base/Pairing.sol:Pairing",
@@ -69,6 +72,7 @@ pub async fn spawn_mock_chain(
         )
         .resolve()
         .unwrap();
+
     if verifier_bytecode_object.is_unlinked() {
         panic!("Could not link the Pairing library into the Verifier.");
     }
@@ -76,46 +80,46 @@ pub async fn spawn_mock_chain(
     let bytecode_bytes = verifier_bytecode_object.as_bytes().unwrap_or_else(|| {
         panic!("Could not parse the bytecode for the contract at {verifier_path}")
     });
+
     let verifier_factory = ContractFactory::new(
         verifier_contract_json.abi,
         bytecode_bytes.clone(),
         client.clone(),
     );
-    let semaphore_verifier = verifier_factory.deploy(())?.confirmations(0usize).send();
+
+    let semaphore_verifier = verifier_factory
+        .deploy(())?
+        .confirmations(0usize)
+        .send()
+        .await?;
 
     // The rest of the contracts can be deployed to the mock chain normally.
     let mock_state_bridge_factory =
         load_and_build_contract("./sol/SimpleStateBridge.json", client.clone())?;
+
     let mock_state_bridge = mock_state_bridge_factory
         .deploy(())?
         .confirmations(0usize)
-        .send();
+        .send()
+        .await?;
 
     let mock_verifier_factory =
         load_and_build_contract("./sol/SequencerVerifier.json", client.clone())?;
+
     let mock_verifier = mock_verifier_factory
         .deploy(())?
         .confirmations(0usize)
-        .send();
+        .send()
+        .await?;
 
     let unimplemented_verifier_factory =
         load_and_build_contract("./sol/UnimplementedTreeVerifier.json", client.clone())?;
+
     let unimplemented_verifier = unimplemented_verifier_factory
         .deploy(())?
         .confirmations(0usize)
-        .send();
-
-    let (semaphore_verifier, mock_state_bridge, mock_verifier, unimplemented_verifier) = tokio::join!(
-        semaphore_verifier,
-        mock_state_bridge,
-        mock_verifier,
-        unimplemented_verifier
-    );
-
-    let semaphore_verifier = semaphore_verifier?;
-    let mock_state_bridge = mock_state_bridge?;
-    let mock_verifier = mock_verifier?;
-    let unimplemented_verifier = unimplemented_verifier?;
+        .send()
+        .await?;
 
     let verifier_lookup_table_factory =
         load_and_build_contract("./sol/VerifierLookupTable.json", client.clone())?;
@@ -126,12 +130,14 @@ pub async fn spawn_mock_chain(
         .clone()
         .deploy((first_batch_size as u64, mock_verifier.address()))?
         .confirmations(0usize)
-        .send();
+        .send()
+        .await?;
 
     let update_verifiers = verifier_lookup_table_factory
         .deploy((first_batch_size as u64, unimplemented_verifier.address()))?
         .confirmations(0usize)
-        .send();
+        .send()
+        .await?;
 
     let identity_manager_impl_factory =
         load_and_build_contract("./sol/WorldIDIdentityManagerImplV1.json", client.clone())?;
@@ -139,17 +145,9 @@ pub async fn spawn_mock_chain(
     let identity_manager_impl = identity_manager_impl_factory
         .deploy(())?
         .confirmations(0usize)
-        .send();
+        .send()
+        .await?;
 
-    let (insert_verifiers, update_verifiers, identity_manager_impl) =
-        tokio::join!(insert_verifiers, update_verifiers, identity_manager_impl);
-
-    let insert_verifiers = insert_verifiers?;
-    let update_verifiers = update_verifiers?;
-    let identity_manager_impl = identity_manager_impl?;
-
-    // TODO: This is sequential but could be parallelized, but for now it's only
-    //   multiple batch sizes for one test so I don't wanna do it now.
     for batch_size in &batch_sizes[1..] {
         let batch_size = *batch_size as u64;
 

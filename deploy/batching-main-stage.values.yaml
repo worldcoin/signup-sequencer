@@ -16,5 +16,5 @@ env:
   DENSE_TREE_PREFIX_DEPTH: 18
   # This is way too low for any practical use, but we're trying to stress-test GC.
   TREE_GC_THRESHOLD: 20
-  IDENTITY_MANAGER_ADDRESS: "0x9D439D9504bF9f81CC0A8Bfe4Ce526e2DACD2F73"
+  IDENTITY_MANAGER_ADDRESS: "0x025b71c2D32A29b419A359632C8050cf82F7308B"
   PROVER_URLS: '[{"url": "https://semaphore-mtb.internal.stage-crypto.worldcoin.dev","batch_size": 10,"timeout_s": 30}]'

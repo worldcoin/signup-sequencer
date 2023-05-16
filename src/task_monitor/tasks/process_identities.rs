@@ -132,6 +132,9 @@ async fn process_identities(
                 ).await?;
 
                 last_batch_time = SystemTime::now();
+
+                // Also wake up if woken up due to a tick
+                wake_up_notify.notify_one();
             }
             _ = wake_up_notify.notified() => {
                 tracing::trace!("Identity batch insertion woken due to request.");
@@ -339,9 +342,6 @@ async fn commit_identities(
     // Additionally if the receiver is dropped this reserve call will also fail.
     let permit = pending_identities_sender.reserve().await?;
 
-    // Ensure that we are not going to submit based on an out of date root anyway.
-    identity_manager.assert_latest_root(pre_root.into()).await?;
-
     info!(start_index, ?pre_root, ?post_root, "Submitting batch");
 
     // With all the data prepared we can submit the identities to the on-chain
@@ -360,14 +360,8 @@ async fn commit_identities(
             e
         })?;
 
-    let identity_keys: Vec<usize> = updates
-        .iter()
-        .map(|update| update.update.leaf_index)
-        .collect();
-
     // The transaction will be awaited on asynchronously
     permit.send(PendingIdentities {
-        identity_keys,
         transaction_id,
         pre_root,
         post_root,
@@ -375,7 +369,7 @@ async fn commit_identities(
     });
 
     // Update the batching tree only after submitting the identities to the chain
-    batching_tree.apply_next_updates(updates.len());
+    batching_tree.apply_updates_up_to(post_root.into());
 
     TaskMonitor::log_batch_size(updates.len());
 

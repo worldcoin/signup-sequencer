@@ -5,7 +5,7 @@
 use std::fmt;
 
 use chrono::{DateTime, Utc};
-use ethers::types::{Bytes, NameOrAddress, U256};
+use ethers::types::{Bytes, NameOrAddress, H256, U256};
 use serde::{Deserialize, Serialize};
 
 /// OpenZeppelin Defender transaction status.
@@ -62,6 +62,9 @@ pub struct SendBaseTransactionRequest<'a> {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelayerTransactionBase {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub hash:           Option<H256>,
     pub transaction_id: String,
     pub to:             NameOrAddress,
     #[serde(skip_serializing_if = "Option::is_none")]

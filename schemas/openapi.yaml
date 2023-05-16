@@ -30,7 +30,7 @@ paths:
             schema:
               $ref: '#/components/schemas/IdentityCommitment'
       responses:
-        '200':
+        '202':
           description: 'Identity insert was successfully queued'
           content:
             application/json:
@@ -57,6 +57,12 @@ paths:
           description: 'A Merkle inclusion proof for an already inserted commitment'
           content:
             'application/json':
+              schema:
+                $ref: '#/components/schemas/InclusionProof'
+        '202':
+          description: 'A Merkle inclusion proof for a pending commitment'
+          content:
+            application/json:
               schema:
                 $ref: '#/components/schemas/InclusionProof'
         '400':
@@ -107,7 +113,6 @@ components:
           type: string
           pattern: '^[A-F0-9]{64}$'
       example:
-        groupId: 1
         identityCommitment: '0000F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2F2'
     FieldElement:
       type: string
@@ -155,19 +160,19 @@ components:
       properties:
         root:
           $ref: '#/components/schemas/FieldElement'
-        signal_hash:
+        signalHash:
           $ref: '#/components/schemas/FieldElement'
-        nullifier_hash:
+        nullifierHash:
           $ref: '#/components/schemas/FieldElement'
-        external_nullifier_hash:
+        externalNullifierHash:
           $ref: '#/components/schemas/FieldElement'
         proof:
           $ref: '#/components/schemas/SemaphoreProof'
       required:
         - root
-        - signal_hash
-        - nullifier_hash
-        - external_nullifier_hash
+        - signalHash
+        - nullifierHash
+        - externalNullifierHash
         - proof
     VerifySemaphoreProofResponse:
       type: object
@@ -176,10 +181,10 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/InclusionProofStatus'
-        pending_valid_as_of:
+        pendingValidAsOf:
           type: string
           format: date-time
-        mined_valid_as_of:
+        minedValidAsOf:
           type: string
           format: date-time
           nullable: true

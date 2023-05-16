@@ -1,4 +1,5 @@
 use std::{
+    cmp::min,
     str::FromStr,
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -13,7 +14,7 @@ use semaphore::{
 };
 use serde::Serialize;
 use thiserror::Error;
-use tracing::info;
+use tracing::{info, warn};
 
 pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -177,23 +178,35 @@ where
             .collect()
     }
 
-    /// Applies the next _up to_ `update_count` updates, returning the merkle
-    /// tree proofs obtained after each apply.
-    fn apply_next_updates(&mut self, update_count: usize) {
-        let Some(next) = self.next.clone() else { return; };
+    fn apply_updates_up_to(&mut self, root: Hash) -> usize {
+        let Some(next) = self.next.clone() else { return 0; };
 
+        let num_updates;
         {
             // Acquire the exclusive write lock on the next version.
             let mut next = next.get_data();
 
-            let num_updates = std::cmp::min(next.metadata.diff.len(), update_count);
+            let index_of_root = next
+                .metadata
+                .diff
+                .iter()
+                .position(|update| update.result.root() == root);
 
-            let applied_updates: Vec<_> = next.metadata.diff.drain(..num_updates).collect();
+            let Some(index_of_root) = index_of_root else {
+                warn!(?root, "Root not found in the diff");
+                return 0;
+            };
+
+            let applied_updates: Vec<_> = next.metadata.diff.drain(..=index_of_root).collect();
+
+            num_updates = applied_updates.len();
 
             self.apply_diffs(applied_updates);
         }
 
         self.garbage_collect();
+
+        num_updates
     }
 }
 
@@ -412,7 +425,7 @@ impl TreeVersion<Latest> {
 /// only allow peeking and applying updates from the successor.
 pub trait TreeWithNextVersion {
     fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate>;
-    fn apply_next_updates(&self, update_count: usize);
+    fn apply_updates_up_to(&self, root: Hash) -> usize;
 }
 
 impl<V> TreeWithNextVersion for TreeVersion<V>
@@ -424,8 +437,8 @@ where
         self.get_data().peek_next_updates(maximum_update_count)
     }
 
-    fn apply_next_updates(&self, update_count: usize) {
-        self.get_data().apply_next_updates(update_count);
+    fn apply_updates_up_to(&self, root: Hash) -> usize {
+        self.get_data().apply_updates_up_to(root)
     }
 }
 
@@ -501,22 +514,36 @@ impl CanonicalTreeBuilder {
         dense_prefix_depth: usize,
         flattening_threshold: usize,
         initial_leaf: Field,
+        initial_leaves: &[Field],
     ) -> Self {
-        let tree = PoseidonTree::<lazy_merkle_tree::Canonical>::new_with_dense_prefix(
-            tree_depth,
-            dense_prefix_depth,
-            &initial_leaf,
-        );
+        let initial_leaves_in_dense_count = min(initial_leaves.len(), 1 << dense_prefix_depth);
+        let (initial_leaves_in_dense, leftover_initial_leaves) =
+            initial_leaves.split_at(initial_leaves_in_dense_count);
+
+        let tree =
+            PoseidonTree::<lazy_merkle_tree::Canonical>::new_with_dense_prefix_with_initial_values(
+                tree_depth,
+                dense_prefix_depth,
+                &initial_leaf,
+                initial_leaves_in_dense,
+            );
         let metadata = CanonicalTreeMetadata {
             flatten_threshold:        flattening_threshold,
             count_since_last_flatten: 0,
         };
-        Self(TreeVersionData {
+        let mut builder = Self(TreeVersionData {
             tree,
-            next_leaf: 0,
+            next_leaf: initial_leaves_in_dense_count,
             metadata,
             next: None,
-        })
+        });
+        for (index, leaf) in leftover_initial_leaves.iter().enumerate() {
+            builder.update(&TreeUpdate {
+                leaf_index: index + initial_leaves_in_dense_count,
+                element:    *leaf,
+            });
+        }
+        builder
     }
 
     /// Updates a leaf in the resulting tree.

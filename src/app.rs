@@ -1,9 +1,9 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, time::Instant};
 
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use hyper::StatusCode;
-use semaphore::protocol::verify_proof;
+use semaphore::{poseidon_tree::LazyPoseidonTree, protocol::verify_proof};
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, instrument, warn};
@@ -41,7 +41,10 @@ impl From<InclusionProof> for InclusionProofResponse {
 
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
-        StatusCode::OK
+        match self.0.status {
+            Status::Pending => StatusCode::ACCEPTED,
+            Status::Mined => StatusCode::OK,
+        }
     }
 }
 
@@ -146,12 +149,19 @@ impl App {
         let root_hash = identity_manager.latest_root().await?;
         let root_hash = root_hash.into();
 
+        let initial_root_hash = LazyPoseidonTree::new(
+            identity_manager.tree_depth(),
+            identity_manager.initial_leaf_value(),
+        )
+        .root();
+
         // We don't store the initial root in the database, so we have to skip this step
-        // if the db is empty
-        if !database.has_no_identities().await? {
+        // if the contract root hash is equal to initial root hash
+        if root_hash != initial_root_hash {
             database.mark_root_as_mined(&root_hash).await?;
         }
 
+        let timer = Instant::now();
         let tree_state = Self::initialize_tree(
             &database,
             // Poseidon tree depth is one more than the contract's tree depth
@@ -161,6 +171,7 @@ impl App {
             identity_manager.initial_leaf_value(),
         )
         .await?;
+        info!("Tree state initialization took: {:?}", timer.elapsed());
 
         let identity_committer = Arc::new(TaskMonitor::new(
             database.clone(),
@@ -200,16 +211,27 @@ impl App {
         gc_threshold: usize,
         initial_leaf_value: Hash,
     ) -> AnyhowResult<TreeState> {
-        let mut mined_builder = CanonicalTreeBuilder::new(
+        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
+        let initial_leaves = if mined_items.is_empty() {
+            vec![]
+        } else {
+            mined_items.sort_by_key(|item| item.leaf_index);
+            let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
+            let mut leaves = vec![initial_leaf_value; max_leaf + 1];
+
+            for item in mined_items {
+                leaves[item.leaf_index] = item.element;
+            }
+
+            leaves
+        };
+        let mined_builder = CanonicalTreeBuilder::new(
             tree_depth,
             dense_prefix_depth,
             gc_threshold,
             initial_leaf_value,
+            &initial_leaves,
         );
-        let mined_items = database.get_commitments_by_status(Status::Mined).await?;
-        for update in mined_items {
-            mined_builder.update(&update);
-        }
         let (mined, batching_builder) = mined_builder.seal();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
         let pending_items = database.get_commitments_by_status(Status::Pending).await?;

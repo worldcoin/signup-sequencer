@@ -109,11 +109,10 @@ async fn insert_identities(
         let next_db_index = database.get_next_leaf_index().await?;
         let next_leaf = latest_tree.next_leaf();
 
-        assert!(
-            next_leaf == next_db_index,
-            "Database and tree are out of sync. Next leaf index in tree is: {}, in database: {}",
-            next_leaf,
-            next_db_index
+        assert_eq!(
+            next_leaf, next_db_index,
+            "Database and tree are out of sync. Next leaf index in tree is: {next_leaf}, in \
+             database: {next_db_index}"
         );
 
         let (identities, on_completes): (Vec<_>, Vec<_>) = identities

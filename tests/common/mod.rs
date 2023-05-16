@@ -58,12 +58,11 @@ use std::{
     sync::Arc,
 };
 
-use futures::{stream::FuturesUnordered, StreamExt};
-
 use self::{
     chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract},
     prelude::*,
 };
+use futures::{stream::FuturesUnordered, StreamExt};
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
@@ -202,6 +201,70 @@ pub async fn test_inclusion_proof(
     let result_json = mined_json.expect("Failed to get mined response");
     let proof_json = generate_reference_proof_json(ref_tree, leaf_index, "mined");
     assert_eq!(result_json, proof_json);
+}
+
+#[instrument(skip_all)]
+pub async fn test_add_batch_size(
+    uri: impl Into<String>,
+    prover_url: impl Into<String>,
+    batch_size: u64,
+    client: &Client<HttpConnector>,
+) -> anyhow::Result<()> {
+    let prover_url_string: String = prover_url.into();
+    let body = Body::from(
+        json!({
+            "url": prover_url_string,
+            "batchSize": batch_size,
+            "timeoutSeconds": 3
+        })
+        .to_string(),
+    );
+    let request = Request::builder()
+        .method("POST")
+        .uri(uri.into() + "/addBatchSize")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create add batch size hyper::Body");
+
+    client
+        .request(request)
+        .await
+        .expect("Failed to execute request.");
+
+    Ok(())
+}
+
+#[instrument(skip_all)]
+pub async fn test_remove_batch_size(
+    uri: impl Into<String>,
+    batch_size: u64,
+    client: &Client<HttpConnector>,
+    expect_failure: bool,
+) -> anyhow::Result<()> {
+    let body = Body::from(json!({ "batchSize": batch_size }).to_string());
+    let request = Request::builder()
+        .method("POST")
+        .uri(uri.into() + "/removeBatchSize")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create remove batch size hyper::Body");
+
+    let mut result = client
+        .request(request)
+        .await
+        .expect("Request didn't return.");
+
+    let body_bytes = hyper::body::to_bytes(result.body_mut())
+        .await
+        .expect("Failed to get response bytes.");
+    let body_str =
+        String::from_utf8(body_bytes.into_iter().collect()).expect("Failed to decode response.");
+
+    if expect_failure && body_str == "The last batch size cannot be removed" {
+        Ok(())
+    } else {
+        Ok(())
+    }
 }
 
 #[instrument(skip_all)]

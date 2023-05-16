@@ -1,26 +1,33 @@
+pub mod error;
+
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     sync::Arc,
     time::Duration,
 };
 
-use anyhow::{bail, ensure, Error as EyreError, Result as AnyhowResult};
-use axum::{extract::State, middleware, response::IntoResponse, routing::post, Json, Router};
+use anyhow::{bail, ensure, Result as AnyhowResult};
+use axum::{
+    extract::State,
+    middleware,
+    routing::{get, post},
+    Json, Router,
+};
 use clap::Parser;
 use cli_batteries::await_shutdown;
 use hyper::StatusCode;
 use semaphore::{protocol::Proof, Field};
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer};
-use tracing::{error, info, Level};
+use tracing::{info, Level};
 use url::{Host, Url};
 
 use crate::{
-    app::{App, InclusionProofResponse, VerifySemaphoreProofResponse},
-    database,
+    app::{App, InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofResponse},
     identity_tree::Hash,
 };
+
+use error::Error;
 
 mod api_metrics_layer;
 mod extract_trace_layer;
@@ -44,6 +51,26 @@ pub struct Options {
 #[serde(deny_unknown_fields)]
 pub struct InsertCommitmentRequest {
     identity_commitment: Hash,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct AddBatchSizeRequest {
+    /// The URL of the prover for the provided batch size.
+    url:             String,
+    /// The batch size to add.
+    batch_size:      usize,
+    /// The timeout for communications with the prover service.
+    timeout_seconds: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct RemoveBatchSizeRequest {
+    /// The batch size to remove from the prover map.
+    batch_size: usize,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -71,82 +98,6 @@ pub trait ToResponseCode {
 impl ToResponseCode for () {
     fn to_response_code(&self) -> StatusCode {
         StatusCode::OK
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("invalid http method")]
-    InvalidMethod,
-    #[error("invalid path")]
-    InvalidPath,
-    #[error("invalid content type")]
-    InvalidContentType,
-    #[error("invalid group id")]
-    InvalidGroupId,
-    #[error("invalid root")]
-    InvalidRoot,
-    #[error("invalid semaphore proof")]
-    InvalidProof,
-    #[error("provided identity index out of bounds")]
-    IndexOutOfBounds,
-    #[error("provided identity commitment not found")]
-    IdentityCommitmentNotFound,
-    #[error("provided identity commitment is invalid")]
-    InvalidCommitment,
-    #[error("provided identity commitment is not in reduced form")]
-    UnreducedCommitment,
-    #[error("provided identity commitment is already included")]
-    DuplicateCommitment,
-    #[error("Root mismatch between tree and contract.")]
-    RootMismatch,
-    #[error("invalid JSON request: {0}")]
-    InvalidSerialization(#[from] serde_json::Error),
-    #[error(transparent)]
-    Database(#[from] database::Error),
-    #[error(transparent)]
-    Hyper(#[from] hyper::Error),
-    #[error(transparent)]
-    Http(#[from] hyper::http::Error),
-    #[error("not semaphore manager")]
-    NotManager,
-    #[error(transparent)]
-    Elapsed(#[from] tokio::time::error::Elapsed),
-    #[error("prover error")]
-    ProverError,
-    #[error("Failed to insert identity")]
-    FailedToInsert,
-    #[error(transparent)]
-    Other(#[from] EyreError),
-}
-
-impl Error {
-    fn to_status_code(&self) -> StatusCode {
-        match self {
-            Self::InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
-            Self::InvalidPath => StatusCode::NOT_FOUND,
-            Self::InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            Self::IndexOutOfBounds
-            | Self::IdentityCommitmentNotFound
-            | Self::InvalidCommitment
-            | Self::InvalidSerialization(_) => StatusCode::BAD_REQUEST,
-            Self::DuplicateCommitment => StatusCode::CONFLICT,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-}
-
-impl IntoResponse for Error {
-    fn into_response(self) -> axum::response::Response {
-        let status_code = self.to_status_code();
-
-        let body = if let Self::Other(err) = self {
-            format!("{err:?}")
-        } else {
-            self.to_string()
-        };
-
-        (status_code, body).into_response()
     }
 }
 
@@ -183,6 +134,30 @@ async fn verify_semaphore_proof(
     Ok(Json(result))
 }
 
+async fn add_batch_size(
+    State(app): State<Arc<App>>,
+    Json(req): Json<AddBatchSizeRequest>,
+) -> Result<(), Error> {
+    app.add_batch_size(req.url, req.batch_size, req.timeout_seconds)
+        .await?;
+
+    Ok(())
+}
+async fn remove_batch_size(
+    State(app): State<Arc<App>>,
+    Json(req): Json<RemoveBatchSizeRequest>,
+) -> Result<(), Error> {
+    app.remove_batch_size(req.batch_size).await?;
+
+    Ok(())
+}
+async fn list_batch_sizes(
+    State(app): State<Arc<App>>,
+) -> Result<Json<ListBatchSizesResponse>, Error> {
+    let result = app.list_batch_sizes().await?;
+
+    Ok(Json(result))
+}
 /// # Errors
 ///
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
@@ -231,6 +206,9 @@ pub async fn bind_from_listener(
         .route("/verifySemaphoreProof", post(verify_semaphore_proof))
         .route("/inclusionProof", post(inclusion_proof))
         .route("/insertIdentity", post(insert_identity))
+        .route("/addBatchSize", post(add_batch_size))
+        .route("/removeBatchSize", post(remove_batch_size))
+        .route("/listBatchSizes", get(list_batch_sizes))
         .layer(middleware::from_fn(api_metrics_layer::middleware))
         .layer(middleware::from_fn_with_state(
             serve_timeout,

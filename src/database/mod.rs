@@ -1,5 +1,7 @@
 #![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 
+use std::collections::HashSet;
+
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
 use sqlx::{
@@ -12,6 +14,10 @@ use tracing::{error, info, instrument, warn};
 use url::Url;
 
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
+
+use self::prover::ProverConfiguration;
+
+pub mod prover;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
@@ -327,6 +333,92 @@ impl Database {
         .bind(<&str>::from(Status::Pending));
         let result = self.pool.fetch_one(query).await?;
         Ok(result.get::<i64, _>(0) as i32)
+    }
+
+    pub async fn get_provers(&self) -> Result<prover::Provers, Error> {
+        let query = sqlx::query(
+            r#"
+                SELECT batch_size, url, timeout_s
+                FROM provers
+            "#,
+        );
+
+        let result = self.pool.fetch_all(query).await?;
+
+        Ok(result
+            .iter()
+            .map(|row| {
+                let batch_size = row.get::<i64, _>(0) as usize;
+                let url = row.get::<String, _>(1);
+                let timeout_s = row.get::<i64, _>(2) as u64;
+                prover::ProverConfiguration {
+                    url,
+                    batch_size,
+                    timeout_s,
+                }
+            })
+            .collect::<prover::Provers>())
+    }
+
+    pub async fn insert_prover_configuration(
+        &self,
+        batch_size: usize,
+        url: impl ToString,
+        timeout_seconds: u64,
+    ) -> Result<(), Error> {
+        let url = url.to_string();
+
+        let query = sqlx::query(
+            r#"
+                INSERT INTO provers (batch_size, url, timeout_s)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (batch_size)
+                DO UPDATE SET (url, timeout_s) = ($2, $3)
+            "#,
+        )
+        .bind(batch_size as i64)
+        .bind(url)
+        .bind(timeout_seconds as i64);
+
+        self.pool.execute(query).await?;
+
+        Ok(())
+    }
+
+    pub async fn insert_provers(&self, provers: HashSet<ProverConfiguration>) -> Result<(), Error> {
+        if provers.is_empty() {
+            return Ok(());
+        }
+
+        let mut query_builder = sqlx::QueryBuilder::new(
+            r#"
+                  INSERT INTO provers (batch_size, url, timeout_s)  
+            "#,
+        );
+
+        query_builder.push_values(provers, |mut b, prover| {
+            b.push_bind(prover.batch_size as i64)
+                .push_bind(prover.url)
+                .push_bind(prover.timeout_s as i64);
+        });
+
+        let query = query_builder.build();
+
+        self.pool.execute(query).await?;
+        Ok(())
+    }
+
+    pub async fn remove_prover(&self, batch_size: usize) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+              DELETE FROM provers WHERE batch_size = $1  
+            "#,
+        )
+        .bind(batch_size as i64);
+
+        self.pool.execute(query).await?;
+
+        Ok(())
     }
 }
 

@@ -19,7 +19,7 @@ use crate::{
     identity_tree::{
         AppliedTreeUpdate, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
     },
-    prover::batch_insertion::Identity,
+    prover::{batch_insertion::Identity, map::ReadOnlyInsertionProver},
     task_monitor::{PendingIdentities, TaskMonitor},
 };
 
@@ -80,7 +80,7 @@ async fn process_identities(
     identity_manager.await_clean_slate().await?;
 
     info!("Starting identity processor.");
-    let batch_size = identity_manager.max_batch_size();
+    let batch_size = identity_manager.max_batch_size().await;
 
     // We start a timer and force it to perform one initial tick to avoid an
     // immediate trigger.
@@ -102,7 +102,6 @@ async fn process_identities(
         // maximum time that users can wait for their identity commitment to be
         // processed, but also that we are not inefficient with on-chain gas by being
         // too eager.
-        //
         select! {
             _ = timer.tick() => {
                 debug!("Identity batch insertion woken due to timeout.");
@@ -114,14 +113,22 @@ async fn process_identities(
                 if updates.is_empty() {
                     continue;
                 }
-                info!("Sending non-full batch with {}/{} updates.", updates.len(), batch_size);
+
+                let prover = identity_manager.get_suitable_prover(updates.len()).await?;
+
+                info!(
+                    "Sending timed-out batch with {}/{} updates.",
+                    updates.len(),
+                    prover.batch_size()
+                );
 
                 commit_identities(
                     database,
                     identity_manager,
                     batching_tree,
                     pending_identities_sender,
-                    &updates
+                    &updates,
+                    prover
                 ).await?;
 
                 last_batch_time = SystemTime::now();
@@ -143,7 +150,7 @@ async fn process_identities(
                 let diff_secs = if let Ok(diff) = current_time.duration_since(last_batch_time) {
                     diff.as_secs()
                 } else {
-                    warn!("Identity committer things that the last batch is in the future.");
+                    warn!("Identity committer thinks that the last batch is in the future.");
                     continue
                 };
                 let should_process_anyway =
@@ -167,12 +174,15 @@ async fn process_identities(
                     continue;
                 }
 
+                let prover = identity_manager.get_suitable_prover(updates.len()).await?;
+
                 commit_identities(
                     database,
                     identity_manager,
                     batching_tree,
                     pending_identities_sender,
-                    &updates
+                    &updates,
+                    prover
                 ).await?;
 
                 // We've inserted the identities, so we want to ensure that
@@ -195,6 +205,7 @@ async fn commit_identities(
     batching_tree: &TreeVersion<Intermediate>,
     pending_identities_sender: &mpsc::Sender<PendingIdentities>,
     updates: &[AppliedTreeUpdate],
+    insertion_prover: ReadOnlyInsertionProver<'_>,
 ) -> AnyhowResult<()> {
     TaskMonitor::log_pending_identities_count(database).await?;
 
@@ -256,8 +267,7 @@ async fn commit_identities(
         "Number of identities does not match the number of merkle proofs."
     );
 
-    let prover = identity_manager.get_suitable_prover(commitment_count)?;
-    let batch_size = prover.batch_size();
+    let batch_size = insertion_prover.batch_size();
 
     // The verifier and prover can only work with a given batch size, so we need to
     // ensure that our batches match that size. We do this by padding with
@@ -313,7 +323,7 @@ async fn commit_identities(
 
     // We prepare the proof before reserving a slot in the pending identities
     let proof = IdentityManager::prepare_proof(
-        prover,
+        insertion_prover,
         start_index,
         pre_root,
         post_root,

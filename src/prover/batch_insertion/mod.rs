@@ -1,8 +1,10 @@
 mod identity;
 
+use clap::Parser;
 use std::{
     fmt::{Display, Formatter},
     mem::size_of,
+    str::FromStr,
     time::Duration,
 };
 
@@ -13,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub use crate::prover::batch_insertion::identity::Identity;
-use crate::prover::proof::Proof;
+use crate::{database::prover::ProverConfiguration as DbProverConfiguration, prover::Proof};
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";
@@ -36,10 +38,24 @@ static PROVER_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
     .unwrap()
 });
 
+#[derive(Clone, Debug, PartialEq, Eq, Parser)]
+#[group(skip)]
+pub struct Options {
+    /// The options for configuring the batch insertion prover service.
+    ///
+    /// This should be a JSON array containing objects of the following format `{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}`
+    #[clap(
+        long,
+        env,
+        default_value = r#"[{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}]"#
+    )]
+    pub prover_urls: ProverOptionsWrapper,
+}
+
 /// Configuration options for the component responsible for interacting with the
 /// prover service.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Options {
+pub struct ProverConfiguration {
     /// The URL at which to contact the semaphore prover service for proof
     /// generation.
     pub url: String,
@@ -53,12 +69,24 @@ pub struct Options {
     pub batch_size: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProverOptionsWrapper(pub Vec<ProverConfiguration>);
+
+impl FromStr for ProverOptionsWrapper {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s).map(ProverOptionsWrapper)
+    }
+}
+
 /// A representation of the connection to the MTB prover service.
 #[derive(Clone, Debug)]
 pub struct Prover {
     target_url: Url,
     client:     reqwest::Client,
     batch_size: usize,
+    timeout_s:  u64,
 }
 
 impl Prover {
@@ -66,9 +94,10 @@ impl Prover {
     ///
     /// # Arguments
     /// - `options`: The prover configuration options.
-    pub fn new(options: &Options) -> anyhow::Result<Self> {
+    pub fn new(options: &ProverConfiguration) -> anyhow::Result<Self> {
         let target_url = Url::parse(&options.url)?;
         let timeout_duration = Duration::from_secs(options.timeout_s);
+        let timeout_s = options.timeout_s;
         let batch_size = options.batch_size;
         let client = reqwest::Client::builder()
             .connect_timeout(timeout_duration)
@@ -78,13 +107,36 @@ impl Prover {
             target_url,
             client,
             batch_size,
+            timeout_s,
         };
 
         Ok(mtb)
     }
 
+    /// Creates a new batch insertion prover from the prover taken from the
+    /// database
+    pub fn from_prover_conf(prover_conf: &DbProverConfiguration) -> anyhow::Result<Self> {
+        let target_url = Url::parse(&prover_conf.url)?;
+        let timeout_duration = Duration::from_secs(prover_conf.timeout_s);
+        let client = reqwest::Client::builder()
+            .connect_timeout(timeout_duration)
+            .https_only(false)
+            .build()?;
+
+        Ok(Self {
+            target_url,
+            client,
+            batch_size: prover_conf.batch_size,
+            timeout_s: prover_conf.timeout_s,
+        })
+    }
+
     pub fn batch_size(&self) -> usize {
         self.batch_size
+    }
+
+    pub fn timeout_s(&self) -> u64 {
+        self.timeout_s
     }
 
     /// Generates a proof term for the provided identity insertions into the
@@ -153,6 +205,10 @@ impl Prover {
         total_proving_time_timer.observe_duration();
 
         Ok(proof)
+    }
+
+    pub fn url(&self) -> String {
+        self.target_url.to_string()
     }
 }
 
@@ -239,7 +295,7 @@ mod test {
         let mock_url: String = "0.0.0.0:3001".into();
         let mock_service = mock::Service::new(mock_url.clone()).await?;
 
-        let options = Options {
+        let options = ProverConfiguration {
             url:        "http://localhost:3001".into(),
             timeout_s:  30,
             batch_size: 3,
@@ -270,7 +326,7 @@ mod test {
         let mock_url: String = "0.0.0.0:3002".into();
         let mock_service = mock::Service::new(mock_url.clone()).await?;
 
-        let options = Options {
+        let options = ProverConfiguration {
             url:        "http://localhost:3002".into(),
             timeout_s:  30,
             batch_size: 3,
@@ -297,7 +353,7 @@ mod test {
 
     #[tokio::test]
     async fn prover_should_error_if_batch_size_wrong() -> anyhow::Result<()> {
-        let options = Options {
+        let options = ProverConfiguration {
             url:        "http://localhost:3002".into(),
             timeout_s:  30,
             batch_size: 10,

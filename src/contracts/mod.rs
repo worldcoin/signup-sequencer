@@ -10,16 +10,19 @@ use ethers::{
     types::{Address, U256},
 };
 use semaphore::Field;
-use tracing::{error, info, instrument};
+use tokio::sync::RwLockReadGuard;
+use tracing::{error, info, instrument, warn};
 
 use self::abi::BatchingContract as ContractAbi;
 use crate::{
     ethereum::{write::TransactionId, Ethereum, ReadProvider},
     prover::{
-        batch_insertion::{Identity, Prover},
-        proof::Proof,
-        ProverMap,
+        batch_insertion,
+        batch_insertion::ProverConfiguration,
+        map::{InsertionProverMap, ReadOnlyInsertionProver},
+        Proof, ReadOnlyProver,
     },
+    server::error::Error as ServerError,
 };
 
 /// Configuration options for the component responsible for interacting with the
@@ -49,13 +52,13 @@ pub struct Options {
 
 /// A structure representing the interface to the batch-based identity manager
 /// contract.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct IdentityManager {
-    ethereum:           Ethereum,
-    prover_map:         ProverMap,
-    abi:                ContractAbi<ReadProvider>,
-    initial_leaf_value: Field,
-    tree_depth:         usize,
+    ethereum:             Ethereum,
+    insertion_prover_map: InsertionProverMap,
+    abi:                  ContractAbi<ReadProvider>,
+    initial_leaf_value:   Field,
+    tree_depth:           usize,
 }
 
 impl IdentityManager {
@@ -63,7 +66,7 @@ impl IdentityManager {
     pub async fn new(
         options: Options,
         ethereum: Ethereum,
-        prover_map: ProverMap,
+        insertion_prover_map: InsertionProverMap,
     ) -> anyhow::Result<Self>
     where
         Self: Sized,
@@ -100,7 +103,7 @@ impl IdentityManager {
 
         let identity_manager = Self {
             ethereum,
-            prover_map,
+            insertion_prover_map,
             abi,
             initial_leaf_value,
             tree_depth,
@@ -114,9 +117,8 @@ impl IdentityManager {
         self.tree_depth
     }
 
-    #[must_use]
-    pub fn max_batch_size(&self) -> usize {
-        self.prover_map.max_batch_size()
+    pub async fn max_batch_size(&self) -> usize {
+        self.insertion_prover_map.read().await.max_batch_size()
     }
 
     #[must_use]
@@ -126,7 +128,10 @@ impl IdentityManager {
 
     /// Validates that merkle proofs are of the correct length against tree
     /// depth
-    pub fn validate_merkle_proofs(&self, identity_commitments: &[Identity]) -> anyhow::Result<()> {
+    pub fn validate_merkle_proofs(
+        &self,
+        identity_commitments: &[batch_insertion::Identity],
+    ) -> anyhow::Result<()> {
         for id in identity_commitments {
             if id.merkle_proof.len() != self.tree_depth {
                 return Err(anyhow!(format!(
@@ -140,22 +145,27 @@ impl IdentityManager {
         Ok(())
     }
 
-    pub fn get_suitable_prover(&self, num_identities: usize) -> anyhow::Result<&Prover> {
-        let prover = self
-            .prover_map
-            .get(num_identities)
-            .ok_or_else(|| anyhow!("No available prover for batch size: {num_identities}"))?;
+    pub async fn get_suitable_prover(
+        &self,
+        num_identities: usize,
+    ) -> anyhow::Result<ReadOnlyProver<batch_insertion::Prover>> {
+        let prover_map = self.insertion_prover_map.read().await;
 
-        Ok(prover)
+        match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
+            Ok(p) => anyhow::Ok(p),
+            Err(_) => Err(anyhow!(
+                "No available prover for batch size: {num_identities}"
+            )),
+        }
     }
 
     #[instrument(level = "debug", skip_all)]
     pub async fn prepare_proof(
-        prover: &Prover,
+        prover: ReadOnlyInsertionProver<'_>,
         start_index: usize,
         pre_root: U256,
         post_root: U256,
-        identity_commitments: &[Identity],
+        identity_commitments: &[batch_insertion::Identity],
     ) -> anyhow::Result<Proof> {
         let batch_size = identity_commitments.len();
 
@@ -185,7 +195,7 @@ impl IdentityManager {
         start_index: usize,
         pre_root: U256,
         post_root: U256,
-        identity_commitments: Vec<Identity>,
+        identity_commitments: Vec<batch_insertion::Identity>,
         proof_data: Proof,
     ) -> anyhow::Result<TransactionId> {
         let actual_start_index: u32 = start_index.try_into()?;
@@ -249,6 +259,62 @@ impl IdentityManager {
         let latest_root = self.abi.latest_root().call().await?;
 
         Ok(latest_root)
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the provided batch size already exists.
+    pub async fn add_batch_size(
+        &self,
+        url: &impl ToString,
+        batch_size: usize,
+        timeout_seconds: u64,
+    ) -> Result<(), ServerError> {
+        let mut map = self.insertion_prover_map.write().await;
+
+        if map.batch_size_exists(batch_size) {
+            return Err(ServerError::BatchSizeAlreadyExists);
+        }
+
+        let prover = batch_insertion::Prover::new(&ProverConfiguration {
+            url: url.to_string(),
+            batch_size,
+            timeout_s: timeout_seconds,
+        })?;
+
+        map.add(batch_size, prover);
+
+        Ok(())
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the batch size requested for removal doesn't exist
+    /// in the prover map.
+    pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
+        let mut map = self.insertion_prover_map.write().await;
+
+        if map.len() == 1 {
+            warn!("Attempting to remove the last batch size.");
+            return Err(ServerError::CannotRemoveLastBatchSize);
+        }
+
+        match map.remove(batch_size) {
+            Some(_) => Ok(()),
+            None => Err(ServerError::NoSuchBatchSize),
+        }
+    }
+
+    pub async fn list_batch_sizes(&self) -> Result<Vec<ProverConfiguration>, ServerError> {
+        Ok(self
+            .insertion_prover_map
+            .read()
+            .await
+            .as_configuration_vec())
+    }
+
+    pub async fn has_provers(&self) -> bool {
+        self.insertion_prover_map.read().await.len() > 0
     }
 }
 

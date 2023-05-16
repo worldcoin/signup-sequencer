@@ -23,11 +23,17 @@ use crate::{
     },
     server::{error::Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
     task_monitor,
-    task_monitor::{
-        tasks::insert_identities::{IdentityInsert, OnInsertComplete},
-        TaskMonitor,
-    },
+    task_monitor::{tasks::insert_identities::IdentityInsert, TaskMonitor},
 };
+
+#[derive(Serialize)]
+pub struct EmptyResponse;
+
+impl ToResponseCode for EmptyResponse {
+    fn to_response_code(&self) -> StatusCode {
+        StatusCode::ACCEPTED
+    }
+}
 
 #[derive(Serialize)]
 #[serde(transparent)]
@@ -42,6 +48,7 @@ impl From<InclusionProof> for InclusionProofResponse {
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
         match self.0.status {
+            Status::New | Status::Failed => StatusCode::BAD_REQUEST,
             Status::Pending => StatusCode::ACCEPTED,
             Status::Mined => StatusCode::OK,
         }
@@ -249,10 +256,10 @@ impl App {
     /// Will return `Err` if identity is already queued, or in the tree, or the
     /// queue malfunctions.
     #[instrument(level = "debug", skip_all)]
-    pub async fn insert_identity(
-        &self,
-        commitment: Hash,
-    ) -> Result<InclusionProofResponse, ServerError> {
+    pub async fn insert_identity(&self, commitment: Hash) -> Result<EmptyResponse, ServerError> {
+        self.database.insert_new_identity(commitment).await?;
+
+        // TO REMOVE
         if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
@@ -274,7 +281,7 @@ impl App {
             return Err(ServerError::UnreducedCommitment);
         }
 
-        let (tx, rx) = oneshot::channel();
+        let (tx, _) = oneshot::channel();
         self.insert_identities_sender
             .send(IdentityInsert {
                 identity:    commitment,
@@ -283,18 +290,7 @@ impl App {
             .await
             .map_err(|_| ServerError::FailedToInsert)?;
 
-        let inclusion_proof = rx.await.map_err(|_| ServerError::FailedToInsert)?;
-
-        let inclusion_proof = match inclusion_proof {
-            OnInsertComplete::DuplicateCommitment => {
-                warn!(?commitment, "Pending identity already exists.");
-
-                return Err(ServerError::DuplicateCommitment);
-            }
-            OnInsertComplete::Proof(inclusion_proof) => inclusion_proof,
-        };
-
-        Ok(InclusionProofResponse::from(inclusion_proof))
+        Ok(EmptyResponse)
     }
 
     fn merge_env_provers(

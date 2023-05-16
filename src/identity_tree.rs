@@ -44,6 +44,8 @@ pub struct TreeItem {
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
+    New,
+    Failed,
     Pending,
     Mined,
 }
@@ -67,6 +69,8 @@ impl FromStr for Status {
 impl From<Status> for &str {
     fn from(scope: Status) -> Self {
         match scope {
+            Status::New => "new",
+            Status::Failed => "failed",
             Status::Pending => "pending",
             Status::Mined => "mined",
         }
@@ -481,7 +485,9 @@ impl TreeState {
     #[must_use]
     pub fn get_proof_for(&self, item: &TreeItem) -> InclusionProof {
         let (root, proof) = match item.status {
-            Status::Pending => self.latest.get_proof(item.leaf_index),
+            Status::Pending | Status::New | Status::Failed => {
+                self.latest.get_proof(item.leaf_index)
+            }
             Status::Mined => self.mined.get_proof(item.leaf_index),
         };
         InclusionProof {

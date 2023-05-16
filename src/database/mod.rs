@@ -420,6 +420,19 @@ impl Database {
 
         Ok(())
     }
+
+    pub async fn insert_new_identity(&self, identity: Hash) -> Result<Hash, Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO unprocessed_identities (commitment, status, created_at)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            "#,
+        )
+        .bind(identity)
+        .bind(<&str>::from(Status::New));
+        self.pool.execute(query).await?;
+        Ok(identity)
+    }
 }
 
 #[derive(Debug, Error)]

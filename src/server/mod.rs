@@ -115,12 +115,11 @@ async fn inclusion_proof(
 async fn insert_identity(
     State(app): State<Arc<App>>,
     Json(insert_identity_request): Json<InsertCommitmentRequest>,
-) -> Result<Json<InclusionProofResponse>, Error> {
-    let result = app
-        .insert_identity(insert_identity_request.identity_commitment)
+) -> Result<(), Error> {
+    app.insert_identity(insert_identity_request.identity_commitment)
         .await?;
 
-    Ok(Json(result))
+    Ok(())
 }
 
 async fn verify_semaphore_proof(

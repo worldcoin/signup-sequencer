@@ -18,6 +18,7 @@ use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 use self::prover::ProverConfiguration;
 
 pub mod prover;
+use crate::secret::Secret;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
@@ -27,7 +28,7 @@ pub struct Options {
     /// Database server connection string.
     /// Example: `postgres://user:password@localhost:5432/database`
     #[clap(long, env)]
-    pub database: Url,
+    pub database: Secret<Url>,
 
     /// Allow creation or migration of the database schema.
     #[clap(long, default_value = "true")]
@@ -51,15 +52,16 @@ impl Database {
         info!(url = %&redacted_db_url, "Connecting to database");
 
         // Create database if requested and does not exist
-        if options.database_migrate && !Any::database_exists(options.database.as_str()).await? {
-            warn!(url = %&redacted_db_url, "Database does not exist, creating database");
-            Any::create_database(options.database.as_str()).await?;
+        if options.database_migrate && !Postgres::database_exists(options.database.expose()).await?
+        {
+            warn!(url = %&options.database, "Database does not exist, creating database");
+            Postgres::create_database(options.database.expose()).await?;
         }
 
         // Create a connection pool
         let pool = PoolOptions::<Postgres>::new()
             .max_connections(options.database_max_connections)
-            .connect(options.database.as_str())
+            .connect(options.database.expose())
             .await
             .context("error connecting to database")?;
 
@@ -443,7 +445,7 @@ mod test {
     use semaphore::Field;
 
     use super::{Database, Options};
-    use crate::identity_tree::Status;
+    use crate::{identity_tree::Status, secret::Secret};
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {
@@ -472,7 +474,7 @@ mod test {
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
         let db = Database::new(Options {
-            database:                 Url::parse(&url)?,
+            database:                 Secret::new(Url::parse(&url)?),
             database_migrate:         true,
             database_max_connections: 1,
         })

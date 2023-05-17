@@ -107,13 +107,13 @@ mod tests {
 
     #[test]
     fn test_expose() {
-        let secret = Secret(String::from("password@something!"));
+        let secret = Secret::from_str("password@something!").unwrap();
         assert_eq!(secret.expose(), "password@something!");
     }
 
     #[test]
     fn test_debug() {
-        let secret = Secret(String::from("password@something!"));
+        let secret = Secret::from_str("password@something!").unwrap();
         assert_eq!(format!("{:?}", secret), "**********");
     }
 

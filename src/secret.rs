@@ -36,7 +36,7 @@ impl FromStr for SecretUrl {
     type Err = <Url as FromStr>::Err;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Url::from_str(s).map(SecretUrl::new)?)
+        Url::from_str(s).map(SecretUrl::new)
     }
 }
 

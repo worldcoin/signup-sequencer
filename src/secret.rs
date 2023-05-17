@@ -119,9 +119,8 @@ mod tests {
 
     #[test]
     fn test_url_expose() {
-        let secret = SecretUrl::new(Secret(
-            Url::from_str("postgres://user:password@localhost:5432/database").unwrap(),
-        ));
+        let secret =
+            SecretUrl::from_str("postgres://user:password@localhost:5432/database").unwrap();
         assert_eq!(
             secret.expose(),
             "postgres://user:password@localhost:5432/database"
@@ -130,9 +129,8 @@ mod tests {
 
     #[test]
     fn test_url_debug() {
-        let secret = SecretUrl::new(Secret(
-            Url::from_str("postgres://user:password@localhost:5432/database").unwrap(),
-        ));
+        let secret =
+            SecretUrl::from_str("postgres://user:password@localhost:5432/database").unwrap();
         assert_eq!(
             format!("{:?}", secret),
             "postgres://**********@localhost:5432/database"

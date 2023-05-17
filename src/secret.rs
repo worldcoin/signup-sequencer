@@ -13,16 +13,15 @@ impl SecretUrl {
         self.as_ref()
     }
 
-    fn format(&self) -> String {
-        if self.0.has_authority() {
-            let mut url = self.0.clone();
+    fn format(&self) -> Url {
+        let mut url = self.0.clone();
+        if url.has_authority() {
             if url.password().is_some() {
                 url.set_password(None).unwrap();
             }
             url.set_username("**********").unwrap();
-            return url.to_string();
         }
-        self.0.to_string()
+        url
     }
 }
 
@@ -42,13 +41,13 @@ impl FromStr for SecretUrl {
 
 impl fmt::Display for SecretUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.format())
+        self.format().fmt(f)
     }
 }
 
 impl fmt::Debug for SecretUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.format())
+        self.format().fmt(f)
     }
 }
 

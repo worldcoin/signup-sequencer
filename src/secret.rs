@@ -10,7 +10,7 @@ impl SecretUrl {
     }
 
     pub fn expose(&self) -> &str {
-        self.as_ref()
+        self.0.as_str()
     }
 
     fn format(&self) -> Url {
@@ -22,12 +22,6 @@ impl SecretUrl {
             url.set_username("**********").unwrap();
         }
         url
-    }
-}
-
-impl AsRef<str> for SecretUrl {
-    fn as_ref(&self) -> &str {
-        self.0.as_str()
     }
 }
 

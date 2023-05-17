@@ -257,8 +257,6 @@ impl App {
     /// queue malfunctions.
     #[instrument(level = "debug", skip_all)]
     pub async fn insert_identity(&self, commitment: Hash) -> Result<EmptyResponse, ServerError> {
-        self.database.insert_new_identity(commitment).await?;
-
         // TO REMOVE
         if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
@@ -280,6 +278,13 @@ impl App {
             );
             return Err(ServerError::UnreducedCommitment);
         }
+
+        let identity_exists = self.database.identity_exists(commitment).await?;
+        if identity_exists {
+            return Err(ServerError::DuplicateCommitment);
+        }
+
+        self.database.insert_new_identity(commitment).await?;
 
         let (tx, _) = oneshot::channel();
         self.insert_identities_sender

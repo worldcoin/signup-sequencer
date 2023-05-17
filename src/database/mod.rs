@@ -433,6 +433,25 @@ impl Database {
         self.pool.execute(query).await?;
         Ok(identity)
     }
+
+    pub async fn identity_exists(&self, commitment: Hash) -> Result<bool, Error> {
+        let query_unprocessed_identity = sqlx::query(
+            r#"SELECT exists(SELECT 1 from unprocessed_identities where commitment = $1)"#,
+        )
+        .bind(commitment);
+
+        let row_unprocessed = self.pool.fetch_one(query_unprocessed_identity).await?;
+
+        let query_processed_identity =
+            sqlx::query(r#"SELECT exists(SELECT 1 from identities where commitment = $1)"#)
+                .bind(commitment);
+
+        let row_processed = self.pool.fetch_one(query_processed_identity).await?;
+
+        let exists = row_unprocessed.get::<bool, _>(0) && row_processed.get::<bool, _>(0);
+
+        Ok(exists)
+    }
 }
 
 #[derive(Debug, Error)]

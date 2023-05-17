@@ -59,6 +59,8 @@ impl FromStr for Status {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "new" => Ok(Self::New),
+            "failed" => Ok(Self::Failed),
             "pending" => Ok(Self::Pending),
             "mined" => Ok(Self::Mined),
             _ => Err(UnknownStatus),

@@ -1305,7 +1305,7 @@ checksum = "8a2dd5a6fe8c6e3502f568a6353e5273bbb15193ad9a89e457b9970798efbea1"
 [[package]]
 name = "cli-batteries"
 version = "0.5.0"
-source = "git+https://github.com/Dzejkop/cli-batteries?rev=af8f226ca93b68cc5ff6285d6aa9f703cc7a8fe5#af8f226ca93b68cc5ff6285d6aa9f703cc7a8fe5"
+source = "git+https://github.com/Dzejkop/cli-batteries?rev=149ba931b3b7f34c78d71f77f4e70a51f56fa3cd#149ba931b3b7f34c78d71f77f4e70a51f56fa3cd"
 dependencies = [
  "ansi_term",
  "chrono",

@@ -544,9 +544,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sigv4"
-version = "0.46.0"
+version = "0.46.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd866926c2c4978210bcb01d7d1b431c794f0c23ca9ee1e420204b018836b5fb"
+checksum = "d6a70364c0d649ef1c37188a4d0e4f5a918e1a9df318e5b1b2bb7117e271f6e1"
 dependencies = [
  "aws-smithy-http",
  "form_urlencoded",

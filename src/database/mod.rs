@@ -1,4 +1,8 @@
-#![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+#![allow(
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap
+)]
 
 use std::collections::HashSet;
 
@@ -392,7 +396,7 @@ impl Database {
 
         let mut query_builder = sqlx::QueryBuilder::new(
             r#"
-                  INSERT INTO provers (batch_size, url, timeout_s)  
+                  INSERT INTO provers (batch_size, url, timeout_s)
             "#,
         );
 
@@ -411,7 +415,7 @@ impl Database {
     pub async fn remove_prover(&self, batch_size: usize) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
-              DELETE FROM provers WHERE batch_size = $1  
+              DELETE FROM provers WHERE batch_size = $1
             "#,
         )
         .bind(batch_size as i64);

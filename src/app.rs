@@ -1,58 +1,76 @@
+use std::{collections::HashSet, sync::Arc, time::Instant};
+
+use anyhow::Result as AnyhowResult;
+use clap::Parser;
+use hyper::StatusCode;
+use semaphore::{poseidon_tree::LazyPoseidonTree, protocol::verify_proof};
+use serde::Serialize;
+use tokio::sync::{mpsc, oneshot};
+use tracing::{info, instrument, warn};
+
 use crate::{
     contracts,
-    contracts::{
-        batching::Contract as BatchingContract, legacy::Contract as LegacyContract,
-        IdentityManager, SharedIdentityManager,
+    contracts::{IdentityManager, SharedIdentityManager},
+    database::{
+        self,
+        prover::{ProverConfiguration as DbProverConf, Provers},
+        Database,
     },
-    database::{self, Database},
     ethereum::{self, Ethereum},
-    ethereum_subscriber::{Error as SubscriberError, EthereumSubscriber},
-    identity_committer::IdentityCommitter,
-    identity_tree::{Hash, SharedTreeState, TreeState},
-    prover,
-    server::{Error as ServerError, ToResponseCode},
-    timed_rw_lock::TimedRwLock,
+    identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
+    prover::{
+        self, batch_insertion, batch_insertion::ProverConfiguration, map::make_insertion_map,
+    },
+    server::{error::Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
+    task_monitor,
+    task_monitor::{
+        tasks::insert_identities::{IdentityInsert, OnInsertComplete},
+        TaskMonitor,
+    },
 };
-use anyhow::{anyhow, Result as AnyhowResult};
-use clap::Parser;
-use cli_batteries::await_shutdown;
-use ethers::types::U256;
-use futures::TryFutureExt;
-use hyper::StatusCode;
-use semaphore::{poseidon_tree::Proof, Field};
-use serde::{ser::SerializeStruct, Serialize, Serializer};
-use std::{sync::Arc, time::Duration};
-use tokio::{select, try_join};
-use tracing::{error, info, instrument, warn};
 
-pub enum InclusionProofResponse {
-    Proof { root: Field, proof: Proof },
-    Pending,
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct InclusionProofResponse(InclusionProof);
+
+impl From<InclusionProof> for InclusionProofResponse {
+    fn from(value: InclusionProof) -> Self {
+        Self(value)
+    }
 }
 
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
-        match self {
-            Self::Proof { .. } => StatusCode::OK,
-            Self::Pending => StatusCode::ACCEPTED,
+        match self.0.status {
+            Status::Pending => StatusCode::ACCEPTED,
+            Status::Mined => StatusCode::OK,
         }
     }
 }
 
-impl Serialize for InclusionProofResponse {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Self::Proof { root, proof } => {
-                let mut state = serializer.serialize_struct("InclusionProof", 2)?;
-                state.serialize_field("root", root)?;
-                state.serialize_field("proof", proof)?;
-                state.end()
-            }
-            Self::Pending => serializer.serialize_str("pending"),
-        }
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct ListBatchSizesResponse(Vec<ProverConfiguration>);
+
+impl From<Vec<ProverConfiguration>> for ListBatchSizesResponse {
+    fn from(value: Vec<ProverConfiguration>) -> Self {
+        Self(value)
+    }
+}
+
+impl ToResponseCode for ListBatchSizesResponse {
+    fn to_response_code(&self) -> StatusCode {
+        StatusCode::OK
+    }
+}
+
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct VerifySemaphoreProofResponse(RootItem);
+
+impl ToResponseCode for VerifySemaphoreProofResponse {
+    fn to_response_code(&self) -> StatusCode {
+        StatusCode::OK
     }
 }
 
@@ -69,7 +87,10 @@ pub struct Options {
     pub database: database::Options,
 
     #[clap(flatten)]
-    pub prover: prover::Options,
+    pub batch_provers: prover::batch_insertion::Options,
+
+    #[clap(flatten)]
+    pub committer: task_monitor::Options,
 
     /// Block number to start syncing from
     #[clap(long, env, default_value = "0")]
@@ -78,18 +99,23 @@ pub struct Options {
     /// Timeout for the tree lock (seconds).
     #[clap(long, env, default_value = "120")]
     pub lock_timeout: u64,
+
+    /// The depth of the tree prefix that is vectorized.
+    #[clap(long, env, default_value = "20")]
+    pub dense_tree_prefix_depth: usize,
+
+    /// The number of updates to trigger garbage collection.
+    #[clap(long, env, default_value = "10000")]
+    pub tree_gc_threshold: usize,
 }
 
 pub struct App {
-    database:           Arc<Database>,
-    #[allow(dead_code)]
-    ethereum:           Ethereum,
-    identity_manager:   SharedIdentityManager,
-    identity_committer: Arc<IdentityCommitter>,
-    #[allow(dead_code)]
-    chain_subscriber:   EthereumSubscriber,
-    tree_state:         SharedTreeState,
-    snark_scalar_field: Hash,
+    database:                 Arc<Database>,
+    identity_manager:         SharedIdentityManager,
+    identity_committer:       Arc<TaskMonitor>,
+    tree_state:               TreeState,
+    snark_scalar_field:       Hash,
+    insert_identities_sender: mpsc::Sender<IdentityInsert>,
 }
 
 impl App {
@@ -97,138 +123,123 @@ impl App {
     ///
     /// Will return `Err` if the internal Ethereum handler errors or if the
     /// `options.storage_file` is not accessible.
-    #[allow(clippy::missing_panics_doc)] // TODO
     #[instrument(name = "App::new", level = "debug")]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
-        let refresh_rate = options.ethereum.refresh_rate;
-        let cache_recovery_step_size = options.ethereum.cache_recovery_step_size;
+        let ethereum = Ethereum::new(options.ethereum);
+        let db = Database::new(options.database);
 
-        // Connect to Ethereum and Database
-        let (database, (ethereum, identity_manager)) = {
-            let db = Database::new(options.database);
+        let (ethereum, db) = tokio::try_join!(ethereum, db)?;
 
-            let eth = Ethereum::new(options.ethereum).and_then(|ethereum| async move {
-                let identity_manager = if cfg!(feature = "batching-contract") {
-                    BatchingContract::new(options.contracts, ethereum.clone()).await?;
-                    panic!("The batching contract does not yet exist but was requested.");
-                } else {
-                    LegacyContract::new(options.contracts, ethereum.clone()).await?
-                };
-                Ok((ethereum, Arc::new(identity_manager)))
-            });
+        let database = Arc::new(db);
+        let mut provers = database.get_provers().await?;
+        let non_inserted_provers = Self::merge_env_provers(options.batch_provers, &mut provers);
 
-            // Connect to both in parallel
-            try_join!(db, eth)?
-        };
-        let database = Arc::new(database);
+        database.insert_provers(non_inserted_provers).await?;
 
-        // Poseidon tree depth is one more than the contract's tree depth
-        let tree_state = Arc::new(TimedRwLock::new(
-            Duration::from_secs(options.lock_timeout),
-            TreeState::new(
-                identity_manager.tree_depth() + 1,
-                identity_manager.initial_leaf_value(),
-            ),
-        ));
+        let insertion_prover_map = make_insertion_map(provers)?;
+        let identity_manager =
+            IdentityManager::new(options.contracts, ethereum.clone(), insertion_prover_map).await?;
 
-        let identity_committer = Arc::new(IdentityCommitter::new(
+        let identity_manager = Arc::new(identity_manager);
+
+        // Await for all pending transactions
+        identity_manager.await_clean_slate().await?;
+
+        // Prefetch latest root & mark it as mined
+        let root_hash = identity_manager.latest_root().await?;
+        let root_hash = root_hash.into();
+
+        let initial_root_hash = LazyPoseidonTree::new(
+            identity_manager.tree_depth(),
+            identity_manager.initial_leaf_value(),
+        )
+        .root();
+
+        // We don't store the initial root in the database, so we have to skip this step
+        // if the contract root hash is equal to initial root hash
+        if root_hash != initial_root_hash {
+            database.mark_root_as_mined(&root_hash).await?;
+        }
+
+        let timer = Instant::now();
+        let tree_state = Self::initialize_tree(
+            &database,
+            // Poseidon tree depth is one more than the contract's tree depth
+            identity_manager.tree_depth(),
+            options.dense_tree_prefix_depth,
+            options.tree_gc_threshold,
+            identity_manager.initial_leaf_value(),
+        )
+        .await?;
+        info!("Tree state initialization took: {:?}", timer.elapsed());
+
+        let identity_committer = Arc::new(TaskMonitor::new(
             database.clone(),
             identity_manager.clone(),
             tree_state.clone(),
+            &options.committer,
         ));
-        let chain_subscriber = EthereumSubscriber::new(
-            options.starting_block,
-            database.clone(),
-            identity_manager.clone(),
-            tree_state.clone(),
-            identity_committer.clone(),
-        );
 
+        // TODO Export the reduced-ness check that this is enabling from the
+        //  `semaphore-rs` library when we bump the version.
         let snark_scalar_field = Hash::from_str_radix(
             "21888242871839275222246405745257275088548364400416034343698204186575808495617",
             10,
         )
         .expect("This should just parse.");
 
+        // Process to push new identities to Ethereum
+        let insert_identities_sender = identity_committer.start().await;
+
         // Sync with chain on start up
-        let mut app = Self {
+        let app = Self {
             database,
-            ethereum,
             identity_manager,
             identity_committer,
-            chain_subscriber,
             tree_state,
             snark_scalar_field,
+            insert_identities_sender,
         };
-
-        select! {
-            _ = app.load_initial_events(options.lock_timeout, options.starting_block, cache_recovery_step_size) => {},
-            _ = await_shutdown() => return Err(anyhow!("Interrupted"))
-        }
-
-        // Basic sanity checks on the merkle tree
-        app.chain_subscriber.check_health().await;
-
-        // Listen to Ethereum events
-        app.chain_subscriber.start(refresh_rate).await;
-
-        // Process to push new identities to Ethereum
-        app.identity_committer.start().await;
 
         Ok(app)
     }
 
-    async fn load_initial_events(
-        &mut self,
-        lock_timeout: u64,
-        starting_block: u64,
-        cache_recovery_step_size: usize,
-    ) -> AnyhowResult<()> {
-        let mut root_mismatch_count = 0;
-        loop {
-            if root_mismatch_count == 1 {
-                error!(cache_recovery_step_size, "Removing most recent cache.");
-                self.database
-                    .delete_most_recent_cached_events(cache_recovery_step_size as i64)
-                    .await?;
-            } else if root_mismatch_count == 2 {
-                error!("Wiping out the entire cache.");
-                self.database.wipe_cache().await?;
-            } else if root_mismatch_count >= 3 {
-                return Err(SubscriberError::RootMismatch.into());
+    async fn initialize_tree(
+        database: &Database,
+        tree_depth: usize,
+        dense_prefix_depth: usize,
+        gc_threshold: usize,
+        initial_leaf_value: Hash,
+    ) -> AnyhowResult<TreeState> {
+        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
+        let initial_leaves = if mined_items.is_empty() {
+            vec![]
+        } else {
+            mined_items.sort_by_key(|item| item.leaf_index);
+            let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
+            let mut leaves = vec![initial_leaf_value; max_leaf + 1];
+
+            for item in mined_items {
+                leaves[item.leaf_index] = item.element;
             }
 
-            match self.chain_subscriber.process_initial_events().await {
-                Err(SubscriberError::RootMismatch) => {
-                    error!("Error when rebuilding tree from cache.");
-                    root_mismatch_count += 1;
-
-                    // Create a new empty MerkleTree
-                    self.tree_state = Arc::new(TimedRwLock::new(
-                        Duration::from_secs(lock_timeout),
-                        TreeState::new(
-                            self.identity_manager.tree_depth() + 1,
-                            self.identity_manager.initial_leaf_value(),
-                        ),
-                    ));
-
-                    // Retry
-                    self.chain_subscriber = EthereumSubscriber::new(
-                        starting_block,
-                        self.database.clone(),
-                        self.identity_manager.clone(),
-                        self.tree_state.clone(),
-                        self.identity_committer.clone(),
-                    );
-                }
-                Err(e) => return Err(e.into()),
-                Ok(_) => return Ok(()),
-            }
+            leaves
+        };
+        let mined_builder = CanonicalTreeBuilder::new(
+            tree_depth,
+            dense_prefix_depth,
+            gc_threshold,
+            initial_leaf_value,
+            &initial_leaves,
+        );
+        let (mined, batching_builder) = mined_builder.seal();
+        let (batching, mut latest_builder) = batching_builder.seal_and_continue();
+        let pending_items = database.get_commitments_by_status(Status::Pending).await?;
+        for update in pending_items {
+            latest_builder.update(&update);
         }
-    }
-
-    fn identity_is_reduced(&self, commitment: Hash) -> bool {
-        commitment.lt(&self.snark_scalar_field)
+        let latest = latest_builder.seal();
+        Ok(TreeState::new(mined, batching, latest))
     }
 
     /// Queues an insert into the merkle tree.
@@ -240,16 +251,19 @@ impl App {
     #[instrument(level = "debug", skip_all)]
     pub async fn insert_identity(
         &self,
-        group_id: usize,
         commitment: Hash,
-    ) -> Result<(), ServerError> {
-        if U256::from(group_id) != self.identity_manager.group_id() {
-            return Err(ServerError::InvalidGroupId);
-        }
-
+    ) -> Result<InclusionProofResponse, ServerError> {
         if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
+        }
+
+        if !self.identity_manager.has_provers().await {
+            warn!(
+                ?commitment,
+                "Identity Manager has no provers. Add provers with /addBatchSize request."
+            );
+            return Err(ServerError::NoProversOnIdInsert);
         }
 
         if !self.identity_is_reduced(commitment) {
@@ -260,39 +274,97 @@ impl App {
             return Err(ServerError::UnreducedCommitment);
         }
 
-        // Note the ordering of duplicate checks: since we never want to lose data,
-        // pending identities are removed from the DB _after_ they are inserted into the
-        // tree. Therefore this order of checks guarantees we will not insert a
-        // duplicate.
-        if self
-            .database
-            .pending_identity_exists(group_id, &commitment)
-            .await?
-        {
-            warn!(?commitment, "Pending identity already exists.");
-            return Err(ServerError::DuplicateCommitment);
-        }
+        let (tx, rx) = oneshot::channel();
+        self.insert_identities_sender
+            .send(IdentityInsert {
+                identity:    commitment,
+                on_complete: tx,
+            })
+            .await
+            .map_err(|_| ServerError::FailedToInsert)?;
 
-        {
-            let tree = self.tree_state.read().await?;
-            if let Some(existing) = tree
-                .merkle_tree
-                .leaves()
-                .iter()
-                .position(|&x| x == commitment)
-            {
-                warn!(?existing, ?commitment, next = %tree.next_leaf, "Commitment already exists in tree.");
+        let inclusion_proof = rx.await.map_err(|_| ServerError::FailedToInsert)?;
+
+        let inclusion_proof = match inclusion_proof {
+            OnInsertComplete::DuplicateCommitment => {
+                warn!(?commitment, "Pending identity already exists.");
+
                 return Err(ServerError::DuplicateCommitment);
             }
+            OnInsertComplete::Proof(inclusion_proof) => inclusion_proof,
+        };
+
+        Ok(InclusionProofResponse::from(inclusion_proof))
+    }
+
+    fn merge_env_provers(
+        options: batch_insertion::Options,
+        existing_provers: &mut Provers,
+    ) -> Provers {
+        let options_set: HashSet<DbProverConf> = options
+            .prover_urls
+            .0
+            .into_iter()
+            .map(|opt| DbProverConf {
+                url:        opt.url,
+                batch_size: opt.batch_size,
+                timeout_s:  opt.timeout_s,
+            })
+            .collect();
+
+        let env_provers: HashSet<_> = options_set.difference(existing_provers).cloned().collect();
+
+        for unique in &env_provers {
+            existing_provers.insert(unique.clone());
         }
 
-        self.database
-            .insert_pending_identity(group_id, &commitment)
+        env_provers
+    }
+
+    fn identity_is_reduced(&self, commitment: Hash) -> bool {
+        commitment.lt(&self.snark_scalar_field)
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the provided batch size already exists.
+    /// Will return `Err` if the batch size fails to write to database.
+    pub async fn add_batch_size(
+        &self,
+        url: impl ToString,
+        batch_size: usize,
+        timeout_seconds: u64,
+    ) -> Result<(), ServerError> {
+        self.identity_manager
+            .add_batch_size(&url, batch_size, timeout_seconds)
             .await?;
 
-        self.identity_committer.notify_queued().await;
+        self.database
+            .insert_prover_configuration(batch_size, url, timeout_seconds)
+            .await?;
 
         Ok(())
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the requested batch size does not exist.
+    /// Will return `Err` if batch size fails to be removed from database.
+    pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
+        self.identity_manager.remove_batch_size(batch_size).await?;
+
+        self.database.remove_prover(batch_size).await?;
+
+        Ok(())
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if something unknown went wrong.
+    pub async fn list_batch_sizes(&self) -> Result<ListBatchSizesResponse, ServerError> {
+        let batches = self.identity_manager.list_batch_sizes().await?;
+
+        Ok(ListBatchSizesResponse::from(batches))
     }
 
     /// # Errors
@@ -301,72 +373,50 @@ impl App {
     #[instrument(level = "debug", skip_all)]
     pub async fn inclusion_proof(
         &self,
-        group_id: usize,
         commitment: &Hash,
     ) -> Result<InclusionProofResponse, ServerError> {
-        if U256::from(group_id) != self.identity_manager.group_id() {
-            return Err(ServerError::InvalidGroupId);
-        }
-
         if commitment == &self.identity_manager.initial_leaf_value() {
             return Err(ServerError::InvalidCommitment);
         }
 
-        {
-            let tree = self.tree_state.read().await.map_err(|e| {
-                error!(?e, "Failed to obtain tree lock in inclusion_proof.");
-                panic!("Sequencer potentially deadlocked, terminating.");
-                #[allow(unreachable_code)]
-                e
-            })?;
-
-            if let Some(identity_index) = tree
-                .merkle_tree
-                .leaves()
-                .iter()
-                .position(|&x| x == *commitment)
-            {
-                let proof = tree
-                    .merkle_tree
-                    .proof(identity_index)
-                    .ok_or(ServerError::IndexOutOfBounds)?;
-                let root = tree.merkle_tree.root();
-
-                // Locally check the proof
-                // TODO: Check the leaf index / path
-                if !tree.merkle_tree.verify(*commitment, &proof) {
-                    error!(
-                        ?commitment,
-                        ?identity_index,
-                        ?root,
-                        "Proof does not verify locally."
-                    );
-                    panic!("Proof does not verify locally.");
-                }
-
-                drop(tree);
-
-                // Verify the root on chain
-                if let Err(error) = self.identity_manager.assert_valid_root(root).await {
-                    error!(
-                        computed_root = ?root,
-                        ?error,
-                        "Root mismatch between tree and contract."
-                    );
-                    return Err(ServerError::RootMismatch);
-                }
-                return Ok(InclusionProofResponse::Proof { root, proof });
-            }
-        }
-
-        if self
+        let item = self
             .database
-            .pending_identity_exists(group_id, commitment)
+            .get_identity_leaf_index(commitment)
             .await?
-        {
-            Ok(InclusionProofResponse::Pending)
-        } else {
-            Err(ServerError::IdentityCommitmentNotFound)
+            .ok_or(ServerError::InvalidCommitment)?;
+
+        let proof = self.tree_state.get_proof_for(&item);
+
+        Ok(InclusionProofResponse(proof))
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the provided proof is invalid.
+    #[instrument(level = "debug", skip_all)]
+    pub async fn verify_semaphore_proof(
+        &self,
+        request: &VerifySemaphoreProofRequest,
+    ) -> Result<VerifySemaphoreProofResponse, ServerError> {
+        let Some(root_state) = self.database.get_root_state(&request.root).await? else {
+            return Err(ServerError::InvalidRoot)
+        };
+
+        let checked = verify_proof(
+            request.root,
+            request.nullifier_hash,
+            request.signal_hash,
+            request.external_nullifier_hash,
+            &request.proof,
+            self.identity_manager.tree_depth(),
+        );
+        match checked {
+            Ok(true) => Ok(VerifySemaphoreProofResponse(root_state)),
+            Ok(false) => Err(ServerError::InvalidProof),
+            Err(err) => {
+                info!(?err, "verify_proof failed with error");
+                Err(ServerError::ProverError)
+            }
         }
     }
 
@@ -375,8 +425,7 @@ impl App {
     /// Will return an Error if any of the components cannot be shut down
     /// gracefully.
     pub async fn shutdown(&self) -> AnyhowResult<()> {
-        info!("Shutting down identity committer and chain subscriber.");
-        self.chain_subscriber.shutdown().await;
+        info!("Shutting down identity committer.");
         self.identity_committer.shutdown().await
     }
 }

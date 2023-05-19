@@ -1,17 +1,23 @@
-use crate::identity_tree::Hash;
+#![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+
+use std::collections::HashSet;
+
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
-use ruint::{aliases::U256, uint};
-use semaphore::Field;
 use sqlx::{
-    any::AnyKind,
     migrate::{Migrate, MigrateDatabase, Migrator},
     pool::PoolOptions,
-    Any, Executor, Pool, Row,
+    Executor, Pool, Postgres, Row,
 };
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 use url::Url;
+
+use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
+
+use self::prover::ProverConfiguration;
+
+pub mod prover;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
@@ -20,9 +26,7 @@ static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 pub struct Options {
     /// Database server connection string.
     /// Example: `postgres://user:password@localhost:5432/database`
-    /// Sqlite file: ``
-    /// In memory DB: `sqlite::memory:`
-    #[clap(long, env, default_value = "sqlite::memory:")]
+    #[clap(long, env)]
     pub database: Url,
 
     /// Allow creation or migration of the database schema.
@@ -35,7 +39,7 @@ pub struct Options {
 }
 
 pub struct Database {
-    pool: Pool<Any>,
+    pool: Pool<Postgres>,
 }
 
 impl Database {
@@ -44,37 +48,34 @@ impl Database {
         info!(url = %&options.database, "Connecting to database");
 
         // Create database if requested and does not exist
-        if options.database_migrate && !Any::database_exists(options.database.as_str()).await? {
-            warn!(url = %&options.database, "Database does not exist, creating
-        database");
-            Any::create_database(options.database.as_str()).await?;
+        if options.database_migrate && !Postgres::database_exists(options.database.as_str()).await?
+        {
+            warn!(url = %&options.database, "Database does not exist, creating database");
+            Postgres::create_database(options.database.as_str()).await?;
         }
 
         // Create a connection pool
-        let pool = PoolOptions::<Any>::new()
+        let pool = PoolOptions::<Postgres>::new()
             .max_connections(options.database_max_connections)
             .connect(options.database.as_str())
             .await
             .context("error connecting to database")?;
 
-        // Log DB version to test connection.
-        let sql = match pool.any_kind() {
-            AnyKind::Sqlite => "sqlite_version() || ' ' || sqlite_source_id()",
-            AnyKind::Postgres => "version()",
-
-            // Depending on compilation flags there may be more patterns.
-            #[allow(unreachable_patterns)]
-            _ => "'unknown'",
-        };
         let version = pool
-            .fetch_one(format!("SELECT {sql};").as_str())
+            .fetch_one("SELECT version()")
             .await
             .context("error getting database version")?
             .get::<String, _>(0);
-        info!(url = %&options.database, kind = ?pool.any_kind(), ?version, "Connected to database");
+
+        info!(url = %&options.database, ?version, "Connected to database");
 
         // Run migrations if requested.
-        let latest = MIGRATOR.migrations.last().unwrap().version;
+        let latest = MIGRATOR
+            .migrations
+            .last()
+            .expect("Missing migrations")
+            .version;
+
         if options.database_migrate {
             info!(url = %&options.database, "Running migrations");
             MIGRATOR.run(&pool).await?;
@@ -128,243 +129,633 @@ impl Database {
 
     pub async fn insert_pending_identity(
         &self,
-        group_id: usize,
+        leaf_index: usize,
         identity: &Hash,
+        root: &Hash,
     ) -> Result<(), Error> {
-        let query = sqlx::query(
-            r#"INSERT INTO pending_identities (group_id, commitment)
-                   VALUES ($1, $2);"#,
+        let mut tx = self.pool.begin().await?;
+
+        let insert_pending_identity_query = sqlx::query(
+            r#"
+            INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of)
+            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+            ON CONFLICT (root) DO NOTHING;
+            "#,
         )
-        .bind(group_id as i64)
-        .bind(identity);
-        self.pool.execute(query).await?;
+        .bind(leaf_index as i64)
+        .bind(identity)
+        .bind(root)
+        .bind(<&str>::from(Status::Pending));
+
+        tx.execute(insert_pending_identity_query).await?;
+
+        tx.commit().await?;
+
         Ok(())
     }
 
-    pub async fn mark_identity_inserted(
-        &self,
-        group_id: usize,
-        commitment: &Hash,
-        block_number: usize,
-    ) -> Result<(), Error> {
-        let query = sqlx::query(
-            r#"UPDATE pending_identities
-                   SET mined_in_block = $1
-                   WHERE group_id = $2 AND commitment = $3;"#,
+    pub async fn get_leaf_index_by_root(
+        tx: impl Executor<'_, Database = Postgres>,
+        root: &Hash,
+    ) -> Result<Option<usize>, Error> {
+        let root_leaf_index_query = sqlx::query(
+            r#"
+            SELECT leaf_index FROM identities WHERE root = $1
+            "#,
         )
-        .bind(block_number as i64)
-        .bind(group_id as i64)
-        .bind(commitment);
+        .bind(root);
 
-        self.pool.execute(query).await?;
+        let row = tx.fetch_optional(root_leaf_index_query).await?;
+
+        let Some(row) = row else { return Ok(None) };
+        let root_leaf_index = row.get::<i64, _>(0);
+
+        Ok(Some(root_leaf_index as usize))
+    }
+
+    /// Marks the identities and roots from before a given root hash as mined
+    #[instrument(skip(self), level = "debug")]
+    pub async fn mark_root_as_mined(&self, root: &Hash) -> Result<(), Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let root_leaf_index = Self::get_leaf_index_by_root(&mut tx, root).await?;
+
+        let Some(root_leaf_index) = root_leaf_index else {
+            return Err(Error::MissingRoot {
+                root: *root
+            });
+        };
+
+        let root_leaf_index = root_leaf_index as i64;
+
+        let update_previous_roots = sqlx::query(
+            r#"
+            UPDATE identities
+            SET    status = $2, mined_at = CURRENT_TIMESTAMP
+            WHERE  leaf_index <= $1
+            AND    status <> $2
+            "#,
+        )
+        .bind(root_leaf_index)
+        .bind(<&str>::from(Status::Mined));
+
+        let update_next_roots = sqlx::query(
+            r#"
+            UPDATE identities
+            SET    status = $2, mined_at = NULL
+            WHERE  leaf_index > $1
+            "#,
+        )
+        .bind(root_leaf_index)
+        .bind(<&str>::from(Status::Pending));
+
+        tx.execute(update_previous_roots).await?;
+        tx.execute(update_next_roots).await?;
+
+        tx.commit().await?;
+
         Ok(())
     }
 
-    pub async fn delete_pending_identity(
-        &self,
-        group_id: usize,
-        commitment: &Hash,
-    ) -> Result<(), Error> {
+    pub async fn get_next_leaf_index(&self) -> Result<usize, Error> {
         let query = sqlx::query(
-            r#"DELETE FROM pending_identities
-                WHERE group_id = $1 AND commitment = $2;"#,
-        )
-        .bind(group_id as i64)
-        .bind(commitment);
-
-        self.pool.execute(query).await?;
-        Ok(())
-    }
-
-    pub async fn confirm_identity_and_retrigger_stale_recods(
-        &self,
-        commitment: &Hash,
-    ) -> Result<IdentityConfirmationResult, Error> {
-        let retrigger_query = sqlx::query(
-            r#"UPDATE pending_identities
-            SET mined_in_block = NULL, created_at = CURRENT_TIMESTAMP
-            WHERE created_at < (SELECT created_at FROM pending_identities WHERE commitment = $1 LIMIT 1)"#,
-        )
-        .bind(commitment);
-
-        let retrigger_result = self.pool.execute(retrigger_query).await?;
-
-        let cleanup_query = sqlx::query(
-            r#"DELETE FROM pending_identities
-                WHERE commitment = $1;"#,
-        )
-        .bind(commitment);
-
-        self.pool.execute(cleanup_query).await?;
-
-        if retrigger_result.rows_affected() > 0 {
-            Ok(IdentityConfirmationResult::RetriggerProcessing)
-        } else {
-            Ok(IdentityConfirmationResult::Done)
-        }
-    }
-
-    pub async fn pending_identity_exists(
-        &self,
-        group_id: usize,
-        identity: &Hash,
-    ) -> Result<bool, Error> {
-        let query = sqlx::query(
-            r#"SELECT 1
-                   FROM pending_identities
-                   WHERE group_id = $1 AND commitment = $2
-                   LIMIT 1;"#,
-        )
-        .bind(group_id as i64)
-        .bind(identity);
-        let row = self.pool.fetch_optional(query).await?;
-        Ok(row.is_some())
-    }
-
-    pub async fn get_oldest_unprocessed_identity(&self) -> Result<Option<(usize, Hash)>, Error> {
-        let queue_size = sqlx::query("SELECT COUNT(1) FROM pending_identities");
-        let size: i64 = self.pool.fetch_one(queue_size).await?.get(0);
-        info!(size, "pending identity queue size fetched");
-
-        let query = sqlx::query(
-            r#"SELECT group_id, commitment
-                   FROM pending_identities
-                   WHERE mined_in_block IS NULL
-                   ORDER BY created_at ASC
-                   LIMIT 1;"#,
+            r#"
+            SELECT leaf_index FROM identities
+            ORDER BY leaf_index DESC
+            LIMIT 1
+            "#,
         );
+
         let row = self.pool.fetch_optional(query).await?;
-        Ok(row.map(|row| (row.get::<i64, _>(0).try_into().unwrap(), row.get(1))))
+
+        let Some(row) = row else { return Ok(0) };
+        let leaf_index = row.get::<i64, _>(0);
+
+        Ok((leaf_index + 1) as usize)
     }
 
-    #[allow(unused)]
-    pub async fn read(&self, _index: usize) -> Result<Hash, Error> {
-        self.pool
-            .execute(sqlx::query(
-                r#"CREATE TABLE IF NOT EXISTS hashes (
-                id SERIAL PRIMARY KEY,
-                hash TEXT NOT NULL
-            );"#,
-            ))
-            .await?;
-
-        let value = uint!(0x12356_U256);
-
-        self.pool
-            .execute(sqlx::query(r#"INSERT INTO hashes ( hash ) VALUES ( $1 );"#).bind(value))
-            .await?;
-
-        let rows = self
-            .pool
-            .fetch_all(sqlx::query(r#"SELECT hash FROM hashes;"#))
-            .await?;
-        for row in rows {
-            let hash = row.get::<U256, _>(0);
-            info!(hash = ?hash, "Read hash");
-        }
-
-        Ok(Hash::default())
-    }
-
-    pub async fn get_block_number(&self) -> Result<u64, Error> {
-        let row = self
-            .pool
-            .fetch_optional(sqlx::query(
-                r#"SELECT block_index FROM logs ORDER BY block_index DESC LIMIT 1;"#,
-            ))
-            .await?;
-
-        if let Some(row) = row {
-            let block_number: i64 = row.try_get(0)?;
-            Ok(u64::try_from(block_number).unwrap_or(0))
-        } else {
-            Ok(0)
-        }
-    }
-
-    pub async fn load_logs(
+    pub async fn get_identity_leaf_index(
         &self,
-        from_block: i64,
-        to_block: Option<i64>,
-    ) -> Result<Vec<(Field, Field)>, Error> {
-        let rows = self
-            .pool
-            .fetch_all(
-                sqlx::query(
-                r#"SELECT leaf, root FROM logs WHERE block_index >= $1 AND block_index <= $2 ORDER BY block_index, transaction_index, log_index;"#,
-                )
-                .bind(from_block)
-                .bind(to_block.unwrap_or(i64::MAX))
-            )
-            .await?
+        identity: &Hash,
+    ) -> Result<Option<TreeItem>, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT leaf_index, status
+            FROM identities
+            WHERE commitment = $1
+            LIMIT 1;
+            "#,
+        )
+        .bind(identity);
+
+        let Some(row) = self.pool.fetch_optional(query).await? else {
+            return Ok(None);
+        };
+
+        let leaf_index = row.get::<i64, _>(0) as usize;
+
+        let status = row
+            .get::<&str, _>(1)
+            .parse()
+            .expect("Status is unreadable, database is corrupt");
+
+        Ok(Some(TreeItem { status, leaf_index }))
+    }
+
+    pub async fn get_commitments_by_status(
+        &self,
+        status: Status,
+    ) -> Result<Vec<TreeUpdate>, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT leaf_index, commitment
+            FROM identities
+            WHERE status = $1
+            ORDER BY leaf_index ASC;
+            "#,
+        )
+        .bind(<&str>::from(status));
+
+        let rows = self.pool.fetch_all(query).await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| TreeUpdate {
+                leaf_index: row.get::<i64, _>(0) as usize,
+                element:    row.get::<Hash, _>(1),
+            })
+            .collect::<Vec<_>>())
+    }
+
+    pub async fn get_root_state(&self, root: &Hash) -> Result<Option<RootItem>, Error> {
+        // This tries really hard to do everything in one query to prevent race
+        // conditions.
+        let query = sqlx::query(
+            r#"
+            SELECT
+                status,
+                pending_as_of as pending_valid_as_of,
+                mined_at as mined_valid_as_of
+            FROM identities
+            WHERE root = $1;
+            "#,
+        )
+        .bind(root);
+
+        let row = self.pool.fetch_optional(query).await?;
+
+        Ok(row.map(|r| {
+            let status = r
+                .get::<&str, _>(0)
+                .parse()
+                .expect("Status is unreadable, database is corrupt");
+
+            let pending_valid_as_of = r.get::<_, _>(1);
+            let mined_valid_as_of = r.get::<_, _>(2);
+
+            RootItem {
+                root: *root,
+                status,
+                pending_valid_as_of,
+                mined_valid_as_of,
+            }
+        }))
+    }
+
+    pub async fn count_pending_identities(&self) -> Result<i32, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT COUNT(*) as pending
+            FROM identities
+            WHERE status = $1
+            "#,
+        )
+        .bind(<&str>::from(Status::Pending));
+        let result = self.pool.fetch_one(query).await?;
+        Ok(result.get::<i64, _>(0) as i32)
+    }
+
+    pub async fn get_provers(&self) -> Result<prover::Provers, Error> {
+        let query = sqlx::query(
+            r#"
+                SELECT batch_size, url, timeout_s
+                FROM provers
+            "#,
+        );
+
+        let result = self.pool.fetch_all(query).await?;
+
+        Ok(result
             .iter()
-            .map(|row| (row.try_get(0).unwrap_or_default(), row.try_get(1).unwrap_or_default()))
-            .collect();
-
-        Ok(rows)
+            .map(|row| {
+                let batch_size = row.get::<i64, _>(0) as usize;
+                let url = row.get::<String, _>(1);
+                let timeout_s = row.get::<i64, _>(2) as u64;
+                prover::ProverConfiguration {
+                    url,
+                    batch_size,
+                    timeout_s,
+                }
+            })
+            .collect::<prover::Provers>())
     }
 
-    pub async fn save_log(&self, identity: &ConfirmedIdentityEvent) -> Result<(), Error> {
-        self.pool
-            .execute(
-                sqlx::query(
-                    r#"INSERT INTO logs (block_index, transaction_index, log_index, raw, leaf, root)
-                    VALUES ($1, $2, $3, $4, $5, $6);"#,
-                )
-                .bind(identity.block_index)
-                .bind(identity.transaction_index)
-                .bind(identity.log_index)
-                .bind(identity.raw_log.clone())
-                .bind(identity.leaf)
-                .bind(identity.root),
-            )
-            .await
-            .map_err(Error::InternalError)?;
-
-        Ok(())
-    }
-
-    pub async fn delete_most_recent_cached_events(
+    pub async fn insert_prover_configuration(
         &self,
-        recovery_step_size: i64,
+        batch_size: usize,
+        url: impl ToString,
+        timeout_seconds: u64,
     ) -> Result<(), Error> {
-        let max_block_number =
-            i64::try_from(self.get_block_number().await?).expect("block number must be i64");
-        self.pool
-            .execute(
-                sqlx::query("DELETE FROM logs WHERE block_index >= $1;")
-                    .bind(max_block_number - recovery_step_size),
-            )
-            .await
-            .map_err(Error::InternalError)?;
+        let url = url.to_string();
+
+        let query = sqlx::query(
+            r#"
+                INSERT INTO provers (batch_size, url, timeout_s)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (batch_size)
+                DO UPDATE SET (url, timeout_s) = ($2, $3)
+            "#,
+        )
+        .bind(batch_size as i64)
+        .bind(url)
+        .bind(timeout_seconds as i64);
+
+        self.pool.execute(query).await?;
+
         Ok(())
     }
 
-    pub async fn wipe_cache(&self) -> Result<(), Error> {
-        self.pool
-            .execute(sqlx::query("DELETE FROM logs;"))
-            .await
-            .map_err(Error::InternalError)?;
+    pub async fn insert_provers(&self, provers: HashSet<ProverConfiguration>) -> Result<(), Error> {
+        if provers.is_empty() {
+            return Ok(());
+        }
+
+        let mut query_builder = sqlx::QueryBuilder::new(
+            r#"
+                  INSERT INTO provers (batch_size, url, timeout_s)  
+            "#,
+        );
+
+        query_builder.push_values(provers, |mut b, prover| {
+            b.push_bind(prover.batch_size as i64)
+                .push_bind(prover.url)
+                .push_bind(prover.timeout_s as i64);
+        });
+
+        let query = query_builder.build();
+
+        self.pool.execute(query).await?;
+        Ok(())
+    }
+
+    pub async fn remove_prover(&self, batch_size: usize) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+              DELETE FROM provers WHERE batch_size = $1  
+            "#,
+        )
+        .bind(batch_size as i64);
+
+        self.pool.execute(query).await?;
+
         Ok(())
     }
 }
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("database error")]
+    #[error("database error: {0}")]
     InternalError(#[from] sqlx::Error),
+
+    #[error("Tried to mine missing root {root:?}")]
+    MissingRoot { root: Hash },
 }
 
-pub enum IdentityConfirmationResult {
-    Done,
-    RetriggerProcessing,
-}
+#[cfg(test)]
+mod test {
+    use std::time::Duration;
 
-pub struct ConfirmedIdentityEvent {
-    pub block_index:       i64,
-    pub transaction_index: i32,
-    pub log_index:         i32,
-    pub raw_log:           String,
-    pub leaf:              Field,
-    pub root:              Field,
+    use anyhow::Context;
+    use chrono::Utc;
+    use postgres_docker_utils::DockerContainerGuard;
+    use reqwest::Url;
+    use semaphore::Field;
+
+    use super::{Database, Options};
+    use crate::identity_tree::Status;
+
+    macro_rules! assert_same_time {
+        ($a:expr, $b:expr, $diff:expr) => {
+            assert!(
+                abs_duration($a - $b) < $diff,
+                "Difference between {} and {} is larger than {:?}",
+                $a,
+                $b,
+                $diff
+            );
+        };
+
+        ($a:expr, $b:expr) => {
+            assert_same_time!($a, $b, chrono::Duration::milliseconds(500));
+        };
+    }
+
+    fn abs_duration(x: chrono::Duration) -> chrono::Duration {
+        chrono::Duration::milliseconds(x.num_milliseconds().abs())
+    }
+
+    async fn setup_db() -> anyhow::Result<(Database, DockerContainerGuard)> {
+        let db_container = postgres_docker_utils::setup().await?;
+        let port = db_container.port();
+
+        let url = format!("postgres://postgres:postgres@localhost:{port}/database");
+
+        let db = Database::new(Options {
+            database:                 Url::parse(&url)?,
+            database_migrate:         true,
+            database_max_connections: 1,
+        })
+        .await?;
+
+        Ok((db, db_container))
+    }
+
+    fn mock_roots(n: usize) -> Vec<Field> {
+        (1..=n).map(Field::from).collect()
+    }
+
+    fn mock_identities(n: usize) -> Vec<Field> {
+        (1..=n).map(Field::from).collect()
+    }
+
+    #[tokio::test]
+    async fn get_last_leaf_index() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(1);
+        let roots = mock_roots(1);
+
+        let next_leaf_index = db.get_next_leaf_index().await?;
+
+        assert_eq!(next_leaf_index, 0, "Db should contain not leaf indexes");
+
+        db.insert_pending_identity(0, &identities[0], &roots[0])
+            .await?;
+
+        let next_leaf_index = db.get_next_leaf_index().await?;
+        assert_eq!(next_leaf_index, 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn mark_root_as_mined_marks_previous_roots() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(5);
+        let roots = mock_roots(5);
+
+        for i in 0..5 {
+            db.insert_pending_identity(i, &identities[i], &roots[i])
+                .await
+                .context("Inserting identity")?;
+        }
+
+        db.mark_root_as_mined(&roots[2]).await?;
+
+        for root in roots.iter().take(3) {
+            let root = db
+                .get_root_state(root)
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, Status::Mined);
+        }
+
+        for root in roots.iter().skip(3).take(2) {
+            let root = db
+                .get_root_state(root)
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, Status::Pending);
+        }
+
+        let pending_identities = db.count_pending_identities().await?;
+        assert_eq!(
+            pending_identities, 2,
+            "There should be 2 pending identities"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn mark_root_as_mined_marks_next_roots() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(5);
+        let roots = mock_roots(5);
+
+        for i in 0..5 {
+            db.insert_pending_identity(i, &identities[i], &roots[i])
+                .await
+                .context("Inserting identity")?;
+        }
+
+        // root[2] is somehow erroneously marked as mined
+        db.mark_root_as_mined(&roots[2]).await?;
+
+        // Later we correctly mark the previous root as mined
+        db.mark_root_as_mined(&roots[1]).await?;
+
+        for root in roots.iter().take(2) {
+            let root = db
+                .get_root_state(root)
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, Status::Mined);
+        }
+
+        for root in roots.iter().skip(2).take(3) {
+            let root = db
+                .get_root_state(root)
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, Status::Pending);
+        }
+
+        let pending_identities = db.count_pending_identities().await?;
+        assert_eq!(pending_identities, 3, "There should be 3 pending roots");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn root_history_timing() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(5);
+        let roots = mock_roots(5);
+
+        let root = db.get_root_state(&roots[0]).await?;
+
+        assert!(root.is_none(), "Root should not exist");
+
+        db.insert_pending_identity(0, &identities[0], &roots[0])
+            .await?;
+
+        let root = db
+            .get_root_state(&roots[0])
+            .await?
+            .context("Fetching root state")?;
+        let time_of_insertion = Utc::now();
+
+        assert_same_time!(
+            root.pending_valid_as_of,
+            time_of_insertion,
+            chrono::Duration::milliseconds(100)
+        );
+
+        assert!(
+            root.mined_valid_as_of.is_none(),
+            "Root has not yet been mined"
+        );
+
+        db.mark_root_as_mined(&roots[0]).await?;
+
+        let root = db
+            .get_root_state(&roots[0])
+            .await?
+            .context("Fetching root state")?;
+        let time_of_mining = Utc::now();
+
+        let mined_valid_as_of = root
+            .mined_valid_as_of
+            .context("Root should have been mined")?;
+
+        assert_same_time!(
+            root.pending_valid_as_of,
+            time_of_insertion,
+            chrono::Duration::milliseconds(100)
+        );
+        assert_same_time!(
+            mined_valid_as_of,
+            time_of_mining,
+            chrono::Duration::milliseconds(100)
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_commitments_by_status() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(5);
+        let roots = mock_roots(5);
+
+        for i in 0..5 {
+            db.insert_pending_identity(i, &identities[i], &roots[i])
+                .await
+                .context("Inserting identity")?;
+        }
+
+        db.mark_root_as_mined(&roots[2]).await?;
+
+        let mined_tree_updates = db.get_commitments_by_status(Status::Mined).await?;
+        let pending_tree_updates = db.get_commitments_by_status(Status::Pending).await?;
+
+        assert_eq!(mined_tree_updates.len(), 3);
+        for i in 0..3 {
+            assert_eq!(mined_tree_updates[i].element, identities[i]);
+            assert_eq!(mined_tree_updates[i].leaf_index, i);
+        }
+
+        assert_eq!(pending_tree_updates.len(), 2);
+        for i in 0..2 {
+            assert_eq!(pending_tree_updates[i].element, identities[i + 3]);
+            assert_eq!(pending_tree_updates[i].leaf_index, i + 3);
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_root_invalidation() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(5);
+        let roots = mock_roots(5);
+
+        db.insert_pending_identity(0, &identities[0], &roots[0])
+            .await
+            .context("Inserting identity 1")?;
+
+        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
+
+        // Invalid root returns None
+        assert!(db.get_root_state(&roots[1]).await?.is_none());
+
+        // Basic scenario, latest pending root
+        let root_item = db.get_root_state(&roots[0]).await?.unwrap();
+        assert_eq!(roots[0], root_item.root);
+        assert!(matches!(root_item.status, Status::Pending));
+        assert!(root_item.mined_valid_as_of.is_none());
+
+        // Inserting a new pending root sets invalidation time for the
+        // previous root
+        db.insert_pending_identity(1, &identities[1], &roots[1])
+            .await?;
+        db.insert_pending_identity(2, &identities[2], &roots[2])
+            .await?;
+
+        let root_1_inserted_at = Utc::now();
+
+        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
+
+        let root_item_0 = db.get_root_state(&roots[0]).await?.unwrap();
+        let root_item_1 = db.get_root_state(&roots[1]).await?.unwrap();
+
+        assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
+        println!("root_1_inserted_at = {root_1_inserted_at:?}");
+        println!(
+            "root_item_1.pending_valid_as_of = {:?}",
+            root_item_1.pending_valid_as_of
+        );
+
+        assert_same_time!(root_item_1.pending_valid_as_of, root_1_inserted_at);
+
+        // Test mined roots
+        db.insert_pending_identity(3, &identities[3], &roots[3])
+            .await?;
+
+        db.mark_root_as_mined(&roots[0])
+            .await
+            .context("Marking root as mined")?;
+
+        let root_2_mined_at = Utc::now();
+
+        tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
+
+        let root_item_2 = db.get_root_state(&roots[2]).await?.unwrap();
+        assert!(matches!(root_item_2.status, Status::Pending));
+        assert!(root_item_2.mined_valid_as_of.is_none());
+
+        let root_item_1 = db.get_root_state(&roots[1]).await?.unwrap();
+        assert_eq!(root_item_1.status, Status::Pending);
+        assert!(root_item_1.mined_valid_as_of.is_none());
+        assert!(root_item_1.pending_valid_as_of < root_2_mined_at);
+
+        let root_item_0 = db.get_root_state(&roots[0]).await?.unwrap();
+        assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
+        assert_eq!(root_item_0.status, Status::Mined);
+        assert!(root_item_0.mined_valid_as_of.unwrap() < root_2_mined_at);
+        assert!(root_item_0.mined_valid_as_of.unwrap() > root_1_inserted_at);
+        assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
+
+        Ok(())
+    }
 }

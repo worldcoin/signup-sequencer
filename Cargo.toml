@@ -14,16 +14,14 @@ categories = ["cryptography::cryptocurrencies"]
 readme = "Readme.md"
 license-file = "mit-license.md"
 
+[workspace]
+members = ["crates/*"]
+
 [features]
 default = []
+oz-provider = ["oz-api"]
 bench = ["criterion", "proptest"]
 mimalloc = ["cli-batteries/mimalloc"]
-
-[[bench]]
-name = "criterion"
-harness = false
-path = "criterion.rs"
-required-features = ["bench", "proptest"]
 
 [dependencies]
 anyhow = { version = "1.0.68" }
@@ -31,26 +29,32 @@ async-stream = "0.3.3"
 async-trait = "0.1.64"
 axum = "0.6.4"
 axum-server = "0.4.4"
-chrono = "0.4.19"
+chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "4.0", features = ["derive"] }
-cli-batteries = { version = "0.4.0", features = ["signals", "prometheus", "metered-allocator", "otlp"] }
+cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "f82b7f95c649988f26f33671edbdb28dfdf2c3d0", features = ["signals", "prometheus", "metered-allocator", "otlp"] }
+cognitoauth = { git = "https://github.com/lucdew/cognito-srp-auth.git" }
 criterion = { version = "0.4", optional = true, features = ["async_tokio"] } # For `bench`
 ethers = { version = "1.0.0", features = ["ws", "ipc", "openssl", "abigen"] }
 eyre = "0.6"
 futures = "0.3"
 futures-util = { version = "^0.3" }
+hex = "0.4.3"
 hyper = { version = "^0.14.17", features = ["server", "tcp", "http1", "http2"] }
 once_cell = "1.8"
+oz-api = { path = "crates/oz-api", optional = true }
 prometheus = "0.13.3" # We need upstream PR#465 to fix #272.
 proptest = { version = "1.0", optional = true } # For `bench`
 reqwest = { version = "0.11.14", features = ["json"] }
 ruint = { version = "1.3", features = ["primitive-types", "sqlx"] }
-semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main" }
+semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main", features = ["depth_30"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "any", "sqlite", "postgres"] }
+sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "any", "postgres", "chrono"] }
+take_mut = "0.2.2"
+tempfile = "3.3.0"
 thiserror = "1.0"
-tokio = { version = "1.17", features = ["signal", "macros", "rt", "sync", "time", "rt-multi-thread", "tracing"] }
+tokio = { version = "1.17", features = ["signal", "macros", "rt", "sync", "time", "rt-multi-thread", "tracing", "test-util"] }
+tower-http = { version = "0.4.0", features = ["trace", "cors"] }
 tracing = "0.1"
 tracing-futures = "0.2"
 url = "2.2"
@@ -59,16 +63,21 @@ url = "2.2"
 # `cargo update --package primitive-types@0.12.1 --precise 0.11.1`
 
 [dev-dependencies]
-cli-batteries = { version = "0.4.0", features = ["mock-shutdown"] }
+cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "f82b7f95c649988f26f33671edbdb28dfdf2c3d0", features = ["mock-shutdown"] }
 hex = "0.4.3"
 hex-literal = "0.3"
+maplit = "1.0.2"
+postgres-docker-utils = { path = "crates/postgres-docker-utils" }
 proptest = { version = "1.0" }
+regex = { version = "1.7.1", features = ["std"] }
+semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main", features = ["depth_20"] }
 serial_test = { version = "1.0.0" }
+test-case = "3.0"
 tracing-subscriber = "0.3.11"
 tracing-test = "0.2"
 
 [build-dependencies]
-cli-batteries = "0.4.0"
+cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "f82b7f95c649988f26f33671edbdb28dfdf2c3d0" }
 
 [profile.release]
 panic = "abort"

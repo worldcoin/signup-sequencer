@@ -1,24 +1,24 @@
 #![doc = include_str!("../Readme.md")]
-#![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
+#![warn(clippy::all, clippy::pedantic, clippy::cargo)]
+#![allow(clippy::module_name_repetitions, clippy::wildcard_imports)]
 
 pub mod app;
 mod contracts;
 mod database;
 mod ethereum;
-mod ethereum_subscriber;
-mod identity_committer;
 pub mod identity_tree;
 mod prover;
 pub mod server;
-mod timed_rw_lock;
-mod tx_sitter;
+mod task_monitor;
 mod utils;
 
-use crate::app::App;
+use std::sync::Arc;
+
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
-use std::sync::Arc;
 use tracing::info;
+
+use crate::app::App;
 
 #[derive(Clone, Debug, PartialEq, Parser)]
 #[group(skip)]
@@ -33,7 +33,7 @@ pub struct Options {
 /// ```
 /// assert!(true);
 /// ```
-#[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#[allow(clippy::missing_errors_doc)]
 pub async fn main(options: Options) -> AnyhowResult<()> {
     // Create App struct
     let app = Arc::new(App::new(options.app).await?);
@@ -50,18 +50,10 @@ pub async fn main(options: Options) -> AnyhowResult<()> {
 
 #[cfg(test)]
 pub mod test {
-    use super::*;
-    use proptest::proptest;
     use tracing::{error, warn};
     use tracing_test::traced_test;
 
-    #[test]
-    #[allow(clippy::eq_op)]
-    fn test_with_proptest() {
-        proptest!(|(a in 0..5, b in 0..5)| {
-            assert_eq!(a + b, b + a);
-        });
-    }
+    use super::*;
 
     #[test]
     #[allow(clippy::disallowed_methods)] // False positive from macro
@@ -74,7 +66,6 @@ pub mod test {
     #[tokio::test]
     #[allow(clippy::disallowed_methods)] // False positive from macro
     #[traced_test]
-    #[allow(clippy::semicolon_if_nothing_returned)] // False positive
     async fn async_test_with_log() {
         // Local log
         info!("This is being logged on the info level");
@@ -90,61 +81,5 @@ pub mod test {
         assert!(logs_contain("logged on the info level"));
         assert!(logs_contain("logged on the warn level"));
         assert!(!logs_contain("logged on the error level"));
-    }
-}
-
-#[cfg(feature = "bench")]
-#[doc(hidden)]
-pub mod bench {
-    use criterion::{black_box, BatchSize, Criterion};
-    use proptest::{
-        strategy::{Strategy, ValueTree},
-        test_runner::TestRunner,
-    };
-    use std::time::Duration;
-    use tokio::runtime;
-
-    pub fn group(criterion: &mut Criterion) {
-        crate::server::bench::group(criterion);
-        bench_example_proptest(criterion);
-        bench_example_async(criterion);
-    }
-
-    /// Constructs an executor for async tests
-    pub(crate) fn runtime() -> runtime::Runtime {
-        runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-    }
-
-    /// Example proptest benchmark
-    /// Uses proptest to randomize the benchmark input
-    fn bench_example_proptest(criterion: &mut Criterion) {
-        let input = (0..5, 0..5);
-        let mut runner = TestRunner::deterministic();
-        // Note: benchmarks need to have proper identifiers as names for
-        // the CI to pick them up correctly.
-        criterion.bench_function("example_proptest", move |bencher| {
-            bencher.iter_batched(
-                || input.new_tree(&mut runner).unwrap().current(),
-                |(a, b)| {
-                    // Benchmark number addition
-                    black_box(a + b)
-                },
-                BatchSize::LargeInput,
-            );
-        });
-    }
-
-    /// Example async benchmark
-    /// See <https://bheisler.github.io/criterion.rs/book/user_guide/benchmarking_async.html>
-    fn bench_example_async(criterion: &mut Criterion) {
-        let duration = Duration::from_micros(1);
-        criterion.bench_function("example_async", move |bencher| {
-            bencher.to_async(runtime()).iter(|| async {
-                tokio::time::sleep(duration).await;
-            });
-        });
     }
 }

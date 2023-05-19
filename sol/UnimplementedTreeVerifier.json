@@ -1,0 +1,767 @@
+{
+  "abi": [
+    {
+      "inputs": [],
+      "name": "UnsupportedOperation",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256[2]",
+          "name": "a",
+          "type": "uint256[2]"
+        },
+        {
+          "internalType": "uint256[2][2]",
+          "name": "b",
+          "type": "uint256[2][2]"
+        },
+        {
+          "internalType": "uint256[2]",
+          "name": "c",
+          "type": "uint256[2]"
+        },
+        {
+          "internalType": "uint256[1]",
+          "name": "input",
+          "type": "uint256[1]"
+        }
+      ],
+      "name": "verifyProof",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "pure",
+      "type": "function"
+    }
+  ],
+  "bytecode": {
+    "object": "0x608060405234801561001057600080fd5b506102c9806100206000396000f3fe608060405234801561001057600080fd5b506004361061002b5760003560e01c806343753b4d14610030575b600080fd5b61004361003e3660046101b5565b610057565b604051901515815260200160405180910390f35b600061006161009a565b945061006b6100b8565b935061007561009a565b925061007f6100e5565b9150604051639ba6061b60e01b815260040160405180910390fd5b60405180604001604052806002906020820280368337509192915050565b60405180604001604052806002905b6100cf61009a565b8152602001906001900390816100c75790505090565b60405180602001604052806001906020820280368337509192915050565b634e487b7160e01b600052604160045260246000fd5b6040805190810167ffffffffffffffff8111828210171561013c5761013c610103565b60405290565b6040516020810167ffffffffffffffff8111828210171561013c5761013c610103565b600082601f83011261017657600080fd5b61017e610119565b80604084018581111561019057600080fd5b845b818110156101aa578035845260209384019301610192565b509095945050505050565b6000806000806101208086880312156101cd57600080fd5b6101d78787610165565b9450604087605f8801126101ea57600080fd5b6101f2610119565b8060c089018a81111561020457600080fd5b838a015b818110156102295761021a8c82610165565b84526020909301928401610208565b508197506102378b82610165565b9650505050508661011f87011261024d57600080fd5b610255610142565b90860190808883111561026757600080fd5b61010088015b8381101561028557803583526020928301920161026d565b50959894975092955050505056fea2646970667358221220bb5d29dd1e0b2af81543910f6cf4d347c79f7d4cf679354d2d0cddff01fb371564736f6c63430008130033",
+    "sourceMap": "573:997:77:-:0;;;;;;;;;;;;;;;;;;;",
+    "linkReferences": {}
+  },
+  "deployedBytecode": {
+    "object": "0x608060405234801561001057600080fd5b506004361061002b5760003560e01c806343753b4d14610030575b600080fd5b61004361003e3660046101b5565b610057565b604051901515815260200160405180910390f35b600061006161009a565b945061006b6100b8565b935061007561009a565b925061007f6100e5565b9150604051639ba6061b60e01b815260040160405180910390fd5b60405180604001604052806002906020820280368337509192915050565b60405180604001604052806002905b6100cf61009a565b8152602001906001900390816100c75790505090565b60405180602001604052806001906020820280368337509192915050565b634e487b7160e01b600052604160045260246000fd5b6040805190810167ffffffffffffffff8111828210171561013c5761013c610103565b60405290565b6040516020810167ffffffffffffffff8111828210171561013c5761013c610103565b600082601f83011261017657600080fd5b61017e610119565b80604084018581111561019057600080fd5b845b818110156101aa578035845260209384019301610192565b509095945050505050565b6000806000806101208086880312156101cd57600080fd5b6101d78787610165565b9450604087605f8801126101ea57600080fd5b6101f2610119565b8060c089018a81111561020457600080fd5b838a015b818110156102295761021a8c82610165565b84526020909301928401610208565b508197506102378b82610165565b9650505050508661011f87011261024d57600080fd5b610255610142565b90860190808883111561026757600080fd5b61010088015b8381101561028557803583526020928301920161026d565b50959894975092955050505056fea2646970667358221220bb5d29dd1e0b2af81543910f6cf4d347c79f7d4cf679354d2d0cddff01fb371564736f6c63430008130033",
+    "sourceMap": "573:997:77:-:0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;1267:301;;;;;;:::i;:::-;;:::i;:::-;;;2709:14:78;;2702:22;2684:41;;2672:2;2657:18;1267:301:77;;;;;;;;1440:4;1456:8;;:::i;:::-;;;1474;;:::i;:::-;;;1492;;:::i;:::-;;;1510:12;;:::i;:::-;;;1539:22;;-1:-1:-1;;;1539:22:77;;;;;;;;;;;-1:-1:-1;;;;;;;;;;;;;;;;;;;;;;;;:::o;:::-;;;;;;;;;;;;;;:::i;:::-;;;;;;;;;;;;;;;;;:::o;:::-;;;;;;;;;;;;;;;;;;;;;;;;:::o;14:127:78:-;75:10;70:3;66:20;63:1;56:31;106:4;103:1;96:15;130:4;127:1;120:15;146:251;218:2;212:9;;;248:15;;293:18;278:34;;314:22;;;275:62;272:88;;;340:18;;:::i;:::-;376:2;369:22;146:251;:::o;402:246::-;469:2;463:9;511:2;499:15;;544:18;529:34;;565:22;;;526:62;523:88;;;591:18;;:::i;653:484::-;703:5;756:3;749:4;741:6;737:17;733:27;723:55;;774:1;771;764:12;723:55;798:22;;:::i;:::-;842:3;880:2;872:6;868:15;906:3;898:6;895:15;892:35;;;923:1;920;913:12;892:35;947:6;962:146;978:6;973:3;970:15;962:146;;;1046:17;;1034:30;;1093:4;1084:14;;;;995;962:146;;;-1:-1:-1;1126:5:78;;653:484;-1:-1:-1;;;;;653:484:78:o;1142:1397::-;1343:6;1351;1359;1367;1398:3;1442:2;1430:9;1421:7;1417:23;1413:32;1410:52;;;1458:1;1455;1448:12;1410:52;1481:44;1517:7;1506:9;1481:44;:::i;:::-;1471:54;;1544:2;1589:7;1584:2;1573:9;1569:18;1565:32;1555:60;;1611:1;1608;1601:12;1555:60;1635:22;;:::i;:::-;1679:3;1720;1709:9;1705:19;1747:7;1739:6;1736:19;1733:39;;;1768:1;1765;1758:12;1733:39;1807:2;1796:9;1792:18;1819:165;1835:6;1830:3;1827:15;1819:165;;;1901:38;1931:7;1926:3;1901:38;:::i;:::-;1889:51;;1969:4;1960:14;;;;1852:12;;1819:165;;;1823:3;2003:5;1993:15;;2027:41;2060:7;2052:6;2027:41;:::i;:::-;2017:51;;;;;;2112:7;2106:3;2095:9;2091:19;2087:33;2077:61;;2134:1;2131;2124:12;2077:61;2160:17;;:::i;:::-;2229:18;;;;2199:5;2259:21;;;2256:41;;;2293:1;2290;2283:12;2256:41;2334:3;2323:9;2319:19;2347:162;2365:8;2358:5;2355:19;2347:162;;;2441:19;;2427:34;;2494:4;2483:16;;;;2386;2347:162;;;-1:-1:-1;1142:1397:78;;;;-1:-1:-1;1142:1397:78;;-1:-1:-1;;;;1142:1397:78:o",
+    "linkReferences": {}
+  },
+  "methodIdentifiers": {
+    "verifyProof(uint256[2],uint256[2][2],uint256[2],uint256[1])": "43753b4d"
+  },
+  "rawMetadata": "{\"compiler\":{\"version\":\"0.8.19+commit.7dd6d404\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[],\"name\":\"UnsupportedOperation\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256[2]\",\"name\":\"a\",\"type\":\"uint256[2]\"},{\"internalType\":\"uint256[2][2]\",\"name\":\"b\",\"type\":\"uint256[2][2]\"},{\"internalType\":\"uint256[2]\",\"name\":\"c\",\"type\":\"uint256[2]\"},{\"internalType\":\"uint256[1]\",\"name\":\"input\",\"type\":\"uint256[1]\"}],\"name\":\"verifyProof\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"pure\",\"type\":\"function\"}],\"devdoc\":{\"author\":\"Worldcoin\",\"details\":\"This verifier is used as the default implementation for the update and remove endpoints in      the WorldID identity manager. We do not currently have ZK circuit designs for these      endpoints, but having the contract portion already implemented makes it easier for the      future where those will work.\",\"kind\":\"dev\",\"methods\":{\"verifyProof(uint256[2],uint256[2][2],uint256[2],uint256[1])\":{\"custom:reverts\":\"UnsupportedOperation When called.\",\"details\":\"Exists to satisfy the interface. Will always revert.\",\"params\":{\"a\":\"The first G1Point of the proof (ar).\",\"b\":\"The G2Point for the proof (bs).\",\"c\":\"The second G1Point of the proof (kr).\",\"input\":\"The public inputs to the function, reduced such that it is a member of the              field `Fr` where `r` is `SNARK_SCALAR_FIELD`.\"}}},\"title\":\"Unimplemented Tree Verifier\",\"version\":1},\"userdoc\":{\"errors\":{\"UnsupportedOperation()\":[{\"notice\":\"Thrown when an operation is not supported.\"}]},\"kind\":\"user\",\"methods\":{\"verifyProof(uint256[2],uint256[2][2],uint256[2],uint256[1])\":{\"notice\":\"Verifies the provided proof data for the provided public inputs.\"}},\"notice\":\"A tree verifier instance that will always revert.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"src/utils/UnimplementedTreeVerifier.sol\":\"UnimplementedTreeVerifier\"},\"evmVersion\":\"london\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[\":@zk-kit/=lib/zk-kit/packages/\",\":contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/\",\":ds-test/=lib/ds-test/src/\",\":forge-std/=lib/forge-std/src/\",\":openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/\",\":openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/\",\":semaphore/=lib/semaphore/packages/contracts/contracts/\",\":solmate/=lib/solmate/src/\",\":zk-kit/=lib/zk-kit/\"]},\"sources\":{\"src/interfaces/ITreeVerifier.sol\":{\"keccak256\":\"0x3f980c7fa04a40d3e128a27ac7eb2fba6020a2a81baec4172e3ce809a1189388\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://5e7cca84723edc4bfffec31b48dcd93bf78b677b80939d97209c57ad8a248f15\",\"dweb:/ipfs/QmSxNKodWF1Fh94b3UmKQS63KE7arLqgdrXyGxVq7gXJHR\"]},\"src/utils/UnimplementedTreeVerifier.sol\":{\"keccak256\":\"0xc896073f04ff29d08f354bbe3bf46ef06a65d3aab15538c729a52eab99f20e68\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://9c3f13fb6fecbb958513d66816aed8ab2f3ac6ea8b74c286a1031099fd4624e8\",\"dweb:/ipfs/QmSL1DHR1ktAauurFwqb2SxHzDqsQSE6i69RodhpEPNtyp\"]}},\"version\":1}",
+  "metadata": {
+    "compiler": {
+      "version": "0.8.19+commit.7dd6d404"
+    },
+    "language": "Solidity",
+    "output": {
+      "abi": [
+        {
+          "inputs": [],
+          "type": "error",
+          "name": "UnsupportedOperation"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256[2]",
+              "name": "a",
+              "type": "uint256[2]"
+            },
+            {
+              "internalType": "uint256[2][2]",
+              "name": "b",
+              "type": "uint256[2][2]"
+            },
+            {
+              "internalType": "uint256[2]",
+              "name": "c",
+              "type": "uint256[2]"
+            },
+            {
+              "internalType": "uint256[1]",
+              "name": "input",
+              "type": "uint256[1]"
+            }
+          ],
+          "stateMutability": "pure",
+          "type": "function",
+          "name": "verifyProof",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ]
+        }
+      ],
+      "devdoc": {
+        "kind": "dev",
+        "methods": {
+          "verifyProof(uint256[2],uint256[2][2],uint256[2],uint256[1])": {
+            "custom:reverts": "UnsupportedOperation When called.",
+            "details": "Exists to satisfy the interface. Will always revert.",
+            "params": {
+              "a": "The first G1Point of the proof (ar).",
+              "b": "The G2Point for the proof (bs).",
+              "c": "The second G1Point of the proof (kr).",
+              "input": "The public inputs to the function, reduced such that it is a member of the              field `Fr` where `r` is `SNARK_SCALAR_FIELD`."
+            }
+          }
+        },
+        "version": 1
+      },
+      "userdoc": {
+        "kind": "user",
+        "methods": {
+          "verifyProof(uint256[2],uint256[2][2],uint256[2],uint256[1])": {
+            "notice": "Verifies the provided proof data for the provided public inputs."
+          }
+        },
+        "version": 1
+      }
+    },
+    "settings": {
+      "remappings": [
+        ":@zk-kit/=lib/zk-kit/packages/",
+        ":contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+        ":ds-test/=lib/ds-test/src/",
+        ":forge-std/=lib/forge-std/src/",
+        ":openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
+        ":openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/",
+        ":semaphore/=lib/semaphore/packages/contracts/contracts/",
+        ":solmate/=lib/solmate/src/",
+        ":zk-kit/=lib/zk-kit/"
+      ],
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "metadata": {
+        "bytecodeHash": "ipfs"
+      },
+      "compilationTarget": {
+        "src/utils/UnimplementedTreeVerifier.sol": "UnimplementedTreeVerifier"
+      },
+      "libraries": {}
+    },
+    "sources": {
+      "src/interfaces/ITreeVerifier.sol": {
+        "keccak256": "0x3f980c7fa04a40d3e128a27ac7eb2fba6020a2a81baec4172e3ce809a1189388",
+        "urls": [
+          "bzz-raw://5e7cca84723edc4bfffec31b48dcd93bf78b677b80939d97209c57ad8a248f15",
+          "dweb:/ipfs/QmSxNKodWF1Fh94b3UmKQS63KE7arLqgdrXyGxVq7gXJHR"
+        ],
+        "license": "MIT"
+      },
+      "src/utils/UnimplementedTreeVerifier.sol": {
+        "keccak256": "0xc896073f04ff29d08f354bbe3bf46ef06a65d3aab15538c729a52eab99f20e68",
+        "urls": [
+          "bzz-raw://9c3f13fb6fecbb958513d66816aed8ab2f3ac6ea8b74c286a1031099fd4624e8",
+          "dweb:/ipfs/QmSL1DHR1ktAauurFwqb2SxHzDqsQSE6i69RodhpEPNtyp"
+        ],
+        "license": "MIT"
+      }
+    },
+    "version": 1
+  },
+  "ast": {
+    "absolutePath": "src/utils/UnimplementedTreeVerifier.sol",
+    "id": 41129,
+    "exportedSymbols": {
+      "ITreeVerifier": [
+        26728
+      ],
+      "UnimplementedTreeVerifier": [
+        41128
+      ]
+    },
+    "nodeType": "SourceUnit",
+    "src": "32:1539:77",
+    "nodes": [
+      {
+        "id": 41079,
+        "nodeType": "PragmaDirective",
+        "src": "32:24:77",
+        "nodes": [],
+        "literals": [
+          "solidity",
+          "^",
+          "0.8",
+          ".19"
+        ]
+      },
+      {
+        "id": 41081,
+        "nodeType": "ImportDirective",
+        "src": "58:62:77",
+        "nodes": [],
+        "absolutePath": "src/interfaces/ITreeVerifier.sol",
+        "file": "../interfaces/ITreeVerifier.sol",
+        "nameLocation": "-1:-1:-1",
+        "scope": 41129,
+        "sourceUnit": 26729,
+        "symbolAliases": [
+          {
+            "foreign": {
+              "id": 41080,
+              "name": "ITreeVerifier",
+              "nodeType": "Identifier",
+              "overloadedDeclarations": [],
+              "referencedDeclaration": 26728,
+              "src": "66:13:77",
+              "typeDescriptions": {}
+            },
+            "nameLocation": "-1:-1:-1"
+          }
+        ],
+        "unitAlias": ""
+      },
+      {
+        "id": 41128,
+        "nodeType": "ContractDefinition",
+        "src": "573:997:77",
+        "nodes": [
+          {
+            "id": 41087,
+            "nodeType": "ErrorDefinition",
+            "src": "690:29:77",
+            "nodes": [],
+            "documentation": {
+              "id": 41085,
+              "nodeType": "StructuredDocumentation",
+              "src": "631:54:77",
+              "text": "@notice Thrown when an operation is not supported."
+            },
+            "errorSelector": "9ba6061b",
+            "name": "UnsupportedOperation",
+            "nameLocation": "696:20:77",
+            "parameters": {
+              "id": 41086,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "716:2:77"
+            }
+          },
+          {
+            "id": 41127,
+            "nodeType": "FunctionDefinition",
+            "src": "1267:301:77",
+            "nodes": [],
+            "body": {
+              "id": 41126,
+              "nodeType": "Block",
+              "src": "1446:122:77",
+              "nodes": [],
+              "statements": [
+                {
+                  "expression": {
+                    "id": 41112,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "nodeType": "UnaryOperation",
+                    "operator": "delete",
+                    "prefix": true,
+                    "src": "1456:8:77",
+                    "subExpression": {
+                      "id": 41111,
+                      "name": "a",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 41092,
+                      "src": "1463:1:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_array$_t_uint256_$2_memory_ptr",
+                        "typeString": "uint256[2] memory"
+                      }
+                    },
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_tuple$__$",
+                      "typeString": "tuple()"
+                    }
+                  },
+                  "id": 41113,
+                  "nodeType": "ExpressionStatement",
+                  "src": "1456:8:77"
+                },
+                {
+                  "expression": {
+                    "id": 41115,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "nodeType": "UnaryOperation",
+                    "operator": "delete",
+                    "prefix": true,
+                    "src": "1474:8:77",
+                    "subExpression": {
+                      "id": 41114,
+                      "name": "b",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 41098,
+                      "src": "1481:1:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_array$_t_array$_t_uint256_$2_memory_ptr_$2_memory_ptr",
+                        "typeString": "uint256[2] memory[2] memory"
+                      }
+                    },
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_tuple$__$",
+                      "typeString": "tuple()"
+                    }
+                  },
+                  "id": 41116,
+                  "nodeType": "ExpressionStatement",
+                  "src": "1474:8:77"
+                },
+                {
+                  "expression": {
+                    "id": 41118,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "nodeType": "UnaryOperation",
+                    "operator": "delete",
+                    "prefix": true,
+                    "src": "1492:8:77",
+                    "subExpression": {
+                      "id": 41117,
+                      "name": "c",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 41102,
+                      "src": "1499:1:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_array$_t_uint256_$2_memory_ptr",
+                        "typeString": "uint256[2] memory"
+                      }
+                    },
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_tuple$__$",
+                      "typeString": "tuple()"
+                    }
+                  },
+                  "id": 41119,
+                  "nodeType": "ExpressionStatement",
+                  "src": "1492:8:77"
+                },
+                {
+                  "expression": {
+                    "id": 41121,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "nodeType": "UnaryOperation",
+                    "operator": "delete",
+                    "prefix": true,
+                    "src": "1510:12:77",
+                    "subExpression": {
+                      "id": 41120,
+                      "name": "input",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 41106,
+                      "src": "1517:5:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_array$_t_uint256_$1_memory_ptr",
+                        "typeString": "uint256[1] memory"
+                      }
+                    },
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_tuple$__$",
+                      "typeString": "tuple()"
+                    }
+                  },
+                  "id": 41122,
+                  "nodeType": "ExpressionStatement",
+                  "src": "1510:12:77"
+                },
+                {
+                  "errorCall": {
+                    "arguments": [],
+                    "expression": {
+                      "argumentTypes": [],
+                      "id": 41123,
+                      "name": "UnsupportedOperation",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 41087,
+                      "src": "1539:20:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_function_error_pure$__$returns$__$",
+                        "typeString": "function () pure"
+                      }
+                    },
+                    "id": 41124,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "kind": "functionCall",
+                    "lValueRequested": false,
+                    "nameLocations": [],
+                    "names": [],
+                    "nodeType": "FunctionCall",
+                    "src": "1539:22:77",
+                    "tryCall": false,
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_tuple$__$",
+                      "typeString": "tuple()"
+                    }
+                  },
+                  "id": 41125,
+                  "nodeType": "RevertStatement",
+                  "src": "1532:29:77"
+                }
+              ]
+            },
+            "baseFunctions": [
+              26727
+            ],
+            "documentation": {
+              "id": 41088,
+              "nodeType": "StructuredDocumentation",
+              "src": "725:537:77",
+              "text": "@notice Verifies the provided proof data for the provided public inputs.\n @dev Exists to satisfy the interface. Will always revert.\n @param a The first G1Point of the proof (ar).\n @param b The G2Point for the proof (bs).\n @param c The second G1Point of the proof (kr).\n @param input The public inputs to the function, reduced such that it is a member of the\n              field `Fr` where `r` is `SNARK_SCALAR_FIELD`.\n @custom:reverts UnsupportedOperation When called."
+            },
+            "functionSelector": "43753b4d",
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [],
+            "name": "verifyProof",
+            "nameLocation": "1276:11:77",
+            "parameters": {
+              "id": 41107,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 41092,
+                  "mutability": "mutable",
+                  "name": "a",
+                  "nameLocation": "1315:1:77",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 41127,
+                  "src": "1297:19:77",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_array$_t_uint256_$2_memory_ptr",
+                    "typeString": "uint256[2]"
+                  },
+                  "typeName": {
+                    "baseType": {
+                      "id": 41089,
+                      "name": "uint256",
+                      "nodeType": "ElementaryTypeName",
+                      "src": "1297:7:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_uint256",
+                        "typeString": "uint256"
+                      }
+                    },
+                    "id": 41091,
+                    "length": {
+                      "hexValue": "32",
+                      "id": 41090,
+                      "isConstant": false,
+                      "isLValue": false,
+                      "isPure": true,
+                      "kind": "number",
+                      "lValueRequested": false,
+                      "nodeType": "Literal",
+                      "src": "1305:1:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_rational_2_by_1",
+                        "typeString": "int_const 2"
+                      },
+                      "value": "2"
+                    },
+                    "nodeType": "ArrayTypeName",
+                    "src": "1297:10:77",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_array$_t_uint256_$2_storage_ptr",
+                      "typeString": "uint256[2]"
+                    }
+                  },
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 41098,
+                  "mutability": "mutable",
+                  "name": "b",
+                  "nameLocation": "1347:1:77",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 41127,
+                  "src": "1326:22:77",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_array$_t_array$_t_uint256_$2_memory_ptr_$2_memory_ptr",
+                    "typeString": "uint256[2][2]"
+                  },
+                  "typeName": {
+                    "baseType": {
+                      "baseType": {
+                        "id": 41093,
+                        "name": "uint256",
+                        "nodeType": "ElementaryTypeName",
+                        "src": "1326:7:77",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      },
+                      "id": 41095,
+                      "length": {
+                        "hexValue": "32",
+                        "id": 41094,
+                        "isConstant": false,
+                        "isLValue": false,
+                        "isPure": true,
+                        "kind": "number",
+                        "lValueRequested": false,
+                        "nodeType": "Literal",
+                        "src": "1334:1:77",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_rational_2_by_1",
+                          "typeString": "int_const 2"
+                        },
+                        "value": "2"
+                      },
+                      "nodeType": "ArrayTypeName",
+                      "src": "1326:10:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_array$_t_uint256_$2_storage_ptr",
+                        "typeString": "uint256[2]"
+                      }
+                    },
+                    "id": 41097,
+                    "length": {
+                      "hexValue": "32",
+                      "id": 41096,
+                      "isConstant": false,
+                      "isLValue": false,
+                      "isPure": true,
+                      "kind": "number",
+                      "lValueRequested": false,
+                      "nodeType": "Literal",
+                      "src": "1337:1:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_rational_2_by_1",
+                        "typeString": "int_const 2"
+                      },
+                      "value": "2"
+                    },
+                    "nodeType": "ArrayTypeName",
+                    "src": "1326:13:77",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_array$_t_array$_t_uint256_$2_storage_$2_storage_ptr",
+                      "typeString": "uint256[2][2]"
+                    }
+                  },
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 41102,
+                  "mutability": "mutable",
+                  "name": "c",
+                  "nameLocation": "1376:1:77",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 41127,
+                  "src": "1358:19:77",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_array$_t_uint256_$2_memory_ptr",
+                    "typeString": "uint256[2]"
+                  },
+                  "typeName": {
+                    "baseType": {
+                      "id": 41099,
+                      "name": "uint256",
+                      "nodeType": "ElementaryTypeName",
+                      "src": "1358:7:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_uint256",
+                        "typeString": "uint256"
+                      }
+                    },
+                    "id": 41101,
+                    "length": {
+                      "hexValue": "32",
+                      "id": 41100,
+                      "isConstant": false,
+                      "isLValue": false,
+                      "isPure": true,
+                      "kind": "number",
+                      "lValueRequested": false,
+                      "nodeType": "Literal",
+                      "src": "1366:1:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_rational_2_by_1",
+                        "typeString": "int_const 2"
+                      },
+                      "value": "2"
+                    },
+                    "nodeType": "ArrayTypeName",
+                    "src": "1358:10:77",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_array$_t_uint256_$2_storage_ptr",
+                      "typeString": "uint256[2]"
+                    }
+                  },
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 41106,
+                  "mutability": "mutable",
+                  "name": "input",
+                  "nameLocation": "1405:5:77",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 41127,
+                  "src": "1387:23:77",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_array$_t_uint256_$1_memory_ptr",
+                    "typeString": "uint256[1]"
+                  },
+                  "typeName": {
+                    "baseType": {
+                      "id": 41103,
+                      "name": "uint256",
+                      "nodeType": "ElementaryTypeName",
+                      "src": "1387:7:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_uint256",
+                        "typeString": "uint256"
+                      }
+                    },
+                    "id": 41105,
+                    "length": {
+                      "hexValue": "31",
+                      "id": 41104,
+                      "isConstant": false,
+                      "isLValue": false,
+                      "isPure": true,
+                      "kind": "number",
+                      "lValueRequested": false,
+                      "nodeType": "Literal",
+                      "src": "1395:1:77",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_rational_1_by_1",
+                        "typeString": "int_const 1"
+                      },
+                      "value": "1"
+                    },
+                    "nodeType": "ArrayTypeName",
+                    "src": "1387:10:77",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_array$_t_uint256_$1_storage_ptr",
+                      "typeString": "uint256[1]"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "1287:129:77"
+            },
+            "returnParameters": {
+              "id": 41110,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 41109,
+                  "mutability": "mutable",
+                  "name": "",
+                  "nameLocation": "-1:-1:-1",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 41127,
+                  "src": "1440:4:77",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bool",
+                    "typeString": "bool"
+                  },
+                  "typeName": {
+                    "id": 41108,
+                    "name": "bool",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1440:4:77",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bool",
+                      "typeString": "bool"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "1439:6:77"
+            },
+            "scope": 41128,
+            "stateMutability": "pure",
+            "virtual": false,
+            "visibility": "external"
+          }
+        ],
+        "abstract": false,
+        "baseContracts": [
+          {
+            "baseName": {
+              "id": 41083,
+              "name": "ITreeVerifier",
+              "nameLocations": [
+                "611:13:77"
+              ],
+              "nodeType": "IdentifierPath",
+              "referencedDeclaration": 26728,
+              "src": "611:13:77"
+            },
+            "id": 41084,
+            "nodeType": "InheritanceSpecifier",
+            "src": "611:13:77"
+          }
+        ],
+        "canonicalName": "UnimplementedTreeVerifier",
+        "contractDependencies": [],
+        "contractKind": "contract",
+        "documentation": {
+          "id": 41082,
+          "nodeType": "StructuredDocumentation",
+          "src": "122:451:77",
+          "text": "@title Unimplemented Tree Verifier\n @author Worldcoin\n @notice A tree verifier instance that will always revert.\n @dev This verifier is used as the default implementation for the update and remove endpoints in\n      the WorldID identity manager. We do not currently have ZK circuit designs for these\n      endpoints, but having the contract portion already implemented makes it easier for the\n      future where those will work."
+        },
+        "fullyImplemented": true,
+        "linearizedBaseContracts": [
+          41128,
+          26728
+        ],
+        "name": "UnimplementedTreeVerifier",
+        "nameLocation": "582:25:77",
+        "scope": 41129,
+        "usedErrors": [
+          41087
+        ]
+      }
+    ],
+    "license": "MIT"
+  },
+  "id": 77
+}

@@ -5,6 +5,22 @@
 [![codecov](https://codecov.io/gh/worldcoin/signup-sequencer/branch/main/graph/badge.svg?token=WBPZ9U4TTO)](https://codecov.io/gh/worldcoin/signup-sequencer)
 [![CI](https://github.com/worldcoin/signup-sequencer/actions/workflows/build-test-deploy.yml/badge.svg)](https://github.com/worldcoin/signup-sequencer/actions/workflows/build-test-deploy.yml)
 
+## Setup
+Install Protobuf compiler
+
+| Os            | Command                                     |
+| ------------- | ------------------------------------------- |
+| MacOs         | `brew install protobuf`                     |
+| Ubuntu/Debian | `sudo apt-get install -y protobuf-compiler` |
+
+Install [Docker](https://docs.docker.com/get-docker/) - Docker is used to setup the database for testing
+
+Fetch the [postgres](https://hub.docker.com/_/postgres) docker image before running tests.
+
+```shell
+docker pull postgres
+```
+
 ## API
 
 

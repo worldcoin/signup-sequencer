@@ -1,0 +1,414 @@
+{
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "root",
+          "type": "uint256"
+        }
+      ],
+      "name": "StateRootSentMultichain",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "root",
+          "type": "uint256"
+        }
+      ],
+      "name": "sendRootMultichain",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": {
+    "object": "0x608060405234801561001057600080fd5b5060ba8061001f6000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c8063393170cf14602d575b600080fd5b603c6038366004606c565b603e565b005b60405181907f118a5978e509351fb120eb558e2dc9bd6db3cf57cf66ec9744ef8acabf3b0aec90600090a250565b600060208284031215607d57600080fd5b503591905056fea264697066735822122009366b28a1bae882fe05cdba91a291fdd9387e34205b1448e93122db6c68797264736f6c63430008130033",
+    "sourceMap": "337:223:57:-:0;;;;;;;;;;;;;;;;;;;",
+    "linkReferences": {}
+  },
+  "deployedBytecode": {
+    "object": "0x6080604052348015600f57600080fd5b506004361060285760003560e01c8063393170cf14602d575b600080fd5b603c6038366004606c565b603e565b005b60405181907f118a5978e509351fb120eb558e2dc9bd6db3cf57cf66ec9744ef8acabf3b0aec90600090a250565b600060208284031215607d57600080fd5b503591905056fea264697066735822122009366b28a1bae882fe05cdba91a291fdd9387e34205b1448e93122db6c68797264736f6c63430008130033",
+    "sourceMap": "337:223:57:-:0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;439:119;;;;;;:::i;:::-;;:::i;:::-;;;522:29;;546:4;;522:29;;;;;439:119;:::o;14:180:78:-;73:6;126:2;114:9;105:7;101:23;97:32;94:52;;;142:1;139;132:12;94:52;-1:-1:-1;165:23:78;;14:180;-1:-1:-1;14:180:78:o",
+    "linkReferences": {}
+  },
+  "methodIdentifiers": {
+    "sendRootMultichain(uint256)": "393170cf"
+  },
+  "rawMetadata": "{\"compiler\":{\"version\":\"0.8.19+commit.7dd6d404\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"root\",\"type\":\"uint256\"}],\"name\":\"StateRootSentMultichain\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"root\",\"type\":\"uint256\"}],\"name\":\"sendRootMultichain\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"author\":\"Worldcoin\",\"kind\":\"dev\",\"methods\":{\"sendRootMultichain(uint256)\":{\"details\":\"Calls this method on the L1 Proxy contract to relay the latest root to all supported networks\",\"params\":{\"root\":\"The latest Semaphore root.\"}}},\"title\":\"State Bridge Mock\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"sendRootMultichain(uint256)\":{\"notice\":\"Sends the latest Semaphore root to Optimism.\"}},\"notice\":\"This purely exists to allow tests to compile and does not have any functionality.A dumb bridge to make it easy to fuzz test successes and failures.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"src/test/mock/SimpleStateBridge.sol\":\"SimpleStateBridge\"},\"evmVersion\":\"london\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[\":@zk-kit/=lib/zk-kit/packages/\",\":contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/\",\":ds-test/=lib/ds-test/src/\",\":forge-std/=lib/forge-std/src/\",\":openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/\",\":openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/\",\":semaphore/=lib/semaphore/packages/contracts/contracts/\",\":solmate/=lib/solmate/src/\",\":zk-kit/=lib/zk-kit/\"]},\"sources\":{\"src/interfaces/IBridge.sol\":{\"keccak256\":\"0xaa64f67fb28b78d9c270cdbebe00f19611e0eadb67c4287172c805cc2380d8d6\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://b79e327de5168c65e7d55009533f5d5c2b4262c4c0c86dccd8f8f495e5a7c37d\",\"dweb:/ipfs/QmYCeKYuT84QjdFaVh4vuJYV9aCjB9KyLvcpc73mzc3qXH\"]},\"src/test/mock/SimpleStateBridge.sol\":{\"keccak256\":\"0x70606221ef1952ff696af15db7881b0005b7c10b4934cc4b4f4f61a035792825\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://0b451b400c0cb68338d9a09a800f8e259718f19e207a69e159f7117d3a551a10\",\"dweb:/ipfs/QmSgZWVfbnNttEzw8JSbLM2id8uacy7mztwP9EmD59BboC\"]}},\"version\":1}",
+  "metadata": {
+    "compiler": {
+      "version": "0.8.19+commit.7dd6d404"
+    },
+    "language": "Solidity",
+    "output": {
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "root",
+              "type": "uint256",
+              "indexed": true
+            }
+          ],
+          "type": "event",
+          "name": "StateRootSentMultichain",
+          "anonymous": false
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "root",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "sendRootMultichain"
+        }
+      ],
+      "devdoc": {
+        "kind": "dev",
+        "methods": {
+          "sendRootMultichain(uint256)": {
+            "details": "Calls this method on the L1 Proxy contract to relay the latest root to all supported networks",
+            "params": {
+              "root": "The latest Semaphore root."
+            }
+          }
+        },
+        "version": 1
+      },
+      "userdoc": {
+        "kind": "user",
+        "methods": {
+          "sendRootMultichain(uint256)": {
+            "notice": "Sends the latest Semaphore root to Optimism."
+          }
+        },
+        "version": 1
+      }
+    },
+    "settings": {
+      "remappings": [
+        ":@zk-kit/=lib/zk-kit/packages/",
+        ":contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+        ":ds-test/=lib/ds-test/src/",
+        ":forge-std/=lib/forge-std/src/",
+        ":openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
+        ":openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/",
+        ":semaphore/=lib/semaphore/packages/contracts/contracts/",
+        ":solmate/=lib/solmate/src/",
+        ":zk-kit/=lib/zk-kit/"
+      ],
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "metadata": {
+        "bytecodeHash": "ipfs"
+      },
+      "compilationTarget": {
+        "src/test/mock/SimpleStateBridge.sol": "SimpleStateBridge"
+      },
+      "libraries": {}
+    },
+    "sources": {
+      "src/interfaces/IBridge.sol": {
+        "keccak256": "0xaa64f67fb28b78d9c270cdbebe00f19611e0eadb67c4287172c805cc2380d8d6",
+        "urls": [
+          "bzz-raw://b79e327de5168c65e7d55009533f5d5c2b4262c4c0c86dccd8f8f495e5a7c37d",
+          "dweb:/ipfs/QmYCeKYuT84QjdFaVh4vuJYV9aCjB9KyLvcpc73mzc3qXH"
+        ],
+        "license": "MIT"
+      },
+      "src/test/mock/SimpleStateBridge.sol": {
+        "keccak256": "0x70606221ef1952ff696af15db7881b0005b7c10b4934cc4b4f4f61a035792825",
+        "urls": [
+          "bzz-raw://0b451b400c0cb68338d9a09a800f8e259718f19e207a69e159f7117d3a551a10",
+          "dweb:/ipfs/QmSgZWVfbnNttEzw8JSbLM2id8uacy7mztwP9EmD59BboC"
+        ],
+        "license": "MIT"
+      }
+    },
+    "version": 1
+  },
+  "ast": {
+    "absolutePath": "src/test/mock/SimpleStateBridge.sol",
+    "id": 35680,
+    "exportedSymbols": {
+      "IBridge": [
+        26700
+      ],
+      "SimpleStateBridge": [
+        35679
+      ]
+    },
+    "nodeType": "SourceUnit",
+    "src": "32:529:57",
+    "nodes": [
+      {
+        "id": 35658,
+        "nodeType": "PragmaDirective",
+        "src": "32:24:57",
+        "nodes": [],
+        "literals": [
+          "solidity",
+          "^",
+          "0.8",
+          ".19"
+        ]
+      },
+      {
+        "id": 35660,
+        "nodeType": "ImportDirective",
+        "src": "58:53:57",
+        "nodes": [],
+        "absolutePath": "src/interfaces/IBridge.sol",
+        "file": "../../interfaces/IBridge.sol",
+        "nameLocation": "-1:-1:-1",
+        "scope": 35680,
+        "sourceUnit": 26701,
+        "symbolAliases": [
+          {
+            "foreign": {
+              "id": 35659,
+              "name": "IBridge",
+              "nodeType": "Identifier",
+              "overloadedDeclarations": [],
+              "referencedDeclaration": 26700,
+              "src": "66:7:57",
+              "typeDescriptions": {}
+            },
+            "nameLocation": "-1:-1:-1"
+          }
+        ],
+        "unitAlias": ""
+      },
+      {
+        "id": 35679,
+        "nodeType": "ContractDefinition",
+        "src": "337:223:57",
+        "nodes": [
+          {
+            "id": 35667,
+            "nodeType": "EventDefinition",
+            "src": "381:52:57",
+            "nodes": [],
+            "anonymous": false,
+            "eventSelector": "118a5978e509351fb120eb558e2dc9bd6db3cf57cf66ec9744ef8acabf3b0aec",
+            "name": "StateRootSentMultichain",
+            "nameLocation": "387:23:57",
+            "parameters": {
+              "id": 35666,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 35665,
+                  "indexed": true,
+                  "mutability": "mutable",
+                  "name": "root",
+                  "nameLocation": "427:4:57",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 35667,
+                  "src": "411:20:57",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 35664,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "411:7:57",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "410:22:57"
+            }
+          },
+          {
+            "id": 35678,
+            "nodeType": "FunctionDefinition",
+            "src": "439:119:57",
+            "nodes": [],
+            "body": {
+              "id": 35677,
+              "nodeType": "Block",
+              "src": "507:51:57",
+              "nodes": [],
+              "statements": [
+                {
+                  "eventCall": {
+                    "arguments": [
+                      {
+                        "id": 35674,
+                        "name": "root",
+                        "nodeType": "Identifier",
+                        "overloadedDeclarations": [],
+                        "referencedDeclaration": 35669,
+                        "src": "546:4:57",
+                        "typeDescriptions": {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      }
+                    ],
+                    "expression": {
+                      "argumentTypes": [
+                        {
+                          "typeIdentifier": "t_uint256",
+                          "typeString": "uint256"
+                        }
+                      ],
+                      "id": 35673,
+                      "name": "StateRootSentMultichain",
+                      "nodeType": "Identifier",
+                      "overloadedDeclarations": [],
+                      "referencedDeclaration": 35667,
+                      "src": "522:23:57",
+                      "typeDescriptions": {
+                        "typeIdentifier": "t_function_event_nonpayable$_t_uint256_$returns$__$",
+                        "typeString": "function (uint256)"
+                      }
+                    },
+                    "id": 35675,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "kind": "functionCall",
+                    "lValueRequested": false,
+                    "nameLocations": [],
+                    "names": [],
+                    "nodeType": "FunctionCall",
+                    "src": "522:29:57",
+                    "tryCall": false,
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_tuple$__$",
+                      "typeString": "tuple()"
+                    }
+                  },
+                  "id": 35676,
+                  "nodeType": "EmitStatement",
+                  "src": "517:34:57"
+                }
+              ]
+            },
+            "baseFunctions": [
+              26699
+            ],
+            "functionSelector": "393170cf",
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [],
+            "name": "sendRootMultichain",
+            "nameLocation": "448:18:57",
+            "overrides": {
+              "id": 35671,
+              "nodeType": "OverrideSpecifier",
+              "overrides": [],
+              "src": "498:8:57"
+            },
+            "parameters": {
+              "id": 35670,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 35669,
+                  "mutability": "mutable",
+                  "name": "root",
+                  "nameLocation": "475:4:57",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 35678,
+                  "src": "467:12:57",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 35668,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "467:7:57",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "466:14:57"
+            },
+            "returnParameters": {
+              "id": 35672,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "507:0:57"
+            },
+            "scope": 35679,
+            "stateMutability": "nonpayable",
+            "virtual": true,
+            "visibility": "external"
+          }
+        ],
+        "abstract": false,
+        "baseContracts": [
+          {
+            "baseName": {
+              "id": 35662,
+              "name": "IBridge",
+              "nameLocations": [
+                "367:7:57"
+              ],
+              "nodeType": "IdentifierPath",
+              "referencedDeclaration": 26700,
+              "src": "367:7:57"
+            },
+            "id": 35663,
+            "nodeType": "InheritanceSpecifier",
+            "src": "367:7:57"
+          }
+        ],
+        "canonicalName": "SimpleStateBridge",
+        "contractDependencies": [],
+        "contractKind": "contract",
+        "documentation": {
+          "id": 35661,
+          "nodeType": "StructuredDocumentation",
+          "src": "113:224:57",
+          "text": "@title State Bridge Mock\n @notice This purely exists to allow tests to compile and does not have any functionality.\n @author Worldcoin\n @notice A dumb bridge to make it easy to fuzz test successes and failures."
+        },
+        "fullyImplemented": true,
+        "linearizedBaseContracts": [
+          35679,
+          26700
+        ],
+        "name": "SimpleStateBridge",
+        "nameLocation": "346:17:57",
+        "scope": 35680,
+        "usedErrors": []
+      }
+    ],
+    "license": "MIT"
+  },
+  "id": 57
+}

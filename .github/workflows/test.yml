@@ -7,7 +7,11 @@ name: Tests & linter
 on:
   push:
     branches:
-      - 'batching/**'
+      - main
+  pull_request:
+    types: [opened,synchronize,reopened]
+    branches:
+      - main
 
 env:
   RUST_VERSION: "1.65"

@@ -31,7 +31,6 @@ use error::Error;
 
 mod api_metrics_layer;
 mod extract_trace_layer;
-mod remove_auth_layer;
 mod timeout_layer;
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
@@ -222,7 +221,6 @@ pub async fn bind_from_listener(
                 .on_response(DefaultOnResponse::new().level(Level::INFO)),
         )
         .layer(middleware::from_fn(extract_trace_layer::middleware))
-        .layer(middleware::from_fn(remove_auth_layer::middleware))
         .with_state(app.clone());
 
     let server = axum::Server::from_tcp(listener)?

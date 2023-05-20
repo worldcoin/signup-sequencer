@@ -11,13 +11,13 @@ use sqlx::{
 };
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
+use url::Url;
 
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
 use self::prover::ProverConfiguration;
 
 pub mod prover;
-use crate::secret::SecretUrl;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
@@ -27,7 +27,7 @@ pub struct Options {
     /// Database server connection string.
     /// Example: `postgres://user:password@localhost:5432/database`
     #[clap(long, env)]
-    pub database: SecretUrl,
+    pub database: Url,
 
     /// Allow creation or migration of the database schema.
     #[clap(long, default_value = "true")]
@@ -48,16 +48,16 @@ impl Database {
         info!(url = %&options.database, "Connecting to database");
 
         // Create database if requested and does not exist
-        if options.database_migrate && !Postgres::database_exists(options.database.expose()).await?
+        if options.database_migrate && !Postgres::database_exists(options.database.as_str()).await?
         {
             warn!(url = %&options.database, "Database does not exist, creating database");
-            Postgres::create_database(options.database.expose()).await?;
+            Postgres::create_database(options.database.as_str()).await?;
         }
 
         // Create a connection pool
         let pool = PoolOptions::<Postgres>::new()
             .max_connections(options.database_max_connections)
-            .connect(options.database.expose())
+            .connect(options.database.as_str())
             .await
             .context("error connecting to database")?;
 
@@ -66,6 +66,7 @@ impl Database {
             .await
             .context("error getting database version")?
             .get::<String, _>(0);
+
         info!(url = %&options.database, ?version, "Connected to database");
 
         // Run migrations if requested.
@@ -432,15 +433,16 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
-    use std::{str::FromStr, time::Duration};
+    use std::time::Duration;
 
     use anyhow::Context;
     use chrono::Utc;
     use postgres_docker_utils::DockerContainerGuard;
+    use reqwest::Url;
     use semaphore::Field;
 
     use super::{Database, Options};
-    use crate::{identity_tree::Status, secret::SecretUrl};
+    use crate::identity_tree::Status;
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {
@@ -469,7 +471,7 @@ mod test {
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
         let db = Database::new(Options {
-            database:                 SecretUrl::from_str(&url)?,
+            database:                 Url::parse(&url)?,
             database_migrate:         true,
             database_max_connections: 1,
         })

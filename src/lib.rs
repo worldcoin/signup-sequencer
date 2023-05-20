@@ -8,7 +8,6 @@ mod database;
 mod ethereum;
 pub mod identity_tree;
 mod prover;
-pub mod secret;
 pub mod server;
 mod task_monitor;
 mod utils;

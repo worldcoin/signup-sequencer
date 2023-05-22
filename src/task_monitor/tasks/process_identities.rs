@@ -213,6 +213,7 @@ async fn commit_identities(
         warn!("Identity commit requested with zero identities. Continuing.");
         return Ok(());
     }
+
     debug!("Starting identity commit for {} identities.", updates.len());
 
     // Sanity check that the insertions are to consecutive leaves in the tree.

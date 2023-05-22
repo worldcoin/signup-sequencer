@@ -286,6 +286,7 @@ impl App {
 
         self.database.insert_new_identity(commitment).await?;
 
+        // TODO: remove this
         let (tx, _) = oneshot::channel();
         self.insert_identities_sender
             .send(IdentityInsert {

@@ -62,29 +62,23 @@ async fn insert_identities(
     wake_up_notify: &Notify,
 ) -> AnyhowResult<()> {
     loop {
-        let Some(first_identity) = identity_receiver.recv().await else {
-            warn!("Identity channel closed, terminating.");
-            break;
-        };
-
-        // Get as many identities to commit in bulk
-        let mut identities = vec![first_identity];
-        while let Ok(identity) = identity_receiver.try_recv() {
-            identities.push(identity);
-        }
+        // get commits from database
+        let unprocessed = database.get_unprocessed_commitments("NEW").await?;
 
         // Dedup
         let mut commitments_set = HashSet::new();
-        let mut deduped = Vec::with_capacity(identities.len());
+        let mut deduped = Vec::with_capacity(unprocessed.len());
 
-        for identity in identities {
-            if commitments_set.contains(&identity.identity) {
-                identity
-                    .on_complete
-                    .send(OnInsertComplete::DuplicateCommitment)
-                    .ok();
+        for identity in unprocessed {
+            if commitments_set.contains(&identity.commitment) {
+                database
+                    .update_err_unprocessed_commitment(
+                        identity.commitment,
+                        "Duplicate commitment.".into(),
+                    )
+                    .await?;
             } else {
-                commitments_set.insert(identity.identity);
+                commitments_set.insert(identity.commitment);
                 deduped.push(identity);
             }
         }
@@ -93,14 +87,16 @@ async fn insert_identities(
         let mut identities = Vec::with_capacity(deduped.len());
         for identity in deduped {
             if database
-                .get_identity_leaf_index(&identity.identity)
+                .get_identity_leaf_index(&identity.commitment)
                 .await?
                 .is_some()
             {
-                identity
-                    .on_complete
-                    .send(OnInsertComplete::DuplicateCommitment)
-                    .ok();
+                database
+                    .update_err_unprocessed_commitment(
+                        identity.commitment,
+                        "Duplicate commitment.".into(),
+                    )
+                    .await?;
             } else {
                 identities.push(identity);
             }
@@ -115,10 +111,10 @@ async fn insert_identities(
              database: {next_db_index}"
         );
 
-        let (identities, on_completes): (Vec<_>, Vec<_>) = identities
+        let identities: Vec<Hash> = identities
             .into_iter()
-            .map(|insert| (insert.identity, insert.on_complete))
-            .unzip();
+            .map(|insert| insert.commitment)
+            .collect();
 
         let data = latest_tree.append_many(&identities);
 
@@ -128,29 +124,14 @@ async fn insert_identities(
             "Length mismatch when appending identities to tree"
         );
 
-        let items = three_way_zip(
-            data.into_iter(),
-            identities.into_iter(),
-            on_completes.into_iter(),
-        );
+        let items = data.into_iter().zip(identities.into_iter());
 
-        for ((root, proof, leaf_index), identity, on_complete) in items {
+        for ((root, proof, leaf_index), identity) in items {
             database
                 .insert_pending_identity(leaf_index, &identity, &root)
                 .await?;
 
-            let inclusion_proof = InclusionProof {
-                status: Status::Pending,
-                root,
-                proof,
-            };
-
-            if on_complete
-                .send(OnInsertComplete::Proof(inclusion_proof))
-                .is_err()
-            {
-                error!("On complete channel was closed before identity was inserted");
-            }
+            // TODO: update db, set status of unprocessed to something?
         }
 
         // Notify the identity processing task, that there are new identities

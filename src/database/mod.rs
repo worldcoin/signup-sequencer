@@ -18,6 +18,7 @@ use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 use self::prover::ProverConfiguration;
 
 pub mod prover;
+pub mod types;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
@@ -432,6 +433,52 @@ impl Database {
         .bind(<&str>::from(Status::New));
         self.pool.execute(query).await?;
         Ok(identity)
+    }
+
+    // TODO: Change status to enum
+    pub async fn get_unprocessed_commitments(
+        &self,
+        status: &str,
+    ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
+        let query = sqlx::query(
+            r#"
+                SELECT * FROM unprocessed_identities
+                WHERE status = $1
+            "#,
+        )
+        .bind(status);
+
+        let result = self.pool.fetch_all(query).await?;
+
+        Ok(result
+            .into_iter()
+            .map(|row| types::UnprocessedCommitment {
+                commitment:    row.get::<Hash, _>(0),
+                status:        row.get::<String, _>(1),
+                created_at:    row.get::<String, _>(2),
+                processed_at:  row.get::<String, _>(3),
+                error_message: row.get::<String, _>(4),
+            })
+            .collect::<Vec<_>>())
+    }
+
+    pub async fn update_err_unprocessed_commitment(
+        &self,
+        commitment: Hash,
+        message: String,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+                UPDATE unprocessed_identities SET error_message = $1, status = Failed
+                WHERE commitment = $2
+            "#,
+        )
+        .bind(commitment)
+        .bind(message);
+
+        self.pool.execute(query).await?;
+
+        Ok(())
     }
 
     pub async fn identity_exists(&self, commitment: Hash) -> Result<bool, Error> {

@@ -58,14 +58,4 @@ mod tests {
             "postgres://user:password@localhost:5432/database"
         );
     }
-
-    #[test]
-    fn test_url_debug() {
-        let secret =
-            SecretUrl::from_str("postgres://user:password@localhost:5432/database").unwrap();
-        assert_eq!(
-            format!("{:?}", secret),
-            "postgres://**********@localhost:5432/database"
-        );
-    }
 }

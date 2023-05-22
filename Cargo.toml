@@ -24,7 +24,7 @@ bench = ["criterion", "proptest"]
 mimalloc = ["cli-batteries/mimalloc"]
 
 [dependencies]
-anyhow = { version = "1.0.68" }
+anyhow = { version = "1.0.71" }
 async-stream = "0.3.3"
 async-trait = "0.1.64"
 axum = "0.6.4"

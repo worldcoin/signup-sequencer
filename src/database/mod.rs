@@ -438,7 +438,7 @@ impl Database {
     // TODO: Change status to enum
     pub async fn get_unprocessed_commitments(
         &self,
-        status: &str,
+        status: Status,
     ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
         let query = sqlx::query(
             r#"
@@ -446,7 +446,7 @@ impl Database {
                 WHERE status = $1
             "#,
         )
-        .bind(status);
+        .bind(<&str>::from(status));
 
         let result = self.pool.fetch_all(query).await?;
 
@@ -455,11 +455,24 @@ impl Database {
             .map(|row| types::UnprocessedCommitment {
                 commitment:    row.get::<Hash, _>(0),
                 status:        row.get::<String, _>(1),
-                created_at:    row.get::<String, _>(2),
-                processed_at:  row.get::<String, _>(3),
-                error_message: row.get::<String, _>(4),
+                created_at:    row.get::<_, _>(2),
+                processed_at:  row.get::<_, _>(3),
+                error_message: row.get::<_, _>(4),
             })
             .collect::<Vec<_>>())
+    }
+
+    pub async fn remove_unprocessed_identity(&self, commitment: &Hash) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+                DELETE FROM unprocessed_identities WHERE commitment = $1
+            "#,
+        )
+        .bind(commitment);
+
+        self.pool.execute(query).await?;
+
+        Ok(())
     }
 
     pub async fn update_err_unprocessed_commitment(

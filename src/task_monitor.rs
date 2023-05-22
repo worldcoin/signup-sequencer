@@ -139,7 +139,7 @@ impl TaskMonitor {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn start(&self) -> mpsc::Sender<IdentityInsert> {
+    pub async fn start(&self) {
         let mut instance = self.instance.write().await;
         if instance.is_some() {
             warn!("Identity committer already running");
@@ -150,8 +150,6 @@ impl TaskMonitor {
         let (shutdown_sender, _) = broadcast::channel(1);
         let (pending_identities_sender, pending_identities_receiver) =
             mpsc::channel(self.pending_identities_capacity);
-        let (insert_identities_sender, insert_identities_receiver) =
-            mpsc::channel(self.insert_identities_capacity);
 
         let wake_up_notify = Arc::new(Notify::new());
         // Immediately notify so we can start processing if we have pending identities
@@ -161,7 +159,6 @@ impl TaskMonitor {
         // We need to maintain mutable access to these receivers from multiple
         // invocations of this task
         let pending_identities_receiver = Arc::new(Mutex::new(pending_identities_receiver));
-        let insert_identities_receiver = Arc::new(Mutex::new(insert_identities_receiver));
 
         let mut handles = Vec::new();
 
@@ -203,7 +200,6 @@ impl TaskMonitor {
         let insert_identities = InsertIdentities::new(
             self.database.clone(),
             self.tree_state.get_latest_tree(),
-            insert_identities_receiver,
             wake_up_notify,
         );
 
@@ -219,8 +215,6 @@ impl TaskMonitor {
             handles,
             shutdown_sender,
         });
-
-        insert_identities_sender
     }
 
     async fn log_pending_identities_count(database: &Database) -> AnyhowResult<()> {

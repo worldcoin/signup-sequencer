@@ -1,8 +1,8 @@
 use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Result as AnyhowResult;
-use tokio::sync::{mpsc, oneshot, Mutex, Notify};
-use tracing::{error, instrument, warn};
+use tokio::sync::{oneshot, Notify};
+use tracing::{info, instrument};
 
 use crate::{
     database::Database,
@@ -20,37 +20,26 @@ pub struct IdentityInsert {
 }
 
 pub struct InsertIdentities {
-    database:          Arc<Database>,
-    latest_tree:       TreeVersion<Latest>,
-    identity_receiver: Arc<Mutex<mpsc::Receiver<IdentityInsert>>>,
-    wake_up_notify:    Arc<Notify>,
+    database:       Arc<Database>,
+    latest_tree:    TreeVersion<Latest>,
+    wake_up_notify: Arc<Notify>,
 }
 
 impl InsertIdentities {
     pub fn new(
         database: Arc<Database>,
         latest_tree: TreeVersion<Latest>,
-        identity_receiver: Arc<Mutex<mpsc::Receiver<IdentityInsert>>>,
         wake_up_notify: Arc<Notify>,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
             latest_tree,
-            identity_receiver,
             wake_up_notify,
         })
     }
 
     pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
-        let mut identity_receiver = self.identity_receiver.lock().await;
-
-        insert_identities(
-            &self.database,
-            &self.latest_tree,
-            &mut identity_receiver,
-            &self.wake_up_notify,
-        )
-        .await
+        insert_identities(&self.database, &self.latest_tree, &self.wake_up_notify).await
     }
 }
 
@@ -58,12 +47,11 @@ impl InsertIdentities {
 async fn insert_identities(
     database: &Database,
     latest_tree: &TreeVersion<Latest>,
-    identity_receiver: &mut mpsc::Receiver<IdentityInsert>,
     wake_up_notify: &Notify,
 ) -> AnyhowResult<()> {
     loop {
         // get commits from database
-        let unprocessed = database.get_unprocessed_commitments("NEW").await?;
+        let unprocessed = database.get_unprocessed_commitments(Status::New).await?;
 
         // Dedup
         let mut commitments_set = HashSet::new();
@@ -126,12 +114,12 @@ async fn insert_identities(
 
         let items = data.into_iter().zip(identities.into_iter());
 
-        for ((root, proof, leaf_index), identity) in items {
+        for ((root, _proof, leaf_index), identity) in items {
             database
                 .insert_pending_identity(leaf_index, &identity, &root)
                 .await?;
 
-            // TODO: update db, set status of unprocessed to something?
+            database.remove_unprocessed_identity(&identity).await?;
         }
 
         // Notify the identity processing task, that there are new identities
@@ -139,12 +127,4 @@ async fn insert_identities(
     }
 
     Ok(())
-}
-
-fn three_way_zip<A, B, C>(
-    a: impl Iterator<Item = A>,
-    b: impl Iterator<Item = B>,
-    c: impl Iterator<Item = C>,
-) -> impl Iterator<Item = (A, B, C)> {
-    a.zip(b).zip(c).map(|((a, b), c)| (a, b, c))
 }

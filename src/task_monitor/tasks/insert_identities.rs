@@ -1,23 +1,13 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::Result as AnyhowResult;
-use tokio::sync::{oneshot, Notify};
-use tracing::{info, instrument};
+use tokio::{sync::Notify, time::sleep};
+use tracing::instrument;
 
 use crate::{
     database::Database,
-    identity_tree::{Hash, InclusionProof, Latest, Status, TreeVersion, TreeVersionReadOps},
+    identity_tree::{Hash, Latest, Status, TreeVersion, TreeVersionReadOps},
 };
-
-pub enum OnInsertComplete {
-    DuplicateCommitment,
-    Proof(InclusionProof),
-}
-
-pub struct IdentityInsert {
-    pub identity:    Hash,
-    pub on_complete: oneshot::Sender<OnInsertComplete>,
-}
 
 pub struct InsertIdentities {
     database:       Arc<Database>,
@@ -52,6 +42,9 @@ async fn insert_identities(
     loop {
         // get commits from database
         let unprocessed = database.get_unprocessed_commitments(Status::New).await?;
+        if unprocessed.is_empty() {
+            sleep(Duration::from_secs(5)).await;
+        }
 
         // Dedup
         let mut commitments_set = HashSet::new();

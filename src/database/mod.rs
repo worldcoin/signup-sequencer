@@ -453,10 +453,10 @@ impl Database {
         Ok(result
             .into_iter()
             .map(|row| types::UnprocessedCommitment {
-                commitment:    row.get::<Hash, _>(0),
-                status:        row.get::<&str, _>(1).parse().expect("status is unreadable"),
-                created_at:    row.get::<_, _>(2),
-                processed_at:  row.get::<_, _>(3),
+                commitment: row.get::<Hash, _>(0),
+                status,
+                created_at: row.get::<_, _>(2),
+                processed_at: row.get::<_, _>(3),
                 error_message: row.get::<_, _>(4),
             })
             .collect::<Vec<_>>())
@@ -486,8 +486,8 @@ impl Database {
                 WHERE commitment = $2
             "#,
         )
-        .bind(commitment)
-        .bind(message);
+        .bind(message)
+        .bind(commitment);
 
         self.pool.execute(query).await?;
 

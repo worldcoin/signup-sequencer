@@ -12,8 +12,7 @@ use tokio::{
 use tracing::{info, instrument, warn};
 
 use self::tasks::{
-    insert_identities::{IdentityInsert, InsertIdentities},
-    mine_identities::MineIdentities,
+    insert_identities::InsertIdentities, mine_identities::MineIdentities,
     process_identities::ProcessIdentities,
 };
 use crate::{

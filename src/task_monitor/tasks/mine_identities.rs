@@ -78,6 +78,14 @@ async fn mine_identities(
         start_index,
     } = pending_identity;
 
+    info!(
+        start_index,
+        ?pre_root,
+        ?post_root,
+        ?transaction_id,
+        "Mining batch"
+    );
+
     identity_manager.mine_identities(transaction_id).await?;
 
     // With this done, all that remains is to mark them as submitted to the

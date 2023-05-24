@@ -361,6 +361,14 @@ async fn commit_identities(
             e
         })?;
 
+    info!(
+        start_index,
+        ?pre_root,
+        ?post_root,
+        ?transaction_id,
+        "Batch submitted"
+    );
+
     // The transaction will be awaited on asynchronously
     permit.send(PendingIdentities {
         transaction_id,
@@ -371,6 +379,8 @@ async fn commit_identities(
 
     // Update the batching tree only after submitting the identities to the chain
     batching_tree.apply_updates_up_to(post_root.into());
+
+    info!(start_index, ?pre_root, ?post_root, "Tree updated");
 
     TaskMonitor::log_batch_size(updates.len());
 

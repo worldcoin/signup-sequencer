@@ -248,7 +248,7 @@ impl App {
     ///
     /// Will return `Err` if identity is already queued, or in the tree, or the
     /// queue malfunctions.
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(level = "debug", skip(self))]
     pub async fn insert_identity(
         &self,
         commitment: Hash,
@@ -329,9 +329,10 @@ impl App {
     ///
     /// Will return `Err` if the provided batch size already exists.
     /// Will return `Err` if the batch size fails to write to database.
+    #[instrument(level = "debug", skip(self))]
     pub async fn add_batch_size(
         &self,
-        url: impl ToString,
+        url: String,
         batch_size: usize,
         timeout_seconds: u64,
     ) -> Result<(), ServerError> {
@@ -350,6 +351,7 @@ impl App {
     ///
     /// Will return `Err` if the requested batch size does not exist.
     /// Will return `Err` if batch size fails to be removed from database.
+    #[instrument(level = "debug", skip(self))]
     pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
         self.identity_manager.remove_batch_size(batch_size).await?;
 
@@ -361,6 +363,7 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if something unknown went wrong.
+    #[instrument(level = "debug", skip(self))]
     pub async fn list_batch_sizes(&self) -> Result<ListBatchSizesResponse, ServerError> {
         let batches = self.identity_manager.list_batch_sizes().await?;
 
@@ -370,7 +373,7 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if the provided index is out of bounds.
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(level = "debug", skip(self))]
     pub async fn inclusion_proof(
         &self,
         commitment: &Hash,
@@ -393,7 +396,7 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if the provided proof is invalid.
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(level = "debug", skip(self))]
     pub async fn verify_semaphore_proof(
         &self,
         request: &VerifySemaphoreProofRequest,

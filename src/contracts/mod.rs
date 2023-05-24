@@ -159,7 +159,7 @@ impl IdentityManager {
         }
     }
 
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(level = "debug", skip(prover, identity_commitments))]
     pub async fn prepare_proof(
         prover: ReadOnlyInsertionProver<'_>,
         start_index: usize,
@@ -189,7 +189,7 @@ impl IdentityManager {
         Ok(proof_data)
     }
 
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(level = "debug", skip(self, identity_commitments, proof_data))]
     pub async fn register_identities(
         &self,
         start_index: usize,
@@ -226,7 +226,7 @@ impl IdentityManager {
             .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
     }
 
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(level = "debug", skip(self))]
     pub async fn mine_identities(&self, transaction_id: TransactionId) -> anyhow::Result<()> {
         self.ethereum.mine_transaction(transaction_id).await?;
         Ok(())

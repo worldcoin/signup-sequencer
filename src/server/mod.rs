@@ -16,6 +16,7 @@ use axum::{
 use clap::Parser;
 use cli_batteries::await_shutdown;
 use error::Error;
+use error::Error;
 use hyper::StatusCode;
 use semaphore::{protocol::Proof, Field};
 use serde::{Deserialize, Serialize};
@@ -28,10 +29,7 @@ use crate::{
     identity_tree::Hash,
 };
 
-mod api_metrics_layer;
-mod extract_trace_layer;
-mod remove_auth_layer;
-mod timeout_layer;
+mod custom_middleware;
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 #[group(skip)]
@@ -80,7 +78,7 @@ pub struct InclusionProofRequest {
     pub identity_commitment: Hash,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct VerifySemaphoreProofRequest {
@@ -209,19 +207,29 @@ pub async fn bind_from_listener(
         .route("/addBatchSize", post(add_batch_size))
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
-        .layer(middleware::from_fn(api_metrics_layer::middleware))
+        .layer(middleware::from_fn(
+            custom_middleware::api_metrics_layer::middleware,
+        ))
         .layer(middleware::from_fn_with_state(
             serve_timeout,
-            timeout_layer::middleware,
+            custom_middleware::timeout_layer::middleware,
         ))
         .layer(
             TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .make_span_with(
+                    DefaultMakeSpan::new()
+                        .level(Level::INFO)
+                        .include_headers(true),
+                )
                 .on_request(DefaultOnRequest::new().level(Level::INFO))
                 .on_response(DefaultOnResponse::new().level(Level::INFO)),
         )
-        .layer(middleware::from_fn(extract_trace_layer::middleware))
-        .layer(middleware::from_fn(remove_auth_layer::middleware))
+        .layer(middleware::from_fn(
+            custom_middleware::extract_trace_layer::middleware,
+        ))
+        .layer(middleware::from_fn(
+            custom_middleware::remove_auth_layer::middleware,
+        ))
         .with_state(app.clone());
 
     let server = axum::Server::from_tcp(listener)?

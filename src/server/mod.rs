@@ -15,6 +15,7 @@ use axum::{
 };
 use clap::Parser;
 use cli_batteries::await_shutdown;
+use error::Error;
 use hyper::StatusCode;
 use semaphore::{protocol::Proof, Field};
 use serde::{Deserialize, Serialize};
@@ -26,8 +27,6 @@ use crate::{
     app::{App, InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofResponse},
     identity_tree::Hash,
 };
-
-use error::Error;
 
 mod api_metrics_layer;
 mod extract_trace_layer;
@@ -105,34 +104,34 @@ impl ToResponseCode for () {
 async fn inclusion_proof(
     State(app): State<Arc<App>>,
     Json(inclusion_proof_request): Json<InclusionProofRequest>,
-) -> Result<Json<InclusionProofResponse>, Error> {
+) -> Result<(StatusCode, Json<InclusionProofResponse>), Error> {
     let result = app
         .inclusion_proof(&inclusion_proof_request.identity_commitment)
         .await?;
 
-    Ok(Json(result))
+    Ok((result.to_response_code(), Json(result)))
 }
 
 async fn insert_identity(
     State(app): State<Arc<App>>,
     Json(insert_identity_request): Json<InsertCommitmentRequest>,
-) -> Result<Json<InclusionProofResponse>, Error> {
+) -> Result<(StatusCode, Json<InclusionProofResponse>), Error> {
     let result = app
         .insert_identity(insert_identity_request.identity_commitment)
         .await?;
 
-    Ok(Json(result))
+    Ok((result.to_response_code(), Json(result)))
 }
 
 async fn verify_semaphore_proof(
     State(app): State<Arc<App>>,
     Json(verify_semaphore_proof_request): Json<VerifySemaphoreProofRequest>,
-) -> Result<Json<VerifySemaphoreProofResponse>, Error> {
+) -> Result<(StatusCode, Json<VerifySemaphoreProofResponse>), Error> {
     let result = app
         .verify_semaphore_proof(&verify_semaphore_proof_request)
         .await?;
 
-    Ok(Json(result))
+    Ok((result.to_response_code(), Json(result)))
 }
 
 async fn add_batch_size(
@@ -154,10 +153,10 @@ async fn remove_batch_size(
 }
 async fn list_batch_sizes(
     State(app): State<Arc<App>>,
-) -> Result<Json<ListBatchSizesResponse>, Error> {
+) -> Result<(StatusCode, Json<ListBatchSizesResponse>), Error> {
     let result = app.list_batch_sizes().await?;
 
-    Ok(Json(result))
+    Ok((result.to_response_code(), Json(result)))
 }
 /// # Errors
 ///

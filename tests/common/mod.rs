@@ -63,6 +63,7 @@ use self::{
     prelude::*,
 };
 use futures::{stream::FuturesUnordered, StreamExt};
+use hyper::StatusCode;
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
@@ -190,6 +191,7 @@ pub async fn test_inclusion_proof(
                 result_json,
                 generate_reference_proof_json(ref_tree, leaf_index, "pending")
             );
+            assert_eq!(response.status(), StatusCode::ACCEPTED);
             info!("Got pending, waiting 1 second, iteration {}", i);
             tokio::time::sleep(Duration::from_secs(1)).await;
         } else {
@@ -295,6 +297,9 @@ pub async fn test_insert_identity(
     if !response.status().is_success() {
         panic!("Failed to insert identity: {result}");
     }
+
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+
     let result_json = serde_json::from_str::<serde_json::Value>(&result)
         .expect("Failed to parse response as json");
 

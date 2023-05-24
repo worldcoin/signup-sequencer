@@ -368,16 +368,16 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        let unprocessed = self
+        if let Some(unprocessed) = self
             .database
             .get_unprocessed_commit_status(&commitment)
-            .await?;
-        if let Some(unp) = unprocessed {
+            .await?
+        {
             return Ok(InclusionProofResponse(InclusionProof {
-                status:  unp.0,
+                status:  unprocessed.0,
                 root:    None,
                 proof:   None,
-                message: Some(unp.1),
+                message: Some(unprocessed.1),
             }));
         }
 

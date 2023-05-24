@@ -462,6 +462,32 @@ impl Database {
             .collect::<Vec<_>>())
     }
 
+    pub async fn get_unprocessed_commit_status(
+        &self,
+        commitment: &Hash,
+    ) -> Result<Option<(Status, String)>, Error> {
+        let query = sqlx::query(
+            r#"
+                SELECT status, error_message FROM unprocessed_identities WHERE commitment = $1
+            "#,
+        )
+        .bind(commitment);
+
+        let result = self.pool.fetch_optional(query).await?;
+
+        if let Some(row) = result {
+            return Ok(
+                Some(
+                    (
+                        row.get::<&str, _>(0).parse().expect("couldn't read status"),
+                        row.get::<String, _>(1),
+                    )
+                )
+            )
+        };
+        Ok(None)
+    }
+
     pub async fn remove_unprocessed_identity(&self, commitment: &Hash) -> Result<(), Error> {
         let query = sqlx::query(
             r#"

@@ -91,9 +91,10 @@ pub struct RootItem {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProof {
-    pub status: Status,
-    pub root:   Field,
-    pub proof:  Proof,
+    pub status:  Status,
+    pub root:    Option<Field>,
+    pub proof:   Option<Proof>,
+    pub message: Option<String>,
 }
 
 /// Additional data held by the canonical tree version. It includes data
@@ -493,9 +494,10 @@ impl TreeState {
             Status::Mined => self.mined.get_proof(item.leaf_index),
         };
         InclusionProof {
-            status: item.status,
-            root,
-            proof,
+            status:  item.status,
+            root:    Some(root),
+            proof:   Some(proof),
+            message: None,
         }
     }
 }

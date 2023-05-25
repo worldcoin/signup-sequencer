@@ -624,10 +624,7 @@ mod test {
             .expect("expected commitment status");
         assert_eq!(commit.0, Status::New);
 
-        let identity_count = db
-            .get_unprocessed_commitments(Status::New)
-            .await?
-            .len();
+        let identity_count = db.get_unprocessed_commitments(Status::New).await?.len();
         assert_eq!(identity_count, 1);
 
         assert!(db.remove_unprocessed_identity(&commit_hash).await.is_ok());

@@ -29,7 +29,7 @@ use crate::{
 /// trigger a forced batch insertion.
 const DEBOUNCE_THRESHOLD_SECS: u64 = 1;
 
-const PENDING_IDENTITIES_CHANNEL_CAPACITY: Lazy<Histogram> = Lazy::new(|| {
+static PENDING_IDENTITIES_CHANNEL_CAPACITY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
         "pending_identities_channel_capacity",
         "Pending identities channel capacity"
@@ -346,6 +346,7 @@ async fn commit_identities(
         e
     })?;
 
+    #[allow(clippy::cast_precision_loss)]
     PENDING_IDENTITIES_CHANNEL_CAPACITY.observe(pending_identities_sender.capacity() as f64);
 
     // This channel's capacity provides us with a natural back-pressure mechanism

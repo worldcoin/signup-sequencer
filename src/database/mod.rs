@@ -556,7 +556,6 @@ mod test {
     use ethers::types::U256;
     use postgres_docker_utils::DockerContainerGuard;
     use semaphore::Field;
-    use tracing::span::Record;
 
     use super::{Database, Options};
     use crate::{
@@ -628,8 +627,7 @@ mod test {
         let identity_count = db
             .get_unprocessed_commitments(Status::New)
             .await?
-            .iter()
-            .count();
+            .len();
         assert_eq!(identity_count, 1);
 
         assert!(db.remove_unprocessed_identity(&commit_hash).await.is_ok());

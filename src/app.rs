@@ -245,7 +245,6 @@ impl App {
     /// queue malfunctions.
     #[instrument(level = "debug", skip(self))]
     pub async fn insert_identity(&self, commitment: Hash) -> Result<(), ServerError> {
-
         if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
@@ -364,7 +363,7 @@ impl App {
 
         if let Some(unprocessed) = self
             .database
-            .get_unprocessed_commit_status(&commitment)
+            .get_unprocessed_commit_status(commitment)
             .await?
         {
             return Ok(InclusionProofResponse(InclusionProof {

@@ -296,7 +296,7 @@ pub async fn test_insert_identity(
         panic!("Failed to insert identity");
     }
 
-    assert_eq!(bytes.is_empty(), true);
+    assert!(bytes.is_empty());
     ref_tree.set(leaf_index, test_leaves[leaf_index]);
 
     (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())

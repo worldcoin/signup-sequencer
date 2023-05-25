@@ -5,6 +5,8 @@ use std::{
 
 use anyhow::Result as AnyhowResult;
 use ethers::types::U256;
+use once_cell::sync::Lazy;
+use prometheus::{register_histogram, Histogram};
 use semaphore::poseidon_tree::Branch;
 use tokio::{
     select,
@@ -26,6 +28,14 @@ use crate::{
 /// The number of seconds either side of the timer tick to treat as enough to
 /// trigger a forced batch insertion.
 const DEBOUNCE_THRESHOLD_SECS: u64 = 1;
+
+const PENDING_IDENTITIES_CHANNEL_CAPACITY: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "pending_identities_channel_capacity",
+        "Pending identities channel capacity"
+    )
+    .unwrap()
+});
 
 pub struct ProcessIdentities {
     database:                  Arc<Database>,
@@ -335,6 +345,8 @@ async fn commit_identities(
         error!(?e, "Failed to prepare proof.");
         e
     })?;
+
+    PENDING_IDENTITIES_CHANNEL_CAPACITY.observe(pending_identities_sender.capacity() as f64);
 
     // This channel's capacity provides us with a natural back-pressure mechanism
     // to ensure that we don't overwhelm the identity manager with too many

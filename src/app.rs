@@ -27,15 +27,6 @@ use crate::{
 };
 
 #[derive(Serialize)]
-pub struct EmptyResponse;
-
-impl ToResponseCode for EmptyResponse {
-    fn to_response_code(&self) -> StatusCode {
-        StatusCode::ACCEPTED
-    }
-}
-
-#[derive(Serialize)]
 #[serde(transparent)]
 pub struct InclusionProofResponse(InclusionProof);
 
@@ -256,7 +247,7 @@ impl App {
     /// Will return `Err` if identity is already queued, or in the tree, or the
     /// queue malfunctions.
     #[instrument(level = "debug", skip_all)]
-    pub async fn insert_identity(&self, commitment: Hash) -> Result<EmptyResponse, ServerError> {
+    pub async fn insert_identity(&self, commitment: Hash) -> Result<(), ServerError> {
         // TO REMOVE
         if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
@@ -295,7 +286,7 @@ impl App {
             .await
             .map_err(|_| ServerError::FailedToInsert)?;
 
-        Ok(EmptyResponse)
+        Ok(())
     }
 
     fn merge_env_provers(

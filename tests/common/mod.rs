@@ -460,6 +460,7 @@ pub fn generate_reference_proof_json(
         "status": status,
         "root": root,
         "proof": proof,
+        "message": serde_json::Value::Null
     })
 }
 

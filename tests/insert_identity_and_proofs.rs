@@ -3,6 +3,7 @@ mod common;
 use common::prelude::*;
 
 const SUPPORTED_DEPTH: usize = 20;
+const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
 #[serial_test::serial]
@@ -96,6 +97,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 1).await;
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 2).await;
 
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
     // Check that we can get their inclusion proofs back.
     test_inclusion_proof(
         &uri,
@@ -135,6 +137,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     tokio::time::pause();
     tokio::time::resume();
 
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
     // Check that we can also get these inclusion proofs back.
     test_inclusion_proof(
         &uri,

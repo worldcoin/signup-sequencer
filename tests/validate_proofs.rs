@@ -78,6 +78,7 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let (merkle_proof, root) =
         test_insert_identity(&uri, &client, &mut ref_tree, &TEST_LEAVES, 0).await;
 
+    tokio::time::sleep(Duration::from_secs(5)).await;
     // simulate client generating a proof
     let nullifier_hash = generate_nullifier_hash(&IDENTITIES[0], external_nullifier_hash);
 

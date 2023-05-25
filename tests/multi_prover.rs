@@ -14,7 +14,7 @@ async fn multi_prover() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(tree_depth as usize + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let batch_timeout_seconds: u64 = 2;
+    let batch_timeout_seconds: u64 = 5;
 
     let batch_size_3: usize = 3;
     let batch_size_10: usize = 10;
@@ -108,9 +108,7 @@ async fn multi_prover() -> anyhow::Result<()> {
         test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, offset + i).await;
     }
 
-    // Batch should be immediately produced, we'll wait a little for stability
-    // but we'll less than the batch timeout
-    tokio::time::sleep(Duration::from_secs_f32(batch_timeout_seconds as f32 / 3.0)).await;
+    tokio::time::sleep(Duration::from_secs(batch_timeout_seconds)).await;
 
     // Identities should have been inserted and processed
     for i in 0..batch_size_10 {

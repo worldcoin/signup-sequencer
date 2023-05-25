@@ -253,10 +253,7 @@ impl App {
     /// Will return `Err` if identity is already queued, or in the tree, or the
     /// queue malfunctions.
     #[instrument(level = "debug", skip(self))]
-    pub async fn insert_identity(
-        &self,
-        commitment: Hash,
-    ) -> Result<InclusionProofResponse, ServerError> {
+    pub async fn insert_identity(&self, commitment: Hash) -> Result<(), ServerError> {
         if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
@@ -285,7 +282,7 @@ impl App {
 
         self.database.insert_new_identity(commitment).await?;
 
-        Ok(EmptyResponse)
+        Ok(())
     }
 
     fn merge_env_provers(

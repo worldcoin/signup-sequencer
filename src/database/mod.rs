@@ -435,7 +435,6 @@ impl Database {
         Ok(identity)
     }
 
-    // TODO: Change status to enum
     pub async fn get_unprocessed_commitments(
         &self,
         status: Status,

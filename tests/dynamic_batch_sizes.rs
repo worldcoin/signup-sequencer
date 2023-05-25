@@ -6,7 +6,7 @@ use hyper::Uri;
 
 use std::str::FromStr;
 
-const SUPPORTED_DEPTH: usize = 16;
+const SUPPORTED_DEPTH: usize = 20;
 
 #[tokio::test]
 #[serial_test::serial]

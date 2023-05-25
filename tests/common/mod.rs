@@ -290,19 +290,12 @@ pub async fn test_insert_identity(
     let bytes = hyper::body::to_bytes(response.body_mut())
         .await
         .expect("Failed to convert response body to bytes");
-    let result = String::from_utf8(bytes.into_iter().collect())
-        .expect("Could not parse response bytes to utf-8");
     if !response.status().is_success() {
-        panic!("Failed to insert identity: {result}");
+        panic!("Failed to insert identity");
     }
-    let result_json = serde_json::from_str::<serde_json::Value>(&result)
-        .expect("Failed to parse response as json");
 
+    assert_eq!(bytes.is_empty(), true);
     ref_tree.set(leaf_index, test_leaves[leaf_index]);
-
-    let expected_json = generate_reference_proof_json(ref_tree, leaf_index, "pending");
-
-    assert_eq!(result_json, expected_json);
 
     (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())
 }

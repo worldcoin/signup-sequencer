@@ -476,14 +476,10 @@ impl Database {
         let result = self.pool.fetch_optional(query).await?;
 
         if let Some(row) = result {
-            return Ok(
-                Some(
-                    (
-                        row.get::<&str, _>(0).parse().expect("couldn't read status"),
-                        row.get::<String, _>(1),
-                    )
-                )
-            )
+            return Ok(Some((
+                row.get::<&str, _>(0).parse().expect("couldn't read status"),
+                row.get::<Option<String>, _>(1).unwrap_or_default(),
+            )));
         };
         Ok(None)
     }
@@ -555,12 +551,14 @@ mod test {
 
     use anyhow::Context;
     use chrono::Utc;
+    use ethers::types::U256;
     use postgres_docker_utils::DockerContainerGuard;
     use reqwest::Url;
     use semaphore::Field;
+    use tracing::span::Record;
 
     use super::{Database, Options};
-    use crate::identity_tree::Status;
+    use crate::identity_tree::{Hash, Status};
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {
@@ -604,6 +602,35 @@ mod test {
 
     fn mock_identities(n: usize) -> Vec<Field> {
         (1..=n).map(Field::from).collect()
+    }
+
+    #[tokio::test]
+    async fn insert_identity() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let dec = "1234500000000000000";
+        let commit_hash: Hash = U256::from_dec_str(dec)
+            .expect("cant convert to u256")
+            .into();
+        let hash = db.insert_new_identity(commit_hash).await?;
+
+        assert_eq!(commit_hash, hash);
+
+        let commit = db
+            .get_unprocessed_commit_status(&commit_hash)
+            .await?
+            .expect("expected commitment status");
+        assert_eq!(commit.0, Status::New);
+
+        let identity_count = db
+            .get_unprocessed_commitments(Status::New)
+            .await?
+            .iter()
+            .count();
+        assert_eq!(identity_count, 1);
+
+        assert!(db.remove_unprocessed_identity(&commit_hash).await.is_ok());
+
+        Ok(())
     }
 
     #[tokio::test]

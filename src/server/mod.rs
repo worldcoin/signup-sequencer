@@ -16,7 +16,6 @@ use axum::{
 use clap::Parser;
 use cli_batteries::await_shutdown;
 use error::Error;
-use error::Error;
 use hyper::StatusCode;
 use semaphore::{protocol::Proof, Field};
 use serde::{Deserialize, Serialize};

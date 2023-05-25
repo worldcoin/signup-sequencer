@@ -1,4 +1,8 @@
-#![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+#![allow(
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap
+)]
 
 use std::collections::HashSet;
 
@@ -11,7 +15,6 @@ use sqlx::{
 };
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
-use url::Url;
 
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
@@ -19,6 +22,7 @@ use self::prover::ProverConfiguration;
 
 pub mod prover;
 pub mod types;
+use crate::secret::SecretUrl;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
@@ -28,7 +32,7 @@ pub struct Options {
     /// Database server connection string.
     /// Example: `postgres://user:password@localhost:5432/database`
     #[clap(long, env)]
-    pub database: Url,
+    pub database: SecretUrl,
 
     /// Allow creation or migration of the database schema.
     #[clap(long, default_value = "true")]
@@ -49,16 +53,16 @@ impl Database {
         info!(url = %&options.database, "Connecting to database");
 
         // Create database if requested and does not exist
-        if options.database_migrate && !Postgres::database_exists(options.database.as_str()).await?
+        if options.database_migrate && !Postgres::database_exists(options.database.expose()).await?
         {
             warn!(url = %&options.database, "Database does not exist, creating database");
-            Postgres::create_database(options.database.as_str()).await?;
+            Postgres::create_database(options.database.expose()).await?;
         }
 
         // Create a connection pool
         let pool = PoolOptions::<Postgres>::new()
             .max_connections(options.database_max_connections)
-            .connect(options.database.as_str())
+            .connect(options.database.expose())
             .await
             .context("error connecting to database")?;
 
@@ -67,7 +71,6 @@ impl Database {
             .await
             .context("error getting database version")?
             .get::<String, _>(0);
-
         info!(url = %&options.database, ?version, "Connected to database");
 
         // Run migrations if requested.
@@ -393,7 +396,7 @@ impl Database {
 
         let mut query_builder = sqlx::QueryBuilder::new(
             r#"
-                  INSERT INTO provers (batch_size, url, timeout_s)  
+                  INSERT INTO provers (batch_size, url, timeout_s)
             "#,
         );
 
@@ -412,7 +415,7 @@ impl Database {
     pub async fn remove_prover(&self, batch_size: usize) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
-              DELETE FROM provers WHERE batch_size = $1  
+              DELETE FROM provers WHERE batch_size = $1
             "#,
         )
         .bind(batch_size as i64);
@@ -546,18 +549,20 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
+    use std::{str::FromStr, time::Duration};
 
     use anyhow::Context;
     use chrono::Utc;
     use ethers::types::U256;
     use postgres_docker_utils::DockerContainerGuard;
-    use reqwest::Url;
     use semaphore::Field;
     use tracing::span::Record;
 
     use super::{Database, Options};
-    use crate::identity_tree::{Hash, Status};
+    use crate::{
+        identity_tree::{Hash, Status},
+        secret::SecretUrl,
+    };
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {
@@ -586,7 +591,7 @@ mod test {
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
         let db = Database::new(Options {
-            database:                 Url::parse(&url)?,
+            database:                 SecretUrl::from_str(&url)?,
             database_migrate:         true,
             database_max_connections: 1,
         })

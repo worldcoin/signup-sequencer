@@ -7,6 +7,7 @@ use ethers::{
     providers::Middleware,
     types::{transaction::eip2718::TypedTransaction, Address, H160, U64},
 };
+use tracing::{info, warn};
 
 use self::openzeppelin::OzRelay;
 use super::{
@@ -92,6 +93,8 @@ impl WriteProvider for Provider {
             )))
         })?;
 
+        info!(?tx_hash, "Waiting for transaction to be mined");
+
         let tx = self
             .read_provider
             .get_transaction_receipt(tx_hash)
@@ -106,6 +109,7 @@ impl WriteProvider for Provider {
         })?;
 
         if tx.status != Some(U64::from(1u64)) {
+            warn!(?tx, "Transaction failed");
             return Err(TxError::Failed(Some(tx)));
         }
 

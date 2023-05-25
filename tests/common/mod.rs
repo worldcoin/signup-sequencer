@@ -63,6 +63,7 @@ use self::{
     prelude::*,
 };
 use futures::{stream::FuturesUnordered, StreamExt};
+use hyper::StatusCode;
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
@@ -190,6 +191,7 @@ pub async fn test_inclusion_proof(
                 result_json,
                 generate_reference_proof_json(ref_tree, leaf_index, "pending")
             );
+            assert_eq!(response.status(), StatusCode::ACCEPTED);
             info!("Got pending, waiting 1 second, iteration {}", i);
             tokio::time::sleep(Duration::from_secs(1)).await;
         } else {
@@ -260,8 +262,8 @@ pub async fn test_remove_batch_size(
     let body_str =
         String::from_utf8(body_bytes.into_iter().collect()).expect("Failed to decode response.");
 
-    if expect_failure && body_str == "The last batch size cannot be removed" {
-        Ok(())
+    if expect_failure && body_str != "The last batch size cannot be removed" {
+        anyhow::bail!("Expected failure, but got success");
     } else {
         Ok(())
     }

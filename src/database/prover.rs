@@ -5,7 +5,7 @@ use std::{
 
 pub type Provers = HashSet<ProverConfiguration>;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ProverConfiguration {
     pub url:        String,
     pub batch_size: usize,
@@ -17,3 +17,11 @@ impl Hash for ProverConfiguration {
         self.batch_size.hash(state);
     }
 }
+
+impl PartialEq for ProverConfiguration {
+    fn eq(&self, other: &Self) -> bool {
+        self.batch_size == other.batch_size
+    }
+}
+
+impl Eq for ProverConfiguration {}

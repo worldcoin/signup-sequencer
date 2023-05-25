@@ -44,6 +44,7 @@ async fn insert_identities(
         let unprocessed = database.get_unprocessed_commitments(Status::New).await?;
         if unprocessed.is_empty() {
             sleep(Duration::from_secs(5)).await;
+            continue;
         }
 
         // Dedup

@@ -5,10 +5,12 @@ use url::Url;
 pub struct SecretUrl(Url);
 
 impl SecretUrl {
+    #[must_use]
     pub fn new(url: Url) -> Self {
         Self(url)
     }
 
+    #[must_use]
     pub fn expose(&self) -> &str {
         self.0.as_str()
     }

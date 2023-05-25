@@ -5,6 +5,8 @@ use std::{
 
 use anyhow::Result as AnyhowResult;
 use ethers::types::U256;
+use once_cell::sync::Lazy;
+use prometheus::{register_histogram, Histogram};
 use semaphore::poseidon_tree::Branch;
 use tokio::{
     select,
@@ -26,6 +28,14 @@ use crate::{
 /// The number of seconds either side of the timer tick to treat as enough to
 /// trigger a forced batch insertion.
 const DEBOUNCE_THRESHOLD_SECS: u64 = 1;
+
+static PENDING_IDENTITIES_CHANNEL_CAPACITY: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "pending_identities_channel_capacity",
+        "Pending identities channel capacity"
+    )
+    .unwrap()
+});
 
 pub struct ProcessIdentities {
     database:                  Arc<Database>,
@@ -336,6 +346,9 @@ async fn commit_identities(
         e
     })?;
 
+    #[allow(clippy::cast_precision_loss)]
+    PENDING_IDENTITIES_CHANNEL_CAPACITY.observe(pending_identities_sender.capacity() as f64);
+
     // This channel's capacity provides us with a natural back-pressure mechanism
     // to ensure that we don't overwhelm the identity manager with too many
     // identities to mine.
@@ -361,6 +374,14 @@ async fn commit_identities(
             e
         })?;
 
+    info!(
+        start_index,
+        ?pre_root,
+        ?post_root,
+        ?transaction_id,
+        "Batch submitted"
+    );
+
     // The transaction will be awaited on asynchronously
     permit.send(PendingIdentities {
         transaction_id,
@@ -371,6 +392,8 @@ async fn commit_identities(
 
     // Update the batching tree only after submitting the identities to the chain
     batching_tree.apply_updates_up_to(post_root.into());
+
+    info!(start_index, ?pre_root, ?post_root, "Tree updated");
 
     TaskMonitor::log_batch_size(updates.len());
 

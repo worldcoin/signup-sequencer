@@ -63,6 +63,7 @@ use self::{
     prelude::*,
 };
 use futures::{stream::FuturesUnordered, StreamExt};
+use hyper::StatusCode;
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
@@ -190,6 +191,7 @@ pub async fn test_inclusion_proof(
                 result_json,
                 generate_reference_proof_json(ref_tree, leaf_index, "pending")
             );
+            assert_eq!(response.status(), StatusCode::ACCEPTED);
             info!("Got pending, waiting 1 second, iteration {}", i);
             tokio::time::sleep(Duration::from_secs(1)).await;
         } else {
@@ -260,8 +262,8 @@ pub async fn test_remove_batch_size(
     let body_str =
         String::from_utf8(body_bytes.into_iter().collect()).expect("Failed to decode response.");
 
-    if expect_failure && body_str == "The last batch size cannot be removed" {
-        Ok(())
+    if expect_failure && body_str != "The last batch size cannot be removed" {
+        anyhow::bail!("Expected failure, but got success");
     } else {
         Ok(())
     }
@@ -290,19 +292,12 @@ pub async fn test_insert_identity(
     let bytes = hyper::body::to_bytes(response.body_mut())
         .await
         .expect("Failed to convert response body to bytes");
-    let result = String::from_utf8(bytes.into_iter().collect())
-        .expect("Could not parse response bytes to utf-8");
     if !response.status().is_success() {
-        panic!("Failed to insert identity: {result}");
+        panic!("Failed to insert identity");
     }
-    let result_json = serde_json::from_str::<serde_json::Value>(&result)
-        .expect("Failed to parse response as json");
 
+    assert_eq!(bytes.is_empty(), true);
     ref_tree.set(leaf_index, test_leaves[leaf_index]);
-
-    let expected_json = generate_reference_proof_json(ref_tree, leaf_index, "pending");
-
-    assert_eq!(result_json, expected_json);
 
     (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())
 }
@@ -465,6 +460,7 @@ pub fn generate_reference_proof_json(
         "status": status,
         "root": root,
         "proof": proof,
+        "message": serde_json::Value::Null
     })
 }
 

@@ -2,8 +2,11 @@
 
 ![lines of code](https://img.shields.io/tokei/lines/github/worldcoin/signup-sequencer)
 [![dependency status](https://deps.rs/repo/github/worldcoin/signup-sequencer/status.svg)](https://deps.rs/repo/github/worldcoin/signup-sequencer)
+
 [![codecov](https://codecov.io/gh/worldcoin/signup-sequencer/branch/main/graph/badge.svg?token=WBPZ9U4TTO)](https://codecov.io/gh/worldcoin/signup-sequencer)
-[![CI](https://github.com/worldcoin/signup-sequencer/actions/workflows/build-test-deploy.yml/badge.svg)](https://github.com/worldcoin/signup-sequencer/actions/workflows/build-test-deploy.yml)
+
+[![CI](https://github.com/worldcoin/signup-sequencer/actions/workflows/test.yml/badge.svg)](https://github.com/worldcoin/signup-sequencer/actions/workflows/test.yml)
+[![Audit](https://github.com/worldcoin/signup-sequencer/actions/workflows/audit.yml/badge.svg)](https://github.com/worldcoin/signup-sequencer/actions/workflows/audit.yml)
 
 ## Setup
 Install Protobuf compiler

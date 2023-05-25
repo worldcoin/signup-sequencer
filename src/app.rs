@@ -5,7 +5,6 @@ use clap::Parser;
 use hyper::StatusCode;
 use semaphore::{poseidon_tree::LazyPoseidonTree, protocol::verify_proof};
 use serde::Serialize;
-use tokio::sync::{mpsc, oneshot};
 use tracing::{info, instrument, warn};
 
 use crate::{
@@ -23,7 +22,7 @@ use crate::{
     },
     server::{error::Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
     task_monitor,
-    task_monitor::{tasks::insert_identities::IdentityInsert, TaskMonitor},
+    task_monitor::TaskMonitor,
 };
 
 #[derive(Serialize)]
@@ -108,12 +107,11 @@ pub struct Options {
 }
 
 pub struct App {
-    database:                 Arc<Database>,
-    identity_manager:         SharedIdentityManager,
-    identity_committer:       Arc<TaskMonitor>,
-    tree_state:               TreeState,
-    snark_scalar_field:       Hash,
-    insert_identities_sender: mpsc::Sender<IdentityInsert>,
+    database:           Arc<Database>,
+    identity_manager:   SharedIdentityManager,
+    identity_committer: Arc<TaskMonitor>,
+    tree_state:         TreeState,
+    snark_scalar_field: Hash,
 }
 
 impl App {
@@ -187,7 +185,7 @@ impl App {
         .expect("This should just parse.");
 
         // Process to push new identities to Ethereum
-        let insert_identities_sender = identity_committer.start().await;
+        identity_committer.start().await;
 
         // Sync with chain on start up
         let app = Self {
@@ -196,7 +194,6 @@ impl App {
             identity_committer,
             tree_state,
             snark_scalar_field,
-            insert_identities_sender,
         };
 
         Ok(app)
@@ -246,9 +243,9 @@ impl App {
     ///
     /// Will return `Err` if identity is already queued, or in the tree, or the
     /// queue malfunctions.
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(level = "debug", skip(self))]
     pub async fn insert_identity(&self, commitment: Hash) -> Result<(), ServerError> {
-        // TO REMOVE
+
         if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
@@ -276,15 +273,6 @@ impl App {
         }
 
         self.database.insert_new_identity(commitment).await?;
-
-        let (tx, _) = oneshot::channel();
-        self.insert_identities_sender
-            .send(IdentityInsert {
-                identity:    commitment,
-                on_complete: tx,
-            })
-            .await
-            .map_err(|_| ServerError::FailedToInsert)?;
 
         Ok(())
     }
@@ -321,9 +309,10 @@ impl App {
     ///
     /// Will return `Err` if the provided batch size already exists.
     /// Will return `Err` if the batch size fails to write to database.
+    #[instrument(level = "debug", skip(self))]
     pub async fn add_batch_size(
         &self,
-        url: impl ToString,
+        url: String,
         batch_size: usize,
         timeout_seconds: u64,
     ) -> Result<(), ServerError> {
@@ -342,6 +331,7 @@ impl App {
     ///
     /// Will return `Err` if the requested batch size does not exist.
     /// Will return `Err` if batch size fails to be removed from database.
+    #[instrument(level = "debug", skip(self))]
     pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
         self.identity_manager.remove_batch_size(batch_size).await?;
 
@@ -353,6 +343,7 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if something unknown went wrong.
+    #[instrument(level = "debug", skip(self))]
     pub async fn list_batch_sizes(&self) -> Result<ListBatchSizesResponse, ServerError> {
         let batches = self.identity_manager.list_batch_sizes().await?;
 
@@ -362,13 +353,26 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if the provided index is out of bounds.
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(level = "debug", skip(self))]
     pub async fn inclusion_proof(
         &self,
         commitment: &Hash,
     ) -> Result<InclusionProofResponse, ServerError> {
         if commitment == &self.identity_manager.initial_leaf_value() {
             return Err(ServerError::InvalidCommitment);
+        }
+
+        if let Some(unprocessed) = self
+            .database
+            .get_unprocessed_commit_status(&commitment)
+            .await?
+        {
+            return Ok(InclusionProofResponse(InclusionProof {
+                status:  unprocessed.0,
+                root:    None,
+                proof:   None,
+                message: Some(unprocessed.1),
+            }));
         }
 
         let item = self
@@ -385,7 +389,7 @@ impl App {
     /// # Errors
     ///
     /// Will return `Err` if the provided proof is invalid.
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(level = "debug", skip(self))]
     pub async fn verify_semaphore_proof(
         &self,
         request: &VerifySemaphoreProofRequest,

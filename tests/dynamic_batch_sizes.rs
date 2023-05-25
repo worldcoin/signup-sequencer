@@ -7,6 +7,7 @@ use hyper::Uri;
 use std::str::FromStr;
 
 const SUPPORTED_DEPTH: usize = 20;
+const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
 #[serial_test::serial]
@@ -81,6 +82,9 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 0).await;
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 1).await;
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 2).await;
+
+    // wait at leat 5 seconds before checking proof
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
     // Check that we can get their inclusion proofs back.
     test_inclusion_proof(
@@ -159,6 +163,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     tokio::time::pause();
     tokio::time::resume();
 
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
     // Check that we can also get these inclusion proofs back.
     test_inclusion_proof(
         &uri,
@@ -189,6 +194,8 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     tokio::time::pause();
     tokio::time::resume();
 
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
+
     test_inclusion_proof(
         &uri,
         &client,
@@ -207,6 +214,8 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 6).await;
     tokio::time::pause();
     tokio::time::resume();
+
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
     test_inclusion_proof(
         &uri,

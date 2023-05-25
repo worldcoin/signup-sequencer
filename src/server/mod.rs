@@ -15,6 +15,7 @@ use axum::{
 };
 use clap::Parser;
 use cli_batteries::await_shutdown;
+use error::Error;
 use hyper::StatusCode;
 use semaphore::{protocol::Proof, Field};
 use serde::{Deserialize, Serialize};
@@ -27,11 +28,7 @@ use crate::{
     identity_tree::Hash,
 };
 
-use error::Error;
-
-mod api_metrics_layer;
-mod extract_trace_layer;
-mod timeout_layer;
+mod custom_middleware;
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 #[group(skip)]
@@ -80,7 +77,7 @@ pub struct InclusionProofRequest {
     pub identity_commitment: Hash,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct VerifySemaphoreProofRequest {
@@ -104,12 +101,12 @@ impl ToResponseCode for () {
 async fn inclusion_proof(
     State(app): State<Arc<App>>,
     Json(inclusion_proof_request): Json<InclusionProofRequest>,
-) -> Result<Json<InclusionProofResponse>, Error> {
+) -> Result<(StatusCode, Json<InclusionProofResponse>), Error> {
     let result = app
         .inclusion_proof(&inclusion_proof_request.identity_commitment)
         .await?;
 
-    Ok(Json(result))
+    Ok((result.to_response_code(), Json(result)))
 }
 
 async fn insert_identity(
@@ -125,12 +122,12 @@ async fn insert_identity(
 async fn verify_semaphore_proof(
     State(app): State<Arc<App>>,
     Json(verify_semaphore_proof_request): Json<VerifySemaphoreProofRequest>,
-) -> Result<Json<VerifySemaphoreProofResponse>, Error> {
+) -> Result<(StatusCode, Json<VerifySemaphoreProofResponse>), Error> {
     let result = app
         .verify_semaphore_proof(&verify_semaphore_proof_request)
         .await?;
 
-    Ok(Json(result))
+    Ok((result.to_response_code(), Json(result)))
 }
 
 async fn add_batch_size(
@@ -152,10 +149,10 @@ async fn remove_batch_size(
 }
 async fn list_batch_sizes(
     State(app): State<Arc<App>>,
-) -> Result<Json<ListBatchSizesResponse>, Error> {
+) -> Result<(StatusCode, Json<ListBatchSizesResponse>), Error> {
     let result = app.list_batch_sizes().await?;
 
-    Ok(Json(result))
+    Ok((result.to_response_code(), Json(result)))
 }
 /// # Errors
 ///
@@ -208,18 +205,29 @@ pub async fn bind_from_listener(
         .route("/addBatchSize", post(add_batch_size))
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
-        .layer(middleware::from_fn(api_metrics_layer::middleware))
+        .layer(middleware::from_fn(
+            custom_middleware::api_metrics_layer::middleware,
+        ))
         .layer(middleware::from_fn_with_state(
             serve_timeout,
-            timeout_layer::middleware,
+            custom_middleware::timeout_layer::middleware,
         ))
         .layer(
             TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .make_span_with(
+                    DefaultMakeSpan::new()
+                        .level(Level::INFO)
+                        .include_headers(true),
+                )
                 .on_request(DefaultOnRequest::new().level(Level::INFO))
                 .on_response(DefaultOnResponse::new().level(Level::INFO)),
         )
-        .layer(middleware::from_fn(extract_trace_layer::middleware))
+        .layer(middleware::from_fn(
+            custom_middleware::extract_trace_layer::middleware,
+        ))
+        .layer(middleware::from_fn(
+            custom_middleware::remove_auth_layer::middleware,
+        ))
         .with_state(app.clone());
 
     let server = axum::Server::from_tcp(listener)?

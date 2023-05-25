@@ -1,4 +1,8 @@
-#![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+#![allow(
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap
+)]
 
 use std::collections::HashSet;
 
@@ -11,13 +15,14 @@ use sqlx::{
 };
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
-use url::Url;
 
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
 use self::prover::ProverConfiguration;
 
 pub mod prover;
+pub mod types;
+use crate::secret::SecretUrl;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
@@ -27,7 +32,7 @@ pub struct Options {
     /// Database server connection string.
     /// Example: `postgres://user:password@localhost:5432/database`
     #[clap(long, env)]
-    pub database: Url,
+    pub database: SecretUrl,
 
     /// Allow creation or migration of the database schema.
     #[clap(long, default_value = "true")]
@@ -48,16 +53,16 @@ impl Database {
         info!(url = %&options.database, "Connecting to database");
 
         // Create database if requested and does not exist
-        if options.database_migrate && !Postgres::database_exists(options.database.as_str()).await?
+        if options.database_migrate && !Postgres::database_exists(options.database.expose()).await?
         {
             warn!(url = %&options.database, "Database does not exist, creating database");
-            Postgres::create_database(options.database.as_str()).await?;
+            Postgres::create_database(options.database.expose()).await?;
         }
 
         // Create a connection pool
         let pool = PoolOptions::<Postgres>::new()
             .max_connections(options.database_max_connections)
-            .connect(options.database.as_str())
+            .connect(options.database.expose())
             .await
             .context("error connecting to database")?;
 
@@ -66,7 +71,6 @@ impl Database {
             .await
             .context("error getting database version")?
             .get::<String, _>(0);
-
         info!(url = %&options.database, ?version, "Connected to database");
 
         // Run migrations if requested.
@@ -392,7 +396,7 @@ impl Database {
 
         let mut query_builder = sqlx::QueryBuilder::new(
             r#"
-                  INSERT INTO provers (batch_size, url, timeout_s)  
+                  INSERT INTO provers (batch_size, url, timeout_s)
             "#,
         );
 
@@ -411,7 +415,7 @@ impl Database {
     pub async fn remove_prover(&self, batch_size: usize) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
-              DELETE FROM provers WHERE batch_size = $1  
+              DELETE FROM provers WHERE batch_size = $1
             "#,
         )
         .bind(batch_size as i64);
@@ -432,6 +436,86 @@ impl Database {
         .bind(<&str>::from(Status::New));
         self.pool.execute(query).await?;
         Ok(identity)
+    }
+
+    pub async fn get_unprocessed_commitments(
+        &self,
+        status: Status,
+    ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
+        let query = sqlx::query(
+            r#"
+                SELECT * FROM unprocessed_identities
+                WHERE status = $1
+            "#,
+        )
+        .bind(<&str>::from(status));
+
+        let result = self.pool.fetch_all(query).await?;
+
+        Ok(result
+            .into_iter()
+            .map(|row| types::UnprocessedCommitment {
+                commitment: row.get::<Hash, _>(0),
+                status,
+                created_at: row.get::<_, _>(2),
+                processed_at: row.get::<_, _>(3),
+                error_message: row.get::<_, _>(4),
+            })
+            .collect::<Vec<_>>())
+    }
+
+    pub async fn get_unprocessed_commit_status(
+        &self,
+        commitment: &Hash,
+    ) -> Result<Option<(Status, String)>, Error> {
+        let query = sqlx::query(
+            r#"
+                SELECT status, error_message FROM unprocessed_identities WHERE commitment = $1
+            "#,
+        )
+        .bind(commitment);
+
+        let result = self.pool.fetch_optional(query).await?;
+
+        if let Some(row) = result {
+            return Ok(Some((
+                row.get::<&str, _>(0).parse().expect("couldn't read status"),
+                row.get::<Option<String>, _>(1).unwrap_or_default(),
+            )));
+        };
+        Ok(None)
+    }
+
+    pub async fn remove_unprocessed_identity(&self, commitment: &Hash) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+                DELETE FROM unprocessed_identities WHERE commitment = $1
+            "#,
+        )
+        .bind(commitment);
+
+        self.pool.execute(query).await?;
+
+        Ok(())
+    }
+
+    pub async fn update_err_unprocessed_commitment(
+        &self,
+        commitment: Hash,
+        message: String,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+                UPDATE unprocessed_identities SET error_message = $1, status = Failed
+                WHERE commitment = $2
+            "#,
+        )
+        .bind(message)
+        .bind(commitment);
+
+        self.pool.execute(query).await?;
+
+        Ok(())
     }
 
     pub async fn identity_exists(&self, commitment: Hash) -> Result<bool, Error> {
@@ -465,16 +549,20 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
+    use std::{str::FromStr, time::Duration};
 
     use anyhow::Context;
     use chrono::Utc;
+    use ethers::types::U256;
     use postgres_docker_utils::DockerContainerGuard;
-    use reqwest::Url;
     use semaphore::Field;
+    use tracing::span::Record;
 
     use super::{Database, Options};
-    use crate::identity_tree::Status;
+    use crate::{
+        identity_tree::{Hash, Status},
+        secret::SecretUrl,
+    };
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {
@@ -503,7 +591,7 @@ mod test {
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
         let db = Database::new(Options {
-            database:                 Url::parse(&url)?,
+            database:                 SecretUrl::from_str(&url)?,
             database_migrate:         true,
             database_max_connections: 1,
         })
@@ -518,6 +606,35 @@ mod test {
 
     fn mock_identities(n: usize) -> Vec<Field> {
         (1..=n).map(Field::from).collect()
+    }
+
+    #[tokio::test]
+    async fn insert_identity() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let dec = "1234500000000000000";
+        let commit_hash: Hash = U256::from_dec_str(dec)
+            .expect("cant convert to u256")
+            .into();
+        let hash = db.insert_new_identity(commit_hash).await?;
+
+        assert_eq!(commit_hash, hash);
+
+        let commit = db
+            .get_unprocessed_commit_status(&commit_hash)
+            .await?
+            .expect("expected commitment status");
+        assert_eq!(commit.0, Status::New);
+
+        let identity_count = db
+            .get_unprocessed_commitments(Status::New)
+            .await?
+            .iter()
+            .count();
+        assert_eq!(identity_count, 1);
+
+        assert!(db.remove_unprocessed_identity(&commit_hash).await.is_ok());
+
+        Ok(())
     }
 
     #[tokio::test]

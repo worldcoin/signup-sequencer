@@ -38,8 +38,8 @@ impl From<InclusionProof> for InclusionProofResponse {
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
         match self.0.status {
-            Status::New | Status::Failed => StatusCode::BAD_REQUEST,
-            Status::Pending => StatusCode::ACCEPTED,
+            Status::Failed => StatusCode::BAD_REQUEST,
+            Status::New | Status::Pending => StatusCode::ACCEPTED,
             Status::Mined => StatusCode::OK,
         }
     }

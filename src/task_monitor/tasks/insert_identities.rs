@@ -42,7 +42,6 @@ async fn insert_identities_loop(
         // get commits from database
         let unprocessed = database.get_unprocessed_commitments(Status::New).await?;
 
-
         insert_identities(database, latest_tree, unprocessed).await?;
         // Notify the identity processing task, that there are new identities
         wake_up_notify.notify_one();

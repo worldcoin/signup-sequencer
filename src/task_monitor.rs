@@ -111,7 +111,6 @@ pub struct TaskMonitor {
     identity_manager:            SharedIdentityManager,
     tree_state:                  TreeState,
     batch_insert_timeout_secs:   u64,
-    insert_identities_capacity:  usize,
     pending_identities_capacity: usize,
 }
 
@@ -123,7 +122,6 @@ impl TaskMonitor {
         options: &Options,
     ) -> Self {
         let batch_insert_timeout_secs = options.batch_timeout_seconds;
-        let insert_identities_capacity = options.insert_identities_capacity;
         let pending_identities_capacity = options.pending_identities_capacity;
 
         Self {
@@ -132,7 +130,6 @@ impl TaskMonitor {
             identity_manager: contracts,
             tree_state,
             batch_insert_timeout_secs,
-            insert_identities_capacity,
             pending_identities_capacity,
         }
     }

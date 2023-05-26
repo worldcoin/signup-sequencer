@@ -50,8 +50,6 @@ async fn insert_identities_loop(
         // Notify the identity processing task, that there are new identities
         wake_up_notify.notify_one();
     }
-
-    Ok(())
 }
 
 #[instrument(level = "info", skip_all)]

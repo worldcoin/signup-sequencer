@@ -506,11 +506,12 @@ impl Database {
     ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
-                UPDATE unprocessed_identities SET error_message = $1, status = Failed
-                WHERE commitment = $2
+                UPDATE unprocessed_identities SET error_message = $1, status = $2
+                WHERE commitment = $3
             "#,
         )
         .bind(message)
+        .bind(<&str>::from(Status::Failed))
         .bind(commitment);
 
         self.pool.execute(query).await?;

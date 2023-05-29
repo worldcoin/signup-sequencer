@@ -14,7 +14,7 @@ async fn multi_prover() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(tree_depth as usize + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let batch_timeout_seconds: u64 = 10;
+    let batch_timeout_seconds: u64 = 11;
 
     let batch_size_3: usize = 3;
     let batch_size_10: usize = 10;

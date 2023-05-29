@@ -134,7 +134,7 @@ components:
                   Right: { $ref: '#/components/schemas/FieldElement' }
     InclusionProofStatus:
       type: string
-      enum: [ 'pending', 'mined', 'confirmed' ]
+      enum: [ 'new', 'failed', 'pending', 'mined' ]
     SemaphoreProof:
       type: array
       items:

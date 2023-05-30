@@ -13,6 +13,8 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
+    let batch_timeout_seconds: u64 = 1;
+
     #[allow(clippy::cast_possible_truncation)]
     let tree_depth: u8 = SUPPORTED_DEPTH as u8;
     let batch_size = 3;
@@ -40,6 +42,10 @@ async fn validate_proofs() -> anyhow::Result<()> {
         "--prover-urls",
         &prover_mock.arg_string(),
         "--batch-timeout-seconds",
+        &format!("{batch_timeout_seconds}"),
+        "--dense-tree-prefix-depth",
+        "10",
+        "--tree-gc-threshold",
         "1",
     ])
     .expect("Failed to create options");
@@ -78,6 +84,7 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let (merkle_proof, root) =
         test_insert_identity(&uri, &client, &mut ref_tree, &TEST_LEAVES, 0).await;
 
+    tokio::time::sleep(Duration::from_secs(5 + batch_timeout_seconds)).await;
     // simulate client generating a proof
     let nullifier_hash = generate_nullifier_hash(&IDENTITIES[0], external_nullifier_hash);
 

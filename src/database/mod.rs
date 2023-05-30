@@ -21,6 +21,7 @@ use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 use self::prover::ProverConfiguration;
 
 pub mod prover;
+pub mod types;
 use crate::secret::SecretUrl;
 
 // Statically link in migration files
@@ -423,6 +424,119 @@ impl Database {
 
         Ok(())
     }
+
+    pub async fn insert_new_identity(&self, identity: Hash) -> Result<Hash, Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO unprocessed_identities (commitment, status, created_at)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            "#,
+        )
+        .bind(identity)
+        .bind(<&str>::from(Status::New));
+        self.pool.execute(query).await?;
+        Ok(identity)
+    }
+
+    pub async fn get_unprocessed_commitments(
+        &self,
+        status: Status,
+    ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
+        let query = sqlx::query(
+            r#"
+                SELECT * FROM unprocessed_identities
+                WHERE status = $1
+            "#,
+        )
+        .bind(<&str>::from(status));
+
+        let result = self.pool.fetch_all(query).await?;
+
+        Ok(result
+            .into_iter()
+            .map(|row| types::UnprocessedCommitment {
+                commitment: row.get::<Hash, _>(0),
+                status,
+                created_at: row.get::<_, _>(2),
+                processed_at: row.get::<_, _>(3),
+                error_message: row.get::<_, _>(4),
+            })
+            .collect::<Vec<_>>())
+    }
+
+    pub async fn get_unprocessed_commit_status(
+        &self,
+        commitment: &Hash,
+    ) -> Result<Option<(Status, String)>, Error> {
+        let query = sqlx::query(
+            r#"
+                SELECT status, error_message FROM unprocessed_identities WHERE commitment = $1
+            "#,
+        )
+        .bind(commitment);
+
+        let result = self.pool.fetch_optional(query).await?;
+
+        if let Some(row) = result {
+            return Ok(Some((
+                row.get::<&str, _>(0).parse().expect("couldn't read status"),
+                row.get::<Option<String>, _>(1).unwrap_or_default(),
+            )));
+        };
+        Ok(None)
+    }
+
+    pub async fn remove_unprocessed_identity(&self, commitment: &Hash) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+                DELETE FROM unprocessed_identities WHERE commitment = $1
+            "#,
+        )
+        .bind(commitment);
+
+        self.pool.execute(query).await?;
+
+        Ok(())
+    }
+
+    pub async fn update_err_unprocessed_commitment(
+        &self,
+        commitment: Hash,
+        message: String,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+                UPDATE unprocessed_identities SET error_message = $1, status = $2
+                WHERE commitment = $3
+            "#,
+        )
+        .bind(message)
+        .bind(<&str>::from(Status::Failed))
+        .bind(commitment);
+
+        self.pool.execute(query).await?;
+
+        Ok(())
+    }
+
+    pub async fn identity_exists(&self, commitment: Hash) -> Result<bool, Error> {
+        let query_unprocessed_identity = sqlx::query(
+            r#"SELECT exists(SELECT 1 from unprocessed_identities where commitment = $1)"#,
+        )
+        .bind(commitment);
+
+        let row_unprocessed = self.pool.fetch_one(query_unprocessed_identity).await?;
+
+        let query_processed_identity =
+            sqlx::query(r#"SELECT exists(SELECT 1 from identities where commitment = $1)"#)
+                .bind(commitment);
+
+        let row_processed = self.pool.fetch_one(query_processed_identity).await?;
+
+        let exists = row_unprocessed.get::<bool, _>(0) && row_processed.get::<bool, _>(0);
+
+        Ok(exists)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -440,11 +554,15 @@ mod test {
 
     use anyhow::Context;
     use chrono::Utc;
+    use ethers::types::U256;
     use postgres_docker_utils::DockerContainerGuard;
     use semaphore::Field;
 
     use super::{Database, Options};
-    use crate::{identity_tree::Status, secret::SecretUrl};
+    use crate::{
+        identity_tree::{Hash, Status},
+        secret::SecretUrl,
+    };
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {
@@ -488,6 +606,31 @@ mod test {
 
     fn mock_identities(n: usize) -> Vec<Field> {
         (1..=n).map(Field::from).collect()
+    }
+
+    #[tokio::test]
+    async fn insert_identity() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let dec = "1234500000000000000";
+        let commit_hash: Hash = U256::from_dec_str(dec)
+            .expect("cant convert to u256")
+            .into();
+        let hash = db.insert_new_identity(commit_hash).await?;
+
+        assert_eq!(commit_hash, hash);
+
+        let commit = db
+            .get_unprocessed_commit_status(&commit_hash)
+            .await?
+            .expect("expected commitment status");
+        assert_eq!(commit.0, Status::New);
+
+        let identity_count = db.get_unprocessed_commitments(Status::New).await?.len();
+        assert_eq!(identity_count, 1);
+
+        assert!(db.remove_unprocessed_identity(&commit_hash).await.is_ok());
+
+        Ok(())
     }
 
     #[tokio::test]

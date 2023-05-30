@@ -12,8 +12,7 @@ use tokio::{
 use tracing::{info, instrument, warn};
 
 use self::tasks::{
-    insert_identities::{IdentityInsert, InsertIdentities},
-    mine_identities::MineIdentities,
+    insert_identities::InsertIdentities, mine_identities::MineIdentities,
     process_identities::ProcessIdentities,
 };
 use crate::{
@@ -112,7 +111,6 @@ pub struct TaskMonitor {
     identity_manager:            SharedIdentityManager,
     tree_state:                  TreeState,
     batch_insert_timeout_secs:   u64,
-    insert_identities_capacity:  usize,
     pending_identities_capacity: usize,
 }
 
@@ -124,7 +122,6 @@ impl TaskMonitor {
         options: &Options,
     ) -> Self {
         let batch_insert_timeout_secs = options.batch_timeout_seconds;
-        let insert_identities_capacity = options.insert_identities_capacity;
         let pending_identities_capacity = options.pending_identities_capacity;
 
         Self {
@@ -133,13 +130,12 @@ impl TaskMonitor {
             identity_manager: contracts,
             tree_state,
             batch_insert_timeout_secs,
-            insert_identities_capacity,
             pending_identities_capacity,
         }
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn start(&self) -> mpsc::Sender<IdentityInsert> {
+    pub async fn start(&self) {
         let mut instance = self.instance.write().await;
         if instance.is_some() {
             warn!("Identity committer already running");
@@ -150,8 +146,6 @@ impl TaskMonitor {
         let (shutdown_sender, _) = broadcast::channel(1);
         let (pending_identities_sender, pending_identities_receiver) =
             mpsc::channel(self.pending_identities_capacity);
-        let (insert_identities_sender, insert_identities_receiver) =
-            mpsc::channel(self.insert_identities_capacity);
 
         let wake_up_notify = Arc::new(Notify::new());
         // Immediately notify so we can start processing if we have pending identities
@@ -161,7 +155,6 @@ impl TaskMonitor {
         // We need to maintain mutable access to these receivers from multiple
         // invocations of this task
         let pending_identities_receiver = Arc::new(Mutex::new(pending_identities_receiver));
-        let insert_identities_receiver = Arc::new(Mutex::new(insert_identities_receiver));
 
         let mut handles = Vec::new();
 
@@ -203,7 +196,6 @@ impl TaskMonitor {
         let insert_identities = InsertIdentities::new(
             self.database.clone(),
             self.tree_state.get_latest_tree(),
-            insert_identities_receiver,
             wake_up_notify,
         );
 
@@ -219,8 +211,6 @@ impl TaskMonitor {
             handles,
             shutdown_sender,
         });
-
-        insert_identities_sender
     }
 
     async fn log_pending_identities_count(database: &Database) -> AnyhowResult<()> {

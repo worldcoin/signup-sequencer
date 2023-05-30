@@ -5,7 +5,6 @@ use clap::Parser;
 use hyper::StatusCode;
 use semaphore::{poseidon_tree::LazyPoseidonTree, protocol::verify_proof};
 use serde::Serialize;
-use tokio::sync::{mpsc, oneshot};
 use tracing::{info, instrument, warn};
 
 use crate::{
@@ -23,10 +22,7 @@ use crate::{
     },
     server::{error::Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
     task_monitor,
-    task_monitor::{
-        tasks::insert_identities::{IdentityInsert, OnInsertComplete},
-        TaskMonitor,
-    },
+    task_monitor::TaskMonitor,
 };
 
 #[derive(Serialize)]
@@ -42,7 +38,8 @@ impl From<InclusionProof> for InclusionProofResponse {
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
         match self.0.status {
-            Status::Pending => StatusCode::ACCEPTED,
+            Status::Failed => StatusCode::BAD_REQUEST,
+            Status::New | Status::Pending => StatusCode::ACCEPTED,
             Status::Mined => StatusCode::OK,
         }
     }
@@ -110,12 +107,11 @@ pub struct Options {
 }
 
 pub struct App {
-    database:                 Arc<Database>,
-    identity_manager:         SharedIdentityManager,
-    identity_committer:       Arc<TaskMonitor>,
-    tree_state:               TreeState,
-    snark_scalar_field:       Hash,
-    insert_identities_sender: mpsc::Sender<IdentityInsert>,
+    database:           Arc<Database>,
+    identity_manager:   SharedIdentityManager,
+    identity_committer: Arc<TaskMonitor>,
+    tree_state:         TreeState,
+    snark_scalar_field: Hash,
 }
 
 impl App {
@@ -189,7 +185,7 @@ impl App {
         .expect("This should just parse.");
 
         // Process to push new identities to Ethereum
-        let insert_identities_sender = identity_committer.start().await;
+        identity_committer.start().await;
 
         // Sync with chain on start up
         let app = Self {
@@ -198,7 +194,6 @@ impl App {
             identity_committer,
             tree_state,
             snark_scalar_field,
-            insert_identities_sender,
         };
 
         Ok(app)
@@ -249,10 +244,7 @@ impl App {
     /// Will return `Err` if identity is already queued, or in the tree, or the
     /// queue malfunctions.
     #[instrument(level = "debug", skip(self))]
-    pub async fn insert_identity(
-        &self,
-        commitment: Hash,
-    ) -> Result<InclusionProofResponse, ServerError> {
+    pub async fn insert_identity(&self, commitment: Hash) -> Result<(), ServerError> {
         if commitment == self.identity_manager.initial_leaf_value() {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
@@ -274,27 +266,14 @@ impl App {
             return Err(ServerError::UnreducedCommitment);
         }
 
-        let (tx, rx) = oneshot::channel();
-        self.insert_identities_sender
-            .send(IdentityInsert {
-                identity:    commitment,
-                on_complete: tx,
-            })
-            .await
-            .map_err(|_| ServerError::FailedToInsert)?;
+        let identity_exists = self.database.identity_exists(commitment).await?;
+        if identity_exists {
+            return Err(ServerError::DuplicateCommitment);
+        }
 
-        let inclusion_proof = rx.await.map_err(|_| ServerError::FailedToInsert)?;
+        self.database.insert_new_identity(commitment).await?;
 
-        let inclusion_proof = match inclusion_proof {
-            OnInsertComplete::DuplicateCommitment => {
-                warn!(?commitment, "Pending identity already exists.");
-
-                return Err(ServerError::DuplicateCommitment);
-            }
-            OnInsertComplete::Proof(inclusion_proof) => inclusion_proof,
-        };
-
-        Ok(InclusionProofResponse::from(inclusion_proof))
+        Ok(())
     }
 
     fn merge_env_provers(
@@ -380,6 +359,19 @@ impl App {
     ) -> Result<InclusionProofResponse, ServerError> {
         if commitment == &self.identity_manager.initial_leaf_value() {
             return Err(ServerError::InvalidCommitment);
+        }
+
+        if let Some(unprocessed) = self
+            .database
+            .get_unprocessed_commit_status(commitment)
+            .await?
+        {
+            return Ok(InclusionProofResponse(InclusionProof {
+                status:  unprocessed.0,
+                root:    None,
+                proof:   None,
+                message: Some(unprocessed.1),
+            }));
         }
 
         let item = self

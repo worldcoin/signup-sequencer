@@ -1,17 +1,12 @@
-use std::{
-    cmp::min,
-    str::FromStr,
-    sync::{Arc, Mutex, MutexGuard},
-};
+use std::cmp::min;
+use std::str::FromStr;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use chrono::Utc;
-use semaphore::{
-    lazy_merkle_tree,
-    lazy_merkle_tree::{Derived, LazyMerkleTree},
-    merkle_tree::Hasher,
-    poseidon_tree::{PoseidonHash, Proof},
-    Field,
-};
+use semaphore::lazy_merkle_tree::{Derived, LazyMerkleTree};
+use semaphore::merkle_tree::Hasher;
+use semaphore::poseidon_tree::{PoseidonHash, Proof};
+use semaphore::{lazy_merkle_tree, Field};
 use serde::Serialize;
 use thiserror::Error;
 use tracing::{info, warn};

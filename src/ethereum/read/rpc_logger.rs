@@ -1,9 +1,11 @@
+use std::fmt::Debug;
+
 use ::prometheus::{register_histogram, register_int_counter_vec, Histogram, IntCounterVec};
 use async_trait::async_trait;
 use ethers::providers::JsonRpcClient;
 use once_cell::sync::Lazy;
-use serde::{de::DeserializeOwned, Serialize};
-use std::fmt::Debug;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use tracing::instrument;
 
 static REQUESTS: Lazy<IntCounterVec> = Lazy::new(|| {

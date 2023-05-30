@@ -1,11 +1,9 @@
 use std::time::Duration;
 
-use axum::{
-    extract::State,
-    http::{Request, StatusCode},
-    middleware::Next,
-    response::Response,
-};
+use axum::extract::State;
+use axum::http::{Request, StatusCode};
+use axum::middleware::Next;
+use axum::response::Response;
 
 pub async fn middleware<B>(
     State(timeout_duration): State<Duration>,

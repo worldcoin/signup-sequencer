@@ -1,10 +1,10 @@
-use std::{error::Error, fmt::Debug};
+use std::error::Error;
+use std::fmt::Debug;
 
 use async_trait::async_trait;
-use ethers::{
-    providers::ProviderError,
-    types::{transaction::eip2718::TypedTransaction, Address, TransactionReceipt, H256},
-};
+use ethers::providers::ProviderError;
+use ethers::types::transaction::eip2718::TypedTransaction;
+use ethers::types::{Address, TransactionReceipt, H256};
 use thiserror::Error;
 
 #[derive(Clone, Debug)]

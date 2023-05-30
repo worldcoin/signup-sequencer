@@ -1,19 +1,20 @@
-use std::{num::ParseIntError, str::FromStr, time::Duration};
+use std::num::ParseIntError;
+use std::str::FromStr;
+use std::time::Duration;
 
 use anyhow::{anyhow, Result as AnyhowResult};
 use chrono::{Duration as ChronoDuration, Utc};
 use clap::Parser;
-use ethers::{
-    abi::Error as AbiError,
-    providers::{Middleware, Provider},
-    types::{BlockId, BlockNumber, Chain, U256},
-};
+use ethers::abi::Error as AbiError;
+use ethers::providers::{Middleware, Provider};
+use ethers::types::{BlockId, BlockNumber, Chain, U256};
 use futures::{try_join, FutureExt};
 use thiserror::Error;
 use tracing::{error, info};
 use url::Url;
 
-use self::{rpc_logger::RpcLogger, transport::Transport};
+use self::rpc_logger::RpcLogger;
+use self::transport::Transport;
 
 pub mod rpc_logger;
 pub mod transport;

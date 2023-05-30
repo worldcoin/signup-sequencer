@@ -1,4 +1,6 @@
-use std::{fmt, str::FromStr};
+use std::fmt;
+use std::str::FromStr;
+
 use url::Url;
 
 #[derive(Clone, Eq, PartialEq)]

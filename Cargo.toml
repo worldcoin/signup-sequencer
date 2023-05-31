@@ -29,6 +29,7 @@ async-stream = "0.3.3"
 async-trait = "0.1.64"
 axum = "0.6.4"
 axum-server = "0.4.4"
+bytes = "1.4.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "4.0", features = ["derive"] }
 cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "b8f350d9022edce2c9f7a080c6899eafda3ac9ea", features = ["signals", "prometheus", "metered-allocator", "otlp", "datadog"] }

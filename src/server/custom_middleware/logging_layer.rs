@@ -38,7 +38,7 @@ where
         )
         .await?;
 
-        return Ok(response);
+        Ok(response)
     } else {
         let body = body_to_string(body).await?;
 
@@ -90,13 +90,10 @@ async fn handle_response(
         );
 
         let body = axum::body::boxed(Body::from(response_body));
-        let response = Response::from_parts(parts, body);
 
-        response
+        Response::from_parts(parts, body)
     } else {
-        let response = Response::from_parts(parts, body);
-
-        response
+        Response::from_parts(parts, body)
     };
 
     info!(

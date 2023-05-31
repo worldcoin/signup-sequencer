@@ -74,8 +74,8 @@ async fn malformed_payload() -> anyhow::Result<()> {
 
     assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
 
-    // A KiB of zeros is not a valid UTF-8 string
-    let body = vec![0u8; 1024];
+    // A KiB of 0xffs is not a valid UTF-8 string
+    let body = vec![0xffu8; 1024];
 
     let invalid_payload = Request::builder()
         .method("POST")

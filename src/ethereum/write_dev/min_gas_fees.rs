@@ -1,9 +1,8 @@
-use async_trait::async_trait;
 use core::cmp::max;
-use ethers::{
-    middleware::gas_oracle::{GasOracle, GasOracleError},
-    types::U256,
-};
+
+use async_trait::async_trait;
+use ethers::middleware::gas_oracle::{GasOracle, GasOracleError};
+use ethers::types::U256;
 
 #[derive(Debug, Clone)]
 pub struct MinGasFees<Inner> {

@@ -1,8 +1,6 @@
-use axum::{
-    http::{Request, StatusCode},
-    middleware::Next,
-    response::Response,
-};
+use axum::http::{Request, StatusCode};
+use axum::middleware::Next;
+use axum::response::Response;
 use once_cell::sync::Lazy;
 use prometheus::{
     opts, register_counter, register_histogram, register_int_counter_vec, Counter, Histogram,

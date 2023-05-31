@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
-use ethers::types::{transaction::eip2718::TypedTransaction, Address};
-use tracing::instrument;
-
+use ethers::types::transaction::eip2718::TypedTransaction;
+use ethers::types::Address;
 pub use read::{EventError, ReadProvider};
+use tracing::instrument;
 pub use write::TxError;
 
 use self::write::{TransactionId, WriteProvider};

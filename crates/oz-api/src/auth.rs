@@ -1,7 +1,8 @@
 use std::time::{Duration, Instant};
 
 use cognitoauth::cognito_srp_auth::{auth, CognitoAuthInput};
-use hyper::{http::HeaderValue, HeaderMap};
+use hyper::http::HeaderValue;
+use hyper::HeaderMap;
 
 use crate::error::Error;
 

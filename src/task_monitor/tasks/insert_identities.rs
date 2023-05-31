@@ -1,13 +1,15 @@
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::collections::HashSet;
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result as AnyhowResult;
-use tokio::{sync::Notify, time::sleep};
+use tokio::sync::Notify;
+use tokio::time::sleep;
 use tracing::instrument;
 
-use crate::{
-    database::{types::UnprocessedCommitment, Database},
-    identity_tree::{Hash, Latest, Status, TreeVersion, TreeVersionReadOps},
-};
+use crate::database::types::UnprocessedCommitment;
+use crate::database::Database;
+use crate::identity_tree::{Hash, Latest, Status, TreeVersion, TreeVersionReadOps};
 
 pub struct InsertIdentities {
     database:       Arc<Database>,

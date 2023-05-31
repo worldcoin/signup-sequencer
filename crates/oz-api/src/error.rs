@@ -1,5 +1,6 @@
 use cognitoauth::error::CognitoSrpAuthError;
-use hyper::{header::InvalidHeaderValue, StatusCode};
+use hyper::header::InvalidHeaderValue;
+use hyper::StatusCode;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

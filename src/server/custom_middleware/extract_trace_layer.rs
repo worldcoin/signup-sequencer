@@ -1,8 +1,6 @@
-use axum::{
-    http::{Request, StatusCode},
-    middleware::Next,
-    response::Response,
-};
+use axum::http::{Request, StatusCode};
+use axum::middleware::Next;
+use axum::response::Response;
 
 pub async fn middleware<B>(request: Request<B>, next: Next<B>) -> Result<Response, StatusCode> {
     let (parts, body) = request.into_parts();

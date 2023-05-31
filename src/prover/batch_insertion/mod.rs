@@ -1,21 +1,21 @@
 mod identity;
 
-use clap::Parser;
-use std::{
-    fmt::{Display, Formatter},
-    mem::size_of,
-    str::FromStr,
-    time::Duration,
-};
+use std::fmt::{Display, Formatter};
+use std::mem::size_of;
+use std::str::FromStr;
+use std::time::Duration;
 
-use ethers::{types::U256, utils::keccak256};
+use clap::Parser;
+use ethers::types::U256;
+use ethers::utils::keccak256;
 use once_cell::sync::Lazy;
 use prometheus::{exponential_buckets, register_histogram, Histogram};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use crate::database::prover::ProverConfiguration as DbProverConfiguration;
 pub use crate::prover::batch_insertion::identity::Identity;
-use crate::{database::prover::ProverConfiguration as DbProverConfiguration, prover::Proof};
+use crate::prover::Proof;
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";
@@ -539,7 +539,8 @@ mod test {
 pub mod mock {
     use std::net::SocketAddr;
 
-    use axum::{routing::post, Json, Router};
+    use axum::routing::post;
+    use axum::{Json, Router};
     use axum_server::Handle;
 
     use super::*;

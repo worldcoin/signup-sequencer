@@ -1,24 +1,22 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{linear_buckets, register_gauge, register_histogram, Gauge, Histogram};
-use tokio::{
-    sync::{broadcast, mpsc, Mutex, Notify, RwLock},
-    task::JoinHandle,
-};
+use tokio::sync::{broadcast, mpsc, Mutex, Notify, RwLock};
+use tokio::task::JoinHandle;
 use tracing::{info, instrument, warn};
 
-use self::tasks::{
-    insert_identities::InsertIdentities, mine_identities::MineIdentities,
-    process_identities::ProcessIdentities,
-};
-use crate::{
-    contracts::SharedIdentityManager, database::Database, ethereum::write::TransactionId,
-    identity_tree::TreeState,
-};
+use self::tasks::insert_identities::InsertIdentities;
+use self::tasks::mine_identities::MineIdentities;
+use self::tasks::process_identities::ProcessIdentities;
+use crate::contracts::SharedIdentityManager;
+use crate::database::Database;
+use crate::ethereum::write::TransactionId;
+use crate::identity_tree::TreeState;
 
 pub mod tasks;
 

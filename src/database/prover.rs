@@ -1,7 +1,5 @@
-use std::{
-    collections::HashSet,
-    hash::{Hash, Hasher},
-};
+use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 
 pub type Provers = HashSet<ProverConfiguration>;
 

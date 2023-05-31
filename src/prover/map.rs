@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
-use crate::{database::prover, prover::batch_insertion};
-
-use crate::prover::batch_insertion::ProverConfiguration;
 use tokio::sync::{RwLock, RwLockReadGuard};
+
+use crate::database::prover;
+use crate::prover::batch_insertion;
+use crate::prover::batch_insertion::ProverConfiguration;
 
 /// The type of a map containing a mapping from a usize to a locked item.
 type SharedProverMap<P> = RwLock<ProverMap<P>>;

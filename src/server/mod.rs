@@ -15,8 +15,7 @@ use hyper::StatusCode;
 use semaphore::protocol::Proof;
 use semaphore::Field;
 use serde::{Deserialize, Serialize};
-use tower_http::trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer};
-use tracing::{info, Level};
+use tracing::info;
 use url::{Host, Url};
 
 use crate::app::{
@@ -208,7 +207,9 @@ pub async fn bind_from_listener(
             serve_timeout,
             custom_middleware::timeout_layer::middleware,
         ))
-        .layer(middleware::from_fn(custom_middleware::logging_layer::middleware))
+        .layer(middleware::from_fn(
+            custom_middleware::logging_layer::middleware,
+        ))
         .layer(middleware::from_fn(
             custom_middleware::extract_trace_layer::middleware,
         ))

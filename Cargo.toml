@@ -54,7 +54,6 @@ take_mut = "0.2.2"
 tempfile = "3.3.0"
 thiserror = "1.0"
 tokio = { version = "1.17", features = ["signal", "macros", "rt", "sync", "time", "rt-multi-thread", "tracing", "test-util"] }
-tower-http = { version = "0.3.4", features = ["trace", "cors"] }
 tracing = "0.1"
 tracing-futures = "0.2"
 url = "2.2"

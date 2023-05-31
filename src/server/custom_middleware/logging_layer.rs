@@ -1,8 +1,9 @@
-use axum::http::{Request, StatusCode};
-use axum::middleware::Next;
-use axum::response::Response;
-use hyper::body::HttpBody;
-use hyper::{Body, Method};
+use axum::{
+    http::{Request, StatusCode},
+    middleware::Next,
+    response::Response,
+};
+use hyper::{body::HttpBody, Body, Method};
 use tracing::{error, info};
 
 pub async fn middleware<B>(request: Request<B>, next: Next<Body>) -> Result<Response, StatusCode>

@@ -530,8 +530,6 @@ impl Database {
 
         let row_processed = self.pool.fetch_one(query_processed_identity).await?;
 
-
-
         let exists = row_unprocessed.get::<bool, _>(0) || row_processed.get::<bool, _>(0);
 
         Ok(exists)
@@ -902,7 +900,6 @@ mod test {
         Ok(())
     }
 
-
     #[tokio::test]
     async fn check_identity_existance() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
@@ -915,7 +912,9 @@ mod test {
 
         // When there's only unprocessed identity
 
-        db.insert_new_identity(*&identities[0]).await.context("Inserting new identity")?;
+        db.insert_new_identity(*&identities[0])
+            .await
+            .context("Inserting new identity")?;
         assert_eq!(db.identity_exists(*&identities[0]).await?, true);
 
         // When there's only processed identity

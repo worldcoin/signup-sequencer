@@ -530,7 +530,7 @@ impl Database {
 
         let row_processed = self.pool.fetch_one(query_processed_identity).await?;
 
-        let exists = row_unprocessed.get::<bool, _>(0) && row_processed.get::<bool, _>(0);
+        let exists = row_unprocessed.get::<bool, _>(0) || row_processed.get::<bool, _>(0);
 
         Ok(exists)
     }
@@ -896,6 +896,33 @@ mod test {
         assert!(root_item_0.mined_valid_as_of.unwrap() < root_2_mined_at);
         assert!(root_item_0.mined_valid_as_of.unwrap() > root_1_inserted_at);
         assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn check_identity_existance() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(2);
+        let roots = mock_roots(1);
+
+        // When there's no identity
+        assert_eq!(db.identity_exists(*&identities[0]).await?, false);
+
+        // When there's only unprocessed identity
+
+        db.insert_new_identity(*&identities[0])
+            .await
+            .context("Inserting new identity")?;
+        assert_eq!(db.identity_exists(*&identities[0]).await?, true);
+
+        // When there's only processed identity
+        db.insert_pending_identity(0, &identities[1], &roots[0])
+            .await
+            .context("Inserting identity")?;
+
+        assert_eq!(db.identity_exists(*&identities[1]).await?, true);
 
         Ok(())
     }

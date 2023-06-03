@@ -323,6 +323,17 @@ impl Database {
         }))
     }
 
+    pub async fn count_unprocessed_identities(&self) -> Result<i32, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT COUNT(*) as unprocessed
+            FROM unprocessed_identities
+            "#,
+        );
+        let result = self.pool.fetch_one(query).await?;
+        Ok(result.get::<i64, _>(0) as i32)
+    }
+
     pub async fn count_pending_identities(&self) -> Result<i32, Error> {
         let query = sqlx::query(
             r#"
@@ -908,21 +919,21 @@ mod test {
         let roots = mock_roots(1);
 
         // When there's no identity
-        assert_eq!(db.identity_exists(*&identities[0]).await?, false);
+        assert!(!db.identity_exists(identities[0]).await?);
 
         // When there's only unprocessed identity
 
-        db.insert_new_identity(*&identities[0])
+        db.insert_new_identity(identities[0])
             .await
             .context("Inserting new identity")?;
-        assert_eq!(db.identity_exists(*&identities[0]).await?, true);
+        assert!(db.identity_exists(identities[0]).await?);
 
         // When there's only processed identity
         db.insert_pending_identity(0, &identities[1], &roots[0])
             .await
             .context("Inserting identity")?;
 
-        assert_eq!(db.identity_exists(*&identities[1]).await?, true);
+        assert!(db.identity_exists(identities[1]).await?);
 
         Ok(())
     }

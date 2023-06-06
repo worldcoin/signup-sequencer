@@ -6,7 +6,7 @@ use axum::response::Response;
 use bytes::Bytes;
 use hyper::body::HttpBody;
 use hyper::{Body, Method};
-use tracing::{error, info};
+use tracing::{error, info, info_span};
 
 // 1 MiB
 const MAX_REQUEST_BODY_SIZE: u64 = 1024 * 1024;
@@ -23,52 +23,54 @@ where
     let request_query = parts.uri.query().map(ToString::to_string);
 
     if let Method::GET = request_method {
-        info!(
-            uri_path,
-            ?request_method,
-            ?request_query,
-            "Processing request"
-        );
+        info_span!("request", ?uri_path, ?request_method, ?request_query)
+            .in_scope(|| async {
+                info!(
+                    uri_path,
+                    ?request_method,
+                    ?request_query,
+                    "Processing request"
+                );
 
-        let body = Body::empty();
-        let request = Request::from_parts(parts, body);
+                let body = Body::empty();
+                let request = Request::from_parts(parts, body);
 
-        let response = next.run(request).await;
+                let response = next.run(request).await;
 
-        let response = handle_response(
-            &uri_path,
-            &request_method,
-            request_query.as_deref(),
-            response,
-        )
-        .await?;
+                let response = handle_response(
+                    &uri_path,
+                    &request_method,
+                    request_query.as_deref(),
+                    response,
+                )
+                .await?;
 
-        Ok(response)
+                Ok(response)
+            })
+            .await
     } else {
         let body = body_to_string(body).await?;
 
-        info!(
-            uri_path,
-            ?request_method,
-            ?request_query,
-            body,
-            "Processing request"
-        );
+        info_span!("request", ?uri_path, ?request_method, ?request_query, ?body)
+            .in_scope(|| async {
+                info!("Processing request");
 
-        let body = Body::from(body);
-        let request = Request::from_parts(parts, body);
+                let body = Body::from(body);
+                let request = Request::from_parts(parts, body);
 
-        let response = next.run(request).await;
+                let response = next.run(request).await;
 
-        let response = handle_response(
-            &uri_path,
-            &request_method,
-            request_query.as_deref(),
-            response,
-        )
-        .await?;
+                let response = handle_response(
+                    &uri_path,
+                    &request_method,
+                    request_query.as_deref(),
+                    response,
+                )
+                .await?;
 
-        Ok(response)
+                Ok(response)
+            })
+            .await
     }
 }
 

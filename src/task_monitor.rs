@@ -41,6 +41,14 @@ static PENDING_IDENTITIES: Lazy<Gauge> = Lazy::new(|| {
     register_gauge!("pending_identities", "Identities not submitted on-chain").unwrap()
 });
 
+static UNPROCESSED_IDENTITIES: Lazy<Gauge> = Lazy::new(|| {
+    register_gauge!(
+        "unprocessed_identities",
+        "Identities not processed by identity committer"
+    )
+    .unwrap()
+});
+
 static BATCH_SIZES: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
         "submitted_batch_sizes",
@@ -212,8 +220,20 @@ impl TaskMonitor {
     }
 
     async fn log_pending_identities_count(database: &Database) -> AnyhowResult<()> {
-        let pending_identities = database.count_pending_identities().await?;
-        PENDING_IDENTITIES.set(f64::from(pending_identities));
+        let identities = database.count_pending_identities().await?;
+        PENDING_IDENTITIES.set(f64::from(identities));
+        Ok(())
+    }
+
+    async fn log_unprocessed_identities_count(database: &Database) -> AnyhowResult<()> {
+        let identities = database.count_unprocessed_identities().await?;
+        UNPROCESSED_IDENTITIES.set(f64::from(identities));
+        Ok(())
+    }
+
+    async fn log_identities_queues(database: &Database) -> AnyhowResult<()> {
+        TaskMonitor::log_unprocessed_identities_count(database).await?;
+        TaskMonitor::log_pending_identities_count(database).await?;
         Ok(())
     }
 

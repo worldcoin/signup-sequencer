@@ -103,7 +103,7 @@ async fn mine_identities(
         "Tree updated"
     );
 
-    TaskMonitor::log_pending_identities_count(database).await?;
+    TaskMonitor::log_identities_queues(database).await?;
 
     Ok(())
 }

@@ -211,7 +211,7 @@ async fn commit_identities(
     updates: &[AppliedTreeUpdate],
     insertion_prover: ReadOnlyInsertionProver<'_>,
 ) -> AnyhowResult<()> {
-    TaskMonitor::log_pending_identities_count(database).await?;
+    TaskMonitor::log_identities_queues(database).await?;
 
     if updates.is_empty() {
         warn!("Identity commit requested with zero identities. Continuing.");

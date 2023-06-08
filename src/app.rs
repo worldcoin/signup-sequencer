@@ -157,14 +157,17 @@ impl App {
             database.mark_root_as_mined(&root_hash).await?;
         }
 
+        let mmap_file_path: String = String::from("./testfile");
+
         let timer = Instant::now();
-        let tree_state = Self::initialize_tree(
+        let tree_state = Self::restore_or_initialize_tree(
             &database,
             // Poseidon tree depth is one more than the contract's tree depth
             identity_manager.tree_depth(),
             options.dense_tree_prefix_depth,
             options.tree_gc_threshold,
             identity_manager.initial_leaf_value(),
+            mmap_file_path,
         )
         .await?;
         info!("Tree state initialization took: {:?}", timer.elapsed());
@@ -199,12 +202,80 @@ impl App {
         Ok(app)
     }
 
+    async fn restore_or_initialize_tree(
+        database: &Database,
+        tree_depth: usize,
+        dense_prefix_depth: usize,
+        gc_threshold: usize,
+        initial_leaf_value: Hash,
+        mmap_file_path: String,
+    ) -> AnyhowResult<TreeState> {
+        let tree_state = match Self::get_cached_tree_state(
+            database,
+            tree_depth,
+            dense_prefix_depth,
+            gc_threshold,
+            &initial_leaf_value,
+            &mmap_file_path,
+        )
+        .await?
+        {
+            Some(state) => state,
+            None => match Self::initialize_tree(
+                database,
+                tree_depth,
+                dense_prefix_depth,
+                gc_threshold,
+                initial_leaf_value,
+                mmap_file_path,
+            )
+            .await
+            {
+                anyhow::Result::Ok(state) => state,
+                Err(e) => return Err(e),
+            },
+        };
+
+        Ok(tree_state)
+    }
+
+    #[allow(unused)]
+    async fn get_cached_tree_state(
+        database: &Database,
+        tree_depth: usize,
+        dense_prefix_depth: usize,
+        gc_threshold: usize,
+        initial_leaf_value: &Hash,
+        mmap_file_path: &String,
+    ) -> anyhow::Result<Option<TreeState>> {
+        let mined_builder = match CanonicalTreeBuilder::restore(
+            tree_depth,
+            dense_prefix_depth,
+            initial_leaf_value,
+            gc_threshold,
+            mmap_file_path,
+        ) {
+            Some(tree) => tree,
+            None => return Ok(None),
+        };
+
+        let (mined, batching_builder) = mined_builder.seal();
+        let (batching, mut latest_builder) = batching_builder.seal_and_continue();
+        let pending_items = database.get_commitments_by_status(Status::Pending).await?;
+        for update in pending_items {
+            latest_builder.update(&update);
+        }
+        let latest = latest_builder.seal();
+        Ok(Some(TreeState::new(mined, batching, latest)))
+    }
+
     async fn initialize_tree(
         database: &Database,
         tree_depth: usize,
         dense_prefix_depth: usize,
         gc_threshold: usize,
         initial_leaf_value: Hash,
+        mmap_file_path: String,
     ) -> AnyhowResult<TreeState> {
         let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
         let initial_leaves = if mined_items.is_empty() {
@@ -226,6 +297,7 @@ impl App {
             gc_threshold,
             initial_leaf_value,
             &initial_leaves,
+            mmap_file_path,
         );
         let (mined, batching_builder) = mined_builder.seal();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();

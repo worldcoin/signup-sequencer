@@ -101,6 +101,9 @@ pub struct Options {
     #[clap(long, env, default_value = "20")]
     pub dense_tree_prefix_depth: usize,
 
+    #[clap(env, default_value = "./dense_tree_mmap")]
+    pub dense_tree_mmap_file: String,
+
     /// The number of updates to trigger garbage collection.
     #[clap(long, env, default_value = "10000")]
     pub tree_gc_threshold: usize,
@@ -157,8 +160,6 @@ impl App {
             database.mark_root_as_mined(&root_hash).await?;
         }
 
-        let mmap_file_path: String = String::from("./testfile");
-
         let timer = Instant::now();
         let tree_state = Self::restore_or_initialize_tree(
             &database,
@@ -167,7 +168,7 @@ impl App {
             options.dense_tree_prefix_depth,
             options.tree_gc_threshold,
             identity_manager.initial_leaf_value(),
-            mmap_file_path,
+            options.dense_tree_mmap_file,
         )
         .await?;
         info!("Tree state initialization took: {:?}", timer.elapsed());

@@ -364,13 +364,9 @@ async fn commit_identities(
         )
         .await;
 
-    if transaction_result.is_err() {
-        transaction_result.map_err(|e| {
-            error!(?e, "Failed to insert identity to contract.");
-            e
-        })?;
+    if let Some(err) = transaction_result {
         panic!(
-            "Failed to insert identity to contract. Restarting sequencer to reconstruct local tree"
+            "Failed to insert identity to contract due to error {err}. Restarting sequencer to reconstruct local tree"
         );
     }
 

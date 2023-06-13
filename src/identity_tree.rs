@@ -559,24 +559,41 @@ impl CanonicalTreeBuilder {
     }
 
     pub fn restore(
+        latest_mined: &Field,
+        latest_root: U256,
         tree_depth: usize,
         dense_prefix_depth: usize,
         initial_leaf: &Field,
         flattening_threshold: usize,
         mmap_file_path: &String,
     ) -> Option<Self> {
-        let tree = match PoseidonTree::<lazy_merkle_tree::Canonical>::attempt_dense_mmap_restore(
-            tree_depth,
-            dense_prefix_depth,
-            &initial_leaf,
-            &mmap_file_path,
-        ) {
-            Ok(tree) => tree,
-            Err(error) => {
-                warn!("Tree wasn't trestored. Reason: {}", error.to_string());
-                return None;
-            }
-        };
+        let tree: LazyMerkleTree<PoseidonHash, lazy_merkle_tree::Canonical> =
+            match PoseidonTree::<lazy_merkle_tree::Canonical>::attempt_dense_mmap_restore(
+                tree_depth,
+                dense_prefix_depth,
+                &initial_leaf,
+                &mmap_file_path,
+            ) {
+                Ok(tree) => tree,
+                Err(error) => {
+                    warn!("Tree wasn't trestored. Reason: {}", error.to_string());
+                    return None;
+                }
+            };
+
+        // check if latest mined identity is the same as last in tree
+        if latest_mined != tree.get_leaf((1 << dense_prefix_depth) - 1) {
+            warn!(
+                "latest mined identity from database doesn't match the mined leaf from the tree."
+            );
+            return None;
+        }
+
+        if tree.root() != latest_root {
+            warn!("identity manager root and tree root are different.");
+            return None;
+        }
+
         let metadata = CanonicalTreeMetadata {
             flatten_threshold:        flattening_threshold,
             count_since_last_flatten: 0,

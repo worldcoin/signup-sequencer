@@ -560,7 +560,7 @@ impl CanonicalTreeBuilder {
 
     pub fn restore(
         latest_mined: &Field,
-        latest_root: U256,
+        latest_root: ruint::Uint<256, 4>,
         tree_depth: usize,
         dense_prefix_depth: usize,
         initial_leaf: &Field,
@@ -582,7 +582,7 @@ impl CanonicalTreeBuilder {
             };
 
         // check if latest mined identity is the same as last in tree
-        if latest_mined != tree.get_leaf((1 << dense_prefix_depth) - 1) {
+        if *latest_mined != tree.get_leaf((1 << dense_prefix_depth) - 1) {
             warn!(
                 "latest mined identity from database doesn't match the mined leaf from the tree."
             );
@@ -590,7 +590,7 @@ impl CanonicalTreeBuilder {
         }
 
         if tree.root() != latest_root {
-            warn!("identity manager root and tree root are different.");
+            warn!("identity manager root and tree root are different.\n Tree root: {}, IM root: {}", tree.root(), latest_root);
             return None;
         }
 

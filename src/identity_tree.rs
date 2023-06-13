@@ -589,11 +589,6 @@ impl CanonicalTreeBuilder {
             return None;
         }
 
-        // if tree.root() != latest_root {
-        //     warn!("identity manager root and tree root are different.\n Tree root: {}, IM root: {}", tree.root(), latest_root);
-        //     return None;
-        // }
-
         let metadata = CanonicalTreeMetadata {
             flatten_threshold:        flattening_threshold,
             count_since_last_flatten: 0,

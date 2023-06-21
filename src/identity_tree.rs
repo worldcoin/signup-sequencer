@@ -560,7 +560,6 @@ impl CanonicalTreeBuilder {
 
     pub fn restore(
         latest_mined: &Field,
-        latest_root: ruint::Uint<256, 4>,
         tree_depth: usize,
         dense_prefix_depth: usize,
         initial_leaf: &Field,

@@ -163,7 +163,6 @@ impl App {
         let timer = Instant::now();
         let tree_state = Self::restore_or_initialize_tree(
             &database,
-            root_hash,
             // Poseidon tree depth is one more than the contract's tree depth
             identity_manager.tree_depth(),
             options.dense_tree_prefix_depth,
@@ -206,7 +205,6 @@ impl App {
 
     async fn restore_or_initialize_tree(
         database: &Database,
-        root_hash: ruint::Uint<256, 4>,
         tree_depth: usize,
         dense_prefix_depth: usize,
         gc_threshold: usize,
@@ -215,7 +213,6 @@ impl App {
     ) -> AnyhowResult<TreeState> {
         let tree_state = match Self::get_cached_tree_state(
             database,
-            root_hash,
             tree_depth,
             dense_prefix_depth,
             gc_threshold,
@@ -246,24 +243,19 @@ impl App {
     #[allow(unused)]
     async fn get_cached_tree_state(
         database: &Database,
-        latest_root: ruint::Uint<256, 4>,
         tree_depth: usize,
         dense_prefix_depth: usize,
         gc_threshold: usize,
         initial_leaf_value: &Hash,
         mmap_file_path: &String,
     ) -> anyhow::Result<Option<TreeState>> {
-        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
-        let last_mined = if mined_items.is_empty() {
-            initial_leaf_value.clone()
-        } else {
-            mined_items.sort_by_key(|item| item.leaf_index);
-            mined_items.last().map(|item| item.element).unwrap()
+        let mut last_mined = match database.get_last_commitment_by_status(Status::Mined).await {
+            Some(lm) => lm,
+            None => initial_leaf_value.clone()
         };
-
+            
         let mined_builder = match CanonicalTreeBuilder::restore(
             &last_mined,
-            latest_root,
             tree_depth,
             dense_prefix_depth,
             initial_leaf_value,

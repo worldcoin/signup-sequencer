@@ -291,6 +291,27 @@ impl Database {
             .collect::<Vec<_>>())
     }
 
+    pub async fn get_last_commitment_by_status(&self, status: Status) -> Option<Hash> {
+        let query = sqlx::query(
+            r#"
+                SELECT commitment
+                FROM identities
+                WHERE status = $1
+                ORDER BY leaf_index DESC
+                LIMIT 1   
+            "#,
+        ).bind(<&str>::from(status));
+
+        let row = self.pool.fetch_optional(query).await.ok()?;
+
+        match row {
+            Some(r) => {
+                return Some(r.get::<Hash, _>(0));
+            }
+            None => return None
+        }
+    }
+
     pub async fn get_root_state(&self, root: &Hash) -> Result<Option<RootItem>, Error> {
         // This tries really hard to do everything in one query to prevent race
         // conditions.

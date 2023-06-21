@@ -247,24 +247,21 @@ impl App {
         dense_prefix_depth: usize,
         gc_threshold: usize,
         initial_leaf_value: &Hash,
-        mmap_file_path: &String,
+        mmap_file_path: &str,
     ) -> anyhow::Result<Option<TreeState>> {
         let mut last_mined = match database.get_last_commitment_by_status(Status::Mined).await {
             Some(lm) => lm,
-            None => initial_leaf_value.clone()
+            None => *initial_leaf_value,
         };
-            
-        let mined_builder = match CanonicalTreeBuilder::restore(
+
+        let Some(mined_builder) = CanonicalTreeBuilder::restore(
             &last_mined,
             tree_depth,
             dense_prefix_depth,
             initial_leaf_value,
             gc_threshold,
             mmap_file_path,
-        ) {
-            Some(tree) => tree,
-            None => return Ok(None),
-        };
+        ) else { return Ok(None) };
 
         let (mined, batching_builder) = mined_builder.seal();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
@@ -304,7 +301,7 @@ impl App {
             gc_threshold,
             initial_leaf_value,
             &initial_leaves,
-            mmap_file_path,
+            &mmap_file_path,
         );
         let (mined, batching_builder) = mined_builder.seal();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();

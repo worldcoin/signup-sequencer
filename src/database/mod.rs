@@ -300,16 +300,12 @@ impl Database {
                 ORDER BY leaf_index DESC
                 LIMIT 1   
             "#,
-        ).bind(<&str>::from(status));
+        )
+        .bind(<&str>::from(status));
 
         let row = self.pool.fetch_optional(query).await.ok()?;
 
-        match row {
-            Some(r) => {
-                return Some(r.get::<Hash, _>(0));
-            }
-            None => return None
-        }
+        row.map(|r| r.get::<Hash, _>(0))
     }
 
     pub async fn get_root_state(&self, root: &Hash) -> Result<Option<RootItem>, Error> {

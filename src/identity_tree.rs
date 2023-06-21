@@ -525,7 +525,7 @@ impl CanonicalTreeBuilder {
         flattening_threshold: usize,
         initial_leaf: Field,
         initial_leaves: &[Field],
-        mmap_file_path: String,
+        mmap_file_path: &str,
     ) -> Self {
         let initial_leaves_in_dense_count = min(initial_leaves.len(), 1 << dense_prefix_depth);
         let (initial_leaves_in_dense, leftover_initial_leaves) =
@@ -537,7 +537,7 @@ impl CanonicalTreeBuilder {
                 dense_prefix_depth,
                 &initial_leaf,
                 initial_leaves_in_dense,
-                &mmap_file_path
+                mmap_file_path
             ).unwrap();
         let metadata = CanonicalTreeMetadata {
             flatten_threshold:        flattening_threshold,
@@ -564,14 +564,14 @@ impl CanonicalTreeBuilder {
         dense_prefix_depth: usize,
         initial_leaf: &Field,
         flattening_threshold: usize,
-        mmap_file_path: &String,
+        mmap_file_path: &str,
     ) -> Option<Self> {
         let tree: LazyMerkleTree<PoseidonHash, lazy_merkle_tree::Canonical> =
             match PoseidonTree::<lazy_merkle_tree::Canonical>::attempt_dense_mmap_restore(
                 tree_depth,
                 dense_prefix_depth,
-                &initial_leaf,
-                &mmap_file_path,
+                initial_leaf,
+                mmap_file_path,
             ) {
                 Ok(tree) => tree,
                 Err(error) => {

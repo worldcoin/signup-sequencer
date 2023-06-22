@@ -14,8 +14,8 @@ on:
       - main
 
 env:
-  RUST_VERSION: "1.65"
-  NIGHTLY_VERSION: nightly-2022-11-04
+  RUST_VERSION: "1.70"
+  NIGHTLY_VERSION: nightly-2023-05-31
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0

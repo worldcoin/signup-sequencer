@@ -1,24 +1,22 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{linear_buckets, register_gauge, register_histogram, Gauge, Histogram};
-use tokio::{
-    sync::{broadcast, mpsc, Mutex, Notify, RwLock},
-    task::JoinHandle,
-};
+use tokio::sync::{broadcast, mpsc, Mutex, Notify, RwLock};
+use tokio::task::JoinHandle;
 use tracing::{info, instrument, warn};
 
-use self::tasks::{
-    insert_identities::InsertIdentities, mine_identities::MineIdentities,
-    process_identities::ProcessIdentities,
-};
-use crate::{
-    contracts::SharedIdentityManager, database::Database, ethereum::write::TransactionId,
-    identity_tree::TreeState,
-};
+use self::tasks::insert_identities::InsertIdentities;
+use self::tasks::mine_identities::MineIdentities;
+use self::tasks::process_identities::ProcessIdentities;
+use crate::contracts::SharedIdentityManager;
+use crate::database::Database;
+use crate::ethereum::write::TransactionId;
+use crate::identity_tree::TreeState;
 
 pub mod tasks;
 
@@ -41,6 +39,14 @@ pub struct PendingIdentities {
 
 static PENDING_IDENTITIES: Lazy<Gauge> = Lazy::new(|| {
     register_gauge!("pending_identities", "Identities not submitted on-chain").unwrap()
+});
+
+static UNPROCESSED_IDENTITIES: Lazy<Gauge> = Lazy::new(|| {
+    register_gauge!(
+        "unprocessed_identities",
+        "Identities not processed by identity committer"
+    )
+    .unwrap()
 });
 
 static BATCH_SIZES: Lazy<Histogram> = Lazy::new(|| {
@@ -214,8 +220,20 @@ impl TaskMonitor {
     }
 
     async fn log_pending_identities_count(database: &Database) -> AnyhowResult<()> {
-        let pending_identities = database.count_pending_identities().await?;
-        PENDING_IDENTITIES.set(f64::from(pending_identities));
+        let identities = database.count_pending_identities().await?;
+        PENDING_IDENTITIES.set(f64::from(identities));
+        Ok(())
+    }
+
+    async fn log_unprocessed_identities_count(database: &Database) -> AnyhowResult<()> {
+        let identities = database.count_unprocessed_identities().await?;
+        UNPROCESSED_IDENTITIES.set(f64::from(identities));
+        Ok(())
+    }
+
+    async fn log_identities_queues(database: &Database) -> AnyhowResult<()> {
+        TaskMonitor::log_unprocessed_identities_count(database).await?;
+        TaskMonitor::log_pending_identities_count(database).await?;
         Ok(())
     }
 

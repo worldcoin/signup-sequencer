@@ -1,9 +1,12 @@
-use std::{future::Future, time::Duration};
+use std::future::Future;
+use std::time::Duration;
 
 use anyhow::{Error as EyreError, Result as AnyhowResult};
 use ethers::types::U256;
 use futures::FutureExt;
-use tokio::{select, sync::broadcast, task::JoinHandle};
+use tokio::select;
+use tokio::sync::broadcast;
+use tokio::task::JoinHandle;
 use tracing::{error, info};
 
 pub trait Any<A> {
@@ -101,13 +104,9 @@ pub fn u256_to_f64(value: U256) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        sync::{
-            atomic::{AtomicBool, Ordering},
-            Arc,
-        },
-        time::Duration,
-    };
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
 
     use super::*;
 

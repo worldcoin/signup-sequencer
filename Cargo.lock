@@ -5708,6 +5708,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-server",
+ "bytes",
  "chrono",
  "clap 4.2.7",
  "cli-batteries",
@@ -5739,7 +5740,6 @@ dependencies = [
  "test-case",
  "thiserror",
  "tokio",
- "tower-http",
  "tracing",
  "tracing-futures",
  "tracing-subscriber 0.3.17",
@@ -6517,7 +6517,6 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
- "tracing",
 ]
 
 [[package]]

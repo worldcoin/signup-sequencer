@@ -1,12 +1,11 @@
-use crate::utils::u256_to_f64;
 use ::prometheus::{register_gauge, Gauge};
 use async_trait::async_trait;
-use ethers::{
-    middleware::gas_oracle::{GasOracle, GasOracleError},
-    types::U256,
-};
+use ethers::middleware::gas_oracle::{GasOracle, GasOracleError};
+use ethers::types::U256;
 use once_cell::sync::Lazy;
 use tracing::debug;
+
+use crate::utils::u256_to_f64;
 
 static GAS_PRICE: Lazy<Gauge> =
     Lazy::new(|| register_gauge!("eth_gas_price", "Ethereum gas price for transactions.").unwrap());

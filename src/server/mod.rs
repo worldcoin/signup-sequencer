@@ -1,32 +1,27 @@
 pub mod error;
 
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    sync::Arc,
-    time::Duration,
-};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{bail, ensure, Result as AnyhowResult};
-use axum::{
-    extract::State,
-    middleware,
-    routing::{get, post},
-    Json, Router,
-};
+use axum::extract::State;
+use axum::routing::{get, post};
+use axum::{middleware, Json, Router};
 use clap::Parser;
 use cli_batteries::await_shutdown;
 use error::Error;
 use hyper::StatusCode;
-use semaphore::{protocol::Proof, Field};
+use semaphore::protocol::Proof;
+use semaphore::Field;
 use serde::{Deserialize, Serialize};
-use tower_http::trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer};
-use tracing::{info, Level};
+use tracing::info;
 use url::{Host, Url};
 
-use crate::{
-    app::{App, InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofResponse},
-    identity_tree::Hash,
+use crate::app::{
+    App, InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofResponse,
 };
+use crate::identity_tree::Hash;
 
 mod custom_middleware;
 
@@ -212,18 +207,11 @@ pub async fn bind_from_listener(
             serve_timeout,
             custom_middleware::timeout_layer::middleware,
         ))
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(
-                    DefaultMakeSpan::new()
-                        .level(Level::INFO)
-                        .include_headers(true),
-                )
-                .on_request(DefaultOnRequest::new().level(Level::INFO))
-                .on_response(DefaultOnResponse::new().level(Level::INFO)),
-        )
         .layer(middleware::from_fn(
             custom_middleware::extract_trace_layer::middleware,
+        ))
+        .layer(middleware::from_fn(
+            custom_middleware::logging_layer::middleware,
         ))
         .layer(middleware::from_fn(
             custom_middleware::remove_auth_layer::middleware,

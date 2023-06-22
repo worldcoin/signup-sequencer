@@ -1,29 +1,23 @@
-use std::{
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use anyhow::Result as AnyhowResult;
 use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{register_histogram, Histogram};
 use semaphore::poseidon_tree::Branch;
-use tokio::{
-    select,
-    sync::{mpsc, Notify},
-    time,
-};
+use tokio::sync::{mpsc, Notify};
+use tokio::{select, time};
 use tracing::{debug, error, info, instrument, warn};
 
-use crate::{
-    contracts::{IdentityManager, SharedIdentityManager},
-    database::Database,
-    identity_tree::{
-        AppliedTreeUpdate, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
-    },
-    prover::{batch_insertion::Identity, map::ReadOnlyInsertionProver},
-    task_monitor::{PendingIdentities, TaskMonitor},
+use crate::contracts::{IdentityManager, SharedIdentityManager};
+use crate::database::Database;
+use crate::identity_tree::{
+    AppliedTreeUpdate, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
+use crate::prover::batch_insertion::Identity;
+use crate::prover::map::ReadOnlyInsertionProver;
+use crate::task_monitor::{PendingIdentities, TaskMonitor};
 
 /// The number of seconds either side of the timer tick to treat as enough to
 /// trigger a forced batch insertion.
@@ -217,7 +211,7 @@ async fn commit_identities(
     updates: &[AppliedTreeUpdate],
     insertion_prover: ReadOnlyInsertionProver<'_>,
 ) -> AnyhowResult<()> {
-    TaskMonitor::log_pending_identities_count(database).await?;
+    TaskMonitor::log_identities_queues(database).await?;
 
     if updates.is_empty() {
         warn!("Identity commit requested with zero identities. Continuing.");

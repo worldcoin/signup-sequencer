@@ -1,14 +1,15 @@
-use std::{
-    fmt::{Display, Formatter},
-    mem::size_of,
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
-    sync::Arc,
-};
+use std::fmt::{Display, Formatter};
+use std::mem::size_of;
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::sync::Arc;
 
 use anyhow::Context;
-use axum::{extract::State, routing::post, Json, Router};
+use axum::extract::State;
+use axum::routing::post;
+use axum::{Json, Router};
 use axum_server::Handle;
-use ethers::{types::U256, utils::keccak256};
+use ethers::types::U256;
+use ethers::utils::keccak256;
 use hyper::StatusCode;
 use semaphore::poseidon_tree::{Branch, Proof as TreeProof};
 use serde::{Deserialize, Serialize};

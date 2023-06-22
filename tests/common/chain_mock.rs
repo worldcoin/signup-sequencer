@@ -1,17 +1,19 @@
-use std::{fs::File, io::BufReader, sync::Arc, time::Duration};
+use std::fs::File;
+use std::io::BufReader;
+use std::sync::Arc;
+use std::time::Duration;
 
-use ethers::{
-    abi::AbiEncode,
-    contract::Contract,
-    core::k256::ecdsa::SigningKey,
-    prelude::{
-        artifacts::BytecodeObject, ContractFactory, Http, LocalWallet, NonceManagerMiddleware,
-        Provider, Signer, SignerMiddleware, Wallet,
-    },
-    providers::Middleware,
-    types::{Bytes, H256, U256},
-    utils::{Anvil, AnvilInstance},
+use ethers::abi::AbiEncode;
+use ethers::contract::Contract;
+use ethers::core::k256::ecdsa::SigningKey;
+use ethers::prelude::artifacts::BytecodeObject;
+use ethers::prelude::{
+    ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer, SignerMiddleware,
+    Wallet,
 };
+use ethers::providers::Middleware;
+use ethers::types::{Bytes, H256, U256};
+use ethers::utils::{Anvil, AnvilInstance};
 use tracing::{info, instrument};
 
 use super::{abi as ContractAbi, CompiledContract};

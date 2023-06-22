@@ -4,26 +4,23 @@
     clippy::cast_lossless
 )]
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{anyhow, Result as AnyhowResult};
 use async_trait::async_trait;
 use clap::Parser;
-use ethers::{
-    core::k256::ecdsa::SigningKey,
-    middleware::{
-        gas_oracle::{
-            Cache, EthGasStation, Etherchain, GasNow, GasOracle, GasOracleMiddleware, Median,
-            Polygon, ProviderOracle,
-        },
-        SignerMiddleware,
-    },
-    providers::{Middleware, PendingTransaction},
-    signers::{LocalWallet, Signer, Wallet},
-    types::{
-        transaction::eip2718::TypedTransaction, u256_from_f64_saturating, Address, BlockId,
-        BlockNumber, Chain, TxHash, H256, U64,
-    },
+use ethers::core::k256::ecdsa::SigningKey;
+use ethers::middleware::gas_oracle::{
+    Cache, EthGasStation, Etherchain, GasNow, GasOracle, GasOracleMiddleware, Median, Polygon,
+    ProviderOracle,
+};
+use ethers::middleware::SignerMiddleware;
+use ethers::providers::{Middleware, PendingTransaction};
+use ethers::signers::{LocalWallet, Signer, Wallet};
+use ethers::types::transaction::eip2718::TypedTransaction;
+use ethers::types::{
+    u256_from_f64_saturating, Address, BlockId, BlockNumber, Chain, TxHash, H256, U64,
 };
 use futures::try_join;
 use once_cell::sync::Lazy;
@@ -35,11 +32,11 @@ use reqwest::Client as ReqwestClient;
 use tokio::time::timeout;
 use tracing::{debug_span, error, info, info_span, instrument, warn, Instrument};
 
-use self::{estimator::Estimator, gas_oracle_logger::GasOracleLogger, min_gas_fees::MinGasFees};
-use super::{
-    read::ReadProvider,
-    write::{TransactionId, TxError, WriteProvider},
-};
+use self::estimator::Estimator;
+use self::gas_oracle_logger::GasOracleLogger;
+use self::min_gas_fees::MinGasFees;
+use super::read::ReadProvider;
+use super::write::{TransactionId, TxError, WriteProvider};
 use crate::utils::u256_to_f64;
 
 mod estimator;

@@ -1,8 +1,9 @@
-use crate::database;
 use anyhow::Error as EyreError;
 use axum::response::IntoResponse;
 use hyper::{Body, StatusCode};
 use thiserror::Error;
+
+use crate::database;
 
 #[derive(Debug, Error)]
 pub enum Error {

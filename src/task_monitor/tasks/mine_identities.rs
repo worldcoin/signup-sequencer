@@ -4,12 +4,10 @@ use anyhow::Result as AnyhowResult;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{info, instrument, warn};
 
-use crate::{
-    contracts::{IdentityManager, SharedIdentityManager},
-    database::Database,
-    identity_tree::{Canonical, TreeVersion, TreeWithNextVersion},
-    task_monitor::{PendingIdentities, TaskMonitor},
-};
+use crate::contracts::{IdentityManager, SharedIdentityManager};
+use crate::database::Database;
+use crate::identity_tree::{Canonical, TreeVersion, TreeWithNextVersion};
+use crate::task_monitor::{PendingIdentities, TaskMonitor};
 
 pub struct MineIdentities {
     database:                    Arc<Database>,
@@ -105,7 +103,7 @@ async fn mine_identities(
         "Tree updated"
     );
 
-    TaskMonitor::log_pending_identities_count(database).await?;
+    TaskMonitor::log_identities_queues(database).await?;
 
     Ok(())
 }

@@ -8,17 +8,14 @@ use std::collections::HashSet;
 
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
-use sqlx::{
-    migrate::{Migrate, MigrateDatabase, Migrator},
-    pool::PoolOptions,
-    Executor, Pool, Postgres, Row,
-};
+use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
+use sqlx::pool::PoolOptions;
+use sqlx::{Executor, Pool, Postgres, Row};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
-use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
-
 use self::prover::ProverConfiguration;
+use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
 pub mod prover;
 pub mod types;
@@ -343,6 +340,17 @@ impl Database {
         }))
     }
 
+    pub async fn count_unprocessed_identities(&self) -> Result<i32, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT COUNT(*) as unprocessed
+            FROM unprocessed_identities
+            "#,
+        );
+        let result = self.pool.fetch_one(query).await?;
+        Ok(result.get::<i64, _>(0) as i32)
+    }
+
     pub async fn count_pending_identities(&self) -> Result<i32, Error> {
         let query = sqlx::query(
             r#"
@@ -550,7 +558,7 @@ impl Database {
 
         let row_processed = self.pool.fetch_one(query_processed_identity).await?;
 
-        let exists = row_unprocessed.get::<bool, _>(0) && row_processed.get::<bool, _>(0);
+        let exists = row_unprocessed.get::<bool, _>(0) || row_processed.get::<bool, _>(0);
 
         Ok(exists)
     }
@@ -567,7 +575,8 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
-    use std::{str::FromStr, time::Duration};
+    use std::str::FromStr;
+    use std::time::Duration;
 
     use anyhow::Context;
     use chrono::Utc;
@@ -576,10 +585,8 @@ mod test {
     use semaphore::Field;
 
     use super::{Database, Options};
-    use crate::{
-        identity_tree::{Hash, Status},
-        secret::SecretUrl,
-    };
+    use crate::identity_tree::{Hash, Status};
+    use crate::secret::SecretUrl;
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {
@@ -917,6 +924,33 @@ mod test {
         assert!(root_item_0.mined_valid_as_of.unwrap() < root_2_mined_at);
         assert!(root_item_0.mined_valid_as_of.unwrap() > root_1_inserted_at);
         assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn check_identity_existance() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(2);
+        let roots = mock_roots(1);
+
+        // When there's no identity
+        assert!(!db.identity_exists(identities[0]).await?);
+
+        // When there's only unprocessed identity
+
+        db.insert_new_identity(identities[0])
+            .await
+            .context("Inserting new identity")?;
+        assert!(db.identity_exists(identities[0]).await?);
+
+        // When there's only processed identity
+        db.insert_pending_identity(0, &identities[1], &roots[0])
+            .await
+            .context("Inserting identity")?;
+
+        assert!(db.identity_exists(identities[1]).await?);
 
         Ok(())
     }

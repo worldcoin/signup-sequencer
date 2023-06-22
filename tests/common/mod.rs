@@ -13,57 +13,57 @@ pub mod prelude {
     pub use anyhow::Context;
     pub use clap::Parser;
     pub use cli_batteries::{reset_shutdown, shutdown};
-    pub use ethers::{
-        abi::{AbiEncode, Address},
-        core::{abi::Abi, k256::ecdsa::SigningKey, rand},
-        prelude::{
-            artifacts::{Bytecode, BytecodeObject},
-            ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
-            SignerMiddleware, Wallet,
-        },
-        providers::Middleware,
-        types::{Bytes, H256, U256},
-        utils::{Anvil, AnvilInstance},
+    pub use ethers::abi::{AbiEncode, Address};
+    pub use ethers::core::abi::Abi;
+    pub use ethers::core::k256::ecdsa::SigningKey;
+    pub use ethers::core::rand;
+    pub use ethers::prelude::artifacts::{Bytecode, BytecodeObject};
+    pub use ethers::prelude::{
+        ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
+        SignerMiddleware, Wallet,
     };
-    pub use hyper::{client::HttpConnector, Body, Client, Request};
+    pub use ethers::providers::Middleware;
+    pub use ethers::types::{Bytes, H256, U256};
+    pub use ethers::utils::{Anvil, AnvilInstance};
+    pub use hyper::client::HttpConnector;
+    pub use hyper::{Body, Client, Request};
     pub use once_cell::sync::Lazy;
     pub use postgres_docker_utils::DockerContainerGuard;
-    pub use semaphore::{
-        hash_to_field,
-        identity::Identity,
-        merkle_tree::{self, Branch},
-        poseidon_tree::{PoseidonHash, PoseidonTree},
-        protocol::{self, generate_nullifier_hash, generate_proof},
-        Field,
-    };
+    pub use semaphore::identity::Identity;
+    pub use semaphore::merkle_tree::{self, Branch};
+    pub use semaphore::poseidon_tree::{PoseidonHash, PoseidonTree};
+    pub use semaphore::protocol::{self, generate_nullifier_hash, generate_proof};
+    pub use semaphore::{hash_to_field, Field};
     pub use serde::{Deserialize, Serialize};
     pub use serde_json::json;
-    pub use signup_sequencer::{app::App, identity_tree::Hash, server, Options};
-    pub use tokio::{spawn, task::JoinHandle};
+    pub use signup_sequencer::app::App;
+    pub use signup_sequencer::identity_tree::Hash;
+    pub use signup_sequencer::{server, Options};
+    pub use tokio::spawn;
+    pub use tokio::task::JoinHandle;
     pub use tracing::{error, info, instrument};
-    pub use tracing_subscriber::fmt::{format::FmtSpan, time::Uptime};
+    pub use tracing_subscriber::fmt::format::FmtSpan;
+    pub use tracing_subscriber::fmt::time::Uptime;
     pub use url::{Host, Url};
 
+    pub use super::prover_mock::ProverService;
     pub use super::{
         abi as ContractAbi, generate_reference_proof_json, generate_test_identities,
-        init_tracing_subscriber, prover_mock::ProverService, spawn_app, spawn_deps,
-        spawn_mock_prover, test_inclusion_proof, test_insert_identity, test_verify_proof,
-        test_verify_proof_on_chain,
+        init_tracing_subscriber, spawn_app, spawn_deps, spawn_mock_prover, test_inclusion_proof,
+        test_insert_identity, test_verify_proof, test_verify_proof_on_chain,
     };
 }
 
-use std::{
-    collections::HashMap,
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    sync::Arc,
-};
+use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
+use std::sync::Arc;
 
-use self::{
-    chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract},
-    prelude::*,
-};
-use futures::{stream::FuturesUnordered, StreamExt};
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 use hyper::StatusCode;
+
+use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
+use self::prelude::*;
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]

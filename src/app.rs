@@ -1,29 +1,29 @@
-use std::{collections::HashSet, sync::Arc, time::Instant};
+use std::collections::HashSet;
+use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use hyper::StatusCode;
-use semaphore::{poseidon_tree::LazyPoseidonTree, protocol::verify_proof};
+use semaphore::poseidon_tree::LazyPoseidonTree;
+use semaphore::protocol::verify_proof;
 use serde::Serialize;
 use tracing::{info, instrument, warn};
 
-use crate::{
-    contracts,
-    contracts::{IdentityManager, SharedIdentityManager},
-    database::{
-        self,
-        prover::{ProverConfiguration as DbProverConf, Provers},
-        Database,
-    },
-    ethereum::{self, Ethereum},
-    identity_tree::{CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState},
-    prover::{
-        self, batch_insertion, batch_insertion::ProverConfiguration, map::make_insertion_map,
-    },
-    server::{error::Error as ServerError, ToResponseCode, VerifySemaphoreProofRequest},
-    task_monitor,
-    task_monitor::TaskMonitor,
+use crate::contracts::{IdentityManager, SharedIdentityManager};
+use crate::database::prover::{ProverConfiguration as DbProverConf, Provers};
+use crate::database::{self, Database};
+use crate::ethereum::{self, Ethereum};
+use crate::identity_tree::{
+    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState,
 };
+use crate::prover::batch_insertion::ProverConfiguration;
+use crate::prover::map::make_insertion_map;
+use crate::prover::{self, batch_insertion};
+use crate::server::error::Error as ServerError;
+use crate::server::{ToResponseCode, VerifySemaphoreProofRequest};
+use crate::task_monitor::TaskMonitor;
+use crate::{contracts, task_monitor};
 
 #[derive(Serialize)]
 #[serde(transparent)]

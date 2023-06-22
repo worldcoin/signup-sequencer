@@ -1,18 +1,19 @@
-use std::{fmt::Debug, time::Duration};
+use std::fmt::Debug;
+use std::time::Duration;
 
 use anyhow::Result as AnyhowResult;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use once_cell::sync::Lazy;
-use oz_api::{
-    data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status},
-    OzApi,
-};
+use oz_api::data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status};
+use oz_api::OzApi;
 use prometheus::{register_int_counter_vec, IntCounterVec};
 use tokio::time::timeout;
 use tracing::{error, info, info_span, Instrument};
 
-use super::{error::Error, Options};
-use crate::ethereum::{write::TransactionId, TxError};
+use super::error::Error;
+use super::Options;
+use crate::ethereum::write::TransactionId;
+use crate::ethereum::TxError;
 
 const DEFENDER_RELAY_URL: &str = "https://api.defender.openzeppelin.com";
 

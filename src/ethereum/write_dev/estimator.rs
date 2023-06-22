@@ -1,8 +1,7 @@
 use async_trait::async_trait;
-use ethers::{
-    providers::{FromErr, Middleware, PendingTransaction},
-    types::{transaction::eip2718::TypedTransaction, u256_from_f64_saturating, BlockId, U256},
-};
+use ethers::providers::{FromErr, Middleware, PendingTransaction};
+use ethers::types::transaction::eip2718::TypedTransaction;
+use ethers::types::{u256_from_f64_saturating, BlockId, U256};
 use thiserror::Error;
 
 /// Estimator Provider Errors

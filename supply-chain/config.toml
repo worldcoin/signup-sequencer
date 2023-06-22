@@ -37,6 +37,38 @@ audit-as-crates-io = false
 version = "0.11.4"
 criteria = "safe-to-deploy"
 
+[[exemptions.combine]]
+version = "4.6.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.enum-as-inner]]
+version = "0.5.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.mach2]]
+version = "0.4.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.mmap-rs]]
+version = "0.5.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.nix]]
+version = "0.26.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.sysctl]]
+version = "0.5.4"
+criteria = "safe-to-deploy"
+
+[[exemptions.widestring]]
+version = "1.0.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.windows]]
+version = "0.44.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.addr2line]]
 version = "0.17.0"
 criteria = "safe-to-deploy"

@@ -45,6 +45,8 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         "10",
         "--tree-gc-threshold",
         "1",
+        "--dense-tree-mmap-file",
+        "./testfile"
     ])
     .context("Failed to create options")?;
 
@@ -240,6 +242,8 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         prover.stop();
     }
     reset_shutdown();
+
+    std::fs::remove_file("./testfile").unwrap();
 
     Ok(())
 }

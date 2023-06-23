@@ -101,7 +101,7 @@ pub struct Options {
     #[clap(long, env, default_value = "20")]
     pub dense_tree_prefix_depth: usize,
 
-    #[clap(env, default_value = "./dense_tree_mmap")]
+    #[clap(long, env, default_value = "./dense_tree_mmap")]
     pub dense_tree_mmap_file: String,
 
     /// The number of updates to trigger garbage collection.

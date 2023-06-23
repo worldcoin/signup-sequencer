@@ -570,7 +570,7 @@ impl CanonicalTreeBuilder {
             ) {
                 Ok(tree) => tree,
                 Err(error) => {
-                    warn!("Tree wasn't trestored. Reason: {}", error.to_string());
+                    warn!("Tree wasn't restored. Reason: {}", error.to_string());
                     return None;
                 }
             };

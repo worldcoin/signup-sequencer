@@ -42,6 +42,8 @@ async fn malformed_payload() -> anyhow::Result<()> {
         "10",
         "--tree-gc-threshold",
         "1",
+        "--dense-tree-mmap-file",
+        "./testfile"
     ])
     .context("Failed to create options")?;
 
@@ -94,6 +96,8 @@ async fn malformed_payload() -> anyhow::Result<()> {
         prover.stop();
     }
     reset_shutdown();
+
+    std::fs::remove_file("./testfile").unwrap();
 
     Ok(())
 }

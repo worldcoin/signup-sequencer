@@ -53,6 +53,8 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         "10",
         "--tree-gc-threshold",
         "1",
+        "--dense-tree-mmap-file",
+        "./testfile"
     ])
     .context("Failed to create options")?;
 
@@ -228,6 +230,8 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         false,
     )
     .await;
+
+    std::fs::remove_file("./testfile").unwrap();
 
     // Shutdown the app properly for the final time
     shutdown();

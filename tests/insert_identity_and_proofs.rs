@@ -46,7 +46,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         "--tree-gc-threshold",
         "1",
         "--dense-tree-mmap-file",
-        "./testfile"
+        "./testfile",
     ])
     .context("Failed to create options")?;
 

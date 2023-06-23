@@ -48,7 +48,7 @@ async fn validate_proofs() -> anyhow::Result<()> {
         "--tree-gc-threshold",
         "1",
         "--dense-tree-mmap-file",
-        "./testfile"
+        "./testfile",
     ])
     .expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");

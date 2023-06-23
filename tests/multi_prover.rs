@@ -54,7 +54,7 @@ async fn multi_prover() -> anyhow::Result<()> {
         "--tree-gc-threshold",
         "1",
         "--dense-tree-mmap-file",
-        "./testfile"
+        "./testfile",
     ])
     .context("Failed to create options")?;
 

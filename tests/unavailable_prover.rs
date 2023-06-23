@@ -44,7 +44,7 @@ async fn unavailable_prover() -> anyhow::Result<()> {
         "--tree-gc-threshold",
         "1",
         "--dense-tree-mmap-file",
-        "./testfile"
+        "./testfile",
     ])
     .context("Failed to create options")?;
 

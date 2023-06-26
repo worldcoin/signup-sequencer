@@ -288,10 +288,10 @@ impl Database {
             .collect::<Vec<_>>())
     }
 
-    pub async fn get_last_commitment_by_status(&self, status: Status) -> Option<Hash> {
+    pub async fn get_last_commitment_by_status(&self, status: Status) -> Option<(usize, Hash)> {
         let query = sqlx::query(
             r#"
-                SELECT commitment
+                SELECT leaf_index, commitment
                 FROM identities
                 WHERE status = $1
                 ORDER BY leaf_index DESC
@@ -302,7 +302,7 @@ impl Database {
 
         let row = self.pool.fetch_optional(query).await.ok()?;
 
-        row.map(|r| r.get::<Hash, _>(0))
+        row.map(|r| (r.get::<i64, _>(0) as usize, r.get::<Hash, _>(1)))
     }
 
     pub async fn get_root_state(&self, root: &Hash) -> Result<Option<RootItem>, Error> {

@@ -558,6 +558,7 @@ impl CanonicalTreeBuilder {
         tree_depth: usize,
         dense_prefix_depth: usize,
         initial_leaf: &Field,
+        last_index: usize,
         flattening_threshold: usize,
         mmap_file_path: &str,
     ) -> Option<Self> {
@@ -583,13 +584,15 @@ impl CanonicalTreeBuilder {
             return None;
         }
 
+        let leaves_in_dense_count = min(last_index, 1 << dense_prefix_depth);
+
         let metadata = CanonicalTreeMetadata {
             flatten_threshold:        flattening_threshold,
             count_since_last_flatten: 0,
         };
         let builder = Self(TreeVersionData {
             tree,
-            next_leaf: 1 << dense_prefix_depth,
+            next_leaf: leaves_in_dense_count,
             metadata,
             next: None,
         });

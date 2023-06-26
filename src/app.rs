@@ -251,14 +251,15 @@ impl App {
     ) -> anyhow::Result<Option<TreeState>> {
         let mut last_mined = match database.get_last_commitment_by_status(Status::Mined).await {
             Some(lm) => lm,
-            None => *initial_leaf_value,
+            None => (0, *initial_leaf_value),
         };
 
         let Some(mined_builder) = CanonicalTreeBuilder::restore(
-            &last_mined,
+            &last_mined.1,
             tree_depth,
             dense_prefix_depth,
             initial_leaf_value,
+            last_mined.0,
             gc_threshold,
             mmap_file_path,
         ) else { return Ok(None) };

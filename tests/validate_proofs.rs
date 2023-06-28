@@ -67,10 +67,13 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let client = Client::new();
 
     static IDENTITIES: Lazy<Vec<Identity>> = Lazy::new(|| {
+        let mut s1 = *b"test_f0f0";
+        let mut s2 = *b"test_f1f1";
+        let mut s3 = *b"test_f2f2";
         vec![
-            Identity::from_secret(b"test_f0f0", None),
-            Identity::from_secret(b"test_f1f1", None),
-            Identity::from_secret(b"test_f2f2", None),
+            Identity::from_secret(&mut s1, None),
+            Identity::from_secret(&mut s2, None),
+            Identity::from_secret(&mut s3, None),
         ]
     });
 

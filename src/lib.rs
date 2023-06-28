@@ -1,6 +1,7 @@
 #![doc = include_str!("../Readme.md")]
 #![warn(clippy::all, clippy::pedantic, clippy::cargo)]
 #![allow(clippy::module_name_repetitions, clippy::wildcard_imports)]
+#![feature(iter_advance_by)]
 
 pub mod app;
 mod contracts;

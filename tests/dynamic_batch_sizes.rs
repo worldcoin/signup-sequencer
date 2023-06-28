@@ -86,8 +86,6 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 1).await;
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 2).await;
 
-    assert!(identities_ref[0..3].iter().enumerate().all(|(i, id_ref)| ref_tree.leaves()[i] == *id_ref));
-
     // wait at leat 5 seconds before checking proof
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 

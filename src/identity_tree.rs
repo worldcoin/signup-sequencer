@@ -526,34 +526,14 @@ impl CanonicalTreeBuilder {
         let (initial_leaves_in_dense, leftover_initial_leaves) =
             initial_leaves.split_at(initial_leaves_in_dense_count);
 
-        dbg!("BEFORE TREE CREATION");
-        initial_leaves.iter().for_each(|leaf| {
-            dbg!(leaf);
-        });
-
         let tree =
-            PoseidonTree::<lazy_merkle_tree::Canonical>::new_with_dense_prefix_with_initial_values(
+            PoseidonTree::<lazy_merkle_tree::Canonical>::new_mmapped_with_dense_prefix_with_init_values(
                 tree_depth,
                 dense_prefix_depth,
                 &initial_leaf,
                 initial_leaves_in_dense,
-                //mmap_file_path
-            );//.unwrap();
-
-
-        let tree_len = tree.leaves().count();
-        dbg!("AFTER TREE CREATION");
-        dbg!("FIRST 10");
-        tree.leaves().take(10).for_each(|leaf| { 
-            dbg!(leaf);
-        });
-        dbg!("LAST 10");
-        let mut tree_itr = tree.leaves();
-        tree_itr.advance_by(tree_len - 10).unwrap();
-        tree_itr.for_each(|leaf| { 
-            dbg!(leaf);
-        });
-        dbg!("LEN OF TREE: {}", tree_len);
+                mmap_file_path
+            ).unwrap();
 
         let metadata = CanonicalTreeMetadata {
             flatten_threshold:        flattening_threshold,

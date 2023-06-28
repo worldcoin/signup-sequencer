@@ -224,7 +224,7 @@ impl App {
             Some(state) => {
                 info!("tree restored from cache");
                 state
-            },
+            }
             None => match Self::initialize_tree(
                 database,
                 tree_depth,
@@ -235,14 +235,13 @@ impl App {
             )
             .await
             {
-                anyhow::Result::Ok(state) => { 
+                anyhow::Result::Ok(state) => {
                     info!("tree initialization successful");
                     state
-                },
-                Err(e) => { 
-                    warn!("tree initialization error: {}", e.to_string());
-                    return Err(e) 
-                },
+                }
+                Err(e) => {
+                    return Err(e);
+                }
             },
         };
 

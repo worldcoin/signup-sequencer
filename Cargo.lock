@@ -5406,7 +5406,7 @@ dependencies = [
 [[package]]
 name = "semaphore"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=nemanja/mmap-hotfix#c1c88b539246c9aaadf7eb867c9b4785f6e7586b"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a45738039e0b0a8adbac5ee193958f1e238d7de4"
 dependencies = [
  "ark-bn254",
  "ark-circom",
@@ -5441,12 +5441,12 @@ dependencies = [
 [[package]]
 name = "semaphore-depth-config"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=nemanja/mmap-hotfix#c1c88b539246c9aaadf7eb867c9b4785f6e7586b"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a45738039e0b0a8adbac5ee193958f1e238d7de4"
 
 [[package]]
 name = "semaphore-depth-macros"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=nemanja/mmap-hotfix#c1c88b539246c9aaadf7eb867c9b4785f6e7586b"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a45738039e0b0a8adbac5ee193958f1e238d7de4"
 dependencies = [
  "itertools",
  "proc-macro2",

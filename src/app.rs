@@ -248,7 +248,6 @@ impl App {
         Ok(tree_state)
     }
 
-    #[allow(unused)]
     async fn get_cached_tree_state(
         database: &Database,
         tree_depth: usize,
@@ -257,7 +256,7 @@ impl App {
         initial_leaf_value: &Hash,
         mmap_file_path: &str,
     ) -> anyhow::Result<Option<TreeState>> {
-        let mut last_mined = match database.get_last_commitment_by_status(Status::Mined).await {
+        let last_mined = match database.get_last_commitment_by_status(Status::Mined).await {
             Some(lm) => lm,
             None => (0, *initial_leaf_value),
         };

@@ -15,6 +15,42 @@ user-id = 2396
 user-login = "jdm"
 user-name = "Josh Matthews"
 
+[[publisher.cranelift-bforest]]
+version = "0.82.3"
+when = "2022-04-11"
+user-id = 73222
+user-login = "wasmtime-publish"
+
+[[publisher.cranelift-codegen]]
+version = "0.82.3"
+when = "2022-04-11"
+user-id = 73222
+user-login = "wasmtime-publish"
+
+[[publisher.cranelift-codegen-meta]]
+version = "0.82.3"
+when = "2022-04-11"
+user-id = 73222
+user-login = "wasmtime-publish"
+
+[[publisher.cranelift-codegen-shared]]
+version = "0.82.3"
+when = "2022-04-11"
+user-id = 73222
+user-login = "wasmtime-publish"
+
+[[publisher.cranelift-entity]]
+version = "0.82.3"
+when = "2022-04-11"
+user-id = 73222
+user-login = "wasmtime-publish"
+
+[[publisher.cranelift-frontend]]
+version = "0.82.3"
+when = "2022-04-11"
+user-id = 73222
+user-login = "wasmtime-publish"
+
 [[publisher.unicode-normalization]]
 version = "0.1.22"
 when = "2022-09-16"
@@ -84,6 +120,54 @@ when = "2023-03-31"
 user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
+
+[[audits.bytecodealliance.wildcard-audits.cranelift-bforest]]
+who = "Bobby Holley <bobbyholley@gmail.com>"
+criteria = "safe-to-deploy"
+user-id = 73222 # wasmtime-publish
+start = "2021-10-29"
+end = "2024-06-26"
+notes = "The Bytecode Alliance is the author of this crate."
+
+[[audits.bytecodealliance.wildcard-audits.cranelift-codegen]]
+who = "Bobby Holley <bobbyholley@gmail.com>"
+criteria = "safe-to-deploy"
+user-id = 73222 # wasmtime-publish
+start = "2021-10-29"
+end = "2024-06-26"
+notes = "The Bytecode Alliance is the author of this crate."
+
+[[audits.bytecodealliance.wildcard-audits.cranelift-codegen-meta]]
+who = "Bobby Holley <bobbyholley@gmail.com>"
+criteria = "safe-to-deploy"
+user-id = 73222 # wasmtime-publish
+start = "2021-10-29"
+end = "2024-06-26"
+notes = "The Bytecode Alliance is the author of this crate."
+
+[[audits.bytecodealliance.wildcard-audits.cranelift-codegen-shared]]
+who = "Bobby Holley <bobbyholley@gmail.com>"
+criteria = "safe-to-deploy"
+user-id = 73222 # wasmtime-publish
+start = "2021-10-29"
+end = "2024-06-26"
+notes = "The Bytecode Alliance is the author of this crate."
+
+[[audits.bytecodealliance.wildcard-audits.cranelift-entity]]
+who = "Bobby Holley <bobbyholley@gmail.com>"
+criteria = "safe-to-deploy"
+user-id = 73222 # wasmtime-publish
+start = "2021-10-29"
+end = "2024-06-26"
+notes = "The Bytecode Alliance is the author of this crate."
+
+[[audits.bytecodealliance.wildcard-audits.cranelift-frontend]]
+who = "Bobby Holley <bobbyholley@gmail.com>"
+criteria = "safe-to-deploy"
+user-id = 73222 # wasmtime-publish
+start = "2021-10-29"
+end = "2024-06-26"
+notes = "The Bytecode Alliance is the author of this crate."
 
 [[audits.bytecodealliance.audits.anes]]
 who = "Pat Hickey <phickey@fastly.com>"
@@ -518,6 +602,12 @@ who = "Johan Andersson <opensource@embark-studios.com>"
 criteria = "safe-to-deploy"
 delta = "0.5.11 -> 0.6.1"
 notes = "Minor changes"
+
+[[audits.embark.audits.stringprep]]
+who = "Johan Andersson <opensource@embark-studios.com>"
+criteria = "safe-to-deploy"
+version = "0.1.2"
+notes = "No unsafe usage or ambient capabilities. Old crate from released and unchanged from 2017"
 
 [[audits.embark.audits.strum]]
 who = "Johan Andersson <opensource@embark-studios.com>"

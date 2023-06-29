@@ -484,30 +484,6 @@ criteria = "safe-to-deploy"
 version = "0.2.5"
 criteria = "safe-to-deploy"
 
-[[exemptions.cranelift-bforest]]
-version = "0.82.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.cranelift-codegen]]
-version = "0.82.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.cranelift-codegen-meta]]
-version = "0.82.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.cranelift-codegen-shared]]
-version = "0.82.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.cranelift-entity]]
-version = "0.82.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.cranelift-frontend]]
-version = "0.82.3"
-criteria = "safe-to-deploy"
-
 [[exemptions.crc]]
 version = "3.0.0"
 criteria = "safe-to-deploy"
@@ -1780,10 +1756,6 @@ criteria = "safe-to-deploy"
 version = "0.8.4"
 criteria = "safe-to-deploy"
 
-[[exemptions.stringprep]]
-version = "0.1.2"
-criteria = "safe-to-deploy"
-
 [[exemptions.strsim]]
 version = "0.8.0"
 criteria = "safe-to-deploy"
@@ -2321,7 +2293,7 @@ version = "0.5.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.zeroize]]
-version = "1.5.7"
+version = "1.6.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.zeroize_derive]]

@@ -576,7 +576,6 @@ impl CanonicalTreeBuilder {
                 }
             };
 
-
         let leaves_in_dense_count = min(last_index, 1 << dense_prefix_depth);
 
         let metadata = CanonicalTreeMetadata {

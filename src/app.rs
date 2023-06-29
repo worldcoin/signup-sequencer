@@ -263,7 +263,6 @@ impl App {
         };
 
         let Some(mined_builder) = CanonicalTreeBuilder::restore(
-            &last_mined.1,
             tree_depth,
             dense_prefix_depth,
             initial_leaf_value,

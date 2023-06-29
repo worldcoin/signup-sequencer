@@ -555,7 +555,6 @@ impl CanonicalTreeBuilder {
     }
 
     pub fn restore(
-        latest_mined: &Field,
         tree_depth: usize,
         dense_prefix_depth: usize,
         initial_leaf: &Field,
@@ -577,13 +576,6 @@ impl CanonicalTreeBuilder {
                 }
             };
 
-        // check if latest mined identity is the same as last in tree
-        if *latest_mined != tree.get_leaf((1 << dense_prefix_depth) - 1) {
-            warn!(
-                "latest mined identity from database doesn't match the mined leaf from the tree."
-            );
-            return None;
-        }
 
         let leaves_in_dense_count = min(last_index, 1 << dense_prefix_depth);
 

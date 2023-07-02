@@ -211,7 +211,7 @@ impl App {
         initial_leaf_value: Hash,
         mmap_file_path: String,
     ) -> AnyhowResult<TreeState> {
-        let tree_state = match Self::get_cached_tree_state(
+        if let Some(tree_state) = Self::get_cached_tree_state(
             database,
             tree_depth,
             dense_prefix_depth,
@@ -221,30 +221,19 @@ impl App {
         )
         .await?
         {
-            Some(state) => {
-                info!("tree restored from cache");
-                state
-            }
-            None => match Self::initialize_tree(
-                database,
-                tree_depth,
-                dense_prefix_depth,
-                gc_threshold,
-                initial_leaf_value,
-                mmap_file_path,
-            )
-            .await
-            {
-                anyhow::Result::Ok(state) => {
-                    info!("tree initialization successful");
-                    state
-                }
-                Err(e) => {
-                    return Err(e);
-                }
-            },
-        };
-
+            info!("tree restored from cache");
+            return Ok(tree_state);
+        }
+        let tree_state = Self::initialize_tree(
+            database,
+            tree_depth,
+            dense_prefix_depth,
+            gc_threshold,
+            initial_leaf_value,
+            mmap_file_path,
+        )
+        .await?;
+        info!("tree initialization successful");
         Ok(tree_state)
     }
 
@@ -256,10 +245,12 @@ impl App {
         initial_leaf_value: &Hash,
         mmap_file_path: &str,
     ) -> anyhow::Result<Option<TreeState>> {
-        let last_mined = match database.get_last_commitment_by_status(Status::Mined).await {
-            Some(lm) => lm,
-            None => (0, *initial_leaf_value),
-        };
+        let last_mined =
+            if let Some(lm) = database.get_last_commitment_by_status(Status::Mined).await {
+                lm
+            } else {
+                (0, *initial_leaf_value)
+            };
 
         let Some(mined_builder) = CanonicalTreeBuilder::restore(
             tree_depth,

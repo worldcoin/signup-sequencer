@@ -295,7 +295,7 @@ impl Database {
                 FROM identities
                 WHERE status = $1
                 ORDER BY leaf_index DESC
-                LIMIT 1   
+                LIMIT 1
             "#,
         )
         .bind(<&str>::from(status));

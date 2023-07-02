@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use common::prelude::*;
 use hyper::Uri;
+use tempfile;
 
 use crate::common::{test_add_batch_size, test_remove_batch_size};
 
@@ -33,7 +34,12 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
-    // We initially spawn the service with a single prover for batch size 3.
+    // temp dir will be deleted on drop call
+    let temp_dir = tempfile::tempdir()?;
+    info!(
+        "temp dir created at: {:?}",
+        temp_dir.path().join("testfile")
+    );
 
     let mut options = Options::try_parse_from([
         "signup-sequencer",
@@ -54,7 +60,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         "--tree-gc-threshold",
         "1",
         "--dense-tree-mmap-file",
-        "./testfile",
+        temp_dir.path().join("testfile").to_str().unwrap(),
     ])
     .context("Failed to create options")?;
 
@@ -231,7 +237,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     )
     .await;
 
-    std::fs::remove_file("./testfile").unwrap();
+    info!("temp dir is at: {:?}", temp_dir.path().join("testfile"));
 
     // Shutdown the app properly for the final time
     shutdown();

@@ -27,6 +27,13 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
+    // temp dir will be deleted on drop call
+    let temp_dir = tempfile::tempdir()?;
+    info!(
+        "temp dir created at: {:?}",
+        temp_dir.path().join("testfile")
+    );
+
     let mut options = Options::try_parse_from([
         "signup-sequencer",
         "--identity-manager-address",
@@ -46,7 +53,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         "--tree-gc-threshold",
         "1",
         "--dense-tree-mmap-file",
-        "./testfile",
+        temp_dir.path().join("testfile").to_str().unwrap(),
     ])
     .context("Failed to create options")?;
 
@@ -235,6 +242,8 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     )
     .await;
 
+    info!("temp dir is at: {:?}", temp_dir.path().join("testfile"));
+
     // Shutdown the app properly for the final time
     shutdown();
     app.await.unwrap();
@@ -242,8 +251,6 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         prover.stop();
     }
     reset_shutdown();
-
-    std::fs::remove_file("./testfile").unwrap();
 
     Ok(())
 }

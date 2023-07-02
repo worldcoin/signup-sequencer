@@ -33,6 +33,13 @@ async fn multi_prover() -> anyhow::Result<()> {
 
     info!("Running with {prover_arg_string}");
 
+    // temp dir will be deleted on drop call
+    let temp_dir = tempfile::tempdir()?;
+    info!(
+        "temp dir created at: {:?}",
+        temp_dir.path().join("testfile")
+    );
+
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
     let mut options = Options::try_parse_from([
@@ -54,7 +61,7 @@ async fn multi_prover() -> anyhow::Result<()> {
         "--tree-gc-threshold",
         "1",
         "--dense-tree-mmap-file",
-        "./testfile",
+        temp_dir.path().join("testfile").to_str().unwrap(),
     ])
     .context("Failed to create options")?;
 
@@ -125,14 +132,14 @@ async fn multi_prover() -> anyhow::Result<()> {
         .await;
     }
 
+    info!("temp dir is at: {:?}", temp_dir.path().join("testfile"));
+
     shutdown();
     app.await?;
     for (_, prover) in prover_map.into_iter() {
         prover.stop();
     }
     reset_shutdown();
-
-    std::fs::remove_file("./testfile").unwrap();
 
     Ok(())
 }

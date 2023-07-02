@@ -867,8 +867,14 @@ mod test {
 
         db.mark_root_as_mined(&roots[1]).await?;
 
-        let last_mined = db.get_last_commitment_by_status(Status::Mined).await.unwrap();
-        let last_pending = db.get_last_commitment_by_status(Status::Pending).await.unwrap();
+        let last_mined = db
+            .get_last_commitment_by_status(Status::Mined)
+            .await
+            .unwrap();
+        let last_pending = db
+            .get_last_commitment_by_status(Status::Pending)
+            .await
+            .unwrap();
 
         assert_eq!(last_mined.0, 1);
         assert_eq!(last_mined.1, identities[1]);

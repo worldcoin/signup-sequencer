@@ -237,8 +237,6 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     )
     .await;
 
-    info!("temp dir is at: {:?}", temp_dir.path().join("testfile"));
-
     // Shutdown the app properly for the final time
     shutdown();
     app.await.unwrap();

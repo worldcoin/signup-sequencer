@@ -132,8 +132,6 @@ async fn multi_prover() -> anyhow::Result<()> {
         .await;
     }
 
-    info!("temp dir is at: {:?}", temp_dir.path().join("testfile"));
-
     shutdown();
     app.await?;
     for (_, prover) in prover_map.into_iter() {

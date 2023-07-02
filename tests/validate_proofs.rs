@@ -225,8 +225,6 @@ async fn validate_proofs() -> anyhow::Result<()> {
     .await
     .expect_err("Proof verified on chain when it shouldn't have.");
 
-    info!("temp dir is at: {:?}", temp_dir.path().join("testfile"));
-
     // Shutdown the app properly for the final time
     shutdown();
     app.await.unwrap();

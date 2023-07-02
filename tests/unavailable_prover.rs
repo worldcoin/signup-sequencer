@@ -99,8 +99,6 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     test_inclusion_proof(&uri, &client, 1, &ref_tree, &identities_ref[1], false).await;
     test_inclusion_proof(&uri, &client, 2, &ref_tree, &identities_ref[2], false).await;
 
-    info!("temp dir is at: {:?}", temp_dir.path().join("testfile"));
-
     shutdown();
     app.await?;
     for (_, prover) in prover_map.into_iter() {

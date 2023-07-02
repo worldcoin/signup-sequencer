@@ -98,8 +98,6 @@ async fn malformed_payload() -> anyhow::Result<()> {
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-    info!("temp dir is at: {:?}", temp_dir.path().join("testfile"));
-
     shutdown();
     app.await?;
     for (_, prover) in prover_map.into_iter() {

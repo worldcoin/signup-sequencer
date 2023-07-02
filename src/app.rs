@@ -101,6 +101,7 @@ pub struct Options {
     #[clap(long, env, default_value = "20")]
     pub dense_tree_prefix_depth: usize,
 
+    /// Path and file name to use for mmap file when building dense tree.
     #[clap(long, env, default_value = "./dense_tree_mmap")]
     pub dense_tree_mmap_file: String,
 

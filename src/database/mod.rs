@@ -612,7 +612,7 @@ mod test {
         let db_container = postgres_docker_utils::setup().await?;
         let port = db_container.port();
 
-        let url = format!("postgres://postgres:postgres@localhost:{port}/database");
+        let url = format!("postgres://menko:postgres@localhost:5432/database");
 
         let db = Database::new(Options {
             database:                 SecretUrl::from_str(&url)?,
@@ -848,6 +848,33 @@ mod test {
             assert_eq!(pending_tree_updates[i].element, identities[i + 3]);
             assert_eq!(pending_tree_updates[i].leaf_index, i + 3);
         }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_last_commitment_by_status() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(3);
+        let roots = mock_roots(3);
+
+        for i in 0..3 {
+            db.insert_pending_identity(i, &identities[i], &roots[i])
+                .await
+                .context("Inserting identity")?;
+        }
+
+        db.mark_root_as_mined(&roots[1]).await?;
+
+        let last_mined = db.get_last_commitment_by_status(Status::Mined).await.unwrap();
+        let last_pending = db.get_last_commitment_by_status(Status::Pending).await.unwrap();
+
+        assert_eq!(last_mined.0, 1);
+        assert_eq!(last_mined.1, identities[1]);
+
+        assert_eq!(last_pending.0, 2);
+        assert_eq!(last_pending.1, identities[2]);
 
         Ok(())
     }

@@ -612,7 +612,7 @@ mod test {
         let db_container = postgres_docker_utils::setup().await?;
         let port = db_container.port();
 
-        let url = format!("postgres://menko:postgres@localhost:5432/database");
+        let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
         let db = Database::new(Options {
             database:                 SecretUrl::from_str(&url)?,

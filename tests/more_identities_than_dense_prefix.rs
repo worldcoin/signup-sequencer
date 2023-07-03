@@ -96,7 +96,7 @@ async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
         test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, i).await;
     }
 
-    // Sleep long enough to trigger process batches
+    // Sleep long enough to process all the batches
     tokio::time::sleep(Duration::from_secs(IDLE_TIME * num_batches_total as u64)).await;
 
     // Check that we can get inclusion proof for the first identity
@@ -132,6 +132,9 @@ async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
 
     // After app restart, the tree should have been restored
     // and we should still have all the inserted identities
+
+    // Sleep long enough for the app tree to be restored
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
     // Check that we can get inclusion proof for the first identity
     test_inclusion_proof(&uri, &client, 0, &ref_tree, &identities_ref[0], false).await;

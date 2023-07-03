@@ -252,7 +252,6 @@ impl App {
         mined_items: &Vec<TreeUpdate>,
         mmap_file_path: &str,
     ) -> anyhow::Result<Option<TreeState>> {
-
         let mut last_index_in_dense: usize = 0;
         let leftover_items = if mined_items.is_empty() {
             vec![]
@@ -264,7 +263,7 @@ impl App {
             last_index_in_dense = std::cmp::min(max_leaf, 1 << dense_prefix_depth);
             info!("#### last index in desne {}, ####", last_index_in_dense);
 
-            let mut leaves = Vec::with_capacity((max_leaf + 1) -  last_index_in_dense);
+            let mut leaves = Vec::with_capacity((max_leaf + 1) - last_index_in_dense);
 
             let leftover = &mined_items[last_index_in_dense..];
 
@@ -275,7 +274,6 @@ impl App {
             leaves
         };
 
-        
         let Some(mined_builder) = CanonicalTreeBuilder::restore(
             tree_depth,
             dense_prefix_depth,

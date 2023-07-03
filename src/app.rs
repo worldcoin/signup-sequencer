@@ -15,7 +15,7 @@ use crate::database::prover::{ProverConfiguration as DbProverConf, Provers};
 use crate::database::{self, Database};
 use crate::ethereum::{self, Ethereum};
 use crate::identity_tree::{
-    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState,
+    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState, TreeUpdate,
 };
 use crate::prover::batch_insertion::ProverConfiguration;
 use crate::prover::map::make_insertion_map;
@@ -212,12 +212,16 @@ impl App {
         initial_leaf_value: Hash,
         mmap_file_path: String,
     ) -> AnyhowResult<TreeState> {
+        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
+        mined_items.sort_by_key(|item| item.leaf_index);
+
         if let Some(tree_state) = Self::get_cached_tree_state(
             database,
             tree_depth,
             dense_prefix_depth,
             gc_threshold,
             &initial_leaf_value,
+            &mined_items,
             &mmap_file_path,
         )
         .await?
@@ -231,6 +235,7 @@ impl App {
             dense_prefix_depth,
             gc_threshold,
             initial_leaf_value,
+            mined_items,
             mmap_file_path,
         )
         .await?;
@@ -244,20 +249,37 @@ impl App {
         dense_prefix_depth: usize,
         gc_threshold: usize,
         initial_leaf_value: &Hash,
+        mined_items: &Vec<TreeUpdate>,
         mmap_file_path: &str,
     ) -> anyhow::Result<Option<TreeState>> {
-        let last_mined =
-            if let Some(lm) = database.get_last_commitment_by_status(Status::Mined).await {
-                lm
-            } else {
-                (0, *initial_leaf_value)
-            };
 
+        let mut last_index_in_dense: usize = 0;
+        let leftover_items = if mined_items.is_empty() {
+            vec![]
+        } else {
+            let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
+            // if the last index is greater then dense_prefix_depth, 1 << dense_prefix_depth
+            // should be the last index in restored tree
+            last_index_in_dense = std::cmp::min(max_leaf, 1 << dense_prefix_depth);
+
+            let mut leaves = Vec::with_capacity((max_leaf + 1) -  last_index_in_dense);
+
+            let leftover = &mined_items[last_index_in_dense..];
+
+            for item in leftover {
+                leaves[item.leaf_index] = item.element;
+            }
+
+            leaves
+        };
+
+        
         let Some(mined_builder) = CanonicalTreeBuilder::restore(
             tree_depth,
             dense_prefix_depth,
             initial_leaf_value,
-            last_mined.0,
+            last_index_in_dense,
+            leftover_items,
             gc_threshold,
             mmap_file_path,
         ) else { return Ok(None) };
@@ -278,13 +300,12 @@ impl App {
         dense_prefix_depth: usize,
         gc_threshold: usize,
         initial_leaf_value: Hash,
+        mined_items: Vec<TreeUpdate>,
         mmap_file_path: String,
     ) -> AnyhowResult<TreeState> {
-        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
         let initial_leaves = if mined_items.is_empty() {
             vec![]
         } else {
-            mined_items.sort_by_key(|item| item.leaf_index);
             let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
             let mut leaves = vec![initial_leaf_value; max_leaf + 1];
 

@@ -559,6 +559,7 @@ impl CanonicalTreeBuilder {
         dense_prefix_depth: usize,
         initial_leaf: &Field,
         last_index: usize,
+        leftover_items: Vec<ruint::Uint<256, 4>>,
         flattening_threshold: usize,
         mmap_file_path: &str,
     ) -> Option<Self> {
@@ -576,18 +577,23 @@ impl CanonicalTreeBuilder {
                 }
             };
 
-        let leaves_in_dense_count = min(last_index, 1 << dense_prefix_depth);
-
         let metadata = CanonicalTreeMetadata {
             flatten_threshold:        flattening_threshold,
             count_since_last_flatten: 0,
         };
-        let builder = Self(TreeVersionData {
+        let mut builder = Self(TreeVersionData {
             tree,
-            next_leaf: leaves_in_dense_count,
+            next_leaf: last_index,
             metadata,
             next: None,
         });
+
+        for (index, leaf) in leftover_items.iter().enumerate() {
+            builder.update(&TreeUpdate {
+                leaf_index: index + last_index,
+                element:    *leaf,
+            });
+        }
 
         Some(builder)
     }

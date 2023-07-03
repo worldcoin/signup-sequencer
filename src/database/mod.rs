@@ -288,23 +288,6 @@ impl Database {
             .collect::<Vec<_>>())
     }
 
-    pub async fn get_last_commitment_by_status(&self, status: Status) -> Option<(usize, Hash)> {
-        let query = sqlx::query(
-            r#"
-                SELECT leaf_index, commitment
-                FROM identities
-                WHERE status = $1
-                ORDER BY leaf_index DESC
-                LIMIT 1
-            "#,
-        )
-        .bind(<&str>::from(status));
-
-        let row = self.pool.fetch_optional(query).await.ok()?;
-
-        row.map(|r| (r.get::<i64, _>(0) as usize, r.get::<Hash, _>(1)))
-    }
-
     pub async fn get_root_state(&self, root: &Hash) -> Result<Option<RootItem>, Error> {
         // This tries really hard to do everything in one query to prevent race
         // conditions.
@@ -848,39 +831,6 @@ mod test {
             assert_eq!(pending_tree_updates[i].element, identities[i + 3]);
             assert_eq!(pending_tree_updates[i].leaf_index, i + 3);
         }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_get_last_commitment_by_status() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
-
-        let identities = mock_identities(3);
-        let roots = mock_roots(3);
-
-        for i in 0..3 {
-            db.insert_pending_identity(i, &identities[i], &roots[i])
-                .await
-                .context("Inserting identity")?;
-        }
-
-        db.mark_root_as_mined(&roots[1]).await?;
-
-        let last_mined = db
-            .get_last_commitment_by_status(Status::Mined)
-            .await
-            .unwrap();
-        let last_pending = db
-            .get_last_commitment_by_status(Status::Pending)
-            .await
-            .unwrap();
-
-        assert_eq!(last_mined.0, 1);
-        assert_eq!(last_mined.1, identities[1]);
-
-        assert_eq!(last_pending.0, 2);
-        assert_eq!(last_pending.1, identities[2]);
 
         Ok(())
     }

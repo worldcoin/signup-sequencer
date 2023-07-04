@@ -259,9 +259,7 @@ impl App {
             let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
             // if the last index is greater then dense_prefix_depth, 1 << dense_prefix_depth
             // should be the last index in restored tree
-            info!("#### max leaf {}, ####", max_leaf);
             last_index_in_dense = std::cmp::min(max_leaf, 1 << dense_prefix_depth);
-            info!("#### last index in desne {}, ####", last_index_in_dense);
 
             let mut leaves = Vec::with_capacity((max_leaf + 1) - last_index_in_dense);
 

@@ -252,18 +252,18 @@ impl App {
         mined_items: &Vec<TreeUpdate>,
         mmap_file_path: &str,
     ) -> anyhow::Result<Option<TreeState>> {
-        let mut last_index_in_dense: usize = 0;
+        let mut first_index_outside_dense: usize = 0;
         let leftover_items = if mined_items.is_empty() {
             vec![]
         } else {
             let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
             // if the last index is greater then dense_prefix_depth, 1 << dense_prefix_depth
             // should be the last index in restored tree
-            last_index_in_dense = std::cmp::min(max_leaf, 1 << dense_prefix_depth);
+            first_index_outside_dense = std::cmp::min(max_leaf, 1 << dense_prefix_depth);
 
-            let mut leaves = Vec::with_capacity((max_leaf + 1) - last_index_in_dense);
+            let mut leaves = Vec::with_capacity((max_leaf + 1) - first_index_outside_dense);
 
-            let leftover = &mined_items[last_index_in_dense..];
+            let leftover = &mined_items[first_index_outside_dense..];
 
             for item in leftover {
                 leaves.push(item.element);
@@ -276,7 +276,7 @@ impl App {
             tree_depth,
             dense_prefix_depth,
             initial_leaf_value,
-            last_index_in_dense,
+            first_index_outside_dense,
             &leftover_items,
             gc_threshold,
             mmap_file_path,

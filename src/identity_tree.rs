@@ -583,14 +583,14 @@ impl CanonicalTreeBuilder {
         };
         let mut builder = Self(TreeVersionData {
             tree,
-            next_leaf: last_index,
+            next_leaf: last_index + 1,
             metadata,
             next: None,
         });
 
         for (index, leaf) in leftover_items.iter().enumerate() {
             builder.update(&TreeUpdate {
-                leaf_index: index + last_index,
+                leaf_index: index + last_index + 1,
                 element:    *leaf,
             });
         }

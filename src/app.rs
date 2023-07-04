@@ -279,7 +279,7 @@ impl App {
             dense_prefix_depth,
             initial_leaf_value,
             last_index_in_dense,
-            leftover_items,
+            &leftover_items,
             gc_threshold,
             mmap_file_path,
         ) else { return Ok(None) };

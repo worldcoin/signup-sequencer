@@ -559,7 +559,7 @@ impl CanonicalTreeBuilder {
         dense_prefix_depth: usize,
         initial_leaf: &Field,
         last_index: usize,
-        leftover_items: Vec<ruint::Uint<256, 4>>,
+        leftover_items: &[ruint::Uint<256, 4>],
         flattening_threshold: usize,
         mmap_file_path: &str,
     ) -> Option<Self> {

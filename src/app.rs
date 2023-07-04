@@ -243,6 +243,33 @@ impl App {
         Ok(tree_state)
     }
 
+    pub fn get_leftover_leaves_and_update_index(
+        index: &mut usize,
+        dense_prefix_depth: usize,
+        mined_items: &Vec<TreeUpdate>,
+    ) -> Vec<ruint::Uint<256, 4>> {
+        let leftover_items = if mined_items.is_empty() {
+            vec![]
+        } else {
+            let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
+            // if the last index is greater then dense_prefix_depth, 1 << dense_prefix_depth
+            // should be the last index in restored tree
+            *index = std::cmp::min(max_leaf, 1 << dense_prefix_depth);
+
+            let mut leaves = Vec::with_capacity((max_leaf + 1) - *index);
+
+            let leftover = &mined_items[*index..];
+
+            for item in leftover {
+                leaves.push(item.element);
+            }
+
+            leaves
+        };
+
+        leftover_items
+    }
+
     async fn get_cached_tree_state(
         database: &Database,
         tree_depth: usize,
@@ -253,24 +280,11 @@ impl App {
         mmap_file_path: &str,
     ) -> anyhow::Result<Option<TreeState>> {
         let mut first_index_outside_dense: usize = 0;
-        let leftover_items = if mined_items.is_empty() {
-            vec![]
-        } else {
-            let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
-            // if the last index is greater then dense_prefix_depth, 1 << dense_prefix_depth
-            // should be the last index in restored tree
-            first_index_outside_dense = std::cmp::min(max_leaf, 1 << dense_prefix_depth);
-
-            let mut leaves = Vec::with_capacity((max_leaf + 1) - first_index_outside_dense);
-
-            let leftover = &mined_items[first_index_outside_dense..];
-
-            for item in leftover {
-                leaves.push(item.element);
-            }
-
-            leaves
-        };
+        let leftover_items = Self::get_leftover_leaves_and_update_index(
+            &mut first_index_outside_dense,
+            dense_prefix_depth,
+            mined_items,
+        );
 
         let Some(mined_builder) = CanonicalTreeBuilder::restore(
             tree_depth,
@@ -523,54 +537,48 @@ impl App {
 mod test {
     use ethers::prelude::rand;
     use ethers::types::U256;
+    use ruint::Uint;
 
-    pub fn generate_test_identities_with_index(identity_count: usize) -> Vec<(usize, String)> {
+    use super::App;
+    use crate::identity_tree::TreeUpdate;
+
+    pub fn generate_test_identities_with_index(identity_count: usize) -> Vec<TreeUpdate> {
         let mut identities = vec![];
-    
+
         for i in 1..=identity_count {
-            // Generate the identities using the just the last 64 bits (of 256) has so we're
-            // guaranteed to be less than SNARK_SCALAR_FIELD.
             let bytes: [u8; 32] = U256::from(rand::random::<u64>()).into();
-            let identity_string: String = hex::encode(bytes);
-    
-            identities.push((i, identity_string));
+            let identity = Uint::<256, 4>::from_le_bytes(bytes);
+
+            identities.push(TreeUpdate {
+                leaf_index: i,
+                element:    identity,
+            });
         }
-    
+
         identities
     }
-    
-    
+
     #[tokio::test]
     async fn test_index_logic_for_cached_tree() -> anyhow::Result<()> {
-
         // supports 8 identities (2^3)
-        let dense_prefix_depth = 3;
+        let dense_prefix_depth: usize = 3;
 
-        let less_identities_count = 2usize.pow(dense_prefix_depth) - 2;
-        let more_identities_count = 2usize.pow(dense_prefix_depth) + 2;
+        let less_identities_count = 2usize.pow(dense_prefix_depth.try_into().unwrap()) - 2;
+        let more_identities_count = 2usize.pow(dense_prefix_depth.try_into().unwrap()) + 2;
 
         // first test with less then dense prefix
         let identities = generate_test_identities_with_index(less_identities_count);
 
-        let max_leaf = identities.last().map(|item| item.0).unwrap();
+        let mut first_index_outside_dense: usize = 0;
 
-        // note: indexes are counted from 1
-        assert_eq!(max_leaf, 6);
+        let leaves = App::get_leftover_leaves_and_update_index(
+            &mut first_index_outside_dense,
+            dense_prefix_depth,
+            &identities,
+        );
 
-        // if the last index is greater then dense_prefix_depth, 1 << dense_prefix_depth
-        // should be the last index in restored tree
-        let first_index_outside_dense = std::cmp::min(max_leaf, 1 << dense_prefix_depth);
-        assert_eq!(first_index_outside_dense, max_leaf);
-
-        let mut leaves = Vec::with_capacity((max_leaf + 1) - first_index_outside_dense);
-
-        let leftover = &identities[first_index_outside_dense..];
-
-        for item in leftover {
-            leaves.push(item.1.clone());
-        }
-
-        // since there are less identities then dense prefix, the leavs should be empty vector
+        // since there are less identities then dense prefix, the leavs should be empty
+        // vector
         assert!(leaves.is_empty());
 
         // lets try now with more identities then dense prefix supports
@@ -578,26 +586,18 @@ mod test {
         // this should generate 2^dense_prefix + 2
         let identities = generate_test_identities_with_index(more_identities_count);
 
-        let max_leaf = identities.last().map(|item| item.0).unwrap();
-        assert_eq!(max_leaf, 10);
-
-        let first_index_outside_dense = std::cmp::min(max_leaf, 1 << dense_prefix_depth);
-        assert_eq!(first_index_outside_dense, 1 << dense_prefix_depth);
-
-        let mut leaves = Vec::with_capacity((max_leaf + 1) - first_index_outside_dense);
-
-        let leftover = &identities[first_index_outside_dense..];
-
-        for item in leftover {
-            leaves.push(item.1.clone());
-        }
-
+        first_index_outside_dense = 0;
+        let leaves = App::get_leftover_leaves_and_update_index(
+            &mut first_index_outside_dense,
+            dense_prefix_depth,
+            &identities,
+        );
         // since there are more identities then dense prefix, the leavs should be 2
         assert_eq!(leaves.iter().count(), 2);
 
         // additional check for correctness
-        assert_eq!(leaves[0], identities[8].1);
-        assert_eq!(leaves[1], identities[9].1);
+        assert_eq!(leaves[0], identities[8].element);
+        assert_eq!(leaves[1], identities[9].element);
 
         Ok(())
     }

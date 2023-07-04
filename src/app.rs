@@ -518,3 +518,87 @@ impl App {
         self.identity_committer.shutdown().await
     }
 }
+
+#[cfg(test)]
+mod test {
+    use ethers::prelude::rand;
+    use ethers::types::U256;
+
+    pub fn generate_test_identities_with_index(identity_count: usize) -> Vec<(usize, String)> {
+        let mut identities = vec![];
+    
+        for i in 1..=identity_count {
+            // Generate the identities using the just the last 64 bits (of 256) has so we're
+            // guaranteed to be less than SNARK_SCALAR_FIELD.
+            let bytes: [u8; 32] = U256::from(rand::random::<u64>()).into();
+            let identity_string: String = hex::encode(bytes);
+    
+            identities.push((i, identity_string));
+        }
+    
+        identities
+    }
+    
+    
+    #[tokio::test]
+    async fn test_index_logic_for_cached_tree() -> anyhow::Result<()> {
+
+        // supports 8 identities (2^3)
+        let dense_prefix_depth = 3;
+
+        let less_identities_count = 2usize.pow(dense_prefix_depth) - 2;
+        let more_identities_count = 2usize.pow(dense_prefix_depth) + 2;
+
+        // first test with less then dense prefix
+        let identities = generate_test_identities_with_index(less_identities_count);
+
+        let max_leaf = identities.last().map(|item| item.0).unwrap();
+
+        // note: indexes are counted from 1
+        assert_eq!(max_leaf, 6);
+
+        // if the last index is greater then dense_prefix_depth, 1 << dense_prefix_depth
+        // should be the last index in restored tree
+        let first_index_outside_dense = std::cmp::min(max_leaf, 1 << dense_prefix_depth);
+        assert_eq!(first_index_outside_dense, max_leaf);
+
+        let mut leaves = Vec::with_capacity((max_leaf + 1) - first_index_outside_dense);
+
+        let leftover = &identities[first_index_outside_dense..];
+
+        for item in leftover {
+            leaves.push(item.1.clone());
+        }
+
+        // since there are less identities then dense prefix, the leavs should be empty vector
+        assert!(leaves.is_empty());
+
+        // lets try now with more identities then dense prefix supports
+
+        // this should generate 2^dense_prefix + 2
+        let identities = generate_test_identities_with_index(more_identities_count);
+
+        let max_leaf = identities.last().map(|item| item.0).unwrap();
+        assert_eq!(max_leaf, 10);
+
+        let first_index_outside_dense = std::cmp::min(max_leaf, 1 << dense_prefix_depth);
+        assert_eq!(first_index_outside_dense, 1 << dense_prefix_depth);
+
+        let mut leaves = Vec::with_capacity((max_leaf + 1) - first_index_outside_dense);
+
+        let leftover = &identities[first_index_outside_dense..];
+
+        for item in leftover {
+            leaves.push(item.1.clone());
+        }
+
+        // since there are more identities then dense prefix, the leavs should be 2
+        assert_eq!(leaves.iter().count(), 2);
+
+        // additional check for correctness
+        assert_eq!(leaves[0], identities[8].1);
+        assert_eq!(leaves[1], identities[9].1);
+
+        Ok(())
+    }
+}

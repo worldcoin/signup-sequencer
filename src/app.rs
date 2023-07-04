@@ -256,6 +256,10 @@ impl App {
             // should be the last index in restored tree
             *index = std::cmp::min(max_leaf, (1 << dense_prefix_depth) - 1);
 
+            if max_leaf - *index == 0 {
+                return vec![];
+            }
+
             let mut leaves = Vec::with_capacity(max_leaf - *index);
 
             let leftover = &mined_items[(*index + 1)..];
@@ -569,13 +573,16 @@ mod test {
         // first test with less then dense prefix
         let identities = generate_test_identities_with_index(less_identities_count);
 
-        let mut first_index_outside_dense: usize = 0;
+        let mut last_mined_index_in_dense: usize = 0;
 
         let leaves = App::get_leftover_leaves_and_update_index(
-            &mut first_index_outside_dense,
+            &mut last_mined_index_in_dense,
             dense_prefix_depth,
             &identities,
         );
+
+        // check if the index is correct
+        assert_eq!(last_mined_index_in_dense, identities.iter().count());
 
         // since there are less identities then dense prefix, the leavs should be empty
         // vector
@@ -586,12 +593,16 @@ mod test {
         // this should generate 2^dense_prefix + 2
         let identities = generate_test_identities_with_index(more_identities_count);
 
-        first_index_outside_dense = 0;
+        last_mined_index_in_dense = 0;
         let leaves = App::get_leftover_leaves_and_update_index(
-            &mut first_index_outside_dense,
+            &mut last_mined_index_in_dense,
             dense_prefix_depth,
             &identities,
         );
+
+        // check if the index is correct
+        assert_eq!(last_mined_index_in_dense, (1 << dense_prefix_depth) - 1);
+
         // since there are more identities then dense prefix, the leavs should be 2
         assert_eq!(leaves.iter().count(), 2);
 

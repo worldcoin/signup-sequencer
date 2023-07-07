@@ -29,13 +29,6 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
-    // temp dir will be deleted on drop call
-    let temp_dir = tempfile::tempdir()?;
-    info!(
-        "temp dir created at: {:?}",
-        temp_dir.path().join("testfile")
-    );
-
     let mut options = Options::try_parse_from([
         "signup-sequencer",
         "--identity-manager-address",
@@ -54,8 +47,6 @@ async fn validate_proofs() -> anyhow::Result<()> {
         "10",
         "--tree-gc-threshold",
         "1",
-        "--dense-tree-mmap-file",
-        temp_dir.path().join("testfile").to_str().unwrap(),
     ])
     .expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
@@ -74,13 +65,10 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let client = Client::new();
 
     static IDENTITIES: Lazy<Vec<Identity>> = Lazy::new(|| {
-        let mut s1 = *b"test_f0f0";
-        let mut s2 = *b"test_f1f1";
-        let mut s3 = *b"test_f2f2";
         vec![
-            Identity::from_secret(&mut s1, None),
-            Identity::from_secret(&mut s2, None),
-            Identity::from_secret(&mut s3, None),
+            Identity::from_secret(b"test_f0f0", None),
+            Identity::from_secret(b"test_f1f1", None),
+            Identity::from_secret(b"test_f2f2", None),
         ]
     });
 

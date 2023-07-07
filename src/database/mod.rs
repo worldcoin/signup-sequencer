@@ -24,6 +24,8 @@ use crate::secret::SecretUrl;
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 
+const MAX_UNPROCESSED_FETCH_COUNT: i64 = 10_000;
+
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 pub struct Options {
     /// Database server connection string.
@@ -454,9 +456,11 @@ impl Database {
             r#"
                 SELECT * FROM unprocessed_identities
                 WHERE status = $1
+                LIMIT $2
             "#,
         )
-        .bind(<&str>::from(status));
+        .bind(<&str>::from(status))
+        .bind(MAX_UNPROCESSED_FETCH_COUNT);
 
         let result = self.pool.fetch_all(query).await?;
 

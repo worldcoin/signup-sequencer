@@ -10,6 +10,7 @@ use tokio::sync::{broadcast, mpsc, Mutex, Notify, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{info, instrument, warn};
 
+use self::tasks::finalize_identities::FinalizeRoots;
 use self::tasks::insert_identities::InsertIdentities;
 use self::tasks::mine_identities::MineIdentities;
 use self::tasks::process_identities::ProcessIdentities;
@@ -21,6 +22,7 @@ use crate::identity_tree::TreeState;
 pub mod tasks;
 
 const PROCESS_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
+const FINALIZE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const MINE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const INSERT_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 
@@ -99,6 +101,15 @@ pub struct Options {
     /// `oz-provider` feature enabled.
     #[clap(long, env, default_value = "1")]
     pub pending_identities_capacity: usize,
+
+    /// How many roots can be held in the mined roots queue at any given time.
+    ///
+    /// There is no reason why we shouldn't be able to wait for multiple
+    /// roots to be finalized across chains at the same time.
+    ///
+    /// This is just a limit on memory usage for this channel.
+    #[clap(long, env, default_value = "10")]
+    pub mined_roots_capacity: usize,
 }
 
 /// A worker that commits identities to the blockchain.
@@ -118,6 +129,7 @@ pub struct TaskMonitor {
     tree_state:                  TreeState,
     batch_insert_timeout_secs:   u64,
     pending_identities_capacity: usize,
+    mined_roots_capacity:        usize,
 }
 
 impl TaskMonitor {
@@ -129,6 +141,7 @@ impl TaskMonitor {
     ) -> Self {
         let batch_insert_timeout_secs = options.batch_timeout_seconds;
         let pending_identities_capacity = options.pending_identities_capacity;
+        let mined_roots_capacity = options.mined_roots_capacity;
 
         Self {
             instance: RwLock::new(None),
@@ -137,6 +150,7 @@ impl TaskMonitor {
             tree_state,
             batch_insert_timeout_secs,
             pending_identities_capacity,
+            mined_roots_capacity,
         }
     }
 
@@ -152,6 +166,7 @@ impl TaskMonitor {
         let (shutdown_sender, _) = broadcast::channel(1);
         let (pending_identities_sender, pending_identities_receiver) =
             mpsc::channel(self.pending_identities_capacity);
+        let (mined_root_sender, mined_root_receiver) = mpsc::channel(self.mined_roots_capacity);
 
         let wake_up_notify = Arc::new(Notify::new());
         // Immediately notify so we can start processing if we have pending identities
@@ -161,8 +176,25 @@ impl TaskMonitor {
         // We need to maintain mutable access to these receivers from multiple
         // invocations of this task
         let pending_identities_receiver = Arc::new(Mutex::new(pending_identities_receiver));
+        let mined_root_receiver = Arc::new(Mutex::new(mined_root_receiver));
 
         let mut handles = Vec::new();
+
+        // Finalize identities task
+        let finalize_identities = FinalizeRoots::new(
+            self.database.clone(),
+            self.identity_manager.clone(),
+            self.tree_state.get_finalized_tree(),
+            mined_root_receiver,
+        );
+
+        let finalize_identities_handle = crate::utils::spawn_monitored_with_backoff(
+            move || finalize_identities.clone().run(),
+            shutdown_sender.clone(),
+            FINALIZE_IDENTITIES_BACKOFF,
+        );
+
+        handles.push(finalize_identities_handle);
 
         // Mine identities task
         let mine_identities = MineIdentities::new(
@@ -170,6 +202,7 @@ impl TaskMonitor {
             self.identity_manager.clone(),
             self.tree_state.get_mined_tree(),
             pending_identities_receiver,
+            mined_root_sender,
         );
 
         let mine_identities_handle = crate::utils::spawn_monitored_with_backoff(

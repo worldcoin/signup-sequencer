@@ -25,6 +25,8 @@ where
     if let Method::GET = request_method {
         info_span!("request", ?uri_path, ?request_method, ?request_query)
             .in_scope(|| async {
+                cli_batteries::trace_from_headers(&parts.headers);
+
                 info!(
                     uri_path,
                     ?request_method,
@@ -37,13 +39,15 @@ where
 
                 let response = next.run(request).await;
 
-                let response = handle_response(
+                let mut response = handle_response(
                     &uri_path,
                     &request_method,
                     request_query.as_deref(),
                     response,
                 )
                 .await?;
+
+                cli_batteries::trace_to_headers(response.headers_mut());
 
                 Ok(response)
             })
@@ -53,20 +57,30 @@ where
 
         info_span!("request", ?uri_path, ?request_method, ?request_query, ?body)
             .in_scope(|| async {
-                info!("Processing request");
+                cli_batteries::trace_from_headers(&parts.headers);
+
+                info!(
+                    ?uri_path,
+                    ?request_method,
+                    ?request_query,
+                    ?body,
+                    "Processing request"
+                );
 
                 let body = Body::from(body);
                 let request = Request::from_parts(parts, body);
 
                 let response = next.run(request).await;
 
-                let response = handle_response(
+                let mut response = handle_response(
                     &uri_path,
                     &request_method,
                     request_query.as_deref(),
                     response,
                 )
                 .await?;
+
+                cli_batteries::trace_to_headers(response.headers_mut());
 
                 Ok(response)
             })

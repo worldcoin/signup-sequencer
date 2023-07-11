@@ -1,3 +1,5 @@
+use std::num::ParseIntError;
+use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::Result as AnyhowResult;
@@ -9,12 +11,15 @@ use ethers::types::{Address, H160, U64};
 use tracing::{info, warn};
 
 use self::openzeppelin::OzRelay;
-use super::read::duration_from_str;
 use super::write::{TransactionId, WriteProvider};
 use super::{ReadProvider, TxError};
 
 mod error;
 mod openzeppelin;
+
+fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
+    Ok(Duration::from_secs(u64::from_str(value)?))
+}
 
 // TODO: Log and metrics for signer / nonces.
 #[derive(Clone, Debug, Eq, PartialEq, Parser)]

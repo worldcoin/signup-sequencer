@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
@@ -6,9 +7,11 @@ use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::Address;
 pub use read::{EventError, ReadProvider};
 use tracing::instrument;
+use url::Url;
 pub use write::TxError;
 
 use self::write::{TransactionId, WriteProvider};
+use crate::serde_utils::JsonStrWrapper;
 
 pub mod read;
 pub mod write;
@@ -23,8 +26,13 @@ mod write_oz;
 #[derive(Clone, Debug, PartialEq, Parser)]
 #[group(skip)]
 pub struct Options {
-    #[clap(flatten)]
-    pub read_options: read::Options,
+    /// Ethereum API Provider
+    #[clap(long, env, default_value = "http://localhost:8545")]
+    pub ethereum_provider: Url,
+
+    /// Provider urls for the secondary chains
+    #[clap(long, env, default_value = "[]")]
+    pub secondary_providers: JsonStrWrapper<Vec<Url>>,
 
     #[cfg(not(feature = "oz-provider"))]
     #[clap(flatten)]
@@ -37,14 +45,26 @@ pub struct Options {
 
 #[derive(Clone, Debug)]
 pub struct Ethereum {
-    read_provider:  Arc<ReadProvider>,
-    write_provider: Arc<dyn WriteProvider>,
+    read_provider:            Arc<ReadProvider>,
+    // Mapping of chain id to provider
+    secondary_read_providers: Arc<HashMap<u64, ReadProvider>>,
+    write_provider:           Arc<dyn WriteProvider>,
 }
 
 impl Ethereum {
     #[instrument(name = "Ethereum::new", level = "debug", skip_all)]
     pub async fn new(options: Options) -> AnyhowResult<Self> {
-        let read_provider = ReadProvider::new(options.read_options).await?;
+        let read_provider = ReadProvider::new(options.ethereum_provider).await?;
+
+        let mut secondary_read_providers = HashMap::new();
+
+        for secondary_url in &options.secondary_providers.0 {
+            let secondary_read_provider = ReadProvider::new(secondary_url.clone()).await?;
+            secondary_read_providers.insert(
+                secondary_read_provider.chain_id.as_u64(),
+                secondary_read_provider,
+            );
+        }
 
         #[cfg(not(feature = "oz-provider"))]
         let write_provider: Arc<dyn WriteProvider> =
@@ -56,6 +76,7 @@ impl Ethereum {
 
         Ok(Self {
             read_provider: Arc::new(read_provider),
+            secondary_read_providers: Arc::new(secondary_read_providers),
             write_provider,
         })
     }
@@ -63,6 +84,11 @@ impl Ethereum {
     #[must_use]
     pub const fn provider(&self) -> &Arc<ReadProvider> {
         &self.read_provider
+    }
+
+    #[must_use]
+    pub const fn secondary_providers(&self) -> &Arc<HashMap<u64, ReadProvider>> {
+        &self.secondary_read_providers
     }
 
     #[must_use]

@@ -2,7 +2,6 @@ mod identity;
 
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
-use std::str::FromStr;
 use std::time::Duration;
 
 use clap::Parser;
@@ -16,6 +15,7 @@ use url::Url;
 use crate::database::prover::ProverConfiguration as DbProverConfiguration;
 pub use crate::prover::batch_insertion::identity::Identity;
 use crate::prover::Proof;
+use crate::serde_utils::JsonStrWrapper;
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";
@@ -49,7 +49,7 @@ pub struct Options {
         env,
         default_value = r#"[{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}]"#
     )]
-    pub prover_urls: ProverOptionsWrapper,
+    pub prover_urls: JsonStrWrapper<Vec<ProverConfiguration>>,
 }
 
 /// Configuration options for the component responsible for interacting with the
@@ -67,17 +67,6 @@ pub struct ProverConfiguration {
     /// The batch size that the prover is set up to work with. This must match
     /// the deployed prover.
     pub batch_size: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProverOptionsWrapper(pub Vec<ProverConfiguration>);
-
-impl FromStr for ProverOptionsWrapper {
-    type Err = serde_json::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s).map(ProverOptionsWrapper)
-    }
 }
 
 /// A representation of the connection to the MTB prover service.

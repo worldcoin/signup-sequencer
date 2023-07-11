@@ -233,7 +233,15 @@ impl App {
             &initial_leaves,
         );
 
-        let (finalized, mined_builder) = finalized_builder.seal();
+        let (finalized, mut mined_builder) = finalized_builder.seal();
+
+        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
+        mined_items.sort_by_key(|item| item.leaf_index);
+
+        for mined_item in mined_items {
+            mined_builder.update(&mined_item);
+        }
+
         let (mined, batching_builder) = mined_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
 

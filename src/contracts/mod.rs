@@ -285,7 +285,7 @@ impl IdentityManager {
         }
 
         for bridged_world_id in &self.secondary_abis {
-            let root_timestamp = bridged_world_id.root_history(root).await?;
+            let root_timestamp = bridged_world_id.root_history(root).call().await?;
 
             if root_timestamp == 0 {
                 return Ok(false);

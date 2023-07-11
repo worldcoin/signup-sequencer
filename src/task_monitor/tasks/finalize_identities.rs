@@ -66,12 +66,20 @@ async fn finalize_roots_loop(
 async fn finalize_root(
     mined_root: U256,
     database: &Database,
-    _identity_manager: &IdentityManager,
+    identity_manager: &IdentityManager,
     finalized_tree: &TreeVersion<Canonical>,
 ) -> AnyhowResult<()> {
     info!(?mined_root, "Finalizing root");
 
-    // TODO: implement
+    loop {
+        let is_root_finalized = identity_manager
+            .is_root_mined_multi_chain(mined_root)
+            .await?;
+
+        if is_root_finalized {
+            break;
+        }
+    }
 
     finalized_tree.apply_updates_up_to(mined_root.into());
 

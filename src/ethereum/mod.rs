@@ -47,7 +47,7 @@ pub struct Options {
 pub struct Ethereum {
     read_provider:            Arc<ReadProvider>,
     // Mapping of chain id to provider
-    secondary_read_providers: Arc<HashMap<u64, ReadProvider>>,
+    secondary_read_providers: HashMap<u64, Arc<ReadProvider>>,
     write_provider:           Arc<dyn WriteProvider>,
 }
 
@@ -62,7 +62,7 @@ impl Ethereum {
             let secondary_read_provider = ReadProvider::new(secondary_url.clone()).await?;
             secondary_read_providers.insert(
                 secondary_read_provider.chain_id.as_u64(),
-                secondary_read_provider,
+                Arc::new(secondary_read_provider),
             );
         }
 
@@ -76,7 +76,7 @@ impl Ethereum {
 
         Ok(Self {
             read_provider: Arc::new(read_provider),
-            secondary_read_providers: Arc::new(secondary_read_providers),
+            secondary_read_providers,
             write_provider,
         })
     }
@@ -87,7 +87,7 @@ impl Ethereum {
     }
 
     #[must_use]
-    pub const fn secondary_providers(&self) -> &Arc<HashMap<u64, ReadProvider>> {
+    pub const fn secondary_providers(&self) -> &HashMap<u64, Arc<ReadProvider>> {
         &self.secondary_read_providers
     }
 

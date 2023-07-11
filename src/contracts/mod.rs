@@ -58,7 +58,7 @@ pub struct IdentityManager {
     ethereum:             Ethereum,
     insertion_prover_map: InsertionProverMap,
     abi:                  WorldId<ReadProvider>,
-    secondary_abis:       HashMap<u64, BridgedWorldId<ReadProvider>>,
+    secondary_abis:       Vec<BridgedWorldId<ReadProvider>>,
     initial_leaf_value:   Field,
     tree_depth:           usize,
 }
@@ -100,10 +100,16 @@ impl IdentityManager {
             "Connected to the WorldID Identity Manager"
         );
 
-        let mut secondary_abis = HashMap::new();
+        let secondary_providers = ethereum.secondary_providers();
+
+        let mut secondary_abis = Vec::new();
         for (chain_id, address) in options.relayed_identity_manager_addresses.0 {
-            let abi = BridgedWorldId::new(address, ethereum.provider().clone());
-            secondary_abis.insert(chain_id, abi);
+            let provider = secondary_providers
+                .get(&chain_id)
+                .ok_or_else(|| anyhow!("No provider for chain id: {}", chain_id))?;
+
+            let abi = BridgedWorldId::new(address, provider.clone());
+            secondary_abis.push(abi);
         }
 
         let initial_leaf_value = options.initial_leaf_value;
@@ -270,7 +276,24 @@ impl IdentityManager {
         Ok(latest_root)
     }
 
-    // pub async fn latest_root_multi_chain(&self) -> anyhow::Result<U256,
+    #[instrument(level = "debug", skip_all)]
+    pub async fn is_root_mined_multi_chain(&self, root: U256) -> anyhow::Result<bool> {
+        let (root_on_mainnet, ..) = self.abi.query_root(root).call().await?;
+
+        if root_on_mainnet.is_zero() {
+            return Ok(false);
+        }
+
+        for bridged_world_id in &self.secondary_abis {
+            let root_timestamp = bridged_world_id.root_history(root).await?;
+
+            if root_timestamp == 0 {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
 
     /// # Errors
     ///

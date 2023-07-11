@@ -6,7 +6,7 @@ use axum::response::Response;
 use bytes::Bytes;
 use hyper::body::HttpBody;
 use hyper::{Body, Method};
-use tracing::{error, info, info_span};
+use tracing::{error, info, info_span, Instrument};
 
 // 1 MiB
 const MAX_REQUEST_BODY_SIZE: u64 = 1024 * 1024;
@@ -23,54 +23,72 @@ where
     let request_query = parts.uri.query().map(ToString::to_string);
 
     if let Method::GET = request_method {
-        info_span!("request", ?uri_path, ?request_method, ?request_query)
-            .in_scope(|| async {
-                info!(
-                    uri_path,
-                    ?request_method,
-                    ?request_query,
-                    "Processing request"
-                );
+        let span = info_span!("request", ?uri_path, ?request_method, ?request_query);
 
-                let body = Body::empty();
-                let request = Request::from_parts(parts, body);
+        async {
+            cli_batteries::trace_from_headers(&parts.headers);
 
-                let response = next.run(request).await;
+            info!(
+                uri_path,
+                ?request_method,
+                ?request_query,
+                "Processing request"
+            );
 
-                let response = handle_response(
-                    &uri_path,
-                    &request_method,
-                    request_query.as_deref(),
-                    response,
-                )
-                .await?;
+            let body = Body::empty();
+            let request = Request::from_parts(parts, body);
 
-                Ok(response)
-            })
-            .await
+            let response = next.run(request).await;
+
+            let mut response = handle_response(
+                &uri_path,
+                &request_method,
+                request_query.as_deref(),
+                response,
+            )
+            .await?;
+
+            cli_batteries::trace_to_headers(response.headers_mut());
+
+            Ok(response)
+        }
+        .instrument(span)
+        .await
     } else {
         let body = body_to_string(body).await?;
 
-        info_span!("request", ?uri_path, ?request_method, ?request_query, ?body)
-            .in_scope(|| async {
-                info!("Processing request");
+        let span = info_span!("request", ?uri_path, ?request_method, ?request_query, ?body);
 
-                let body = Body::from(body);
-                let request = Request::from_parts(parts, body);
+        async {
+            cli_batteries::trace_from_headers(&parts.headers);
 
-                let response = next.run(request).await;
+            info!(
+                ?uri_path,
+                ?request_method,
+                ?request_query,
+                ?body,
+                "Processing request"
+            );
 
-                let response = handle_response(
-                    &uri_path,
-                    &request_method,
-                    request_query.as_deref(),
-                    response,
-                )
-                .await?;
+            let body = Body::from(body);
+            let request = Request::from_parts(parts, body);
 
-                Ok(response)
-            })
-            .await
+            let response = next.run(request).await;
+
+            let mut response = handle_response(
+                &uri_path,
+                &request_method,
+                request_query.as_deref(),
+                response,
+            )
+            .await?;
+
+            cli_batteries::trace_to_headers(response.headers_mut());
+
+            Ok(response)
+        }
+        .instrument(span)
+        .await
     }
 }
 

@@ -208,9 +208,6 @@ pub async fn bind_from_listener(
             custom_middleware::timeout_layer::middleware,
         ))
         .layer(middleware::from_fn(
-            custom_middleware::extract_trace_layer::middleware,
-        ))
-        .layer(middleware::from_fn(
             custom_middleware::logging_layer::middleware,
         ))
         .layer(middleware::from_fn(

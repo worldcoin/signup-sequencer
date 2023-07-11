@@ -6,13 +6,13 @@ use tracing::{info, instrument, warn};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
-use crate::identity_tree::{Canonical, TreeVersion, TreeWithNextVersion};
+use crate::identity_tree::{Intermediate, TreeVersion, TreeWithNextVersion};
 use crate::task_monitor::{PendingIdentities, TaskMonitor};
 
 pub struct MineIdentities {
     database:                    Arc<Database>,
     identity_manager:            SharedIdentityManager,
-    mined_tree:                  TreeVersion<Canonical>,
+    mined_tree:                  TreeVersion<Intermediate>,
     pending_identities_receiver: Arc<Mutex<mpsc::Receiver<PendingIdentities>>>,
 }
 
@@ -20,7 +20,7 @@ impl MineIdentities {
     pub fn new(
         database: Arc<Database>,
         identity_manager: SharedIdentityManager,
-        mined_tree: TreeVersion<Canonical>,
+        mined_tree: TreeVersion<Intermediate>,
         pending_identities_receiver: Arc<Mutex<mpsc::Receiver<PendingIdentities>>>,
     ) -> Arc<Self> {
         Arc::new(Self {
@@ -47,7 +47,7 @@ impl MineIdentities {
 async fn mine_identities_loop(
     database: &Database,
     identity_manager: &IdentityManager,
-    mined_tree: &TreeVersion<Canonical>,
+    mined_tree: &TreeVersion<Intermediate>,
     pending_identities_receiver: &mut mpsc::Receiver<PendingIdentities>,
 ) -> AnyhowResult<()> {
     loop {
@@ -67,7 +67,7 @@ async fn mine_identities(
     pending_identity: PendingIdentities,
     database: &Database,
     identity_manager: &IdentityManager,
-    mined_tree: &TreeVersion<Canonical>,
+    mined_tree: &TreeVersion<Intermediate>,
 ) -> AnyhowResult<()> {
     let PendingIdentities {
         transaction_id,

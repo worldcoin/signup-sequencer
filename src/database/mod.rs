@@ -177,8 +177,63 @@ impl Database {
     }
 
     /// Marks the identities and roots from before a given root hash as mined
+    /// Also marks following roots as pending
     #[instrument(skip(self), level = "debug")]
     pub async fn mark_root_as_mined(&self, root: &Hash) -> Result<(), Error> {
+        let finalized_status = Status::Finalized;
+        let mined_status = Status::Mined;
+        let pending_status = Status::Pending;
+
+        let mut tx = self.pool.begin().await?;
+
+        let root_leaf_index = Self::get_leaf_index_by_root(&mut tx, root).await?;
+
+        let Some(root_leaf_index) = root_leaf_index else {
+            return Err(Error::MissingRoot {
+                root: *root
+            });
+        };
+
+        let root_leaf_index = root_leaf_index as i64;
+
+        // TODO: Can I get rid of line `AND    status <> $2
+        let update_previous_roots = sqlx::query(
+            r#"
+            UPDATE identities
+            SET    status = $2, mined_at = CURRENT_TIMESTAMP
+            WHERE  leaf_index <= $1
+            AND    status <> $2
+            AND    status <> $3
+            "#,
+        )
+        .bind(root_leaf_index)
+        .bind(<&str>::from(mined_status))
+        .bind(<&str>::from(finalized_status));
+
+        let update_next_roots = sqlx::query(
+            r#"
+            UPDATE identities
+            SET    status = $2, mined_at = NULL
+            WHERE  leaf_index > $1
+            "#,
+        )
+        .bind(root_leaf_index)
+        .bind(<&str>::from(pending_status));
+
+        tx.execute(update_previous_roots).await?;
+        tx.execute(update_next_roots).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    /// Marks the identities and roots from before a given root hash as
+    /// finalized
+    #[instrument(skip(self), level = "debug")]
+    pub async fn mark_root_as_finalized(&self, root: &Hash) -> Result<(), Error> {
+        let finalized_status = Status::Finalized;
+
         let mut tx = self.pool.begin().await?;
 
         let root_leaf_index = Self::get_leaf_index_by_root(&mut tx, root).await?;
@@ -194,26 +249,14 @@ impl Database {
         let update_previous_roots = sqlx::query(
             r#"
             UPDATE identities
-            SET    status = $2, mined_at = CURRENT_TIMESTAMP
+            SET    status = $2
             WHERE  leaf_index <= $1
-            AND    status <> $2
             "#,
         )
         .bind(root_leaf_index)
-        .bind(<&str>::from(Status::Mined));
-
-        let update_next_roots = sqlx::query(
-            r#"
-            UPDATE identities
-            SET    status = $2, mined_at = NULL
-            WHERE  leaf_index > $1
-            "#,
-        )
-        .bind(root_leaf_index)
-        .bind(<&str>::from(Status::Pending));
+        .bind(<&str>::from(finalized_status));
 
         tx.execute(update_previous_roots).await?;
-        tx.execute(update_next_roots).await?;
 
         tx.commit().await?;
 
@@ -686,6 +729,48 @@ mod test {
                 .context("Fetching root state")?;
 
             assert_eq!(root.status, Status::Mined);
+        }
+
+        for root in roots.iter().skip(3).take(2) {
+            let root = db
+                .get_root_state(root)
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, Status::Pending);
+        }
+
+        let pending_identities = db.count_pending_identities().await?;
+        assert_eq!(
+            pending_identities, 2,
+            "There should be 2 pending identities"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn mark_root_as_finalized_marks_previous_roots() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(5);
+        let roots = mock_roots(5);
+
+        for i in 0..5 {
+            db.insert_pending_identity(i, &identities[i], &roots[i])
+                .await
+                .context("Inserting identity")?;
+        }
+
+        db.mark_root_as_finalized(&roots[2]).await?;
+
+        for root in roots.iter().take(3) {
+            let root = db
+                .get_root_state(root)
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, Status::Finalized);
         }
 
         for root in roots.iter().skip(3).take(2) {

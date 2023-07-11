@@ -40,7 +40,7 @@ impl ToResponseCode for InclusionProofResponse {
         match self.0.status {
             Status::Failed => StatusCode::BAD_REQUEST,
             Status::New | Status::Pending => StatusCode::ACCEPTED,
-            Status::Mined => StatusCode::OK,
+            Status::Mined | Status::Finalized => StatusCode::OK,
         }
     }
 }
@@ -206,35 +206,45 @@ impl App {
         gc_threshold: usize,
         initial_leaf_value: Hash,
     ) -> AnyhowResult<TreeState> {
-        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
-        let initial_leaves = if mined_items.is_empty() {
+        let mut finalized_items = database
+            .get_commitments_by_status(Status::Finalized)
+            .await?;
+
+        let initial_leaves = if finalized_items.is_empty() {
             vec![]
         } else {
-            mined_items.sort_by_key(|item| item.leaf_index);
-            let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
+            finalized_items.sort_by_key(|item| item.leaf_index);
+
+            let max_leaf = finalized_items.last().map(|item| item.leaf_index).unwrap();
             let mut leaves = vec![initial_leaf_value; max_leaf + 1];
 
-            for item in mined_items {
+            for item in finalized_items {
                 leaves[item.leaf_index] = item.element;
             }
 
             leaves
         };
-        let mined_builder = CanonicalTreeBuilder::new(
+
+        let finalized_builder = CanonicalTreeBuilder::new(
             tree_depth,
             dense_prefix_depth,
             gc_threshold,
             initial_leaf_value,
             &initial_leaves,
         );
-        let (mined, batching_builder) = mined_builder.seal();
+
+        let (finalized, mined_builder) = finalized_builder.seal();
+        let (mined, batching_builder) = mined_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
+
         let pending_items = database.get_commitments_by_status(Status::Pending).await?;
         for update in pending_items {
             latest_builder.update(&update);
         }
+
         let latest = latest_builder.seal();
-        Ok(TreeState::new(mined, batching, latest))
+
+        Ok(TreeState::new(finalized, mined, batching, latest))
     }
 
     /// Queues an insert into the merkle tree.
@@ -361,16 +371,16 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        if let Some(unprocessed) = self
+        if let Some((status, error_message)) = self
             .database
             .get_unprocessed_commit_status(commitment)
             .await?
         {
             return Ok(InclusionProofResponse(InclusionProof {
-                status:  unprocessed.0,
-                root:    None,
-                proof:   None,
-                message: Some(unprocessed.1),
+                status,
+                root: None,
+                proof: None,
+                message: Some(error_message),
             }));
         }
 

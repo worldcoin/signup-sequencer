@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result as AnyhowResult;
 use ethers::types::U256;
@@ -8,6 +9,8 @@ use tracing::{info, instrument, warn};
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
 use crate::identity_tree::{Canonical, TreeVersion, TreeWithNextVersion};
+
+const FINALIZE_ROOT_SLEEP_TIME: Duration = Duration::from_secs(5);
 
 pub struct FinalizeRoots {
     database:             Arc<Database>,
@@ -79,13 +82,11 @@ async fn finalize_root(
         if is_root_finalized {
             break;
         }
+
+        tokio::time::sleep(FINALIZE_ROOT_SLEEP_TIME).await;
     }
 
     finalized_tree.apply_updates_up_to(mined_root.into());
-
-    // With this done, all that remains is to mark them as submitted to the
-    // blockchain in the source-of-truth database, and also update the mined tree to
-    // agree with the database and chain.
     database.mark_root_as_finalized(&mined_root.into()).await?;
 
     info!(?mined_root, "Root finalized");

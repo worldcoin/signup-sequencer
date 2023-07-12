@@ -1,33 +1,37 @@
 use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
+use ethers::types::U256;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{info, instrument, warn};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
-use crate::identity_tree::{Canonical, TreeVersion, TreeWithNextVersion};
+use crate::identity_tree::{Intermediate, TreeVersion, TreeWithNextVersion};
 use crate::task_monitor::{PendingIdentities, TaskMonitor};
 
 pub struct MineIdentities {
     database:                    Arc<Database>,
     identity_manager:            SharedIdentityManager,
-    mined_tree:                  TreeVersion<Canonical>,
+    mined_tree:                  TreeVersion<Intermediate>,
     pending_identities_receiver: Arc<Mutex<mpsc::Receiver<PendingIdentities>>>,
+    mined_roots_sender:          mpsc::Sender<U256>,
 }
 
 impl MineIdentities {
     pub fn new(
         database: Arc<Database>,
         identity_manager: SharedIdentityManager,
-        mined_tree: TreeVersion<Canonical>,
+        mined_tree: TreeVersion<Intermediate>,
         pending_identities_receiver: Arc<Mutex<mpsc::Receiver<PendingIdentities>>>,
+        mined_roots_sender: mpsc::Sender<U256>,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
             identity_manager,
             mined_tree,
             pending_identities_receiver,
+            mined_roots_sender,
         })
     }
 
@@ -39,6 +43,7 @@ impl MineIdentities {
             &self.identity_manager,
             &self.mined_tree,
             &mut pending_identities_receiver,
+            &self.mined_roots_sender,
         )
         .await
     }
@@ -47,8 +52,9 @@ impl MineIdentities {
 async fn mine_identities_loop(
     database: &Database,
     identity_manager: &IdentityManager,
-    mined_tree: &TreeVersion<Canonical>,
+    mined_tree: &TreeVersion<Intermediate>,
     pending_identities_receiver: &mut mpsc::Receiver<PendingIdentities>,
+    mined_roots_sender: &mpsc::Sender<U256>,
 ) -> AnyhowResult<()> {
     loop {
         let Some(pending_identity) = pending_identities_receiver.recv().await else {
@@ -56,7 +62,14 @@ async fn mine_identities_loop(
             break;
         };
 
-        mine_identities(pending_identity, database, identity_manager, mined_tree).await?;
+        mine_identities(
+            pending_identity,
+            database,
+            identity_manager,
+            mined_tree,
+            mined_roots_sender,
+        )
+        .await?;
     }
 
     Ok(())
@@ -67,7 +80,8 @@ async fn mine_identities(
     pending_identity: PendingIdentities,
     database: &Database,
     identity_manager: &IdentityManager,
-    mined_tree: &TreeVersion<Canonical>,
+    mined_tree: &TreeVersion<Intermediate>,
+    mined_roots_sender: &mpsc::Sender<U256>,
 ) -> AnyhowResult<()> {
     let PendingIdentities {
         transaction_id,
@@ -95,12 +109,14 @@ async fn mine_identities(
 
     let updates_count = mined_tree.apply_updates_up_to(post_root.into());
 
+    mined_roots_sender.send(post_root).await?;
+
     info!(
         start_index,
         updates_count,
         ?pre_root,
         ?post_root,
-        "Tree updated"
+        "Mined tree updated"
     );
 
     TaskMonitor::log_identities_queues(database).await?;

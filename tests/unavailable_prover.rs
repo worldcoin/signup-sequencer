@@ -49,8 +49,7 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     options.server.server = Url::parse("http://127.0.0.1:0/")?;
 
     options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
-    options.app.ethereum.read_options.confirmation_blocks_delay = 2;
-    options.app.ethereum.read_options.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint())?;
+    options.app.ethereum.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint())?;
 
     options.app.ethereum.write_options.signing_key = mock_chain.private_key;
 

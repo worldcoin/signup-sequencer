@@ -201,7 +201,7 @@ pub async fn test_inclusion_proof(
     }
 
     let result_json = mined_json.expect("Failed to get mined response");
-    let proof_json = generate_reference_proof_json(ref_tree, leaf_index, "mined");
+    let proof_json = generate_reference_proof_json(ref_tree, leaf_index, "finalized");
     assert_eq!(result_json, proof_json);
 }
 

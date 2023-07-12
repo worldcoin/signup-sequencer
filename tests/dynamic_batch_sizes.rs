@@ -59,8 +59,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
     options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
-    options.app.ethereum.read_options.confirmation_blocks_delay = 2;
-    options.app.ethereum.read_options.ethereum_provider =
+    options.app.ethereum.ethereum_provider =
         Url::parse(&mock_chain.anvil.endpoint()).expect("Failed to parse Anvil url");
 
     options.app.ethereum.write_options.signing_key = mock_chain.private_key;

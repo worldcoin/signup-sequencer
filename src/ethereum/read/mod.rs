@@ -1,10 +1,5 @@
-use std::num::ParseIntError;
-use std::str::FromStr;
-use std::time::Duration;
-
 use anyhow::{anyhow, Result as AnyhowResult};
 use chrono::{Duration as ChronoDuration, Utc};
-use clap::Parser;
 use ethers::abi::Error as AbiError;
 use ethers::providers::{Middleware, Provider};
 use ethers::types::{BlockId, BlockNumber, Chain, U256};
@@ -21,35 +16,6 @@ pub mod transport;
 
 type InnerProvider = Provider<RpcLogger<Transport>>;
 
-// TODO: Log and metrics for signer / nonces.
-#[derive(Clone, Debug, PartialEq, Eq, Parser)]
-#[group(skip)]
-pub struct Options {
-    /// Ethereum API Provider
-    #[clap(long, env, default_value = "http://localhost:8545")]
-    pub ethereum_provider: Url,
-
-    /// Maximum number of blocks to pull events from in one request.
-    #[clap(long, env, default_value = "100000")]
-    pub max_log_blocks: usize,
-
-    /// Minimum number of blocks to pull events from in one request.
-    #[clap(long, env, default_value = "1000")]
-    pub min_log_blocks: usize,
-
-    /// Maximum amount of wait time before request is retried (seconds).
-    #[clap(long, env, value_parser=duration_from_str, default_value="32")]
-    pub max_backoff_time: Duration,
-
-    /// Minimum number of blocks before events are considered confirmed.
-    #[clap(long, env, default_value = "35")]
-    pub confirmation_blocks_delay: usize,
-}
-
-pub fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
-    Ok(Duration::from_secs(u64::from_str(value)?))
-}
-
 #[derive(Clone, Debug)]
 pub struct ReadProvider {
     inner:        InnerProvider,
@@ -58,7 +24,7 @@ pub struct ReadProvider {
 }
 
 impl ReadProvider {
-    pub async fn new(options: Options) -> AnyhowResult<Self> {
+    pub async fn new(url: Url) -> AnyhowResult<Self> {
         // Connect to the Ethereum provider
         // TODO: Allow multiple providers with failover / broadcast.
         // TODO: Requests don't seem to process in parallel. Check if this is
@@ -68,10 +34,10 @@ impl ReadProvider {
         // the retry policy?
         let (provider, chain_id, eip1559) = {
             info!(
-                provider = %options.ethereum_provider,
-                "Connecting to Ethereum"
+                provider = %url,
+                "Connecting to provider"
             );
-            let transport = Transport::new(options.ethereum_provider).await?;
+            let transport = Transport::new(url).await?;
             let logger = RpcLogger::new(transport);
             let provider = Provider::new(logger);
 

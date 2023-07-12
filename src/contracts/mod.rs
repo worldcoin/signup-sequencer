@@ -1,6 +1,7 @@
 //! Functionality for interacting with smart contracts deployed on chain.
 mod abi;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::anyhow;
@@ -11,12 +12,13 @@ use semaphore::Field;
 use tokio::sync::RwLockReadGuard;
 use tracing::{error, info, instrument, warn};
 
-use self::abi::BatchingContract as ContractAbi;
+use self::abi::{BridgedWorldId, WorldId};
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::{Ethereum, ReadProvider};
 use crate::prover::batch_insertion::ProverConfiguration;
 use crate::prover::map::{InsertionProverMap, ReadOnlyInsertionProver};
 use crate::prover::{batch_insertion, Proof, ReadOnlyProver};
+use crate::serde_utils::JsonStrWrapper;
 use crate::server::error::Error as ServerError;
 
 /// Configuration options for the component responsible for interacting with the
@@ -27,6 +29,11 @@ pub struct Options {
     /// The address of the identity manager contract.
     #[clap(long, env)]
     pub identity_manager_address: Address,
+
+    /// The addresses of world id contracts on secondary chains
+    /// mapped by chain id
+    #[clap(long, env, default_value = "{}")]
+    pub relayed_identity_manager_addresses: JsonStrWrapper<HashMap<u64, Address>>,
 
     /// The depth of the tree that the contract is working with. This needs to
     /// agree with the verifier in the deployed contract, and also with
@@ -50,7 +57,8 @@ pub struct Options {
 pub struct IdentityManager {
     ethereum:             Ethereum,
     insertion_prover_map: InsertionProverMap,
-    abi:                  ContractAbi<ReadProvider>,
+    abi:                  WorldId<ReadProvider>,
+    secondary_abis:       Vec<BridgedWorldId<ReadProvider>>,
     initial_leaf_value:   Field,
     tree_depth:           usize,
 }
@@ -76,7 +84,7 @@ impl IdentityManager {
         }
 
         // Connect to the running batching contract.
-        let abi = ContractAbi::new(
+        let abi = WorldId::new(
             options.identity_manager_address,
             ethereum.provider().clone(),
         );
@@ -92,6 +100,18 @@ impl IdentityManager {
             "Connected to the WorldID Identity Manager"
         );
 
+        let secondary_providers = ethereum.secondary_providers();
+
+        let mut secondary_abis = Vec::new();
+        for (chain_id, address) in options.relayed_identity_manager_addresses.0 {
+            let provider = secondary_providers
+                .get(&chain_id)
+                .ok_or_else(|| anyhow!("No provider for chain id: {}", chain_id))?;
+
+            let abi = BridgedWorldId::new(address, provider.clone());
+            secondary_abis.push(abi);
+        }
+
         let initial_leaf_value = options.initial_leaf_value;
         let tree_depth = options.tree_depth;
 
@@ -99,6 +119,7 @@ impl IdentityManager {
             ethereum,
             insertion_prover_map,
             abi,
+            secondary_abis,
             initial_leaf_value,
             tree_depth,
         };
@@ -253,6 +274,25 @@ impl IdentityManager {
         let latest_root = self.abi.latest_root().call().await?;
 
         Ok(latest_root)
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    pub async fn is_root_mined_multi_chain(&self, root: U256) -> anyhow::Result<bool> {
+        let (root_on_mainnet, ..) = self.abi.query_root(root).call().await?;
+
+        if root_on_mainnet.is_zero() {
+            return Ok(false);
+        }
+
+        for bridged_world_id in &self.secondary_abis {
+            let root_timestamp = bridged_world_id.root_history(root).call().await?;
+
+            if root_timestamp == 0 {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
     }
 
     /// # Errors

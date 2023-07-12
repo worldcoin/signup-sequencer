@@ -36,13 +36,34 @@ pub struct TreeItem {
     pub leaf_index: usize,
 }
 
+// TODO: Failed and New seem to only be used for "unprocessed" identities
+//       we should create a separate enum with just those 2 variants
+
+/// The status pertains to the status of the root.
+/// But it can also be used interchangeably with the status of an identity
+/// as all identity commitments has an associated root.
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
-    New,
+    /// An unprocessed identity that failed to be included`
     Failed,
+    /// Root is unprocessed - i.e. not included in sequencer's
+    /// in-memory tree.
+    New,
+    /// Root is included in sequencer's in-memory tree but not yet mined.
+    /// The
     Pending,
+    /// Root is mined on mainnet but is still waiting for confirmation on
+    /// relayed chains
+    ///
+    /// i.e. the root is included in a mined block on mainnet,
+    /// but the state has not yet been bridged to Optimism and Polygon
+    ///
+    /// NOTE: If the sequencer is not configured with any secondary chains this
+    /// status       should immediately become Finalized
     Mined,
+    /// Root is mined and relayed to secondary chains
+    Finalized,
 }
 
 #[derive(Debug, Error)]
@@ -58,6 +79,7 @@ impl FromStr for Status {
             "failed" => Ok(Self::Failed),
             "pending" => Ok(Self::Pending),
             "mined" => Ok(Self::Mined),
+            "finalized" => Ok(Self::Finalized),
             _ => Err(UnknownStatus),
         }
     }
@@ -70,6 +92,7 @@ impl From<Status> for &str {
             Status::Failed => "failed",
             Status::Pending => "pending",
             Status::Mined => "mined",
+            Status::Finalized => "finalized",
         }
     }
 }
@@ -446,19 +469,22 @@ where
 
 #[derive(Clone)]
 pub struct TreeState {
-    mined:    TreeVersion<Canonical>,
-    batching: TreeVersion<Intermediate>,
-    latest:   TreeVersion<Latest>,
+    finalized: TreeVersion<Canonical>,
+    mined:     TreeVersion<Intermediate>,
+    batching:  TreeVersion<Intermediate>,
+    latest:    TreeVersion<Latest>,
 }
 
 impl TreeState {
     #[must_use]
     pub const fn new(
-        mined: TreeVersion<Canonical>,
+        finalized: TreeVersion<Canonical>,
+        mined: TreeVersion<Intermediate>,
         batching: TreeVersion<Intermediate>,
         latest: TreeVersion<Latest>,
     ) -> Self {
         Self {
+            finalized,
             mined,
             batching,
             latest,
@@ -471,7 +497,12 @@ impl TreeState {
     }
 
     #[must_use]
-    pub fn get_mined_tree(&self) -> TreeVersion<Canonical> {
+    pub fn get_finalized_tree(&self) -> TreeVersion<Canonical> {
+        self.finalized.clone()
+    }
+
+    #[must_use]
+    pub fn get_mined_tree(&self) -> TreeVersion<Intermediate> {
         self.mined.clone()
     }
 
@@ -487,7 +518,9 @@ impl TreeState {
                 self.latest.get_proof(item.leaf_index)
             }
             Status::Mined => self.mined.get_proof(item.leaf_index),
+            Status::Finalized => self.finalized.get_proof(item.leaf_index),
         };
+
         InclusionProof {
             status:  item.status,
             root:    Some(root),

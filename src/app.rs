@@ -40,7 +40,7 @@ impl ToResponseCode for InclusionProofResponse {
         match self.0.status {
             Status::Failed => StatusCode::BAD_REQUEST,
             Status::New | Status::Pending => StatusCode::ACCEPTED,
-            Status::Mined | Status::Finalized => StatusCode::OK,
+            Status::Mined | Status::Processed => StatusCode::OK,
         }
     }
 }
@@ -154,7 +154,7 @@ impl App {
         // We don't store the initial root in the database, so we have to skip this step
         // if the contract root hash is equal to initial root hash
         if root_hash != initial_root_hash {
-            database.mark_root_as_mined(&root_hash).await?;
+            database.mark_root_as_processed(&root_hash).await?;
         }
 
         let timer = Instant::now();
@@ -206,26 +206,24 @@ impl App {
         gc_threshold: usize,
         initial_leaf_value: Hash,
     ) -> AnyhowResult<TreeState> {
-        let mut finalized_items = database
-            .get_commitments_by_status(Status::Finalized)
-            .await?;
+        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
 
-        let initial_leaves = if finalized_items.is_empty() {
+        let initial_leaves = if mined_items.is_empty() {
             vec![]
         } else {
-            finalized_items.sort_by_key(|item| item.leaf_index);
+            mined_items.sort_by_key(|item| item.leaf_index);
 
-            let max_leaf = finalized_items.last().map(|item| item.leaf_index).unwrap();
+            let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
             let mut leaves = vec![initial_leaf_value; max_leaf + 1];
 
-            for item in finalized_items {
+            for item in mined_items {
                 leaves[item.leaf_index] = item.element;
             }
 
             leaves
         };
 
-        let finalized_builder = CanonicalTreeBuilder::new(
+        let mined_builder = CanonicalTreeBuilder::new(
             tree_depth,
             dense_prefix_depth,
             gc_threshold,
@@ -233,16 +231,18 @@ impl App {
             &initial_leaves,
         );
 
-        let (finalized, mut mined_builder) = finalized_builder.seal();
+        let (mined, mut processed_builder) = mined_builder.seal();
 
-        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
-        mined_items.sort_by_key(|item| item.leaf_index);
+        let mut processed_items = database
+            .get_commitments_by_status(Status::Processed)
+            .await?;
+        processed_items.sort_by_key(|item| item.leaf_index);
 
-        for mined_item in mined_items {
-            mined_builder.update(&mined_item);
+        for processed_item in processed_items {
+            processed_builder.update(&processed_item);
         }
 
-        let (mined, batching_builder) = mined_builder.seal_and_continue();
+        let (processed, batching_builder) = processed_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
 
         let pending_items = database.get_commitments_by_status(Status::Pending).await?;
@@ -252,7 +252,7 @@ impl App {
 
         let latest = latest_builder.seal();
 
-        Ok(TreeState::new(finalized, mined, batching, latest))
+        Ok(TreeState::new(mined, processed, batching, latest))
     }
 
     /// Queues an insert into the merkle tree.

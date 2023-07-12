@@ -103,7 +103,7 @@ async fn mine_identities(
     // With this done, all that remains is to mark them as submitted to the
     // blockchain in the source-of-truth database, and also update the mined tree to
     // agree with the database and chain.
-    database.mark_root_as_mined(&post_root.into()).await?;
+    database.mark_root_as_processed(&post_root.into()).await?;
 
     info!(start_index, ?pre_root, ?post_root, "Batch mined");
 

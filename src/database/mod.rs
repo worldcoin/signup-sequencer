@@ -179,9 +179,9 @@ impl Database {
     /// Marks the identities and roots from before a given root hash as mined
     /// Also marks following roots as pending
     #[instrument(skip(self), level = "debug")]
-    pub async fn mark_root_as_mined(&self, root: &Hash) -> Result<(), Error> {
-        let finalized_status = Status::Finalized;
+    pub async fn mark_root_as_processed(&self, root: &Hash) -> Result<(), Error> {
         let mined_status = Status::Mined;
+        let processed_status = Status::Processed;
         let pending_status = Status::Pending;
 
         let mut tx = self.pool.begin().await?;
@@ -207,8 +207,8 @@ impl Database {
             "#,
         )
         .bind(root_leaf_index)
-        .bind(<&str>::from(mined_status))
-        .bind(<&str>::from(finalized_status));
+        .bind(<&str>::from(processed_status))
+        .bind(<&str>::from(mined_status));
 
         let update_next_roots = sqlx::query(
             r#"
@@ -231,8 +231,8 @@ impl Database {
     /// Marks the identities and roots from before a given root hash as
     /// finalized
     #[instrument(skip(self), level = "debug")]
-    pub async fn mark_root_as_finalized(&self, root: &Hash) -> Result<(), Error> {
-        let finalized_status = Status::Finalized;
+    pub async fn mark_root_as_mined(&self, root: &Hash) -> Result<(), Error> {
+        let mined_status = Status::Mined;
 
         let mut tx = self.pool.begin().await?;
 
@@ -254,7 +254,7 @@ impl Database {
             "#,
         )
         .bind(root_leaf_index)
-        .bind(<&str>::from(finalized_status));
+        .bind(<&str>::from(mined_status));
 
         tx.execute(update_previous_roots).await?;
 
@@ -708,6 +708,48 @@ mod test {
     }
 
     #[tokio::test]
+    async fn mark_root_as_processed_marks_previous_roots() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(5);
+        let roots = mock_roots(5);
+
+        for i in 0..5 {
+            db.insert_pending_identity(i, &identities[i], &roots[i])
+                .await
+                .context("Inserting identity")?;
+        }
+
+        db.mark_root_as_processed(&roots[2]).await?;
+
+        for root in roots.iter().take(3) {
+            let root = db
+                .get_root_state(root)
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, Status::Processed);
+        }
+
+        for root in roots.iter().skip(3).take(2) {
+            let root = db
+                .get_root_state(root)
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, Status::Pending);
+        }
+
+        let pending_identities = db.count_pending_identities().await?;
+        assert_eq!(
+            pending_identities, 2,
+            "There should be 2 pending identities"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn mark_root_as_mined_marks_previous_roots() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
@@ -750,49 +792,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn mark_root_as_finalized_marks_previous_roots() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
-
-        let identities = mock_identities(5);
-        let roots = mock_roots(5);
-
-        for i in 0..5 {
-            db.insert_pending_identity(i, &identities[i], &roots[i])
-                .await
-                .context("Inserting identity")?;
-        }
-
-        db.mark_root_as_finalized(&roots[2]).await?;
-
-        for root in roots.iter().take(3) {
-            let root = db
-                .get_root_state(root)
-                .await?
-                .context("Fetching root state")?;
-
-            assert_eq!(root.status, Status::Finalized);
-        }
-
-        for root in roots.iter().skip(3).take(2) {
-            let root = db
-                .get_root_state(root)
-                .await?
-                .context("Fetching root state")?;
-
-            assert_eq!(root.status, Status::Pending);
-        }
-
-        let pending_identities = db.count_pending_identities().await?;
-        assert_eq!(
-            pending_identities, 2,
-            "There should be 2 pending identities"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn mark_root_as_mined_marks_next_roots() -> anyhow::Result<()> {
+    async fn mark_root_as_processed_marks_next_roots() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
         let identities = mock_identities(5);
@@ -805,10 +805,10 @@ mod test {
         }
 
         // root[2] is somehow erroneously marked as mined
-        db.mark_root_as_mined(&roots[2]).await?;
+        db.mark_root_as_processed(&roots[2]).await?;
 
         // Later we correctly mark the previous root as mined
-        db.mark_root_as_mined(&roots[1]).await?;
+        db.mark_root_as_processed(&roots[1]).await?;
 
         for root in roots.iter().take(2) {
             let root = db
@@ -816,7 +816,7 @@ mod test {
                 .await?
                 .context("Fetching root state")?;
 
-            assert_eq!(root.status, Status::Mined);
+            assert_eq!(root.status, Status::Processed);
         }
 
         for root in roots.iter().skip(2).take(3) {
@@ -865,7 +865,7 @@ mod test {
             "Root has not yet been mined"
         );
 
-        db.mark_root_as_mined(&roots[0]).await?;
+        db.mark_root_as_processed(&roots[0]).await?;
 
         let root = db
             .get_root_state(&roots[0])
@@ -904,9 +904,9 @@ mod test {
                 .context("Inserting identity")?;
         }
 
-        db.mark_root_as_mined(&roots[2]).await?;
+        db.mark_root_as_processed(&roots[2]).await?;
 
-        let mined_tree_updates = db.get_commitments_by_status(Status::Mined).await?;
+        let mined_tree_updates = db.get_commitments_by_status(Status::Processed).await?;
         let pending_tree_updates = db.get_commitments_by_status(Status::Pending).await?;
 
         assert_eq!(mined_tree_updates.len(), 3);
@@ -973,7 +973,7 @@ mod test {
         db.insert_pending_identity(3, &identities[3], &roots[3])
             .await?;
 
-        db.mark_root_as_mined(&roots[0])
+        db.mark_root_as_processed(&roots[0])
             .await
             .context("Marking root as mined")?;
 
@@ -992,7 +992,7 @@ mod test {
 
         let root_item_0 = db.get_root_state(&roots[0]).await?.unwrap();
         assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
-        assert_eq!(root_item_0.status, Status::Mined);
+        assert_eq!(root_item_0.status, Status::Processed);
         assert!(root_item_0.mined_valid_as_of.unwrap() < root_2_mined_at);
         assert!(root_item_0.mined_valid_as_of.unwrap() > root_1_inserted_at);
         assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);

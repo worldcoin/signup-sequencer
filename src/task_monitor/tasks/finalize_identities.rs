@@ -87,7 +87,7 @@ async fn finalize_root(
     }
 
     finalized_tree.apply_updates_up_to(mined_root.into());
-    database.mark_root_as_finalized(&mined_root.into()).await?;
+    database.mark_root_as_mined(&mined_root.into()).await?;
 
     info!(?mined_root, "Root finalized");
 

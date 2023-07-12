@@ -184,7 +184,7 @@ impl TaskMonitor {
         let finalize_identities = FinalizeRoots::new(
             self.database.clone(),
             self.identity_manager.clone(),
-            self.tree_state.get_finalized_tree(),
+            self.tree_state.get_mined_tree(),
             mined_root_receiver,
         );
 
@@ -200,7 +200,7 @@ impl TaskMonitor {
         let mine_identities = MineIdentities::new(
             self.database.clone(),
             self.identity_manager.clone(),
-            self.tree_state.get_mined_tree(),
+            self.tree_state.get_processed_tree(),
             pending_identities_receiver,
             mined_root_sender,
         );

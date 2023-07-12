@@ -61,9 +61,9 @@ pub enum Status {
     ///
     /// NOTE: If the sequencer is not configured with any secondary chains this
     /// status       should immediately become Finalized
-    Mined,
+    Processed,
     /// Root is mined and relayed to secondary chains
-    Finalized,
+    Mined,
 }
 
 #[derive(Debug, Error)]
@@ -79,7 +79,7 @@ impl FromStr for Status {
             "failed" => Ok(Self::Failed),
             "pending" => Ok(Self::Pending),
             "mined" => Ok(Self::Mined),
-            "finalized" => Ok(Self::Finalized),
+            "processed" => Ok(Self::Processed),
             _ => Err(UnknownStatus),
         }
     }
@@ -92,7 +92,7 @@ impl From<Status> for &str {
             Status::Failed => "failed",
             Status::Pending => "pending",
             Status::Mined => "mined",
-            Status::Finalized => "finalized",
+            Status::Processed => "processed",
         }
     }
 }
@@ -469,8 +469,8 @@ where
 
 #[derive(Clone)]
 pub struct TreeState {
-    finalized: TreeVersion<Canonical>,
-    mined:     TreeVersion<Intermediate>,
+    mined:     TreeVersion<Canonical>,
+    processed: TreeVersion<Intermediate>,
     batching:  TreeVersion<Intermediate>,
     latest:    TreeVersion<Latest>,
 }
@@ -478,14 +478,14 @@ pub struct TreeState {
 impl TreeState {
     #[must_use]
     pub const fn new(
-        finalized: TreeVersion<Canonical>,
-        mined: TreeVersion<Intermediate>,
+        mined: TreeVersion<Canonical>,
+        processed: TreeVersion<Intermediate>,
         batching: TreeVersion<Intermediate>,
         latest: TreeVersion<Latest>,
     ) -> Self {
         Self {
-            finalized,
             mined,
+            processed,
             batching,
             latest,
         }
@@ -497,13 +497,13 @@ impl TreeState {
     }
 
     #[must_use]
-    pub fn get_finalized_tree(&self) -> TreeVersion<Canonical> {
-        self.finalized.clone()
+    pub fn get_mined_tree(&self) -> TreeVersion<Canonical> {
+        self.mined.clone()
     }
 
     #[must_use]
-    pub fn get_mined_tree(&self) -> TreeVersion<Intermediate> {
-        self.mined.clone()
+    pub fn get_processed_tree(&self) -> TreeVersion<Intermediate> {
+        self.processed.clone()
     }
 
     #[must_use]
@@ -517,8 +517,8 @@ impl TreeState {
             Status::Pending | Status::New | Status::Failed => {
                 self.latest.get_proof(item.leaf_index)
             }
-            Status::Mined => self.mined.get_proof(item.leaf_index),
-            Status::Finalized => self.finalized.get_proof(item.leaf_index),
+            Status::Mined => self.processed.get_proof(item.leaf_index),
+            Status::Processed => self.mined.get_proof(item.leaf_index),
         };
 
         InclusionProof {

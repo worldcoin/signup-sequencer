@@ -25,6 +25,14 @@ async fn unavailable_prover() -> anyhow::Result<()> {
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
+
+    // temp dir will be deleted on drop call
+    let temp_dir = tempfile::tempdir()?;
+    info!(
+        "temp dir created at: {:?}",
+        temp_dir.path().join("testfile")
+    );
+
     let mut options = Options::try_parse_from([
         "signup-sequencer",
         "--identity-manager-address",
@@ -43,6 +51,8 @@ async fn unavailable_prover() -> anyhow::Result<()> {
         "10",
         "--tree-gc-threshold",
         "1",
+        "--dense-tree-mmap-file",
+        temp_dir.path().join("testfile").to_str().unwrap(),
     ])
     .context("Failed to create options")?;
 

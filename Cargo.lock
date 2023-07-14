@@ -1510,6 +1510,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
+name = "combine"
+version = "4.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35ed6e9d84f0b51a7f52daf1c7d71dd136fd7a3f41a8462b8cdb8c78d920fad4"
+dependencies = [
+ "bytes",
+ "memchr",
+]
+
+[[package]]
 name = "console"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2228,6 +2238,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9852635589dc9f9ea1b6fe9f05b50ef208c85c834a562f0c6abb1c475736ec2b"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "enum-as-inner"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9720bba047d567ffc8a3cba48bf19126600e249ab7f128e9233e6376976a116"
+dependencies = [
+ "heck 0.4.0",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.107",
 ]
 
 [[package]]
@@ -3684,6 +3706,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mach2"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d0d1830bcd151a6fc4aea1369af235b36c1528fe976b8ff678683c9995eade8"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "maplit"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3798,6 +3829,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "mmap-rs"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e6ae912d061146fa8d2b8bf15f66710c8641ac5d1e6478fb6d56839fd958a04"
+dependencies = [
+ "bitflags",
+ "combine",
+ "libc",
+ "mach2",
+ "nix",
+ "sysctl",
+ "thiserror",
+ "widestring",
+ "windows",
+]
+
+[[package]]
 name = "more-asserts"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3826,6 +3874,20 @@ name = "new_debug_unreachable"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4a24736216ec316047a1fc4252e27dabb04218aa4a3f37c6e7ddbf1f9782b54"
+
+[[package]]
+name = "nix"
+version = "0.26.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bfdda3d196821d6af13126e40375cdf7da646a96114af134d5f417a9a1dc8e1a"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "libc",
+ "memoffset 0.7.1",
+ "pin-utils",
+ "static_assertions",
+]
 
 [[package]]
 name = "nom"
@@ -5344,7 +5406,7 @@ dependencies = [
 [[package]]
 name = "semaphore"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#1fa1471a13539af2f859478a0c9108adfe7535ca"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a45738039e0b0a8adbac5ee193958f1e238d7de4"
 dependencies = [
  "ark-bn254",
  "ark-circom",
@@ -5353,11 +5415,13 @@ dependencies = [
  "ark-groth16",
  "ark-relations",
  "ark-std",
+ "bincode",
  "color-eyre 0.6.2",
  "enumset",
  "ethers-core 2.0.3",
  "hex",
  "hex-literal 0.3.4",
+ "mmap-rs",
  "num-bigint",
  "once_cell",
  "rand",
@@ -5371,17 +5435,18 @@ dependencies = [
  "thiserror",
  "tiny-keccak",
  "wasmer",
+ "zeroize",
 ]
 
 [[package]]
 name = "semaphore-depth-config"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#1fa1471a13539af2f859478a0c9108adfe7535ca"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a45738039e0b0a8adbac5ee193958f1e238d7de4"
 
 [[package]]
 name = "semaphore-depth-macros"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#1fa1471a13539af2f859478a0c9108adfe7535ca"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a45738039e0b0a8adbac5ee193958f1e238d7de4"
 dependencies = [
  "itertools",
  "proc-macro2",
@@ -5655,7 +5720,7 @@ dependencies = [
  "futures",
  "futures-util",
  "hex",
- "hex-literal 0.3.4",
+ "hex-literal 0.4.1",
  "hyper",
  "maplit",
  "once_cell",
@@ -5681,6 +5746,7 @@ dependencies = [
  "tracing-subscriber 0.3.17",
  "tracing-test",
  "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -6024,6 +6090,20 @@ dependencies = [
  "quote",
  "syn 1.0.107",
  "unicode-xid",
+]
+
+[[package]]
+name = "sysctl"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed66d6a2ccbd656659289bc90767895b7abbdec897a0fc6031aca3ed1cb51d3e"
+dependencies = [
+ "bitflags",
+ "byteorder",
+ "enum-as-inner",
+ "libc",
+ "thiserror",
+ "walkdir",
 ]
 
 [[package]]
@@ -7256,6 +7336,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "widestring"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "653f141f39ec16bba3c5abe400a0c60da7468261cc2cbf36805022876bc721a8"
+
+[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7285,6 +7371,15 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
+
+[[package]]
+name = "windows"
+version = "0.44.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e745dab35a0c4c77aa3ce42d595e13d2003d6902d6b08c9ef5fc326d08da12b"
+dependencies = [
+ "windows-targets 0.42.2",
+]
 
 [[package]]
 name = "windows-sys"
@@ -7569,9 +7664,9 @@ checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
 
 [[package]]
 name = "zeroize"
-version = "1.5.7"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c394b5bd0c6f669e7275d9c20aa90ae064cb22e75a1cad54e1b34088034b149f"
+checksum = "2a0956f1ba7c7909bfb66c2e9e4124ab6f6482560f6628b5aaeba39207c9aad9"
 dependencies = [
  "zeroize_derive",
 ]

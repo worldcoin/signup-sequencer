@@ -354,7 +354,7 @@ async fn commit_identities(
 
     // With all the data prepared we can submit the identities to the on-chain
     // identity manager and wait for that transaction to be mined.
-    let transaction_result = identity_manager
+    let transaction_id = identity_manager
         .register_identities(
             start_index,
             pre_root,
@@ -362,17 +362,11 @@ async fn commit_identities(
             identity_commitments,
             proof,
         )
-        .await;
-
-    let transaction_id = match transaction_result {
-        Err(err) => {
-            panic!(
-                "Failed to insert identity to contract due to error {err}. Restarting sequencer \
-                 to reconstruct local tree"
-            );
-        }
-        Ok(transaction_id) => transaction_id,
-    };
+        .await
+        .map_err(|e| {
+            error!(?e, "Failed to insert identity to contract.");
+            e
+        })?;
 
     info!(
         start_index,

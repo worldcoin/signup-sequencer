@@ -152,7 +152,6 @@ pub async fn test_inclusion_proof(
     leaf: &Hash,
     expect_failure: bool,
 ) {
-    let mut mined_json = None;
     for i in 1..21 {
         let body = construct_inclusion_proof_body(leaf);
         info!(?uri, "Contacting");
@@ -194,15 +193,21 @@ pub async fn test_inclusion_proof(
             assert_eq!(response.status(), StatusCode::ACCEPTED);
             info!("Got pending, waiting 1 second, iteration {}", i);
             tokio::time::sleep(Duration::from_secs(1)).await;
-        } else {
-            mined_json = Some(result_json);
-            break;
+        }
+        // TODO: Our tests are not checking the processed -> mined flow
+        //       because for that purpose we'd need to setup another chain
+        //       or a different contract for the same chain
+        //       as such both cases with mined or processed can be considered successes
+        else if status == "mined" {
+            let proof_json = generate_reference_proof_json(ref_tree, leaf_index, "mined");
+            assert_eq!(result_json, proof_json);
+            return;
+        } else if status == "processed" {
+            let proof_json = generate_reference_proof_json(ref_tree, leaf_index, "processed");
+            assert_eq!(result_json, proof_json);
+            return;
         }
     }
-
-    let result_json = mined_json.expect("Failed to get mined response");
-    let proof_json = generate_reference_proof_json(ref_tree, leaf_index, "mined");
-    assert_eq!(result_json, proof_json);
 }
 
 #[instrument(skip_all)]

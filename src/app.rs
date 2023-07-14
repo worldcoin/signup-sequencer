@@ -204,6 +204,7 @@ impl App {
         Ok(app)
     }
 
+    #[instrument(skip_all, level = "debug")]
     async fn restore_or_initialize_tree(
         database: &Database,
         tree_depth: usize,
@@ -274,6 +275,7 @@ impl App {
         leftover_items
     }
 
+    #[instrument(skip_all, level = "debug")]
     async fn get_cached_tree_state(
         database: &Database,
         tree_depth: usize,
@@ -300,16 +302,29 @@ impl App {
             mmap_file_path,
         ) else { return Ok(None) };
 
-        let (mined, batching_builder) = mined_builder.seal();
+        let (mined, mut processed_builder) = mined_builder.seal();
+
+        let mut processed_items = database
+            .get_commitments_by_status(Status::Processed)
+            .await?;
+        processed_items.sort_by_key(|item| item.leaf_index);
+
+        for processed_item in processed_items {
+            processed_builder.update(&processed_item);
+        }
+
+        let (processed, batching_builder) = processed_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
         let pending_items = database.get_commitments_by_status(Status::Pending).await?;
         for update in pending_items {
             latest_builder.update(&update);
         }
         let latest = latest_builder.seal();
-        Ok(Some(TreeState::new(mined, batching, latest)))
+
+        Ok(Some(TreeState::new(mined, processed, batching, latest)))
     }
 
+    #[instrument(skip_all, level = "debug")]
     async fn initialize_tree(
         database: &Database,
         tree_depth: usize,
@@ -598,7 +613,7 @@ mod test {
         );
 
         // check if the index is correct
-        assert_eq!(last_mined_index_in_dense, identities.iter().count());
+        assert_eq!(last_mined_index_in_dense, identities.len());
 
         // since there are less identities then dense prefix, the leavs should be empty
         // vector
@@ -620,7 +635,7 @@ mod test {
         assert_eq!(last_mined_index_in_dense, (1 << dense_prefix_depth) - 1);
 
         // since there are more identities then dense prefix, the leavs should be 2
-        assert_eq!(leaves.iter().count(), 2);
+        assert_eq!(leaves.len(), 2);
 
         // additional check for correctness
         assert_eq!(leaves[0], identities[8].element);

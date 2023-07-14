@@ -98,14 +98,7 @@ async fn mine_identities(
         "Mining batch"
     );
 
-    let result = identity_manager.mine_identities(transaction_id).await;
-
-    if let Err(err) = result {
-        panic!(
-            "Failed to insert identity to contract due to error {err}. Restarting sequencer to \
-             reconstruct local tree"
-        );
-    };
+    identity_manager.mine_identities(transaction_id).await?;
 
     // With this done, all that remains is to mark them as submitted to the
     // blockchain in the source-of-truth database, and also update the mined tree to

@@ -3,7 +3,8 @@ name = "signup-sequencer"
 version = "0.1.0"
 authors = [
     "Remco Bloemen <remco@worldcoin.org>",
-    "Lucas Ege <lucas@worldcoin.org>"]
+    "Lucas Ege <lucas@worldcoin.org>",
+]
 edition = "2021"
 build = "build.rs"
 homepage = "https://github.com/worldcoin/signup-sequencer"
@@ -32,9 +33,17 @@ axum-server = "0.4.4"
 bytes = "1.4.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "4.0", features = ["derive"] }
-cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "b8f350d9022edce2c9f7a080c6899eafda3ac9ea", features = ["signals", "prometheus", "metered-allocator", "otlp", "datadog"] }
+cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "b8f350d9022edce2c9f7a080c6899eafda3ac9ea", features = [
+    "signals",
+    "prometheus",
+    "metered-allocator",
+    "otlp",
+    "datadog",
+] }
 cognitoauth = { git = "https://github.com/lucdew/cognito-srp-auth.git" }
-criterion = { version = "0.4", optional = true, features = ["async_tokio"] } # For `bench`
+criterion = { version = "0.4", optional = true, features = [
+    "async_tokio",
+] } # For `bench`
 ethers = { version = "1.0.0", features = ["ws", "ipc", "openssl", "abigen"] }
 eyre = "0.6"
 futures = "0.3"
@@ -47,30 +56,51 @@ prometheus = "0.13.3" # We need upstream PR#465 to fix #272.
 proptest = { version = "1.0", optional = true } # For `bench`
 reqwest = { version = "0.11.14", features = ["json"] }
 ruint = { version = "1.3", features = ["primitive-types", "sqlx"] }
-semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main", features = ["depth_30"] }
+semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main", features = [
+    "depth_30",
+] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "any", "postgres", "chrono"] }
+sqlx = { version = "0.6", features = [
+    "runtime-tokio-native-tls",
+    "any",
+    "postgres",
+    "chrono",
+] }
 take_mut = "0.2.2"
-tempfile = "3.3.0"
+tempfile = "3.5.0"
 thiserror = "1.0"
-tokio = { version = "1.17", features = ["signal", "macros", "rt", "sync", "time", "rt-multi-thread", "tracing", "test-util"] }
+tokio = { version = "1.17", features = [
+    "signal",
+    "macros",
+    "rt",
+    "sync",
+    "time",
+    "rt-multi-thread",
+    "tracing",
+    "test-util",
+] }
 tracing = "0.1"
 tracing-futures = "0.2"
 url = { version = "2.2", features = ["serde"] }
+zeroize = "1.6.0"
 # `ethers-rs` requires an older version of primitive-types.
 # But `ruint` supports the latest version. So we need to override it.
 # `cargo update --package primitive-types@0.12.1 --precise 0.11.1`
 
 [dev-dependencies]
-cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "b8f350d9022edce2c9f7a080c6899eafda3ac9ea", features = ["mock-shutdown"] }
+cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "b8f350d9022edce2c9f7a080c6899eafda3ac9ea", features = [
+    "mock-shutdown",
+] }
 hex = "0.4.3"
-hex-literal = "0.3"
+hex-literal = "0.4.1"
 maplit = "1.0.2"
 postgres-docker-utils = { path = "crates/postgres-docker-utils" }
 proptest = { version = "1.0" }
 regex = { version = "1.7.1", features = ["std"] }
-semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main", features = ["depth_20"] }
+semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main", features = [
+    "depth_20",
+] }
 serial_test = { version = "1.0.0" }
 test-case = "3.0"
 tracing-subscriber = "0.3.11"

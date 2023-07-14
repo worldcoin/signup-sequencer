@@ -11,7 +11,6 @@ const SUPPORTED_DEPTH: usize = 20;
 const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
-#[serial_test::serial]
 async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
@@ -33,7 +32,12 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
-    // We initially spawn the service with a single prover for batch size 3.
+    // temp dir will be deleted on drop call
+    let temp_dir = tempfile::tempdir()?;
+    info!(
+        "temp dir created at: {:?}",
+        temp_dir.path().join("testfile")
+    );
 
     let mut options = Options::try_parse_from([
         "signup-sequencer",
@@ -53,6 +57,8 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         "10",
         "--tree-gc-threshold",
         "1",
+        "--dense-tree-mmap-file",
+        temp_dir.path().join("testfile").to_str().unwrap(),
     ])
     .context("Failed to create options")?;
 

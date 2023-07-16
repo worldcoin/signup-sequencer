@@ -662,6 +662,23 @@ mod test {
         (1..=n).map(Field::from).collect()
     }
 
+    async fn assert_roots_are(
+        db: &Database,
+        roots: impl IntoIterator<Item = &Field>,
+        expected_state: Status,
+    ) -> anyhow::Result<()> {
+        for root in roots.into_iter() {
+            let root = db
+                .get_root_state(root)
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, expected_state,);
+        }
+
+        Ok(())
+    }
+
     #[tokio::test]
     async fn insert_identity() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
@@ -787,6 +804,49 @@ mod test {
             pending_identities, 2,
             "There should be 2 pending identities"
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn mark_root_as_mined_interaction_with_mark_root_as_processed() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let num_identities = 6;
+
+        let identities = mock_identities(num_identities);
+        let roots = mock_roots(num_identities);
+
+        for i in 0..num_identities {
+            db.insert_pending_identity(i, &identities[i], &roots[i])
+                .await
+                .context("Inserting identity")?;
+        }
+
+        println!("Marking roots up to 2nd as processed");
+        db.mark_root_as_processed(&roots[2]).await?;
+
+        assert_roots_are(&db, &roots[..3], Status::Processed).await?;
+        assert_roots_are(&db, &roots[3..], Status::Pending).await?;
+
+        println!("Marking roots up to 1st as mined");
+        db.mark_root_as_mined(&roots[1]).await?;
+
+        assert_roots_are(&db, &roots[..2], Status::Mined).await?;
+        assert_roots_are(&db, &[roots[2]], Status::Processed).await?;
+        assert_roots_are(&db, &roots[3..], Status::Pending).await?;
+
+        println!("Marking roots up to 4th as processed");
+        db.mark_root_as_processed(&roots[4]).await?;
+
+        assert_roots_are(&db, &roots[..2], Status::Mined).await?;
+        assert_roots_are(&db, &roots[2..5], Status::Processed).await?;
+        assert_roots_are(&db, &roots[5..], Status::Pending).await?;
+
+        println!("Marking all roots as mined");
+        db.mark_root_as_mined(&roots[num_identities - 1]).await?;
+
+        assert_roots_are(&db, &roots, Status::Mined).await?;
 
         Ok(())
     }

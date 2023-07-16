@@ -667,7 +667,7 @@ mod test {
         roots: impl IntoIterator<Item = &Field>,
         expected_state: Status,
     ) -> anyhow::Result<()> {
-        for root in roots.into_iter() {
+        for root in roots {
             let root = db
                 .get_root_state(root)
                 .await?

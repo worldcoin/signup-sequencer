@@ -18,6 +18,7 @@ use crate::contracts::SharedIdentityManager;
 use crate::database::Database;
 use crate::ethereum::write::TransactionId;
 use crate::identity_tree::TreeState;
+use crate::utils::async_queue::AsyncQueue;
 
 pub mod tasks;
 
@@ -166,7 +167,6 @@ impl TaskMonitor {
         let (shutdown_sender, _) = broadcast::channel(1);
         let (pending_identities_sender, pending_identities_receiver) =
             mpsc::channel(self.pending_identities_capacity);
-        let (mined_root_sender, mined_root_receiver) = mpsc::channel(self.mined_roots_capacity);
 
         let wake_up_notify = Arc::new(Notify::new());
         // Immediately notify so we can start processing if we have pending identities
@@ -176,7 +176,8 @@ impl TaskMonitor {
         // We need to maintain mutable access to these receivers from multiple
         // invocations of this task
         let pending_identities_receiver = Arc::new(Mutex::new(pending_identities_receiver));
-        let mined_root_receiver = Arc::new(Mutex::new(mined_root_receiver));
+
+        let mined_roots_queue = AsyncQueue::new(self.mined_roots_capacity);
 
         let mut handles = Vec::new();
 
@@ -185,7 +186,7 @@ impl TaskMonitor {
             self.database.clone(),
             self.identity_manager.clone(),
             self.tree_state.get_mined_tree(),
-            mined_root_receiver,
+            mined_roots_queue.clone(),
         );
 
         let finalize_identities_handle = crate::utils::spawn_monitored_with_backoff(
@@ -202,7 +203,7 @@ impl TaskMonitor {
             self.identity_manager.clone(),
             self.tree_state.get_processed_tree(),
             pending_identities_receiver,
-            mined_root_sender,
+            mined_roots_queue,
         );
 
         let mine_identities_handle = crate::utils::spawn_monitored_with_backoff(

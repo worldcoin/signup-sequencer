@@ -9,13 +9,14 @@ use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
 use crate::identity_tree::{Intermediate, TreeVersion, TreeWithNextVersion};
 use crate::task_monitor::{PendingIdentities, TaskMonitor};
+use crate::utils::async_queue::AsyncQueue;
 
 pub struct MineIdentities {
     database:                    Arc<Database>,
     identity_manager:            SharedIdentityManager,
     mined_tree:                  TreeVersion<Intermediate>,
     pending_identities_receiver: Arc<Mutex<mpsc::Receiver<PendingIdentities>>>,
-    mined_roots_sender:          mpsc::Sender<U256>,
+    mined_roots_queue:           AsyncQueue<U256>,
 }
 
 impl MineIdentities {
@@ -24,14 +25,14 @@ impl MineIdentities {
         identity_manager: SharedIdentityManager,
         mined_tree: TreeVersion<Intermediate>,
         pending_identities_receiver: Arc<Mutex<mpsc::Receiver<PendingIdentities>>>,
-        mined_roots_sender: mpsc::Sender<U256>,
+        mined_roots_queue: AsyncQueue<U256>,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
             identity_manager,
             mined_tree,
             pending_identities_receiver,
-            mined_roots_sender,
+            mined_roots_queue,
         })
     }
 
@@ -43,7 +44,7 @@ impl MineIdentities {
             &self.identity_manager,
             &self.mined_tree,
             &mut pending_identities_receiver,
-            &self.mined_roots_sender,
+            &self.mined_roots_queue,
         )
         .await
     }
@@ -54,7 +55,7 @@ async fn mine_identities_loop(
     identity_manager: &IdentityManager,
     mined_tree: &TreeVersion<Intermediate>,
     pending_identities_receiver: &mut mpsc::Receiver<PendingIdentities>,
-    mined_roots_sender: &mpsc::Sender<U256>,
+    mined_roots_queue: &AsyncQueue<U256>,
 ) -> AnyhowResult<()> {
     loop {
         let Some(pending_identity) = pending_identities_receiver.recv().await else {
@@ -67,7 +68,7 @@ async fn mine_identities_loop(
             database,
             identity_manager,
             mined_tree,
-            mined_roots_sender,
+            mined_roots_queue,
         )
         .await?;
     }
@@ -81,7 +82,7 @@ async fn mine_identities(
     database: &Database,
     identity_manager: &IdentityManager,
     mined_tree: &TreeVersion<Intermediate>,
-    mined_roots_sender: &mpsc::Sender<U256>,
+    mined_roots_queue: &AsyncQueue<U256>,
 ) -> AnyhowResult<()> {
     let PendingIdentities {
         transaction_id,
@@ -109,7 +110,7 @@ async fn mine_identities(
 
     let updates_count = mined_tree.apply_updates_up_to(post_root.into());
 
-    mined_roots_sender.send(post_root).await?;
+    mined_roots_queue.push(post_root).await;
 
     info!(
         start_index,

@@ -76,9 +76,9 @@ impl<'a, T> AsyncPopGuard<'a, T>
 where
     T: Clone,
 {
-    pub async fn read(&self) -> Option<T> {
+    pub async fn read(&self) -> T {
         let items = self.queue.inner.items.lock().await;
-        items.front().cloned()
+        items.front().unwrap().clone()
     }
 
     pub async fn commit(self) {
@@ -99,7 +99,7 @@ impl<'a, T> Drop for AsyncPopGuard<'a, T> {
 
 #[cfg(test)]
 mod tests {
-    use tokio::time::{sleep, timeout, Duration};
+    use tokio::time::{timeout, Duration};
 
     use super::*;
 
@@ -122,13 +122,13 @@ mod tests {
 
         queue.push(2).await;
 
-        assert_eq!(pop_guard.read().await, Some(1));
+        assert_eq!(pop_guard.read().await, 1);
 
         pop_guard.commit().await;
 
         let pop_guard = queue.pop().await;
 
-        assert_eq!(pop_guard.read().await, Some(2));
+        assert_eq!(pop_guard.read().await, 2);
     }
 
     #[tokio::test]
@@ -141,13 +141,13 @@ mod tests {
 
         queue.push(2).await;
 
-        assert_eq!(pop_guard.read().await, Some(1));
+        assert_eq!(pop_guard.read().await, 1);
 
         // Drop without committing
         drop(pop_guard);
 
         let pop_guard = queue.pop().await;
-        assert_eq!(pop_guard.read().await, Some(1));
+        assert_eq!(pop_guard.read().await, 1);
     }
 
     #[tokio::test]
@@ -157,7 +157,7 @@ mod tests {
         queue.push(1).await;
 
         let first_guard = queue.pop().await;
-        assert_eq!(first_guard.read().await, Some(1));
+        assert_eq!(first_guard.read().await, 1);
 
         let second_guard = timeout(Duration::from_secs_f32(0.5), queue.pop()).await;
 
@@ -166,6 +166,6 @@ mod tests {
         drop(first_guard);
 
         let pop_guard = queue.pop().await;
-        assert_eq!(pop_guard.read().await, Some(1));
+        assert_eq!(pop_guard.read().await, 1);
     }
 }

@@ -517,8 +517,8 @@ impl TreeState {
             Status::Pending | Status::New | Status::Failed => {
                 self.latest.get_proof(item.leaf_index)
             }
-            Status::Mined => self.processed.get_proof(item.leaf_index),
-            Status::Processed => self.mined.get_proof(item.leaf_index),
+            Status::Processed => self.processed.get_proof(item.leaf_index),
+            Status::Mined => self.mined.get_proof(item.leaf_index),
         };
 
         InclusionProof {

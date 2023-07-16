@@ -154,7 +154,7 @@ impl App {
         // We don't store the initial root in the database, so we have to skip this step
         // if the contract root hash is equal to initial root hash
         if root_hash != initial_root_hash {
-            database.mark_root_as_processed(&root_hash).await?;
+            database.mark_root_as_mined(&root_hash).await?;
         }
 
         let timer = Instant::now();

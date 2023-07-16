@@ -553,21 +553,18 @@ impl CanonicalTreeBuilder {
         flattening_threshold: usize,
         initial_leaf: Field,
         initial_leaves: &[Field],
-        mmap_file_path: &str,
     ) -> Self {
         let initial_leaves_in_dense_count = min(initial_leaves.len(), 1 << dense_prefix_depth);
         let (initial_leaves_in_dense, leftover_initial_leaves) =
             initial_leaves.split_at(initial_leaves_in_dense_count);
 
         let tree =
-            PoseidonTree::<lazy_merkle_tree::Canonical>::new_mmapped_with_dense_prefix_with_init_values(
+            PoseidonTree::<lazy_merkle_tree::Canonical>::new_with_dense_prefix_with_initial_values(
                 tree_depth,
                 dense_prefix_depth,
                 &initial_leaf,
                 initial_leaves_in_dense,
-                mmap_file_path
-            ).unwrap();
-
+            );
         let metadata = CanonicalTreeMetadata {
             flatten_threshold:        flattening_threshold,
             count_since_last_flatten: 0,
@@ -585,50 +582,6 @@ impl CanonicalTreeBuilder {
             });
         }
         builder
-    }
-
-    pub fn restore(
-        tree_depth: usize,
-        dense_prefix_depth: usize,
-        initial_leaf: &Field,
-        last_index: usize,
-        leftover_items: &[ruint::Uint<256, 4>],
-        flattening_threshold: usize,
-        mmap_file_path: &str,
-    ) -> Option<Self> {
-        let tree: LazyMerkleTree<PoseidonHash, lazy_merkle_tree::Canonical> =
-            match PoseidonTree::<lazy_merkle_tree::Canonical>::attempt_dense_mmap_restore(
-                tree_depth,
-                dense_prefix_depth,
-                initial_leaf,
-                mmap_file_path,
-            ) {
-                Ok(tree) => tree,
-                Err(error) => {
-                    warn!("Tree wasn't restored. Reason: {}", error.to_string());
-                    return None;
-                }
-            };
-
-        let metadata = CanonicalTreeMetadata {
-            flatten_threshold:        flattening_threshold,
-            count_since_last_flatten: 0,
-        };
-        let mut builder = Self(TreeVersionData {
-            tree,
-            next_leaf: last_index + 1,
-            metadata,
-            next: None,
-        });
-
-        for (index, leaf) in leftover_items.iter().enumerate() {
-            builder.update(&TreeUpdate {
-                leaf_index: index + last_index + 1,
-                element:    *leaf,
-            });
-        }
-
-        Some(builder)
     }
 
     /// Updates a leaf in the resulting tree.

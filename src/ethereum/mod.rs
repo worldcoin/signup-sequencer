@@ -16,10 +16,6 @@ use crate::serde_utils::JsonStrWrapper;
 pub mod read;
 pub mod write;
 
-#[cfg(not(feature = "oz-provider"))]
-mod write_dev;
-
-#[cfg(feature = "oz-provider")]
 mod write_oz;
 
 // TODO: Log and metrics for signer / nonces.
@@ -34,11 +30,6 @@ pub struct Options {
     #[clap(long, env, default_value = "[]")]
     pub secondary_providers: JsonStrWrapper<Vec<Url>>,
 
-    #[cfg(not(feature = "oz-provider"))]
-    #[clap(flatten)]
-    pub write_options: write_dev::Options,
-
-    #[cfg(feature = "oz-provider")]
     #[clap(flatten)]
     pub write_options: write_oz::Options,
 }
@@ -66,11 +57,6 @@ impl Ethereum {
             );
         }
 
-        #[cfg(not(feature = "oz-provider"))]
-        let write_provider: Arc<dyn WriteProvider> =
-            Arc::new(write_dev::Provider::new(read_provider.clone(), options.write_options).await?);
-
-        #[cfg(feature = "oz-provider")]
         let write_provider: Arc<dyn WriteProvider> =
             Arc::new(write_oz::Provider::new(read_provider.clone(), &options.write_options).await?);
 

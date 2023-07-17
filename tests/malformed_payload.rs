@@ -42,6 +42,14 @@ async fn malformed_payload() -> anyhow::Result<()> {
         "10",
         "--tree-gc-threshold",
         "1",
+        "--oz-api-key",
+        "",
+        "--oz-api-secret",
+        "",
+        "--oz-api-url",
+        &micro_oz.endpoint(),
+        "--oz-address",
+        &format!("{:?}", micro_oz.address()),
     ])
     .context("Failed to create options")?;
 

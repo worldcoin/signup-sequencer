@@ -15,8 +15,6 @@ use super::Options;
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::TxError;
 
-const DEFENDER_RELAY_URL: &str = "https://api.defender.openzeppelin.com";
-
 static TX_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!("eth_tx_count", "The transaction count by bytes4.", &[
         "bytes4"
@@ -35,12 +33,21 @@ pub struct OzRelay {
 
 impl OzRelay {
     pub async fn new(options: &Options) -> AnyhowResult<Self> {
-        let oz_api = OzApi::new(
-            DEFENDER_RELAY_URL,
-            &options.oz_api_key,
-            &options.oz_api_secret,
-        )
-        .await?;
+        let oz_api = if options.oz_api_key.is_empty() && options.oz_api_secret.is_empty() {
+            tracing::warn!(
+                "OpenZeppelin Defender API Key and Secret are empty. Connection will operate \
+                 without authentication headers. Use only in development."
+            );
+
+            OzApi::without_auth(&options.oz_api_url)?
+        } else {
+            OzApi::new(
+                &options.oz_api_url,
+                &options.oz_api_key,
+                &options.oz_api_secret,
+            )
+            .await?
+        };
 
         Ok(Self {
             oz_api,

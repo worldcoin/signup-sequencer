@@ -18,6 +18,13 @@ pub struct ExpiringHeaders {
 }
 
 impl ExpiringHeaders {
+    pub fn empty() -> Self {
+        Self {
+            headers:         HeaderMap::new(),
+            expiration_time: Instant::now(),
+        }
+    }
+
     pub async fn refresh(api_key: &str, api_secret: &str) -> Result<ExpiringHeaders, Error> {
         let now = Instant::now();
 

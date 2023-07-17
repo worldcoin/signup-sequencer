@@ -6,7 +6,8 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use ethers::prelude::k256::{SecretKey, ecdsa::SigningKey};
+use ethers::prelude::k256::ecdsa::SigningKey;
+use ethers::types::Address;
 use oz_api::data::transactions::{RelayerTransactionBase, SendBaseTransactionRequestOwned, Status};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
@@ -22,7 +23,11 @@ async fn send_transaction(
 
     match result {
         Ok(tx) => Ok(Json(tx)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Err(err) => {
+            tracing::error!("Pinhead send_transaction error: {:?}", err);
+
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
@@ -42,7 +47,11 @@ async fn list_transactions(
 
     match txs {
         Ok(txs) => Ok(Json(txs)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Err(err) => {
+            tracing::error!("Pinhead list_transactions error: {:?}", err);
+
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
@@ -54,19 +63,32 @@ async fn query_transaction(
 
     match tx {
         Ok(tx) => Ok(Json(tx)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Err(err) => {
+            tracing::error!("Pinhead query_transaction error: {:?}", err);
+
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
 pub struct ServerHandle {
+    pinhead:            Pinhead,
     addr:               SocketAddr,
     shutdown_notify:    Arc<Notify>,
     server_join_handle: JoinHandle<Result<(), hyper::Error>>,
 }
 
 impl ServerHandle {
+    pub fn address(&self) -> Address {
+        self.pinhead.inner.signer.address()
+    }
+
     pub fn addr(&self) -> SocketAddr {
         self.addr
+    }
+
+    pub fn endpoint(&self) -> String {
+        format!("http://{}", self.addr)
     }
 
     pub async fn shutdown(self) {
@@ -84,7 +106,7 @@ pub async fn spawn(rpc_url: String, secret_key: SigningKey) -> anyhow::Result<Se
     let router = Router::new()
         .route("/txs", post(send_transaction).get(list_transactions))
         .route("/txs/:tx_id", get(query_transaction))
-        .with_state(pinhead);
+        .with_state(pinhead.clone());
 
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0);
     let listener = TcpListener::bind(addr).context("Failed to bind random port")?;
@@ -104,6 +126,7 @@ pub async fn spawn(rpc_url: String, secret_key: SigningKey) -> anyhow::Result<Se
     let server_join_handle = tokio::spawn(server);
 
     Ok(ServerHandle {
+        pinhead,
         addr: local_addr,
         shutdown_notify,
         server_join_handle,

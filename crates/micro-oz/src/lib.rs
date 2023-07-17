@@ -5,10 +5,9 @@ use std::sync::Arc;
 use anyhow::Context;
 use chrono::Utc;
 use ethers::prelude::k256::ecdsa::SigningKey;
-use ethers::prelude::k256::SecretKey;
 use ethers::prelude::SignerMiddleware;
 use ethers::providers::{Http, Middleware, Provider};
-use ethers::signers::LocalWallet;
+use ethers::signers::{LocalWallet, Signer};
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::Eip1559TransactionRequest;
 use oz_api::data::transactions::{RelayerTransactionBase, SendBaseTransactionRequestOwned, Status};
@@ -16,9 +15,11 @@ use tokio::sync::{mpsc, Mutex};
 
 pub mod server;
 
+const DEFAULT_GAS_LIMIT: u32 = 1_000_000;
+
 pub use self::server::{spawn, ServerHandle};
 
-type Signer = SignerMiddleware<Provider<Http>, LocalWallet>;
+type PinheadSigner = SignerMiddleware<Provider<Http>, LocalWallet>;
 
 #[derive(Clone)]
 pub struct Pinhead {
@@ -26,7 +27,7 @@ pub struct Pinhead {
 }
 
 struct PinheadInner {
-    signer:         Arc<Signer>,
+    signer:         Arc<PinheadSigner>,
     is_running:     AtomicBool,
     tx_id_counter:  AtomicU64,
     txs_to_execute: mpsc::Sender<String>,
@@ -49,46 +50,61 @@ async fn runner(
             break;
         };
 
-        let tx = inner
-            .txs
-            .lock()
-            .await
-            .get(&tx_id)
-            .expect("Missing tx")
-            .clone();
-
-        let mut typed_tx = {
-            let tx_guard = tx.lock().await;
-
-            TypedTransaction::Eip1559(Eip1559TransactionRequest {
-                to: Some(tx_guard.to.clone()),
-                value: tx_guard.value.clone(),
-                gas: Some(tx_guard.gas_limit.into()),
-                data: tx_guard.data.clone(),
-                ..Eip1559TransactionRequest::default()
-            })
-        };
-
-        inner.signer.fill_transaction(&mut typed_tx, None).await?;
-
-        let pending_tx = inner.signer.send_transaction(typed_tx, None).await?;
-
-        {
-            let mut tx_guard = tx.lock().await;
-
-            tx_guard.status = Status::Pending;
-            tx_guard.hash = Some(pending_tx.tx_hash());
+        match runner_inner(&inner, tx_id).await {
+            Ok(_) => {}
+            Err(err) => {
+                tracing::error!("Pinhead runner error: {:?}", err);
+            }
         }
+    }
 
-        let receipt = pending_tx.await?;
+    Ok(())
+}
 
+async fn runner_inner(inner: &Arc<PinheadInner>, tx_id: String) -> Result<(), anyhow::Error> {
+    tracing::info!("Executing tx: {tx_id}");
+
+    let tx = inner
+        .txs
+        .lock()
+        .await
+        .get(&tx_id)
+        .expect("Missing tx")
+        .clone();
+
+    let mut typed_tx = {
+        let tx_guard = tx.lock().await;
+
+        TypedTransaction::Eip1559(Eip1559TransactionRequest {
+            to: Some(tx_guard.to.clone()),
+            value: tx_guard.value.clone(),
+            gas: Some(tx_guard.gas_limit.into()),
+            data: tx_guard.data.clone(),
+            ..Eip1559TransactionRequest::default()
+        })
+    };
+
+    inner.signer.fill_transaction(&mut typed_tx, None).await?;
+
+    let pending_tx = inner.signer.send_transaction(typed_tx, None).await?;
+
+    {
         let mut tx_guard = tx.lock().await;
 
-        if let Some(_receipt) = receipt {
-            tx_guard.status = Status::Mined;
-        } else {
-            tx_guard.status = Status::Failed;
-        }
+        tx_guard.status = Status::Pending;
+        tx_guard.hash = Some(pending_tx.tx_hash());
+    }
+
+    tracing::info!("Awaiting for receipt");
+
+    let receipt = pending_tx.await?;
+
+    let mut tx_guard = tx.lock().await;
+
+    if let Some(_receipt) = receipt {
+        tx_guard.status = Status::Mined;
+    } else {
+        tx_guard.status = Status::Failed;
     }
 
     Ok(())
@@ -97,7 +113,9 @@ async fn runner(
 impl Pinhead {
     pub async fn new(rpc_url: String, secret_key: SigningKey) -> anyhow::Result<Self> {
         let provider = Provider::<Http>::try_from(rpc_url)?;
-        let wallet = LocalWallet::from(secret_key);
+
+        let chain_id = provider.get_chainid().await?.as_u64();
+        let wallet = LocalWallet::from(secret_key).with_chain_id(chain_id);
 
         let signer = SignerMiddleware::new(provider, wallet);
 
@@ -132,7 +150,10 @@ impl Pinhead {
             transaction_id: tx_id.clone(),
             to:             tx_request.to.context("Missing to")?,
             value:          tx_request.value,
-            gas_limit:      tx_request.gas_limit.context("Missing gas limit")?.as_u32(),
+            gas_limit:      tx_request
+                .gas_limit
+                .map(|gas_limit| gas_limit.as_u32())
+                .unwrap_or(DEFAULT_GAS_LIMIT),
             data:           tx_request.data,
             status:         Status::Pending,
             hash:           None,

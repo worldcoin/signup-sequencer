@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
 use ethers::types::U256;
-use tokio::sync::{mpsc, Mutex};
-use tracing::{info, instrument, warn};
+use tracing::{info, instrument};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
@@ -94,7 +93,15 @@ async fn mine_identities(
         "Mining batch"
     );
 
-    identity_manager.mine_identities(transaction_id).await?;
+    if !identity_manager
+        .mine_identities(transaction_id.clone())
+        .await?
+    {
+        panic!(
+            "Transaction {} failed on chain - sequencer will crash and restart",
+            transaction_id
+        );
+    }
 
     // With this done, all that remains is to mark them as submitted to the
     // blockchain in the source-of-truth database, and also update the mined tree to

@@ -94,7 +94,7 @@ impl Ethereum {
         self.write_provider.fetch_pending_transactions().await
     }
 
-    pub async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError> {
+    pub async fn mine_transaction(&self, tx: TransactionId) -> Result<bool, TxError> {
         self.write_provider.mine_transaction(tx).await
     }
 }

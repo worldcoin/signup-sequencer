@@ -6,7 +6,7 @@ use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{register_histogram, Histogram};
 use semaphore::poseidon_tree::Branch;
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::Notify;
 use tokio::{select, time};
 use tracing::{debug, error, info, instrument, warn};
 
@@ -376,12 +376,14 @@ async fn commit_identities(
     );
 
     // The transaction will be awaited on asynchronously
-    permit.send(PendingBatchSubmission {
-        transaction_id,
-        pre_root,
-        post_root,
-        start_index,
-    }).await;
+    permit
+        .send(PendingBatchSubmission {
+            transaction_id,
+            pre_root,
+            post_root,
+            start_index,
+        })
+        .await;
 
     // Update the batching tree only after submitting the identities to the chain
     batching_tree.apply_updates_up_to(post_root.into());

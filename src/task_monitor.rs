@@ -33,7 +33,7 @@ struct RunningInstance {
 }
 
 #[derive(Debug, Clone)]
-pub struct PendingIdentities {
+pub struct PendingBatchSubmission {
     transaction_id: TransactionId,
     pre_root:       U256,
     post_root:      U256,
@@ -162,18 +162,13 @@ impl TaskMonitor {
         // We could use the second element of the tuple as `mut shutdown_receiver`,
         // but for symmetry's sake we create it for every task with `.subscribe()`
         let (shutdown_sender, _) = broadcast::channel(1);
-        let (pending_identities_sender, pending_identities_receiver) =
-            mpsc::channel(self.pending_identities_capacity);
 
         let wake_up_notify = Arc::new(Notify::new());
         // Immediately notify so we can start processing if we have pending identities
         // in the database
         wake_up_notify.notify_one();
 
-        // We need to maintain mutable access to these receivers from multiple
-        // invocations of this task
-        let pending_identities_receiver = Arc::new(Mutex::new(pending_identities_receiver));
-
+        let pending_batch_submissions_queue = AsyncQueue::new(self.pending_identities_capacity);
         let mined_roots_queue = AsyncQueue::new(self.mined_roots_capacity);
 
         let mut handles = Vec::new();
@@ -199,7 +194,7 @@ impl TaskMonitor {
             self.database.clone(),
             self.identity_manager.clone(),
             self.tree_state.get_processed_tree(),
-            pending_identities_receiver,
+            pending_batch_submissions_queue.clone(),
             mined_roots_queue,
         );
 
@@ -217,7 +212,7 @@ impl TaskMonitor {
             self.identity_manager.clone(),
             self.tree_state.get_batching_tree(),
             self.batch_insert_timeout_secs,
-            pending_identities_sender,
+            pending_batch_submissions_queue,
             wake_up_notify.clone(),
         );
 

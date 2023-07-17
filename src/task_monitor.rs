@@ -97,9 +97,6 @@ pub struct Options {
 
     /// How many transactions can be sent "at once" to the blockchain via the
     /// write provider.
-    ///
-    /// It's not recommended to use values other than 1 without the
-    /// `oz-provider` feature enabled.
     #[clap(long, env, default_value = "1")]
     pub pending_identities_capacity: usize,
 

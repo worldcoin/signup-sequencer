@@ -1,4 +1,3 @@
-#![cfg(not(feature = "oz-provider"))]
 // We include this module in multiple in multiple integration
 // test crates - so some code may not be used in some cases
 #![allow(dead_code)]

@@ -62,12 +62,11 @@ url = { version = "2.2", features = ["serde"] }
 # `cargo update --package primitive-types@0.12.1 --precise 0.11.1`
 
 [dev-dependencies]
-micro-oz = { path = "crates/micro-oz" }
-
 cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "b8f350d9022edce2c9f7a080c6899eafda3ac9ea", features = ["mock-shutdown"] }
 hex = "0.4.3"
 hex-literal = "0.3"
 maplit = "1.0.2"
+micro-oz = { path = "crates/micro-oz" }
 postgres-docker-utils = { path = "crates/postgres-docker-utils" }
 proptest = { version = "1.0" }
 regex = { version = "1.7.1", features = ["std"] }

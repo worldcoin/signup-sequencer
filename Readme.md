@@ -99,7 +99,7 @@ TREE_DEPTH=*your tree depth (eg. 16)* cargo run -- --batch-size *batch size for 
 Lint, build, test
 
 ```shell
-cargo fmt && cargo clippy --all-targets --features "bench, mimalloc" && cargo build --all-targets --features "bench, mimalloc" && cargo test --all-targets --features "bench, mimalloc"
+cargo fmt && cargo clippy --all-targets && cargo build --all-targets && cargo test --all-targets
 ```
 
 ## Contributing

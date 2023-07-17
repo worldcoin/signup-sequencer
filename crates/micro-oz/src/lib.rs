@@ -77,7 +77,7 @@ async fn runner_inner(inner: &Arc<PinheadInner>, tx_id: String) -> Result<(), an
 
         TypedTransaction::Eip1559(Eip1559TransactionRequest {
             to: Some(tx_guard.to.clone()),
-            value: tx_guard.value.clone(),
+            value: tx_guard.value,
             gas: Some(tx_guard.gas_limit.into()),
             data: tx_guard.data.clone(),
             ..Eip1559TransactionRequest::default()

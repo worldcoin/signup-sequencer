@@ -14,8 +14,6 @@ on:
       - main
 
 env:
-  RUST_VERSION: "1.65"
-  NIGHTLY_VERSION: nightly-2022-11-04
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
@@ -23,31 +21,13 @@ env:
 
 jobs:
   lint:
-    name: Lint
+    name: Lint & Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Install rust
         uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.NIGHTLY_VERSION }}
-          override: true
-          components: rustfmt, clippy
-      - name: Install protobuf-compiler
-        run: sudo apt-get install -y protobuf-compiler
-      - name: Cache
-        uses: actions/cache@v3
-        continue-on-error: false
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-lint-
       - name: Install cargo-sort
         uses: actions-rs/install@v0.1
         with:
@@ -64,53 +44,11 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --locked --features "bench, mimalloc" --all-targets
-      - name: Check docs
+      - name: Run tests
         uses: actions-rs/cargo@v1
         with:
-          command: doc
-          args: --locked --features "bench, mimalloc" --no-deps --document-private-items
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Install rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.NIGHTLY_VERSION }}
-          override: true
-      - name: Install protobuf-compiler
-        run: sudo apt-get install -y protobuf-compiler
-      - name: Cache
-        uses: actions/cache@v3
-        continue-on-error: false
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-test-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
-      # Cargo doc test is not included in `--all-targets`
-      # See <https://github.com/rust-lang/cargo/issues/6669>
-      # Cargo doc test also doesn't support `--no-run`, so we run it but
-      # have it just print `--help`.
-      - name: Build tests
-        run: |
-          cargo test --locked --features "bench, mimalloc" --all-targets --no-run
-          cargo test --locked --features "bench, mimalloc" --doc -- --help
-      - name: Run tests
-        run: |
-          cargo test --locked --features "bench, mimalloc" --all-targets -- --nocapture
-          cargo test --locked --features "bench, mimalloc" --doc -- --nocapture
+          command: test
+          args: --workspace
 
   codecov:
     # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
@@ -132,33 +70,21 @@ jobs:
           components: llvm-tools-preview
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
-      - name: Cache
-        uses: actions/cache@v3
-        continue-on-error: false
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-cov-${{ hashFiles('**/Cargo.lock') }}-cov
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-cov-
       - name: Install cargo-binutils
-        run: cargo install cargo-binutils
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: actions-rs/install@v0.1
         with:
-          version: nightly
-      - name: Build tests with coverage
-        run: |
-          cargo test --locked --features "bench, mimalloc" --all-targets --no-fail-fast --no-run
-          cargo test --locked --features "bench, mimalloc" --doc --no-fail-fast -- --help
-      - name: Run tests with coverage
-        run: |
-          cargo test --locked --features "bench, mimalloc" --all-targets --no-fail-fast -- --nocapture
-          cargo test --locked --features "bench, mimalloc" --doc --no-fail-fast
+          crate: cargo-binutils
+          version: latest
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: test --locked --workspace --no-fail-fast -- --nocapture
       - name: Merge execution traces
-        run: cargo profdata -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata
+        uses: actions-rs/cargo@v1
+        with:
+          command: profdata
+          args: -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata
       - name: Export to lcov format for codecov
         # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/instrument-coverage.html#including-doc-tests>
         run:
@@ -185,6 +111,7 @@ jobs:
           flags: test
           fail_ci_if_error: true
           verbose: true
+
   cargo-vet:
     name: Vet Dependencies
     runs-on: ubuntu-latest
@@ -203,4 +130,7 @@ jobs:
     - name: Ensure that the tool cache is populated with the cargo-vet binary
       run: cargo install --root ${{ runner.tool_cache }}/cargo-vet --version ${{ env.CARGO_VET_VERSION }} cargo-vet
     - name: Invoke cargo-vet
-      run: cargo vet --locked
+      uses: actions-rs/cargo@v1
+      with:
+        command: vet
+        args: --locked

@@ -152,7 +152,6 @@ pub async fn test_inclusion_proof(
     leaf: &Hash,
     expect_failure: bool,
 ) {
-    let mut mined_json = None;
     for i in 1..21 {
         let body = construct_inclusion_proof_body(leaf);
         info!(?uri, "Contacting");
@@ -194,15 +193,14 @@ pub async fn test_inclusion_proof(
             assert_eq!(response.status(), StatusCode::ACCEPTED);
             info!("Got pending, waiting 1 second, iteration {}", i);
             tokio::time::sleep(Duration::from_secs(1)).await;
+        } else if status == "mined" || status == "processed" {
+            // We don't differentiate between these 2 states in tests
+            let proof_json = generate_reference_proof_json(ref_tree, leaf_index, status);
+            assert_eq!(result_json, proof_json);
         } else {
-            mined_json = Some(result_json);
-            break;
+            panic!("Unexpected status: {}", status);
         }
     }
-
-    let result_json = mined_json.expect("Failed to get mined response");
-    let proof_json = generate_reference_proof_json(ref_tree, leaf_index, "mined");
-    assert_eq!(result_json, proof_json);
 }
 
 #[instrument(skip_all)]

@@ -104,6 +104,7 @@ cargo fmt && cargo clippy --all-targets --features "bench, mimalloc" && cargo bu
 
 ## Benchmarking
 
+Make sure you build the sequnecer with `--features "bench"`
 Run benchmarks
 
 ```shell

@@ -13,8 +13,7 @@ Sign-up Sequencer does sequencing of data (identities) that are commited in a ba
 1. [Introduction](#introduction)
 2. [Getting Started](#getting-started)
 3. [Tests](#tests)
-4. [Benchmarking](#benchmarking)
-5. [Contributing](#contributing)
+4. [Contributing](#contributing)
 
 ## Introduction
 
@@ -101,15 +100,6 @@ Lint, build, test
 
 ```shell
 cargo fmt && cargo clippy --all-targets --features "bench, mimalloc" && cargo build --all-targets --features "bench, mimalloc" && cargo test --all-targets --features "bench, mimalloc"
-```
-
-## Benchmarking
-
-Make sure you build the sequnecer with `--features "bench"`
-Run benchmarks
-
-```shell
-cargo criterion
 ```
 
 ## Contributing

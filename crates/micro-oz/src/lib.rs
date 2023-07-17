@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::Utc;
+use ethers::prelude::k256::ecdsa::SigningKey;
 use ethers::prelude::k256::SecretKey;
 use ethers::prelude::SignerMiddleware;
 use ethers::providers::{Http, Middleware, Provider};
@@ -14,6 +15,8 @@ use oz_api::data::transactions::{RelayerTransactionBase, SendBaseTransactionRequ
 use tokio::sync::{mpsc, Mutex};
 
 pub mod server;
+
+pub use self::server::{spawn, ServerHandle};
 
 type Signer = SignerMiddleware<Provider<Http>, LocalWallet>;
 
@@ -92,7 +95,7 @@ async fn runner(
 }
 
 impl Pinhead {
-    pub async fn new(rpc_url: String, secret_key: SecretKey) -> anyhow::Result<Self> {
+    pub async fn new(rpc_url: String, secret_key: SigningKey) -> anyhow::Result<Self> {
         let provider = Provider::<Http>::try_from(rpc_url)?;
         let wallet = LocalWallet::from(secret_key);
 

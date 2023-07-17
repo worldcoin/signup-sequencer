@@ -6,7 +6,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use ethers::prelude::k256::SecretKey;
+use ethers::prelude::k256::{SecretKey, ecdsa::SigningKey};
 use oz_api::data::transactions::{RelayerTransactionBase, SendBaseTransactionRequestOwned, Status};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
@@ -78,7 +78,7 @@ impl ServerHandle {
     }
 }
 
-pub async fn spawn(rpc_url: String, secret_key: SecretKey) -> anyhow::Result<ServerHandle> {
+pub async fn spawn(rpc_url: String, secret_key: SigningKey) -> anyhow::Result<ServerHandle> {
     let pinhead = Pinhead::new(rpc_url, secret_key).await?;
 
     let router = Router::new()

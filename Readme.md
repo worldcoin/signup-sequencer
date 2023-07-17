@@ -44,7 +44,8 @@ Sequencer has 6 API routes.
      
 
 
-## Getting Started (Local development)
+## Getting Started 
+### (Local development)
 Install Protobuf compiler
 
 | Os            | Command                                     |

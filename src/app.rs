@@ -154,6 +154,8 @@ impl App {
         // We don't store the initial root in the database, so we have to skip this step
         // if the contract root hash is equal to initial root hash
         if root_hash != initial_root_hash {
+            // Note that we don't have a way of queuing a root here for finalization.
+            // so it's going to stay as "processed" until the next root is mined.
             database.mark_root_as_processed(&root_hash).await?;
         }
 

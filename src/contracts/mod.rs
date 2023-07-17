@@ -287,7 +287,13 @@ impl IdentityManager {
         for bridged_world_id in &self.secondary_abis {
             let root_timestamp = bridged_world_id.root_history(root).call().await?;
 
-            if root_timestamp == 0 {
+            // root_history only returns superseded roots, so we must also check the latest
+            // root
+            let latest_root = bridged_world_id.latest_root().call().await?;
+
+            // If root is not superseded and it's not the latest root
+            // then it's not mined
+            if root_timestamp == 0 && root != latest_root {
                 return Ok(false);
             }
         }

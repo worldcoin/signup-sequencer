@@ -17,5 +17,6 @@ abigen!(
     BridgedWorldId,
     r#"[
         function rootHistory(uint256 root) public view virtual returns (uint128 timestamp)
+        function latestRoot() public view returns (uint256 root)
     ]"#
 );

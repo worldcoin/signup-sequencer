@@ -1305,7 +1305,7 @@ checksum = "8a2dd5a6fe8c6e3502f568a6353e5273bbb15193ad9a89e457b9970798efbea1"
 [[package]]
 name = "cli-batteries"
 version = "0.5.0"
-source = "git+https://github.com/recmo/cli-batteries?rev=b8f350d9022edce2c9f7a080c6899eafda3ac9ea#b8f350d9022edce2c9f7a080c6899eafda3ac9ea"
+source = "git+https://github.com/recmo/cli-batteries?rev=fc1186d1aba6a25120570fe04ad3362b08c8adfd#fc1186d1aba6a25120570fe04ad3362b08c8adfd"
 dependencies = [
  "ansi_term",
  "chrono",
@@ -6544,7 +6544,8 @@ dependencies = [
 [[package]]
 name = "tracing-opentelemetry"
 version = "0.19.0"
-source = "git+https://github.com/jaysonsantos/tracing-opentelemetry?rev=76b0a0fe45fd53c352e8bfdcdfad775aed727e4c#76b0a0fe45fd53c352e8bfdcdfad775aed727e4c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00a39dcf9bfc1742fa4d6215253b33a6e474be78275884c216fc2a06267b3600"
 dependencies = [
  "once_cell",
  "opentelemetry",

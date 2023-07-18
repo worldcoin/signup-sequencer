@@ -89,13 +89,15 @@ impl WriteProvider for Provider {
     }
 
     async fn mine_transaction(&self, tx: TransactionId) -> Result<bool, TxError> {
-        let oz_transaction = self.inner.mine_transaction(tx).await?;
+        let oz_transaction_result = self.inner.mine_transaction(tx.clone()).await;
 
-        if let TxError::Failed = oz_transaction {
+        if let Err(TxError::Failed(_)) = oz_transaction_result {
             warn!(?tx, "Transaction failed in OZ Relayer");
 
             return Ok(false);
         }
+
+        let oz_transaction = oz_transaction_result?;
 
         let tx_hash = oz_transaction.hash.ok_or_else(|| {
             TxError::Fetch(From::from(format!(

@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::fmt::Debug;
+use std::fmt;
 
 use async_trait::async_trait;
 use ethers::providers::ProviderError;
@@ -13,6 +13,12 @@ pub struct TransactionId(pub String);
 impl AsRef<str> for TransactionId {
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+
+impl fmt::Display for TransactionId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -48,7 +54,7 @@ pub enum TxError {
 }
 
 #[async_trait]
-pub trait WriteProvider: Sync + Send + Debug {
+pub trait WriteProvider: Sync + Send + fmt::Debug {
     async fn send_transaction(
         &self,
         tx: TypedTransaction,
@@ -57,7 +63,7 @@ pub trait WriteProvider: Sync + Send + Debug {
 
     async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError>;
 
-    async fn mine_transaction(&self, tx: TransactionId) -> Result<(), TxError>;
+    async fn mine_transaction(&self, tx: TransactionId) -> Result<bool, TxError>;
 
     fn address(&self) -> Address;
 }

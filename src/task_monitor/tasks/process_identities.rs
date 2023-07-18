@@ -6,7 +6,7 @@ use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{register_histogram, Histogram};
 use semaphore::poseidon_tree::Branch;
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::Notify;
 use tokio::{select, time};
 use tracing::{debug, error, info, instrument, warn};
 
@@ -17,7 +17,8 @@ use crate::identity_tree::{
 };
 use crate::prover::batch_insertion::Identity;
 use crate::prover::map::ReadOnlyInsertionProver;
-use crate::task_monitor::{PendingIdentities, TaskMonitor};
+use crate::task_monitor::{PendingBatchSubmission, TaskMonitor};
+use crate::utils::async_queue::AsyncQueue;
 
 /// The number of seconds either side of the timer tick to treat as enough to
 /// trigger a forced batch insertion.
@@ -32,12 +33,12 @@ static PENDING_IDENTITIES_CHANNEL_CAPACITY: Lazy<Histogram> = Lazy::new(|| {
 });
 
 pub struct ProcessIdentities {
-    database:                  Arc<Database>,
-    identity_manager:          SharedIdentityManager,
-    batching_tree:             TreeVersion<Intermediate>,
+    database: Arc<Database>,
+    identity_manager: SharedIdentityManager,
+    batching_tree: TreeVersion<Intermediate>,
     batch_insert_timeout_secs: u64,
-    pending_identities_sender: mpsc::Sender<PendingIdentities>,
-    wake_up_notify:            Arc<Notify>,
+    pending_batch_submissions_queue: AsyncQueue<PendingBatchSubmission>,
+    wake_up_notify: Arc<Notify>,
 }
 
 impl ProcessIdentities {
@@ -46,7 +47,7 @@ impl ProcessIdentities {
         identity_manager: SharedIdentityManager,
         batching_tree: TreeVersion<Intermediate>,
         batch_insert_timeout_secs: u64,
-        pending_identities_sender: mpsc::Sender<PendingIdentities>,
+        pending_batch_submissions_queue: AsyncQueue<PendingBatchSubmission>,
         wake_up_notify: Arc<Notify>,
     ) -> Arc<Self> {
         Arc::new(Self {
@@ -54,7 +55,7 @@ impl ProcessIdentities {
             identity_manager,
             batching_tree,
             batch_insert_timeout_secs,
-            pending_identities_sender,
+            pending_batch_submissions_queue,
             wake_up_notify,
         })
     }
@@ -65,7 +66,7 @@ impl ProcessIdentities {
             &self.identity_manager,
             &self.batching_tree,
             &self.wake_up_notify,
-            &self.pending_identities_sender,
+            &self.pending_batch_submissions_queue,
             self.batch_insert_timeout_secs,
         )
         .await
@@ -77,7 +78,7 @@ async fn process_identities(
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
     wake_up_notify: &Notify,
-    pending_identities_sender: &mpsc::Sender<PendingIdentities>,
+    pending_batch_submissions_queue: &AsyncQueue<PendingBatchSubmission>,
     timeout_secs: u64,
 ) -> AnyhowResult<()> {
     info!("Awaiting for a clean slate");
@@ -130,7 +131,7 @@ async fn process_identities(
                     database,
                     identity_manager,
                     batching_tree,
-                    pending_identities_sender,
+                    pending_batch_submissions_queue,
                     &updates,
                     prover
                 ).await?;
@@ -184,7 +185,7 @@ async fn process_identities(
                     database,
                     identity_manager,
                     batching_tree,
-                    pending_identities_sender,
+                    pending_batch_submissions_queue,
                     &updates,
                     prover
                 ).await?;
@@ -207,7 +208,7 @@ async fn commit_identities(
     database: &Database,
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
-    pending_identities_sender: &mpsc::Sender<PendingIdentities>,
+    pending_batch_submissions_queue: &AsyncQueue<PendingBatchSubmission>,
     updates: &[AppliedTreeUpdate],
     insertion_prover: ReadOnlyInsertionProver<'_>,
 ) -> AnyhowResult<()> {
@@ -341,14 +342,12 @@ async fn commit_identities(
     })?;
 
     #[allow(clippy::cast_precision_loss)]
-    PENDING_IDENTITIES_CHANNEL_CAPACITY.observe(pending_identities_sender.capacity() as f64);
+    PENDING_IDENTITIES_CHANNEL_CAPACITY.observe(pending_batch_submissions_queue.len().await as f64);
 
-    // This channel's capacity provides us with a natural back-pressure mechanism
+    // This queue's capacity provides us with a natural back-pressure mechanism
     // to ensure that we don't overwhelm the identity manager with too many
     // identities to mine.
-    //
-    // Additionally if the receiver is dropped this reserve call will also fail.
-    let permit = pending_identities_sender.reserve().await?;
+    let permit = pending_batch_submissions_queue.reserve().await;
 
     info!(start_index, ?pre_root, ?post_root, "Submitting batch");
 
@@ -377,12 +376,14 @@ async fn commit_identities(
     );
 
     // The transaction will be awaited on asynchronously
-    permit.send(PendingIdentities {
-        transaction_id,
-        pre_root,
-        post_root,
-        start_index,
-    });
+    permit
+        .send(PendingBatchSubmission {
+            transaction_id,
+            pre_root,
+            post_root,
+            start_index,
+        })
+        .await;
 
     // Update the batching tree only after submitting the identities to the chain
     batching_tree.apply_updates_up_to(post_root.into());

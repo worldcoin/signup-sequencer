@@ -2,21 +2,20 @@ use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
 use ethers::types::U256;
-use tokio::sync::{mpsc, Mutex};
-use tracing::{info, instrument, warn};
+use tracing::{info, instrument};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
 use crate::identity_tree::{Intermediate, TreeVersion, TreeWithNextVersion};
-use crate::task_monitor::{PendingIdentities, TaskMonitor};
-use crate::utils::async_queue::AsyncQueue;
+use crate::task_monitor::{PendingBatchSubmission, TaskMonitor};
+use crate::utils::async_queue::{AsyncPopGuard, AsyncQueue};
 
 pub struct MineIdentities {
-    database:                    Arc<Database>,
-    identity_manager:            SharedIdentityManager,
-    mined_tree:                  TreeVersion<Intermediate>,
-    pending_identities_receiver: Arc<Mutex<mpsc::Receiver<PendingIdentities>>>,
-    mined_roots_queue:           AsyncQueue<U256>,
+    database: Arc<Database>,
+    identity_manager: SharedIdentityManager,
+    mined_tree: TreeVersion<Intermediate>,
+    pending_batch_submissions_queue: AsyncQueue<PendingBatchSubmission>,
+    mined_roots_queue: AsyncQueue<U256>,
 }
 
 impl MineIdentities {
@@ -24,26 +23,24 @@ impl MineIdentities {
         database: Arc<Database>,
         identity_manager: SharedIdentityManager,
         mined_tree: TreeVersion<Intermediate>,
-        pending_identities_receiver: Arc<Mutex<mpsc::Receiver<PendingIdentities>>>,
+        pending_batch_submissions_queue: AsyncQueue<PendingBatchSubmission>,
         mined_roots_queue: AsyncQueue<U256>,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
             identity_manager,
             mined_tree,
-            pending_identities_receiver,
+            pending_batch_submissions_queue,
             mined_roots_queue,
         })
     }
 
     pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
-        let mut pending_identities_receiver = self.pending_identities_receiver.lock().await;
-
         mine_identities_loop(
             &self.database,
             &self.identity_manager,
             &self.mined_tree,
-            &mut pending_identities_receiver,
+            &self.pending_batch_submissions_queue,
             &self.mined_roots_queue,
         )
         .await
@@ -54,42 +51,39 @@ async fn mine_identities_loop(
     database: &Database,
     identity_manager: &IdentityManager,
     mined_tree: &TreeVersion<Intermediate>,
-    pending_identities_receiver: &mut mpsc::Receiver<PendingIdentities>,
+    pending_batch_submissions_queue: &AsyncQueue<PendingBatchSubmission>,
     mined_roots_queue: &AsyncQueue<U256>,
 ) -> AnyhowResult<()> {
     loop {
-        let Some(pending_identity) = pending_identities_receiver.recv().await else {
-            warn!("Pending identities channel closed, terminating.");
-            break;
-        };
+        let pending_identity = pending_batch_submissions_queue.pop().await;
 
         mine_identities(
-            pending_identity,
+            &pending_identity,
             database,
             identity_manager,
             mined_tree,
             mined_roots_queue,
         )
         .await?;
-    }
 
-    Ok(())
+        pending_identity.commit().await;
+    }
 }
 
 #[instrument(level = "info", skip_all)]
 async fn mine_identities(
-    pending_identity: PendingIdentities,
+    pending_identity: &AsyncPopGuard<'_, PendingBatchSubmission>,
     database: &Database,
     identity_manager: &IdentityManager,
     mined_tree: &TreeVersion<Intermediate>,
     mined_roots_queue: &AsyncQueue<U256>,
 ) -> AnyhowResult<()> {
-    let PendingIdentities {
+    let PendingBatchSubmission {
         transaction_id,
         pre_root,
         post_root,
         start_index,
-    } = pending_identity;
+    } = pending_identity.read().await;
 
     info!(
         start_index,
@@ -99,7 +93,15 @@ async fn mine_identities(
         "Mining batch"
     );
 
-    identity_manager.mine_identities(transaction_id).await?;
+    if !identity_manager
+        .mine_identities(transaction_id.clone())
+        .await?
+    {
+        panic!(
+            "Transaction {} failed on chain - sequencer will crash and restart",
+            transaction_id
+        );
+    }
 
     // With this done, all that remains is to mark them as submitted to the
     // blockchain in the source-of-truth database, and also update the mined tree to

@@ -242,9 +242,9 @@ impl IdentityManager {
     }
 
     #[instrument(level = "debug", skip(self))]
-    pub async fn mine_identities(&self, transaction_id: TransactionId) -> anyhow::Result<()> {
-        self.ethereum.mine_transaction(transaction_id).await?;
-        Ok(())
+    pub async fn mine_identities(&self, transaction_id: TransactionId) -> anyhow::Result<bool> {
+        let result = self.ethereum.mine_transaction(transaction_id).await?;
+        Ok(result)
     }
 
     #[instrument(level = "debug", skip_all)]

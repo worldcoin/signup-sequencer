@@ -47,15 +47,6 @@ pub enum TxError {
     Parse(Box<dyn Error + Send + Sync + 'static>),
 }
 
-impl TxError {
-    pub fn fill<E>(err: E) -> Self
-    where
-        Box<dyn Error + Send + Sync + 'static>: From<E>,
-    {
-        Self::Fill(From::from(err))
-    }
-}
-
 #[async_trait]
 pub trait WriteProvider: Sync + Send + Debug {
     async fn send_transaction(

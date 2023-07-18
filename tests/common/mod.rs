@@ -1,4 +1,3 @@
-#![cfg(not(feature = "oz-provider"))]
 // We include this module in multiple in multiple integration
 // test crates - so some code may not be used in some cases
 #![allow(dead_code)]
@@ -379,6 +378,7 @@ pub async fn spawn_deps(
     MockChain,
     DockerContainerGuard,
     HashMap<usize, ProverService>,
+    micro_oz::ServerHandle,
 )> {
     let chain = spawn_mock_chain(initial_root, batch_sizes, tree_depth);
     let db_container = spawn_db();
@@ -391,6 +391,11 @@ pub async fn spawn_deps(
     let (chain, db_container, provers) =
         tokio::join!(chain, db_container, prover_futures.collect::<Vec<_>>());
 
+    let chain = chain?;
+
+    let signing_key = SigningKey::from_bytes(chain.private_key.as_bytes())?;
+    let micro_oz = micro_oz::spawn(chain.anvil.endpoint(), signing_key).await?;
+
     let provers = provers.into_iter().collect::<Result<Vec<_>, _>>()?;
 
     let prover_map = provers
@@ -398,7 +403,7 @@ pub async fn spawn_deps(
         .map(|prover| (prover.batch_size(), prover))
         .collect();
 
-    Ok((chain?, db_container?, prover_map))
+    Ok((chain, db_container?, prover_map, micro_oz))
 }
 
 async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {

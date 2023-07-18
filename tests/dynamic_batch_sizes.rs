@@ -25,7 +25,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, prover_map) =
+    let (mock_chain, db_container, prover_map, micro_oz) =
         spawn_deps(initial_root, &[batch_size, second_batch_size], tree_depth).await?;
 
     let prover_mock = &prover_map[&batch_size];
@@ -53,6 +53,14 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         "10",
         "--tree-gc-threshold",
         "1",
+        "--oz-api-key",
+        "",
+        "--oz-api-secret",
+        "",
+        "--oz-api-url",
+        &micro_oz.endpoint(),
+        "--oz-address",
+        &format!("{:?}", micro_oz.address()),
     ])
     .context("Failed to create options")?;
 
@@ -61,8 +69,6 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
     options.app.ethereum.ethereum_provider =
         Url::parse(&mock_chain.anvil.endpoint()).expect("Failed to parse Anvil url");
-
-    options.app.ethereum.write_options.signing_key = mock_chain.private_key;
 
     let (app, local_addr) = spawn_app(options.clone())
         .await

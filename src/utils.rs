@@ -2,7 +2,6 @@ use std::future::Future;
 use std::time::Duration;
 
 use anyhow::{Error as EyreError, Result as AnyhowResult};
-use ethers::types::U256;
 use futures::FutureExt;
 use tokio::select;
 use tokio::sync::broadcast;
@@ -96,14 +95,6 @@ where
     })
 }
 
-#[cfg(not(feature = "oz-provider"))]
-pub fn u256_to_f64(value: U256) -> f64 {
-    value
-        .to_string()
-        .parse::<f64>()
-        .expect("Failed to parse U256 to f64")
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -111,29 +102,6 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-
-    #[cfg(not(feature = "oz-provider"))]
-    mod u256_to_f64_tests {
-        #![allow(clippy::float_cmp)]
-
-        use hex_literal::hex;
-        use test_case::test_case;
-
-        use super::*;
-
-        #[test_case(1_000_000_000_000_000_000 => 1_000_000_000_000_000_000.0)]
-        #[test_case(42 => 42.0)]
-        #[test_case(0 => 0.0)]
-        fn test_u256_to_f64_small(v: u64) -> f64 {
-            u256_to_f64(U256::from(v))
-        }
-
-        #[test_case(hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF") => 115_792_089_237_316_195_423_570_985_008_687_907_853_269_984_665_640_564_039_457_584_007_913_129_639_935.0)]
-        #[test_case(hex!("0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF") => 7_237_005_577_332_262_213_973_186_563_042_994_240_829_374_041_602_535_252_466_099_000_494_570_602_495.0)]
-        fn test_u256_to_f64_large(v: [u8; 32]) -> f64 {
-            u256_to_f64(U256::from(v))
-        }
-    }
 
     #[tokio::test]
     async fn spawn_monitored_test() -> anyhow::Result<()> {

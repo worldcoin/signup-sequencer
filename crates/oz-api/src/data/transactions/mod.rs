@@ -55,11 +55,34 @@ pub struct SendBaseTransactionRequest<'a> {
     pub valid_until: Option<DateTime<Utc>>,
 }
 
+/// OpenZeppelin Defender transaction to be sent.
+///
+/// https://docs.openzeppelin.com/defender/relay-api-reference#send-transaction
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendBaseTransactionRequestOwned {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub to:          Option<NameOrAddress>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub value:       Option<U256>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub data:        Option<Bytes>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub gas_limit:   Option<U256>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub valid_until: Option<DateTime<Utc>>,
+}
+
 /// OpenZeppelin Defender transaction that has been received by the relayer and
 /// can be queried for.
 ///
 /// https://docs.openzeppelin.com/defender/relay-api-reference#txs-endpoint
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelayerTransactionBase {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -68,9 +91,11 @@ pub struct RelayerTransactionBase {
     pub transaction_id: String,
     pub to:             NameOrAddress,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub value:          Option<U256>,
     pub gas_limit:      u32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub data:           Option<Bytes>,
     pub valid_until:    DateTime<Utc>,
     pub status:         Status,

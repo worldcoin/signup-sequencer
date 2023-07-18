@@ -25,6 +25,9 @@ fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
 #[derive(Clone, Debug, Eq, PartialEq, Parser)]
 #[group(skip)]
 pub struct Options {
+    #[clap(long, env, default_value = "https://api.defender.openzeppelin.com")]
+    pub oz_api_url: String,
+
     /// OpenZeppelin Defender API Key
     #[clap(long, env)]
     pub oz_api_key: String,

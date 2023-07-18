@@ -21,6 +21,7 @@ pub struct OzApi {
     expiring_headers: Mutex<ExpiringHeaders>,
     api_key:          String,
     api_secret:       String,
+    auth_disabled:    bool,
 }
 
 impl OzApi {
@@ -41,6 +42,27 @@ impl OzApi {
             api_url: api_url.into_url()?,
             api_key,
             api_secret,
+            auth_disabled: false,
+        })
+    }
+
+    pub fn without_auth<U>(api_url: U) -> Result<Self>
+    where
+        U: IntoUrl,
+    {
+        let api_key = String::new();
+        let api_secret = String::new();
+
+        let expiring_headers = ExpiringHeaders::empty();
+        let expiring_headers = Mutex::new(expiring_headers);
+
+        Ok(Self {
+            client: reqwest::Client::new(),
+            expiring_headers,
+            api_url: api_url.into_url()?,
+            api_key,
+            api_secret,
+            auth_disabled: true,
         })
     }
 
@@ -102,6 +124,10 @@ impl OzApi {
     }
 
     async fn headers(&self) -> Result<MutexGuard<ExpiringHeaders>> {
+        if self.auth_disabled {
+            return Ok(self.expiring_headers.lock().await);
+        }
+
         let now = Instant::now();
 
         let mut expiring_headers = self.expiring_headers.lock().await;

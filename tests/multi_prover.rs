@@ -19,7 +19,7 @@ async fn multi_prover() -> anyhow::Result<()> {
     let batch_size_3: usize = 3;
     let batch_size_10: usize = 10;
 
-    let (mock_chain, db_container, prover_map) =
+    let (mock_chain, db_container, prover_map, micro_oz) =
         spawn_deps(initial_root, &[batch_size_3, batch_size_10], tree_depth).await?;
 
     let prover_mock_batch_size_3 = &prover_map[&batch_size_3];
@@ -53,6 +53,14 @@ async fn multi_prover() -> anyhow::Result<()> {
         "10",
         "--tree-gc-threshold",
         "1",
+        "--oz-api-key",
+        "",
+        "--oz-api-secret",
+        "",
+        "--oz-api-url",
+        &micro_oz.endpoint(),
+        "--oz-address",
+        &format!("{:?}", micro_oz.address()),
     ])
     .context("Failed to create options")?;
 
@@ -60,8 +68,6 @@ async fn multi_prover() -> anyhow::Result<()> {
 
     options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
     options.app.ethereum.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint())?;
-
-    options.app.ethereum.write_options.signing_key = mock_chain.private_key;
 
     let (app, local_addr) = spawn_app(options.clone())
         .await

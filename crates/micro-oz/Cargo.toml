@@ -1,0 +1,21 @@
+[package]
+name = "micro-oz"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+oz-api = { path = "../oz-api" }
+
+anyhow = "1.0.72"
+axum = "0.6.19"
+clap = { version = "4.3.14", features = ["env", "derive"] }
+serde = "1.0.171"
+serde_json = "1.0.103"
+tokio = { version = "1.29.1", features = ["full"] }
+tracing = "0.1.37"
+tracing-subscriber = "0.3.17"
+ethers = { version = "1.0.0", features = ["openssl"] }
+async-trait = "0.1.71"
+chrono = "0.4.26"
+hyper = "0.14.27"

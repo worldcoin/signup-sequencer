@@ -1151,11 +1151,11 @@ version = "0.1.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.openssl]]
-version = "0.10.44"
+version = "0.10.55"
 criteria = "safe-to-deploy"
 
 [[exemptions.openssl-sys]]
-version = "0.9.79"
+version = "0.9.90"
 criteria = "safe-to-deploy"
 
 [[exemptions.opentelemetry]]

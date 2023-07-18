@@ -121,12 +121,12 @@ impl WriteProvider for Provider {
             )))
         })?;
 
-        if tx.status != Some(U64::from(1u64)) {
+        if tx.status == Some(U64::from(1u64)) {
+            Ok(true)
+        } else {
             warn!(?tx, "Transaction failed");
 
             Ok(false)
-        } else {
-            Ok(true)
         }
     }
 

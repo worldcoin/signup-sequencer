@@ -192,7 +192,7 @@ pub async fn test_inclusion_proof(
             assert_eq!(response.status(), StatusCode::ACCEPTED);
             info!("Got pending, waiting 1 second, iteration {}", i);
             tokio::time::sleep(Duration::from_secs(1)).await;
-        } else if status == "mined" || status == "processed" {
+        } else if status == "mined" {
             // We don't differentiate between these 2 states in tests
             let proof_json = generate_reference_proof_json(ref_tree, leaf_index, status);
             assert_eq!(result_json, proof_json);

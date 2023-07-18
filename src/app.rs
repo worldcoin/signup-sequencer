@@ -29,6 +29,19 @@ use crate::{contracts, task_monitor};
 #[serde(transparent)]
 pub struct InclusionProofResponse(InclusionProof);
 
+impl InclusionProofResponse {
+    #[must_use]
+    pub fn hide_processed_status(mut self) -> Self {
+        self.0.status = if self.0.status == Status::Processed {
+            Status::Mined
+        } else {
+            self.0.status
+        };
+
+        self
+    }
+}
+
 impl From<InclusionProof> for InclusionProofResponse {
     fn from(value: InclusionProof) -> Self {
         Self(value)
@@ -64,6 +77,19 @@ impl ToResponseCode for ListBatchSizesResponse {
 #[derive(Serialize)]
 #[serde(transparent)]
 pub struct VerifySemaphoreProofResponse(RootItem);
+
+impl VerifySemaphoreProofResponse {
+    #[must_use]
+    pub fn hide_processed_status(mut self) -> Self {
+        self.0.status = if self.0.status == Status::Processed {
+            Status::Mined
+        } else {
+            self.0.status
+        };
+
+        self
+    }
+}
 
 impl ToResponseCode for VerifySemaphoreProofResponse {
     fn to_response_code(&self) -> StatusCode {

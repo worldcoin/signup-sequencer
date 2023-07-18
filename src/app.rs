@@ -30,6 +30,7 @@ use crate::{contracts, task_monitor};
 pub struct InclusionProofResponse(InclusionProof);
 
 impl InclusionProofResponse {
+    #[must_use]
     pub fn hide_processed_status(mut self) -> Self {
         self.0.status = if self.0.status == Status::Processed {
             Status::Mined
@@ -78,6 +79,7 @@ impl ToResponseCode for ListBatchSizesResponse {
 pub struct VerifySemaphoreProofResponse(RootItem);
 
 impl VerifySemaphoreProofResponse {
+    #[must_use]
     pub fn hide_processed_status(mut self) -> Self {
         self.0.status = if self.0.status == Status::Processed {
             Status::Mined

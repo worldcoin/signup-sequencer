@@ -4,8 +4,6 @@
     clippy::cast_possible_wrap
 )]
 
-use std::collections::HashSet;
-
 use anyhow::{anyhow, Context, Error as ErrReport};
 use clap::Parser;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
@@ -14,7 +12,6 @@ use sqlx::{Executor, Pool, Postgres, Row};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
-use self::prover::ProverConfiguration;
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
 pub mod prover;

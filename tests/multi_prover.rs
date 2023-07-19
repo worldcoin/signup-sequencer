@@ -47,8 +47,6 @@ async fn multi_prover() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--batch-timeout-seconds",
-        &format!("{batch_timeout_seconds}"),
         "--dense-tree-prefix-depth",
         "10",
         "--tree-gc-threshold",
@@ -84,8 +82,20 @@ async fn multi_prover() -> anyhow::Result<()> {
     let client = Client::new();
 
     // Insert provers to database
-    test_add_prover(&uri, &client, &prover_map[&batch_size_3]).await?;
-    test_add_prover(&uri, &client, &prover_map[&batch_size_10]).await?;
+    test_add_prover(
+        &uri,
+        &client,
+        &prover_map[&batch_size_3],
+        batch_timeout_seconds as usize,
+    )
+    .await?;
+    test_add_prover(
+        &uri,
+        &client,
+        &prover_map[&batch_size_10],
+        batch_timeout_seconds as usize,
+    )
+    .await?;
 
     // We're disabling the larger prover, so that only inserting to the smaller
     // batch size 3 prover can work

@@ -45,8 +45,6 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--batch-timeout-seconds",
-        "3",
         "--dense-tree-prefix-depth",
         "10",
         "--tree-gc-threshold",
@@ -82,8 +80,8 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let client = Client::new();
 
     // Insert provers to database
-    test_add_prover(&uri, &client, &prover_map[&batch_size]).await?;
-    test_add_prover(&uri, &client, &prover_map[&second_batch_size]).await?;
+    test_add_prover(&uri, &client, &prover_map[&batch_size], 30).await?;
+    test_add_prover(&uri, &client, &prover_map[&second_batch_size], 3).await?;
 
     // Insert enough identities to trigger an batch to be sent to the blockchain
     // based on the current batch size of 3.

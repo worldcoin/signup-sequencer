@@ -37,8 +37,6 @@ async fn unavailable_prover() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--batch-timeout-seconds",
-        "10",
         "--dense-tree-prefix-depth",
         "10",
         "--tree-gc-threshold",
@@ -72,7 +70,7 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
 
-    test_add_prover(&uri, &client, &prover_map[&batch_size]).await?;
+    test_add_prover(&uri, &client, &prover_map[&batch_size], 30).await?;
 
     // Insert enough identities to trigger an batch to be sent to the blockchain
     // based on the current batch size of 3.

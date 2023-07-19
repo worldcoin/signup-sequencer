@@ -39,8 +39,6 @@ async fn validate_proofs() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--batch-timeout-seconds",
-        &format!("{batch_timeout_seconds}"),
         "--dense-tree-prefix-depth",
         "10",
         "--tree-gc-threshold",
@@ -68,7 +66,13 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
 
-    test_add_prover(&uri, &client, &prover_map[&batch_size]).await?;
+    test_add_prover(
+        &uri,
+        &client,
+        &prover_map[&batch_size],
+        batch_timeout_seconds as usize,
+    )
+    .await?;
 
     static IDENTITIES: Lazy<Vec<Identity>> = Lazy::new(|| {
         vec![

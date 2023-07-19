@@ -34,8 +34,6 @@ async fn malformed_payload() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--batch-timeout-seconds",
-        "10",
         "--dense-tree-prefix-depth",
         "10",
         "--tree-gc-threshold",
@@ -64,7 +62,7 @@ async fn malformed_payload() -> anyhow::Result<()> {
     let client = Client::new();
 
     // Insert provers to database
-    test_add_prover(&uri, &client, &prover_map[&batch_size]).await?;
+    test_add_prover(&uri, &client, &prover_map[&batch_size], 30).await?;
 
     // 20 MiB zero bytes
     let body = vec![0u8; 1024 * 1024 * 20];

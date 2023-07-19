@@ -37,8 +37,6 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--batch-timeout-seconds",
-        "10",
         "--dense-tree-prefix-depth",
         "10",
         "--tree-gc-threshold",
@@ -74,7 +72,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let client = Client::new();
 
     // Insert provers to database
-    test_add_prover(&uri, &client, &prover_map[&batch_size]).await?;
+    test_add_prover(&uri, &client, &prover_map[&batch_size], 30).await?;
 
     // Check that we can get inclusion proofs for things that already exist in the
     // database and on chain.

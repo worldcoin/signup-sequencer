@@ -270,7 +270,7 @@ pub async fn test_add_prover(
 pub async fn test_remove_prover(
     uri: &str,
     client: &Client<HttpConnector>,
-    batch_size: usize
+    batch_size: usize,
 ) -> anyhow::Result<()> {
     let body = construct_remove_batch_size_body(batch_size);
 
@@ -287,10 +287,7 @@ pub async fn test_remove_prover(
         .expect("Failed to execute request.");
 
     if !response.status().is_success() {
-        panic!(
-            "Failed to remove prover with batch size {}",
-            batch_size
-        );
+        panic!("Failed to remove prover with batch size {}", batch_size);
     }
 
     Ok(())

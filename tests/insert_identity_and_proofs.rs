@@ -72,7 +72,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let client = Client::new();
 
     // Insert provers to database
-    test_add_prover(&uri, &client, &prover_map[&batch_size], 30).await?;
+    test_add_prover(&uri, &client, &prover_map[&batch_size], 10).await?;
 
     // Check that we can get inclusion proofs for things that already exist in the
     // database and on chain.

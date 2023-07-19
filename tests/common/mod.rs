@@ -330,6 +330,36 @@ pub async fn test_add_prover(
     Ok(())
 }
 
+#[instrument(skip_all)]
+pub async fn test_remove_prover(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    batch_size: usize
+) -> anyhow::Result<()> {
+    let body = construct_remove_batch_size_body(batch_size);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri.to_owned() + "/removeBatchSize")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create add_batch_size hyper::Body");
+
+    let response = client
+        .request(req)
+        .await
+        .expect("Failed to execute request.");
+
+    if !response.status().is_success() {
+        panic!(
+            "Failed to remove prover with batch size {}",
+            batch_size
+        );
+    }
+
+    Ok(())
+}
+
 fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
     Body::from(
         json!({
@@ -373,6 +403,15 @@ fn construct_add_batch_size_body(prover: &ProverService, batch_timeout_seconds: 
             "url": prover.url(),
             "batchSize": prover.batch_size(),
             "timeoutSeconds": batch_timeout_seconds,
+        })
+        .to_string(),
+    )
+}
+
+fn construct_remove_batch_size_body(batch_size: usize) -> Body {
+    Body::from(
+        json!({
+            "batchSize": batch_size,
         })
         .to_string(),
     )

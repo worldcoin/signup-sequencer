@@ -5,7 +5,7 @@ use std::str::FromStr;
 use common::prelude::*;
 use hyper::Uri;
 
-use crate::common::{test_add_batch_size, test_add_prover, test_remove_batch_size};
+use crate::common::{test_add_batch_size, test_add_prover, test_remove_batch_size, test_remove_prover};
 
 const SUPPORTED_DEPTH: usize = 20;
 const IDLE_TIME: u64 = 7;
@@ -124,11 +124,16 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     )
     .await;
 
+    // Remove prover
+    test_remove_prover(&uri, &client, second_batch_size).await?;
+
     // Add a new prover for batch sizes of two.
     let second_prover = spawn_mock_prover(second_batch_size).await?;
     test_add_batch_size(&uri, second_prover.url(), second_batch_size as u64, &client)
         .await
         .expect("Failed to add batch size.");
+
+    test_add_prover(&uri, &client, &second_prover, second_batch_size).await?;
 
     // Query for the available provers.
     let batch_sizes_uri: Uri =

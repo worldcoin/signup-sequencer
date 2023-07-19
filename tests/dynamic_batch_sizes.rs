@@ -129,7 +129,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
 
     // Add a new prover for batch sizes of two.
     let second_prover = spawn_mock_prover(second_batch_size).await?;
-    test_add_prover(&uri, &client, &second_prover, second_batch_size).await?;
+    test_add_prover(&uri, &client, &second_prover, 3).await?;
 
     // Query for the available provers.
     let batch_sizes_uri: Uri =

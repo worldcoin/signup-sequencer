@@ -24,8 +24,6 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let (mock_chain, db_container, prover_map, micro_oz) =
         spawn_deps(initial_root, &[batch_size], tree_depth).await?;
 
-    let prover_mock = &prover_map[&batch_size];
-
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
 

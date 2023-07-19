@@ -24,8 +24,6 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let (mock_chain, db_container, prover_map, micro_oz) =
         spawn_deps(initial_root, &[batch_size], tree_depth).await?;
 
-    let prover_mock = &prover_map[&batch_size];
-
     let identity_manager = mock_chain.identity_manager.clone();
 
     let port = db_container.port();

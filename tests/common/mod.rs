@@ -303,9 +303,8 @@ pub async fn test_insert_identity(
 pub async fn test_add_prover(
     uri: &str,
     client: &Client<HttpConnector>,
-    prover: &ProverService
+    prover: &ProverService,
 ) -> anyhow::Result<()> {
-
     let body = construct_add_batch_size_body(prover);
 
     let req = Request::builder()
@@ -321,7 +320,10 @@ pub async fn test_add_prover(
         .expect("Failed to execute request.");
 
     if !response.status().is_success() {
-        panic!("Failed to add prover with batch size {}", prover.batch_size());
+        panic!(
+            "Failed to add prover with batch size {}",
+            prover.batch_size()
+        );
     }
 
     Ok(())

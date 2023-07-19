@@ -203,37 +203,6 @@ pub async fn test_inclusion_proof(
 }
 
 #[instrument(skip_all)]
-pub async fn test_add_batch_size(
-    uri: impl Into<String>,
-    prover_url: impl Into<String>,
-    batch_size: u64,
-    client: &Client<HttpConnector>,
-) -> anyhow::Result<()> {
-    let prover_url_string: String = prover_url.into();
-    let body = Body::from(
-        json!({
-            "url": prover_url_string,
-            "batchSize": batch_size,
-            "timeoutSeconds": 3
-        })
-        .to_string(),
-    );
-    let request = Request::builder()
-        .method("POST")
-        .uri(uri.into() + "/addBatchSize")
-        .header("Content-Type", "application/json")
-        .body(body)
-        .expect("Failed to create add batch size hyper::Body");
-
-    client
-        .request(request)
-        .await
-        .expect("Failed to execute request.");
-
-    Ok(())
-}
-
-#[instrument(skip_all)]
 pub async fn test_remove_batch_size(
     uri: impl Into<String>,
     batch_size: u64,

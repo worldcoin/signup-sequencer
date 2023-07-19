@@ -85,7 +85,7 @@ async fn process_identities(
     identity_manager.await_clean_slate().await?;
 
     info!("Starting identity processor.");
-    let batch_size = identity_manager.max_batch_size().await;
+    let mut batch_size = identity_manager.max_batch_size().await;
 
     // We start a timer and force it to perform one initial tick to avoid an
     // immediate trigger.
@@ -110,6 +110,12 @@ async fn process_identities(
         select! {
             _ = timer.tick() => {
                 debug!("Identity batch insertion woken due to timeout.");
+
+                // If batch size is zero, that probably means that prover map is empty
+                if batch_size == 0 {
+                    batch_size = identity_manager.max_batch_size().await;
+                    continue;
+                }
 
                 // If the timer has fired we want to insert whatever
                 // identities we have, even if it's not many. This ensures
@@ -158,6 +164,13 @@ async fn process_identities(
                     warn!("Identity committer thinks that the last batch is in the future.");
                     continue
                 };
+
+                // If batch size is zero, that probably means that prover map is empty
+                if batch_size == 0 {
+                    batch_size = identity_manager.max_batch_size().await;
+                    continue;
+                }
+
                 let should_process_anyway =
                     timeout_secs.abs_diff(diff_secs) <= DEBOUNCE_THRESHOLD_SECS;
 

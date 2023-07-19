@@ -240,9 +240,9 @@ pub async fn test_add_prover(
     uri: &str,
     client: &Client<HttpConnector>,
     prover: &ProverService,
-    batch_timeout_seconds: usize,
+    timeout_seconds: usize,
 ) -> anyhow::Result<()> {
-    let body = construct_add_batch_size_body(prover, batch_timeout_seconds);
+    let body = construct_add_batch_size_body(prover, timeout_seconds);
 
     let req = Request::builder()
         .method("POST")
@@ -331,12 +331,12 @@ fn construct_verify_proof_body(
     )
 }
 
-fn construct_add_batch_size_body(prover: &ProverService, batch_timeout_seconds: usize) -> Body {
+fn construct_add_batch_size_body(prover: &ProverService, timeout_seconds: usize) -> Body {
     Body::from(
         json!({
             "url": prover.url(),
             "batchSize": prover.batch_size(),
-            "timeoutSeconds": batch_timeout_seconds,
+            "timeoutSeconds": timeout_seconds,
         })
         .to_string(),
     )

@@ -149,6 +149,10 @@ impl App {
         let database = Arc::new(db);
         let provers = database.get_provers().await?;
 
+        if provers.is_empty() {
+            warn!("Database has no provers. Add provers with /addBatchSize.");
+        }
+
         let insertion_prover_map = make_insertion_map(provers)?;
         let identity_manager =
             IdentityManager::new(options.contracts, ethereum.clone(), insertion_prover_map).await?;

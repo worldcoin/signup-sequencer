@@ -1,5 +1,8 @@
 mod common;
 
+use std::{str::FromStr, collections::HashMap};
+
+use anyhow::Ok;
 use common::prelude::*;
 
 use crate::common::test_add_prover;
@@ -37,6 +40,8 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
+        "--batch-timeout-seconds",
+        "10",
         "--dense-tree-prefix-depth",
         "10",
         "--tree-gc-threshold",
@@ -73,6 +78,8 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
 
     // Insert provers to database
     test_add_prover(&uri, &client, &prover_map[&batch_size], 10).await?;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    validate_prover_map(&uri, &client, &prover_map, batch_size).await?;
 
     // Check that we can get inclusion proofs for things that already exist in the
     // database and on chain.
@@ -177,6 +184,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
 
+    validate_prover_map(&uri, &client, &prover_map, batch_size).await?;
     // Check that we can still get inclusion proofs for identities we know to have
     // been inserted previously. Here we check the first and last ones we inserted.
     test_inclusion_proof(
@@ -214,6 +222,8 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
 
+    validate_prover_map(&uri, &client, &prover_map, batch_size).await?;
+
     // Check that we can still get inclusion proofs for identities we know to have
     // been inserted previously. Here we check the first and last ones we inserted.
     test_inclusion_proof(
@@ -246,4 +256,33 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     reset_shutdown();
 
     Ok(())
+}
+
+async fn validate_prover_map(uri: &String, client: &Client<HttpConnector>, prover_map: &HashMap<usize, ProverService>, batch_size: usize) -> anyhow::Result<()> {
+            // fech provers
+        let batch_sizes_uri: hyper::Uri =
+            hyper::Uri::from_str(&format!("{}/listBatchSizes", uri.as_str())).expect("Unable to parse URI.");
+        let mut batch_sizes = client
+            .get(batch_sizes_uri)
+            .await
+            .expect("Failed to execute get request");
+        let batch_sizes_bytes = hyper::body::to_bytes(batch_sizes.body_mut())
+            .await
+            .expect("Failed to get response bytes");
+        let batch_size_str = String::from_utf8(batch_sizes_bytes.into_iter().collect())
+            .expect("Failed to decode response");
+        let batch_size_json =
+            serde_json::from_str::<serde_json::Value>(&batch_size_str).expect("JSON wasn't decoded");
+        assert_eq!(
+            batch_size_json,
+            json!([
+                {
+                    "url": format!("{}{}", prover_map[&batch_size].url(), "/"),
+                    "timeout_s": 10,
+                    "batch_size": batch_size,
+                }
+            ])
+        );
+
+        Ok(())
 }

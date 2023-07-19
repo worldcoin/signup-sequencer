@@ -39,6 +39,8 @@ async fn validate_proofs() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
+        "--batch-timeout-seconds",
+        "10",
         "--dense-tree-prefix-depth",
         "10",
         "--tree-gc-threshold",

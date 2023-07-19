@@ -5,7 +5,7 @@ use std::str::FromStr;
 use common::prelude::*;
 use hyper::Uri;
 
-use crate::common::{test_add_batch_size, test_remove_batch_size};
+use crate::common::{test_add_batch_size, test_remove_batch_size, test_add_prover};
 
 const SUPPORTED_DEPTH: usize = 20;
 const IDLE_TIME: u64 = 7;
@@ -45,8 +45,6 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         "3",
         "--dense-tree-prefix-depth",
@@ -82,6 +80,10 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
+
+    // Insert provers to database
+    test_add_prover(&uri, &client, &prover_map[&batch_size]).await?;
+    test_add_prover(&uri, &client, &prover_map[&second_batch_size]).await?;
 
     // Insert enough identities to trigger an batch to be sent to the blockchain
     // based on the current batch size of 3.

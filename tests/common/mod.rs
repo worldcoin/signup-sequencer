@@ -299,6 +299,34 @@ pub async fn test_insert_identity(
     (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())
 }
 
+#[instrument(skip_all)]
+pub async fn test_add_prover(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    prover: &ProverService
+) -> anyhow::Result<()> {
+
+    let body = construct_add_batch_size_body(prover);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri.to_owned() + "/addBatchSize")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create add_batch_size hyper::Body");
+
+    let response = client
+        .request(req)
+        .await
+        .expect("Failed to execute request.");
+
+    if !response.status().is_success() {
+        panic!("Failed to add prover with batch size {}", prover.batch_size());
+    }
+
+    Ok(())
+}
+
 fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
     Body::from(
         json!({
@@ -331,6 +359,17 @@ fn construct_verify_proof_body(
             "nullifierHash": nullifer_hash,
             "externalNullifierHash": external_nullifier_hash,
             "proof": proof,
+        })
+        .to_string(),
+    )
+}
+
+fn construct_add_batch_size_body(prover: &ProverService) -> Body {
+    Body::from(
+        json!({
+            "url": prover.url(),
+            "batch_size": prover.batch_size(),
+            "timeout_seconds": 10,
         })
         .to_string(),
     )

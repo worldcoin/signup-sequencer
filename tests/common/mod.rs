@@ -271,6 +271,7 @@ pub async fn test_remove_prover(
     uri: &str,
     client: &Client<HttpConnector>,
     batch_size: usize,
+    should_fail: bool,
 ) -> anyhow::Result<()> {
     let body = construct_remove_batch_size_body(batch_size);
 
@@ -286,7 +287,7 @@ pub async fn test_remove_prover(
         .await
         .expect("Failed to execute request.");
 
-    if !response.status().is_success() {
+    if !response.status().is_success() && !should_fail {
         panic!("Failed to remove prover with batch size {}", batch_size);
     }
 

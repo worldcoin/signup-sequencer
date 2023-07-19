@@ -125,7 +125,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     .await;
 
     // Remove prover
-    test_remove_prover(&uri, &client, second_batch_size).await?;
+    test_remove_prover(&uri, &client, second_batch_size, false).await?;
 
     // Add a new prover for batch sizes of two.
     let second_prover = spawn_mock_prover(second_batch_size).await?;
@@ -194,7 +194,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     .await;
 
     // Now if we remove the original prover, things should still work.
-    test_remove_prover(&uri, &client, batch_size).await?;
+    test_remove_prover(&uri, &client, batch_size, false).await?;
 
     // We should be able to insert less than a full batch successfully.
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 5).await;
@@ -215,7 +215,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     .await;
 
     // We should be unable to remove _all_ of the provers, however.
-    test_remove_prover(&uri, &client, second_batch_size).await?;
+    test_remove_prover(&uri, &client, second_batch_size, true).await?;
 
     // So we should still be able to run a batch.
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 6).await;

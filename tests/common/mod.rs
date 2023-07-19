@@ -371,7 +371,7 @@ fn construct_add_batch_size_body(prover: &ProverService) -> Body {
         json!({
             "url": prover.url(),
             "batchSize": prover.batch_size(),
-            "timeoutSeconds": 10,
+            "timeoutSeconds": 30,
         })
         .to_string(),
     )

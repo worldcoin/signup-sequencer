@@ -214,7 +214,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     )
     .await;
 
-    // We should be unable to remove _all_ of the provers, however. ?
+    // We should be unable to remove _all_ of the provers, however.
     test_remove_prover(&uri, &client, second_batch_size).await?;
 
     // So we should still be able to run a batch.

@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -11,7 +10,6 @@ use serde::Serialize;
 use tracing::{info, instrument, warn};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};
-use crate::database::prover::{ProverConfiguration as DbProverConf, Provers};
 use crate::database::{self, Database};
 use crate::ethereum::{self, Ethereum};
 use crate::identity_tree::{
@@ -19,7 +17,6 @@ use crate::identity_tree::{
 };
 use crate::prover::batch_insertion::ProverConfiguration;
 use crate::prover::map::make_insertion_map;
-use crate::prover::{self, batch_insertion};
 use crate::server::error::Error as ServerError;
 use crate::server::{ToResponseCode, VerifySemaphoreProofRequest};
 use crate::task_monitor::TaskMonitor;
@@ -110,9 +107,6 @@ pub struct Options {
     pub database: database::Options,
 
     #[clap(flatten)]
-    pub batch_provers: prover::batch_insertion::Options,
-
-    #[clap(flatten)]
     pub committer: task_monitor::Options,
 
     /// Block number to start syncing from
@@ -153,10 +147,7 @@ impl App {
         let (ethereum, db) = tokio::try_join!(ethereum, db)?;
 
         let database = Arc::new(db);
-        let mut provers = database.get_provers().await?;
-        let non_inserted_provers = Self::merge_env_provers(options.batch_provers, &mut provers);
-
-        database.insert_provers(non_inserted_provers).await?;
+        let provers = database.get_provers().await?;
 
         let insertion_prover_map = make_insertion_map(provers)?;
         let identity_manager =
@@ -320,30 +311,6 @@ impl App {
         self.database.insert_new_identity(commitment).await?;
 
         Ok(())
-    }
-
-    fn merge_env_provers(
-        options: batch_insertion::Options,
-        existing_provers: &mut Provers,
-    ) -> Provers {
-        let options_set: HashSet<DbProverConf> = options
-            .prover_urls
-            .0
-            .into_iter()
-            .map(|opt| DbProverConf {
-                url:        opt.url,
-                batch_size: opt.batch_size,
-                timeout_s:  opt.timeout_s,
-            })
-            .collect();
-
-        let env_provers: HashSet<_> = options_set.difference(existing_provers).cloned().collect();
-
-        for unique in &env_provers {
-            existing_provers.insert(unique.clone());
-        }
-
-        env_provers
     }
 
     fn identity_is_reduced(&self, commitment: Hash) -> bool {

@@ -4,7 +4,6 @@ use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 use std::time::Duration;
 
-use clap::Parser;
 use ethers::types::U256;
 use ethers::utils::keccak256;
 use once_cell::sync::Lazy;
@@ -15,7 +14,6 @@ use url::Url;
 use crate::database::prover::ProverConfiguration as DbProverConfiguration;
 pub use crate::prover::batch_insertion::identity::Identity;
 use crate::prover::Proof;
-use crate::serde_utils::JsonStrWrapper;
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";
@@ -37,20 +35,6 @@ static PROVER_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
     )
     .unwrap()
 });
-
-#[derive(Clone, Debug, PartialEq, Eq, Parser)]
-#[group(skip)]
-pub struct Options {
-    /// The options for configuring the batch insertion prover service.
-    ///
-    /// This should be a JSON array containing objects of the following format `{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}`
-    #[clap(
-        long,
-        env,
-        default_value = r#"[{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}]"#
-    )]
-    pub prover_urls: JsonStrWrapper<Vec<ProverConfiguration>>,
-}
 
 /// Configuration options for the component responsible for interacting with the
 /// prover service.

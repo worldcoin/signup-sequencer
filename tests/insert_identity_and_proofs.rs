@@ -2,6 +2,8 @@ mod common;
 
 use common::prelude::*;
 
+use crate::common::test_add_prover;
+
 const SUPPORTED_DEPTH: usize = 20;
 const IDLE_TIME: u64 = 7;
 
@@ -37,8 +39,6 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         "10",
         "--dense-tree-prefix-depth",
@@ -74,6 +74,9 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
+
+    // Insert provers to database
+    test_add_prover(&uri, &client, &prover_map[&batch_size]).await?;
 
     // Check that we can get inclusion proofs for things that already exist in the
     // database and on chain.

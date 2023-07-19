@@ -2,6 +2,8 @@ mod common;
 
 use common::prelude::*;
 
+use crate::common::test_add_prover;
+
 const SUPPORTED_DEPTH: usize = 20;
 
 #[tokio::test]
@@ -39,8 +41,6 @@ async fn validate_proofs() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         &format!("{batch_timeout_seconds}"),
         "--dense-tree-prefix-depth",
@@ -69,6 +69,8 @@ async fn validate_proofs() -> anyhow::Result<()> {
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
+
+    test_add_prover(&uri, &client, &prover_map[&batch_size]).await?;
 
     static IDENTITIES: Lazy<Vec<Identity>> = Lazy::new(|| {
         vec![

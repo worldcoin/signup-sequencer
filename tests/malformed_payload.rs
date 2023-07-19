@@ -3,6 +3,8 @@ mod common;
 use common::prelude::*;
 use hyper::StatusCode;
 
+use crate::common::test_add_prover;
+
 /// Tests that the app rejects payloads which are too large or are not valid
 /// UTF-8 strings
 #[tokio::test]
@@ -34,8 +36,6 @@ async fn malformed_payload() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         "10",
         "--dense-tree-prefix-depth",
@@ -64,6 +64,9 @@ async fn malformed_payload() -> anyhow::Result<()> {
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
+
+    // Insert provers to database
+    test_add_prover(&uri, &client, &prover_map[&batch_size]).await?;
 
     // 20 MiB zero bytes
     let body = vec![0u8; 1024 * 1024 * 20];

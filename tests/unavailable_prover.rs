@@ -2,6 +2,8 @@ mod common;
 
 use common::prelude::*;
 
+use crate::common::test_add_prover;
+
 /// Tests that the app can keep running even if the prover returns 500s
 /// and that it will eventually succeed if the prover becomes available again.
 #[tokio::test]
@@ -35,8 +37,6 @@ async fn unavailable_prover() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         "10",
         "--dense-tree-prefix-depth",
@@ -71,6 +71,8 @@ async fn unavailable_prover() -> anyhow::Result<()> {
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
+
+    test_add_prover(&uri, &client, &prover_map[&batch_size]).await?;
 
     // Insert enough identities to trigger an batch to be sent to the blockchain
     // based on the current batch size of 3.

@@ -2,6 +2,8 @@ mod common;
 
 use common::prelude::*;
 
+use crate::common::test_add_prover;
+
 /// Tests that the app can keep running even if the prover returns 500s
 /// and that it will eventually succeed if the prover becomes available again.
 #[tokio::test]
@@ -45,8 +47,6 @@ async fn multi_prover() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_arg_string,
         "--batch-timeout-seconds",
         &format!("{batch_timeout_seconds}"),
         "--dense-tree-prefix-depth",
@@ -82,6 +82,10 @@ async fn multi_prover() -> anyhow::Result<()> {
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
+
+    // Insert provers to database
+    test_add_prover(&uri, &client, &prover_map[&batch_size_3]).await?;
+    test_add_prover(&uri, &client, &prover_map[&batch_size_10]).await?;
 
     // We're disabling the larger prover, so that only inserting to the smaller
     // batch size 3 prover can work

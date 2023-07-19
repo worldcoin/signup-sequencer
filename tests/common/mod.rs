@@ -203,39 +203,6 @@ pub async fn test_inclusion_proof(
 }
 
 #[instrument(skip_all)]
-pub async fn test_remove_batch_size(
-    uri: impl Into<String>,
-    batch_size: u64,
-    client: &Client<HttpConnector>,
-    expect_failure: bool,
-) -> anyhow::Result<()> {
-    let body = Body::from(json!({ "batchSize": batch_size }).to_string());
-    let request = Request::builder()
-        .method("POST")
-        .uri(uri.into() + "/removeBatchSize")
-        .header("Content-Type", "application/json")
-        .body(body)
-        .expect("Failed to create remove batch size hyper::Body");
-
-    let mut result = client
-        .request(request)
-        .await
-        .expect("Request didn't return.");
-
-    let body_bytes = hyper::body::to_bytes(result.body_mut())
-        .await
-        .expect("Failed to get response bytes.");
-    let body_str =
-        String::from_utf8(body_bytes.into_iter().collect()).expect("Failed to decode response.");
-
-    if expect_failure && body_str != "The last batch size cannot be removed" {
-        anyhow::bail!("Expected failure, but got success");
-    } else {
-        Ok(())
-    }
-}
-
-#[instrument(skip_all)]
 pub async fn test_insert_identity(
     uri: &str,
     client: &Client<HttpConnector>,

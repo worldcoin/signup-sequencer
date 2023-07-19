@@ -442,29 +442,6 @@ impl Database {
         Ok(())
     }
 
-    pub async fn insert_provers(&self, provers: HashSet<ProverConfiguration>) -> Result<(), Error> {
-        if provers.is_empty() {
-            return Ok(());
-        }
-
-        let mut query_builder = sqlx::QueryBuilder::new(
-            r#"
-                  INSERT INTO provers (batch_size, url, timeout_s)
-            "#,
-        );
-
-        query_builder.push_values(provers, |mut b, prover| {
-            b.push_bind(prover.batch_size as i64)
-                .push_bind(prover.url)
-                .push_bind(prover.timeout_s as i64);
-        });
-
-        let query = query_builder.build();
-
-        self.pool.execute(query).await?;
-        Ok(())
-    }
-
     pub async fn remove_prover(&self, batch_size: usize) -> Result<(), Error> {
         let query = sqlx::query(
             r#"

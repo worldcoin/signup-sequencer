@@ -1,6 +1,7 @@
 mod common;
 
-use std::{str::FromStr, collections::HashMap};
+use std::collections::HashMap;
+use std::str::FromStr;
 
 use anyhow::Ok;
 use common::prelude::*;
@@ -258,31 +259,37 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn validate_prover_map(uri: &String, client: &Client<HttpConnector>, prover_map: &HashMap<usize, ProverService>, batch_size: usize) -> anyhow::Result<()> {
-            // fech provers
-        let batch_sizes_uri: hyper::Uri =
-            hyper::Uri::from_str(&format!("{}/listBatchSizes", uri.as_str())).expect("Unable to parse URI.");
-        let mut batch_sizes = client
-            .get(batch_sizes_uri)
-            .await
-            .expect("Failed to execute get request");
-        let batch_sizes_bytes = hyper::body::to_bytes(batch_sizes.body_mut())
-            .await
-            .expect("Failed to get response bytes");
-        let batch_size_str = String::from_utf8(batch_sizes_bytes.into_iter().collect())
-            .expect("Failed to decode response");
-        let batch_size_json =
-            serde_json::from_str::<serde_json::Value>(&batch_size_str).expect("JSON wasn't decoded");
-        assert_eq!(
-            batch_size_json,
-            json!([
-                {
-                    "url": format!("{}{}", prover_map[&batch_size].url(), "/"),
-                    "timeout_s": 10,
-                    "batch_size": batch_size,
-                }
-            ])
-        );
+async fn validate_prover_map(
+    uri: &String,
+    client: &Client<HttpConnector>,
+    prover_map: &HashMap<usize, ProverService>,
+    batch_size: usize,
+) -> anyhow::Result<()> {
+    // fech provers
+    let batch_sizes_uri: hyper::Uri =
+        hyper::Uri::from_str(&format!("{}/listBatchSizes", uri.as_str()))
+            .expect("Unable to parse URI.");
+    let mut batch_sizes = client
+        .get(batch_sizes_uri)
+        .await
+        .expect("Failed to execute get request");
+    let batch_sizes_bytes = hyper::body::to_bytes(batch_sizes.body_mut())
+        .await
+        .expect("Failed to get response bytes");
+    let batch_size_str = String::from_utf8(batch_sizes_bytes.into_iter().collect())
+        .expect("Failed to decode response");
+    let batch_size_json =
+        serde_json::from_str::<serde_json::Value>(&batch_size_str).expect("JSON wasn't decoded");
+    assert_eq!(
+        batch_size_json,
+        json!([
+            {
+                "url": format!("{}{}", prover_map[&batch_size].url(), "/"),
+                "timeout_s": 10,
+                "batch_size": batch_size,
+            }
+        ])
+    );
 
-        Ok(())
+    Ok(())
 }

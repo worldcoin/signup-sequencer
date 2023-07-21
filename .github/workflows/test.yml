@@ -112,13 +112,83 @@ jobs:
           cargo test --locked --features "bench, mimalloc" --all-targets -- --nocapture
           cargo test --locked --features "bench, mimalloc" --doc -- --nocapture
 
-  codecov:
-    # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
-    name: Coverage
+  # codecov:
+  #   # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
+  #   name: Coverage
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     RUSTFLAGS: -Cinstrument-coverage
+  #     RUSTDOCFLAGS: -C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
+  #     LLVM_PROFILE_FILE: profile-%m.profraw
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v3
+  #     - name: Install rust
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         toolchain: ${{ env.NIGHTLY_VERSION }}
+  #         override: true
+  #         components: llvm-tools-preview
+  #     - name: Install protobuf-compiler
+  #       run: sudo apt-get install -y protobuf-compiler
+  #     - name: Cache
+  #       uses: actions/cache@v3
+  #       continue-on-error: false
+  #       with:
+  #         path: |
+  #           ~/.cargo/registry/index/
+  #           ~/.cargo/registry/cache/
+  #           ~/.cargo/git/db/
+  #           target/
+  #         key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-cov-${{ hashFiles('**/Cargo.lock') }}-cov
+  #         restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-cov-
+  #     - name: Install cargo-binutils
+  #       run: cargo install cargo-binutils
+  #     - name: Install Foundry
+  #       uses: foundry-rs/foundry-toolchain@v1
+  #       with:
+  #         version: nightly
+  #     - name: Build tests with coverage
+  #       run: |
+  #         cargo test --locked --features "bench, mimalloc" --all-targets --no-fail-fast --no-run
+  #         cargo test --locked --features "bench, mimalloc" --doc --no-fail-fast -- --help
+  #     - name: Run tests with coverage
+  #       run: |
+  #         cargo test --locked --features "bench, mimalloc" --all-targets --no-fail-fast -- --nocapture
+  #         cargo test --locked --features "bench, mimalloc" --doc --no-fail-fast
+  #     - name: Merge execution traces
+  #       run: cargo profdata -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata
+  #     - name: Export to lcov format for codecov
+  #       # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/instrument-coverage.html#including-doc-tests>
+  #       run:
+  #         cargo cov -- export
+  #           --format=lcov > profile.lcov
+  #           --instr-profile=profile.profdata
+  #           $(
+  #             for file in
+  #               $(
+  #                 cargo test --locked --features "bench, mimalloc" --all-targets
+  #                   --no-fail-fast --no-run --message-format=json
+  #                   | jq -r "select(.profile.test == true) | .filenames[]"
+  #                   | grep -v dSYM -
+  #               )
+  #               target/debug/doctestbins/*/rust_out;
+  #             do
+  #               [[ -x $file ]] && printf "%s %s " -object $file ;
+  #             done
+  #           )
+  #     - name: Submit to codecov.io
+  #       uses: codecov/codecov-action@v3.1.1
+  #       with:
+  #         token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
+  #         flags: test
+  #         fail_ci_if_error: true
+  #         verbose: true
+  trapaulin:
+    name: Tarpaulin coverage
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: -Cinstrument-coverage
-      RUSTDOCFLAGS: -C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
       LLVM_PROFILE_FILE: profile-%m.profraw
     steps:
       - name: Checkout repository
@@ -141,44 +211,15 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-cov-${{ hashFiles('**/Cargo.lock') }}-cov
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-cov-
+          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-tarpaulin-${{ hashFiles('**/Cargo.lock') }}-cov
+          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-tarpaulin-
       - name: Install cargo-binutils
         run: cargo install cargo-binutils
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
-      - name: Build tests with coverage
-        run: |
-          cargo test --locked --features "bench, mimalloc" --all-targets --no-fail-fast --no-run
-          cargo test --locked --features "bench, mimalloc" --doc --no-fail-fast -- --help
-      - name: Run tests with coverage
-        run: |
-          cargo test --locked --features "bench, mimalloc" --all-targets --no-fail-fast -- --nocapture
-          cargo test --locked --features "bench, mimalloc" --doc --no-fail-fast
-      - name: Merge execution traces
-        run: cargo profdata -- merge -sparse $(find . -iname "profile-*.profraw") -o profile.profdata
-      - name: Export to lcov format for codecov
-        # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/instrument-coverage.html#including-doc-tests>
-        run:
-          cargo cov -- export
-            --format=lcov > profile.lcov
-            --instr-profile=profile.profdata
-            $(
-              for file in
-                $(
-                  cargo test --locked --features "bench, mimalloc" --all-targets
-                    --no-fail-fast --no-run --message-format=json
-                    | jq -r "select(.profile.test == true) | .filenames[]"
-                    | grep -v dSYM -
-                )
-                target/debug/doctestbins/*/rust_out;
-              do
-                [[ -x $file ]] && printf "%s %s " -object $file ;
-              done
-            )
-      - name: Submit to codecov.io
+      - name: Install cargo trapaulin
+        run: cargo install cargo-tarpaulin
+      - name: Generate code coverage
+        run: cargo tarpaulin --all --out Xml --engine Llvm
+      - name: Upload to codecov.io
         uses: codecov/codecov-action@v3.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos

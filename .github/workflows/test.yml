@@ -144,7 +144,7 @@ jobs:
       - name: Install cargo trapaulin
         run: cargo install cargo-tarpaulin
       - name: Generate code coverage
-        run: cargo tarpaulin --locked --all --include-tests --out Xml --engine Llvm
+        run: cargo tarpaulin --locked --all --include-tests --avoid-cfg-tarpaulin --out Xml --engine Llvm
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3.1.1
         with:

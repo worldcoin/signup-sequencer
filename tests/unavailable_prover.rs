@@ -2,7 +2,7 @@ mod common;
 
 use common::prelude::*;
 
-use crate::common::test_add_prover;
+use crate::common::spawn_and_add_provers;
 
 /// Tests that the app can keep running even if the prover returns 500s
 /// and that it will eventually succeed if the prover becomes available again.
@@ -18,12 +18,8 @@ async fn unavailable_prover() -> anyhow::Result<()> {
 
     let batch_size: usize = 3;
 
-    let (mock_chain, db_container, prover_map, micro_oz) =
+    let (mock_chain, db_container, micro_oz) =
         spawn_deps(initial_root, &[batch_size], tree_depth).await?;
-
-    let prover_mock = &prover_map[&batch_size];
-
-    prover_mock.set_availability(false).await;
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
@@ -72,7 +68,8 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
 
-    test_add_prover(&uri, &client, &prover_map[&batch_size], 30).await?;
+    let prover_map = spawn_and_add_provers(&uri, &client, &[batch_size], 10).await?;
+    prover_map[&batch_size].set_availability(false).await;
 
     // Insert enough identities to trigger an batch to be sent to the blockchain
     // based on the current batch size of 3.
@@ -85,7 +82,7 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     tokio::time::sleep(Duration::from_secs(5)).await;
 
     // Make prover available again
-    prover_mock.set_availability(true).await;
+    prover_map[&batch_size].set_availability(true).await;
     // and wait until the processing thread spins up again
     tokio::time::sleep(Duration::from_secs(5)).await;
 

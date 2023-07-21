@@ -5,7 +5,7 @@ use std::str::FromStr;
 use common::prelude::*;
 use hyper::Uri;
 
-use crate::common::{test_add_prover, test_remove_prover};
+use crate::common::{spawn_and_add_provers, test_add_provers, test_remove_prover};
 
 const SUPPORTED_DEPTH: usize = 20;
 const IDLE_TIME: u64 = 7;
@@ -25,10 +25,8 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, prover_map, micro_oz) =
+    let (mock_chain, db_container, micro_oz) =
         spawn_deps(initial_root, &[batch_size, second_batch_size], tree_depth).await?;
-
-    let prover_mock = &prover_map[&batch_size];
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
@@ -82,8 +80,8 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let client = Client::new();
 
     // Insert provers to database
-    test_add_prover(&uri, &client, &prover_map[&batch_size], 30).await?;
-    test_add_prover(&uri, &client, &prover_map[&second_batch_size], 3).await?;
+    let prover_map =
+        spawn_and_add_provers(&uri, &client, &[batch_size, second_batch_size], 10).await?;
 
     // Insert enough identities to trigger an batch to be sent to the blockchain
     // based on the current batch size of 3.
@@ -131,7 +129,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
 
     // Add a new prover for batch sizes of two.
     let second_prover = spawn_mock_prover(second_batch_size).await?;
-    test_add_prover(&uri, &client, &second_prover, 3).await?;
+    test_add_provers(&uri, &client, &[&second_prover], 10).await?;
 
     // Query for the available provers.
     let batch_sizes_uri: Uri =
@@ -152,19 +150,19 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         json!([
             {
                 "url": second_prover.url() + "/",
-                "timeout_s": 3,
+                "timeout_s": 10,
                 "batch_size": second_batch_size,
             },
             {
-                "url": prover_mock.url() + "/",
-                "timeout_s": 30,
+                "url": prover_map[&batch_size].url() + "/",
+                "timeout_s": 10,
                 "batch_size": batch_size,
             }
         ])
     );
 
     // Insert enough identities to trigger the lower batch size.
-    prover_mock.set_availability(false).await;
+    prover_map[&batch_size].set_availability(false).await;
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 3).await;
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 4).await;
 

@@ -2,7 +2,7 @@ mod common;
 
 use common::prelude::*;
 
-use crate::common::test_add_prover;
+use crate::common::spawn_and_add_provers;
 
 /// Tests that the app can keep running even if the prover returns 500s
 /// and that it will eventually succeed if the prover becomes available again.
@@ -21,19 +21,8 @@ async fn multi_prover() -> anyhow::Result<()> {
     let batch_size_3: usize = 3;
     let batch_size_10: usize = 10;
 
-    let (mock_chain, db_container, prover_map, micro_oz) =
+    let (mock_chain, db_container, micro_oz) =
         spawn_deps(initial_root, &[batch_size_3, batch_size_10], tree_depth).await?;
-
-    let prover_mock_batch_size_3 = &prover_map[&batch_size_3];
-    let prover_mock_batch_size_10 = &prover_map[&batch_size_10];
-
-    let prover_arg_string = format!(
-        "[{},{}]",
-        prover_mock_batch_size_3.arg_string_single(),
-        prover_mock_batch_size_10.arg_string_single()
-    );
-
-    info!("Running with {prover_arg_string}");
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
@@ -84,25 +73,21 @@ async fn multi_prover() -> anyhow::Result<()> {
     let client = Client::new();
 
     // Insert provers to database
-    test_add_prover(
-        &uri,
-        &client,
-        &prover_map[&batch_size_3],
-        batch_timeout_seconds as usize,
-    )
-    .await?;
-    test_add_prover(
-        &uri,
-        &client,
-        &prover_map[&batch_size_10],
-        batch_timeout_seconds as usize,
-    )
-    .await?;
+    let prover_map =
+        spawn_and_add_provers(&uri, &client, &[batch_size_3, batch_size_10], 10).await?;
+
+    let prover_arg_string = format!(
+        "[{},{}]",
+        prover_map[&batch_size_3].arg_string_single(),
+        prover_map[&batch_size_10].arg_string_single()
+    );
+
+    info!("Running with {prover_arg_string}");
 
     // We're disabling the larger prover, so that only inserting to the smaller
     // batch size 3 prover can work
-    prover_mock_batch_size_10.set_availability(false).await;
-    prover_mock_batch_size_3.set_availability(true).await; // on by default, but here for visibility
+    prover_map[&batch_size_10].set_availability(false).await;
+    prover_map[&batch_size_3].set_availability(true).await; // on by default, but here for visibility
 
     // Insert only 3 identities, so that the sequencer is forced to submit a batch
     // size of 3
@@ -119,8 +104,8 @@ async fn multi_prover() -> anyhow::Result<()> {
     }
 
     // Now re re-enable the larger prover and disable the smaller one
-    prover_mock_batch_size_10.set_availability(true).await;
-    prover_mock_batch_size_3.set_availability(false).await;
+    prover_map[&batch_size_10].set_availability(true).await;
+    prover_map[&batch_size_3].set_availability(false).await;
 
     // Insert 10 identities
 

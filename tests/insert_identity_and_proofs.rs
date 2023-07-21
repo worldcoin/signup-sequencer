@@ -6,7 +6,7 @@ use std::str::FromStr;
 use anyhow::Ok;
 use common::prelude::*;
 
-use crate::common::test_add_prover;
+use crate::common::spawn_and_add_provers;
 
 const SUPPORTED_DEPTH: usize = 20;
 const IDLE_TIME: u64 = 7;
@@ -25,7 +25,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, prover_map, micro_oz) =
+    let (mock_chain, db_container, micro_oz) =
         spawn_deps(initial_root, &[batch_size], tree_depth).await?;
 
     let port = db_container.port();
@@ -78,7 +78,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let client = Client::new();
 
     // Insert provers to database
-    test_add_prover(&uri, &client, &prover_map[&batch_size], 10).await?;
+    let prover_map = spawn_and_add_provers(&uri, &client, &[batch_size], 10).await?;
     tokio::time::sleep(Duration::from_secs(1)).await;
     validate_prover_map(&uri, &client, &prover_map, batch_size).await?;
 

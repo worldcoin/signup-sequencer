@@ -3,7 +3,7 @@ mod common;
 use common::prelude::*;
 use hyper::StatusCode;
 
-use crate::common::test_add_prover;
+use crate::common::spawn_and_add_provers;
 
 /// Tests that the app rejects payloads which are too large or are not valid
 /// UTF-8 strings
@@ -19,7 +19,7 @@ async fn malformed_payload() -> anyhow::Result<()> {
 
     let batch_size: usize = 3;
 
-    let (mock_chain, db_container, prover_map, micro_oz) =
+    let (mock_chain, db_container, micro_oz) =
         spawn_deps(initial_root, &[batch_size], tree_depth).await?;
 
     let port = db_container.port();
@@ -64,7 +64,7 @@ async fn malformed_payload() -> anyhow::Result<()> {
     let client = Client::new();
 
     // Insert provers to database
-    test_add_prover(&uri, &client, &prover_map[&batch_size], 30).await?;
+    let prover_map = spawn_and_add_provers(&uri, &client, &[batch_size], 10).await?;
 
     // 20 MiB zero bytes
     let body = vec![0u8; 1024 * 1024 * 20];

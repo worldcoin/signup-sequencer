@@ -2,7 +2,7 @@ mod common;
 
 use common::prelude::*;
 
-use crate::common::test_add_prover;
+use crate::common::spawn_and_add_provers;
 
 const SUPPORTED_DEPTH: usize = 20;
 
@@ -21,7 +21,7 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let tree_depth: u8 = SUPPORTED_DEPTH as u8;
     let batch_size = 3;
 
-    let (mock_chain, db_container, prover_map, micro_oz) =
+    let (mock_chain, db_container, micro_oz) =
         spawn_deps(initial_root, &[batch_size], tree_depth).await?;
 
     let identity_manager = mock_chain.identity_manager.clone();
@@ -68,13 +68,7 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
 
-    test_add_prover(
-        &uri,
-        &client,
-        &prover_map[&batch_size],
-        batch_timeout_seconds as usize,
-    )
-    .await?;
+    let prover_map = spawn_and_add_provers(&uri, &client, &[batch_size], 10).await?;
 
     static IDENTITIES: Lazy<Vec<Identity>> = Lazy::new(|| {
         vec![

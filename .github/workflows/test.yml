@@ -116,6 +116,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LLVM_PROFILE_FILE: profile-%m.profraw
+      RUSTFLAGS: -Cdebuginfo=2 --cfg=tarpaulin -Clink-dead-code
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -144,7 +145,7 @@ jobs:
       - name: Install cargo trapaulin
         run: cargo install cargo-tarpaulin
       - name: Generate code coverage
-        run: cargo tarpaulin --locked --verbose --all --all-features --include-tests --avoid-cfg-tarpaulin --debug --out Xml
+        run: cargo tarpaulin --locked --verbose --all --all-features --skip-clean --avoid-cfg-tarpaulin --debug --out Xml
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3.1.4
         with:

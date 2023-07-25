@@ -6,7 +6,7 @@ use axum::response::Response;
 use bytes::Bytes;
 use hyper::body::HttpBody;
 use hyper::{Body, Method};
-use tracing::{error, info, info_span, Instrument};
+use tracing::{error, info, info_span, warn, Instrument};
 
 // 1 MiB
 const MAX_REQUEST_BODY_SIZE: u64 = 1024 * 1024;
@@ -105,14 +105,25 @@ async fn handle_response(
     let response = if response_status.is_client_error() || response_status.is_server_error() {
         let response_body = body_to_string(body).await?;
 
-        error!(
-            uri_path,
-            ?request_method,
-            ?request_query,
-            ?response_status,
-            ?response_body,
-            "Error processing request"
-        );
+        if response_status.is_client_error() {
+            warn!(
+                uri_path,
+                ?request_method,
+                ?request_query,
+                ?response_status,
+                ?response_body,
+                "Error processing request"
+            )
+        } else {
+            error!(
+                uri_path,
+                ?request_method,
+                ?request_query,
+                ?response_status,
+                ?response_body,
+                "Error processing request"
+            )
+        }
 
         let body = axum::body::boxed(Body::from(response_body));
 

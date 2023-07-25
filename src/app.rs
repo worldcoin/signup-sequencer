@@ -33,7 +33,7 @@ impl InclusionProofResponse {
     #[must_use]
     pub fn hide_processed_status(mut self) -> Self {
         self.0.status = if self.0.status == Status::Processed {
-            Status::Mined
+            Status::Pending
         } else {
             self.0.status
         };

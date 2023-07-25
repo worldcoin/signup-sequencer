@@ -424,7 +424,7 @@ impl App {
             .database
             .get_identity_leaf_index(commitment)
             .await?
-            .ok_or(ServerError::InvalidCommitment)?;
+            .ok_or(ServerError::IdentityCommitmentNotFound)?;
 
         let proof = self.tree_state.get_proof_for(&item);
 

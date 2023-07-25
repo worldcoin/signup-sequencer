@@ -113,7 +113,7 @@ async fn handle_response(
                 ?response_status,
                 ?response_body,
                 "Error processing request"
-            )
+            );
         } else {
             error!(
                 uri_path,
@@ -122,7 +122,7 @@ async fn handle_response(
                 ?response_status,
                 ?response_body,
                 "Error processing request"
-            )
+            );
         }
 
         let body = axum::body::boxed(Body::from(response_body));

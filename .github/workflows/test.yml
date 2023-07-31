@@ -116,8 +116,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LLVM_PROFILE_FILE: profile-%m.profraw
-      # This are the flags that tarpaulin uses by default. If we want to --skip-clean, this should be here
-      RUSTFLAGS: -Cdebuginfo=2 --cfg=tarpaulin -Clink-dead-code -Cinstrument-coverage
+      RUSTFLAGS: -Cdebuginfo=2 -Clink-dead-code -Cinstrument-coverage
       RUSTDOCFLAGS: -C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
     steps:
       - name: Checkout repository
@@ -147,7 +146,7 @@ jobs:
       - name: Install cargo trapaulin
         run: cargo install cargo-tarpaulin
       - name: Generate code coverage
-        run: cargo tarpaulin --avoid-cfg-tarpaulin --verbose --skip-clean --timeout 180 --debug --workspace --out Xml
+        run: cargo tarpaulin --avoid-cfg-tarpaulin --ignore-panics --skip-clean --timeout 180 --debug --workspace --out Xml
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3.1.4
         with:

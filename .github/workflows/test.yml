@@ -116,8 +116,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LLVM_PROFILE_FILE: profile-%m.profraw
-      RUSTFLAGS: -Cdebuginfo=2 -Cinstrument-coverage
-      RUSTDOCFLAGS: -C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
+      RUSTFLAGS:
+      RUSTDOCFLAGS:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -130,23 +130,23 @@ jobs:
           components: llvm-tools-preview
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
-      - name: Cache
-        uses: actions/cache@v3
-        continue-on-error: false
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-tarpaulin-${{ hashFiles('**/Cargo.lock') }}-cov
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-tarpaulin-
+      # - name: Cache
+      #   uses: actions/cache@v3
+      #   continue-on-error: false
+      #   with:
+      #     path: |
+      #       ~/.cargo/registry/index/
+      #       ~/.cargo/registry/cache/
+      #       ~/.cargo/git/db/
+      #       target/
+      #     key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-tarpaulin-${{ hashFiles('**/Cargo.lock') }}-cov
+      #     restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-tarpaulin-
       - name: Install cargo-binutils
         run: cargo install cargo-binutils
       - name: Install cargo trapaulin
         run: cargo install cargo-tarpaulin
       - name: Generate code coverage
-        run: cargo tarpaulin --avoid-cfg-tarpaulin --engine llvm --no-dead-code --no-run --skip-clean --timeout 180 --debug --all --out Xml
+        run: cargo tarpaulin --avoid-cfg-tarpaulin --engine llvm --no-dead-code --timeout 180 --debug --all --out Xml
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3.1.4
         with:

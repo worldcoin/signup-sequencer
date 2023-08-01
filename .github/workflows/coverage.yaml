@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        - name: Install cargo-binutils
+      - name: Install cargo-binutils
         run: cargo install cargo-binutils
       - name: Install cargo trapaulin
         run: cargo install cargo-tarpaulin

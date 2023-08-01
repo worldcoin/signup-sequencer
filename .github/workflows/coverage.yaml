@@ -1,4 +1,4 @@
-name: test
+name: Test
 on:
   pull_request:
   push: 
@@ -6,14 +6,14 @@ on:
       - main
 jobs:
   test:
-    name: coverage
+    name: Coverage
     runs-on:  ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Generate code coverage
         run: |
-          cargo +nightly tarpaulin --avoid-cfg-tarpaulin --no-dead-code --engine llvm --verbose --timeout 120 --out Xml
+          cargo tarpaulin --avoid-cfg-tarpaulin --no-dead-code --engine llvm --verbose --timeout 120 --out Xml
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3.1.4
         with:

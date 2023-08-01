@@ -116,7 +116,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LLVM_PROFILE_FILE: profile-%m.profraw
-      RUSTFLAGS: -Cdebuginfo=2 -Clink-dead-code -Cinstrument-coverage
+      RUSTFLAGS: -Cdebuginfo=2 -Clink-dead-code -Cinstrument-coverage -Crelocation-model=dynamic-no-pic -Clink-arg=-no-pie
       RUSTDOCFLAGS: -C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
     steps:
       - name: Checkout repository

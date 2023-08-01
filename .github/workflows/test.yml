@@ -111,25 +111,25 @@ jobs:
         run: |
           cargo test --locked --features "bench, mimalloc" --all-targets -- --nocapture
           cargo test --locked --features "bench, mimalloc" --doc -- --nocapture
-  tarpaulin:
-    name: Tarpaulin coverage
-    runs-on: ubuntu-latest
-    env:
-      LLVM_PROFILE_FILE: profile-%m.profraw
-      RUSTFLAGS:
-      RUSTDOCFLAGS:
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Install rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.NIGHTLY_VERSION }}
-          override: true
-          components: llvm-tools-preview
-      - name: Install protobuf-compiler
-        run: sudo apt-get install -y protobuf-compiler
+  # tarpaulin:
+  #   name: Tarpaulin coverage
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     LLVM_PROFILE_FILE: profile-%m.profraw
+  #     RUSTFLAGS:
+  #     RUSTDOCFLAGS:
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v3
+  #     - name: Install rust
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         toolchain: ${{ env.NIGHTLY_VERSION }}
+  #         override: true
+  #         components: llvm-tools-preview
+  #     - name: Install protobuf-compiler
+  #       run: sudo apt-get install -y protobuf-compiler
       # - name: Cache
       #   uses: actions/cache@v3
       #   continue-on-error: false
@@ -141,19 +141,19 @@ jobs:
       #       target/
       #     key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-tarpaulin-${{ hashFiles('**/Cargo.lock') }}-cov
       #     restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-tarpaulin-
-      - name: Install cargo-binutils
-        run: cargo install cargo-binutils
-      - name: Install cargo trapaulin
-        run: cargo install cargo-tarpaulin
-      - name: Generate code coverage
-        run: cargo tarpaulin --avoid-cfg-tarpaulin --engine llvm --no-dead-code --timeout 180 --debug --all --out Xml
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v3.1.4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
-          flags: test
-          fail_ci_if_error: true
-          verbose: true
+      # - name: Install cargo-binutils
+      #   run: cargo install cargo-binutils
+      # - name: Install cargo trapaulin
+      #   run: cargo install cargo-tarpaulin
+      # - name: Generate code coverage
+      #   run: cargo tarpaulin --avoid-cfg-tarpaulin --engine llvm --no-dead-code --timeout 180 --debug --all --out Xml
+      # - name: Upload to codecov.io
+      #   uses: codecov/codecov-action@v3.1.4
+      #   with:
+      #     token: ${{ secrets.CODECOV_TOKEN }} # Optional for public repos
+      #     flags: test
+      #     fail_ci_if_error: true
+      #     verbose: true
   cargo-vet:
     name: Vet Dependencies
     runs-on: ubuntu-latest

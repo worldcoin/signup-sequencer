@@ -1,5 +1,3 @@
-#![cfg(not(tarpaulin))]
-
 mod common;
 
 use common::prelude::*;

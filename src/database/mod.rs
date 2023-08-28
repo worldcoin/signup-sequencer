@@ -16,7 +16,7 @@ use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
 use self::prover::ProverConfiguration;
-use self::types::RecoveryCommitments;
+use self::types::{DeletionEntry, RecoveryEntry};
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
 pub mod prover;
@@ -512,7 +512,7 @@ impl Database {
     }
 
     //TODO: consider using a larger value than i64 for leaf index, ruint should have postgres compatibility for u256
-    pub async fn get_recoveries(&self) -> Result<Vec<RecoveryCommitments>, Error> {
+    pub async fn get_recoveries(&self) -> Result<Vec<RecoveryEntry>, Error> {
         let query = sqlx::query(
             r#"
             SELECT *
@@ -524,28 +524,29 @@ impl Database {
 
         Ok(result
             .into_iter()
-            .map(|row| RecoveryCommitments {
+            .map(|row| RecoveryEntry {
                 existing_commitment: row.get::<Hash, _>(0),
                 new_commitment: row.get::<Hash, _>(1),
             })
-            .collect::<Vec<RecoveryCommitments>>())
+            .collect::<Vec<RecoveryEntry>>())
     }
 
-    pub async fn insert_new_deletion(&self, leaf_index: i64) -> Result<(), Error> {
+    pub async fn insert_new_deletion(&self, leaf_index: i64, identity: &Hash) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
-            INSERT INTO deletions (leaf_index)
-            VALUES ($1)
+            INSERT INTO deletions (leaf_index, commitment)
+            VALUES ($1, $2)
             "#,
         )
-        .bind(leaf_index);
+        .bind(leaf_index)
+        .bind(identity);
 
         self.pool.execute(query).await?;
         Ok(())
     }
 
     //TODO: consider using a larger value than i64 for leaf index, ruint should have postgres compatibility for u256
-    pub async fn get_deletions(&self) -> Result<Vec<i64>, Error> {
+    pub async fn get_deletions(&self) -> Result<Vec<DeletionEntry>, Error> {
         let query = sqlx::query(
             r#"
             SELECT *
@@ -557,8 +558,11 @@ impl Database {
 
         Ok(result
             .into_iter()
-            .map(|row| row.get::<i64, _>(0))
-            .collect::<Vec<i64>>())
+            .map(|row| DeletionEntry {
+                leaf_index: row.get::<i64, _>(0),
+                commitment: row.get::<Hash, _>(1),
+            })
+            .collect::<Vec<DeletionEntry>>())
     }
 
     pub async fn get_unprocessed_commitments(
@@ -829,11 +833,12 @@ mod test {
     #[tokio::test]
     async fn insert_deletion() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
+        let identities = mock_identities(3);
 
-        db.insert_new_deletion(0).await?;
-        db.insert_new_deletion(1).await?;
-        db.insert_new_deletion(2).await?;
-        db.insert_new_deletion(3).await?;
+        db.insert_new_deletion(0, &identities[0]).await?;
+        db.insert_new_deletion(1, &identities[1]).await?;
+        db.insert_new_deletion(2, &identities[2]).await?;
+        db.insert_new_deletion(3, &identities[3]).await?;
 
         let deletions = db.get_deletions().await?;
 

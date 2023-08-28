@@ -325,7 +325,7 @@ impl Database {
             .into_iter()
             .map(|row| TreeUpdate {
                 leaf_index: row.get::<i64, _>(0) as usize,
-                element:    row.get::<Hash, _>(1),
+                element: row.get::<Hash, _>(1),
             })
             .collect::<Vec<_>>())
     }
@@ -638,18 +638,14 @@ mod test {
     }
 
     async fn setup_db() -> anyhow::Result<(Database, DockerContainerGuard)> {
-        dbg!("here");
-
         let db_container = postgres_docker_utils::setup().await?;
         let port = db_container.port();
-
-        dbg!(&port);
 
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
         let db = Database::new(Options {
-            database:                 SecretUrl::from_str(&url)?,
-            database_migrate:         true,
+            database: SecretUrl::from_str(&url)?,
+            database_migrate: true,
             database_max_connections: 1,
         })
         .await?;

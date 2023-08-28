@@ -11,7 +11,12 @@ pub struct UnprocessedCommitment {
     pub eligibility_timestamp: Option<DateTime<Utc>>,
 }
 
-pub struct RecoveryCommitments {
+pub struct RecoveryEntry {
     pub existing_commitment: Hash,
     pub new_commitment: Hash,
+}
+
+pub struct DeletionEntry {
+    pub leaf_index: i64, //TODO: consider using a larger type for leaf indices
+    pub commitment: Hash,
 }

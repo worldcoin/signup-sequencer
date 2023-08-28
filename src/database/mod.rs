@@ -7,6 +7,7 @@
 use std::collections::HashSet;
 
 use anyhow::{anyhow, Context, Error as ErrReport};
+use chrono::Utc;
 use clap::Parser;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
@@ -580,6 +581,8 @@ impl Database {
                 created_at: row.get::<_, _>(2),
                 processed_at: row.get::<_, _>(3),
                 error_message: row.get::<_, _>(4),
+
+                eligibility_timestamp: row.get::<_, _>(5),
             })
             .collect::<Vec<_>>())
     }
@@ -639,6 +642,25 @@ impl Database {
         Ok(())
     }
 
+    pub async fn update_eligibility_timestamp(
+        &self,
+        commitment: Hash,
+        eligibility_timestamp: sqlx::types::chrono::DateTime<Utc>,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+                UPDATE unprocessed_identities SET eligibility = $1
+                WHERE commitment = $3
+            "#,
+        )
+        .bind(eligibility_timestamp)
+        .bind(commitment);
+
+        self.pool.execute(query).await?;
+
+        Ok(())
+    }
+
     pub async fn identity_exists(&self, commitment: Hash) -> Result<bool, Error> {
         let query_unprocessed_identity = sqlx::query(
             r#"SELECT exists(SELECT 1 from unprocessed_identities where commitment = $1)"#,
@@ -674,7 +696,7 @@ mod test {
     use std::time::Duration;
 
     use anyhow::Context;
-    use chrono::Utc;
+    use chrono::{Days, Utc};
     use ethers::types::U256;
     use postgres_docker_utils::DockerContainerGuard;
     use semaphore::Field;
@@ -768,6 +790,36 @@ mod test {
         assert_eq!(identity_count, 1);
 
         assert!(db.remove_unprocessed_identity(&commit_hash).await.is_ok());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_update_eligibility_timestamp() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let dec = "1234500000000000000";
+        let commit_hash: Hash = U256::from_dec_str(dec)
+            .expect("cant convert to u256")
+            .into();
+
+        db.insert_new_identity(commit_hash).await?;
+
+        let eligibility_timestamp = DateTime::from(Utc::now())
+            .checked_add_days(Days::new(7))
+            .expect("Could not create eligibility timestamp");
+
+        db.update_eligibility_timestamp(commit_hash, eligibility_timestamp)
+            .await?;
+
+        let commitments = db.get_unprocessed_commitments(Status::Pending).await?;
+        assert_eq!(commitments.len(), 1);
+
+        assert_eq!(
+            commitments[0]
+                .eligibility_timestamp
+                .expect("Could not get eligibility_timestamp from commitment"),
+            eligibility_timestamp
+        );
 
         Ok(())
     }

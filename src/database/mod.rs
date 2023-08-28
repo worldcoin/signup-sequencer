@@ -492,6 +492,18 @@ impl Database {
         Ok(identity)
     }
 
+    pub async fn insert_new_deletion(&self, identity: Hash) -> Result<Hash, Error> {
+        let query = sqlx::query(
+            r#"
+        //TODO: 
+            "#,
+        )
+        .bind(identity)
+        .bind(<&str>::from(Status::New));
+        self.pool.execute(query).await?;
+        Ok(identity)
+    }
+
     pub async fn get_unprocessed_commitments(
         &self,
         status: Status,

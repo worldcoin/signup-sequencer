@@ -322,6 +322,65 @@ impl App {
         Ok(())
     }
 
+    /// Queues a deletion from the merkle tree.
+    ///
+    /// # Errors
+    ///
+    /// Will return `Err` if identity is already queued, not in the tree, or the
+    /// queue malfunctions.
+    #[instrument(level = "debug", skip(self))]
+    pub async fn delete_identity(&self, commitment: Hash) -> Result<(), ServerError> {
+        // TODO: in the comment, it mentions the it will error if not in the tree,
+        // TODO: decide if we are to do this or not and the best way if so
+
+        // TODO: update this to check if there are deletion provers
+        if !self.identity_manager.has_provers().await {
+            warn!(
+                ?commitment,
+                "Identity Manager has no provers. Add provers with /addBatchSize request."
+            );
+            return Err(ServerError::NoProversOnIdInsert);
+        }
+
+        let identity_exists = self.database.identity_exists(commitment).await?;
+        if !identity_exists {
+            return Err(ServerError::IdentityCommitmentNotFound);
+        }
+
+        self.database.insert_new_deletion(commitment).await?;
+
+        Ok(())
+    }
+
+    /// Queues a deletion from the merkle tree.
+    ///
+    /// # Errors
+    ///
+    /// Will return `Err` if identity is already queued, not in the tree, or the
+    /// queue malfunctions.
+    #[instrument(level = "debug", skip(self))]
+    pub async fn recover_identity(&self, commitment: Hash) -> Result<(), ServerError> {
+        // TODO: update this to check if there are deletion provers AND recovery provers
+        if !self.identity_manager.has_provers().await {
+            warn!(
+                ?commitment,
+                "Identity Manager has no provers. Add provers with /addBatchSize request."
+            );
+            return Err(ServerError::NoProversOnIdInsert);
+        }
+
+        todo!("TODO: update these checks before starting recovery");
+
+        // let identity_exists = self.database.identity_exists(commitment).await?;
+        // if !identity_exists {
+        //     return Err(ServerError::IdentityCommitmentNotFound);
+        // }
+
+        // self.database.insert_new_deletion(commitment).await?;
+
+        Ok(())
+    }
+
     fn merge_env_provers(
         options: batch_insertion::Options,
         existing_provers: &mut Provers,

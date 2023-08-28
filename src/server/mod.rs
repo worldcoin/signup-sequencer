@@ -83,6 +83,24 @@ pub struct VerifySemaphoreProofRequest {
     pub proof:                   Proof,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct DeletionRequest {
+    /// The identity commitment to delete.
+    identity_commitment: Hash,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct RecoveryRequest {
+    /// The leaf index of the identity commitment to delete.
+    prev_identity_commitment: Hash,
+    /// The new identity commitment to insert.
+    new_identity_commitment:  Hash,
+}
+
 pub trait ToResponseCode {
     fn to_response_code(&self) -> StatusCode;
 }
@@ -138,6 +156,24 @@ async fn add_batch_size(
 
     Ok(())
 }
+
+async fn delete_identity(
+    State(app): State<Arc<App>>,
+    Json(req): Json<DeletionRequest>,
+) -> Result<StatusCode, Error> {
+    app.delete_identity(req.identity_commitment).await?;
+    todo!("TODO: return a status code")
+}
+
+async fn recover_identity(
+    State(app): State<Arc<App>>,
+    Json(req): Json<RecoveryRequest>,
+) -> Result<StatusCode, Error> {
+    app.delete_identity(req.identity_commitment).await?;
+
+    todo!()
+}
+
 async fn remove_batch_size(
     State(app): State<Arc<App>>,
     Json(req): Json<RemoveBatchSizeRequest>,
@@ -202,6 +238,8 @@ pub async fn bind_from_listener(
         .route("/inclusionProof", post(inclusion_proof))
         .route("/insertIdentity", post(insert_identity))
         .route("/addBatchSize", post(add_batch_size))
+        .route("/deleteIdentity", post(delete_identity))
+        .route("/recoverIdentity", post(recover_identity))
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
         .layer(middleware::from_fn(

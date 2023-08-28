@@ -734,8 +734,6 @@ mod test {
     async fn setup_db() -> anyhow::Result<(Database, DockerContainerGuard)> {
         let db_container = postgres_docker_utils::setup().await?;
         let port = db_container.port();
-        dbg!(&db_container.port());
-
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
         let db = Database::new(Options {

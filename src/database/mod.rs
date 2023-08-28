@@ -15,6 +15,7 @@ use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
 use self::prover::ProverConfiguration;
+use self::types::RecoveryCommitments;
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
 pub mod prover;
@@ -492,6 +493,73 @@ impl Database {
         Ok(identity)
     }
 
+    pub async fn insert_new_recovery(
+        &self,
+        existing_commitment: Hash,
+        new_commitment: Hash,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO recoveries (existing_commitment, new_commitment)
+            VALUES ($1, $2)
+            "#,
+        )
+        .bind(existing_commitment)
+        .bind(new_commitment);
+        self.pool.execute(query).await?;
+        Ok(())
+    }
+
+    //TODO: consider using a larger value than i64 for leaf index, ruint should have postgres compatibility for u256
+    pub async fn get_recoveries(&self) -> Result<Vec<RecoveryCommitments>, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT *
+            FROM recoveries
+            "#,
+        );
+
+        let result = self.pool.fetch_all(query).await?;
+
+        Ok(result
+            .into_iter()
+            .map(|row| RecoveryCommitments {
+                existing_commitment: row.get::<Hash, _>(0),
+                new_commitment: row.get::<Hash, _>(1),
+            })
+            .collect::<Vec<RecoveryCommitments>>())
+    }
+
+    pub async fn insert_new_deletion(&self, leaf_index: i64) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO deletions (leaf_index)
+            VALUES ($1)
+            "#,
+        )
+        .bind(leaf_index);
+
+        self.pool.execute(query).await?;
+        Ok(())
+    }
+
+    //TODO: consider using a larger value than i64 for leaf index, ruint should have postgres compatibility for u256
+    pub async fn get_deletions(&self) -> Result<Vec<i64>, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT *
+            FROM deletions
+            "#,
+        );
+
+        let result = self.pool.fetch_all(query).await?;
+
+        Ok(result
+            .into_iter()
+            .map(|row| row.get::<i64, _>(0))
+            .collect::<Vec<i64>>())
+    }
+
     pub async fn get_unprocessed_commitments(
         &self,
         status: Status,
@@ -644,6 +712,7 @@ mod test {
     async fn setup_db() -> anyhow::Result<(Database, DockerContainerGuard)> {
         let db_container = postgres_docker_utils::setup().await?;
         let port = db_container.port();
+        dbg!(&db_container.port());
 
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
@@ -703,6 +772,39 @@ mod test {
         assert_eq!(identity_count, 1);
 
         assert!(db.remove_unprocessed_identity(&commit_hash).await.is_ok());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn insert_deletion() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        db.insert_new_deletion(0).await?;
+        db.insert_new_deletion(1).await?;
+        db.insert_new_deletion(2).await?;
+        db.insert_new_deletion(3).await?;
+
+        let deletions = db.get_deletions().await?;
+
+        assert_eq!(deletions.len(), 4);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn insert_recovery() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let old_identities = mock_identities(3);
+        let new_identities = mock_identities(3);
+
+        for (old, new) in old_identities.into_iter().zip(new_identities) {
+            db.insert_new_recovery(old, new).await?;
+        }
+
+        let recoveries = db.get_recoveries().await?;
+        assert_eq!(recoveries.len(), 3);
 
         Ok(())
     }

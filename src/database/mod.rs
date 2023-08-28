@@ -572,7 +572,7 @@ impl Database {
         let query = sqlx::query(
             r#"
                 SELECT * FROM unprocessed_identities
-                WHERE status = $1
+                WHERE status = $1 AND CURRENT_TIMESTAMP > eligibility
                 LIMIT $2
             "#,
         )

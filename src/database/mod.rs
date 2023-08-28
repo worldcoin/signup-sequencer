@@ -610,6 +610,8 @@ mod test {
     use ethers::types::U256;
     use postgres_docker_utils::DockerContainerGuard;
     use semaphore::Field;
+    use sqlx::types::chrono::DateTime;
+    use sqlx::{PgPool, Row};
 
     use super::{Database, Options};
     use crate::identity_tree::{Hash, Status};
@@ -636,8 +638,12 @@ mod test {
     }
 
     async fn setup_db() -> anyhow::Result<(Database, DockerContainerGuard)> {
+        dbg!("here");
+
         let db_container = postgres_docker_utils::setup().await?;
         let port = db_container.port();
+
+        dbg!(&port);
 
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
@@ -1058,7 +1064,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn check_identity_existance() -> anyhow::Result<()> {
+    async fn check_identity_existence() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
         let identities = mock_identities(2);

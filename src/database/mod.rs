@@ -654,7 +654,7 @@ impl Database {
         let query = sqlx::query(
             r#"
                 UPDATE unprocessed_identities SET eligibility = $1
-                WHERE commitment = $3
+                WHERE commitment = $2
             "#,
         )
         .bind(eligibility_timestamp)
@@ -827,24 +827,23 @@ mod test {
     }
 
     #[tokio::test]
-    async fn insert_deletion() -> anyhow::Result<()> {
+    async fn test_insert_deletion() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
         let identities = mock_identities(3);
 
         db.insert_new_deletion(0, &identities[0]).await?;
         db.insert_new_deletion(1, &identities[1]).await?;
         db.insert_new_deletion(2, &identities[2]).await?;
-        db.insert_new_deletion(3, &identities[3]).await?;
 
         let deletions = db.get_deletions().await?;
 
-        assert_eq!(deletions.len(), 4);
+        assert_eq!(deletions.len(), 3);
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn insert_recovery() -> anyhow::Result<()> {
+    async fn test_insert_recovery() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
         let old_identities = mock_identities(3);

@@ -126,8 +126,8 @@ async fn insert_identity(
 
 async fn verify_semaphore_proof(
     State(app): State<Arc<App>>,
-    Json(verify_semaphore_proof_request): Json<VerifySemaphoreProofRequest>,
     Query(verify_semaphore_proof_query): Query<VerifySemaphoreProofQuery>,
+    Json(verify_semaphore_proof_request): Json<VerifySemaphoreProofRequest>,
 ) -> Result<(StatusCode, Json<VerifySemaphoreProofResponse>), Error> {
     let result = app
         .verify_semaphore_proof(

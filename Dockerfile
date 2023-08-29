@@ -33,6 +33,6 @@ RUN /src/target/release/signup-sequencer --version
 FROM gcr.io/distroless/cc-debian11:nonroot
 
 # Copy the sequencer binary
-COPY --from=build-env --chown=0:10001 --chmod=001 /src/target/release/signup-sequencer /bin/signup-sequencer
+COPY --from=build-env --chown=0:10001 --chmod=010 /src/target/release/signup-sequencer /bin/signup-sequencer
 
 ENTRYPOINT [ "/bin/signup-sequencer" ]

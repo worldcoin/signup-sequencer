@@ -32,6 +32,13 @@ RUN /src/target/release/signup-sequencer --version
 # cc variant because we need libgcc and others
 FROM gcr.io/distroless/cc-debian11:nonroot
 
+# Expose Prometheus
+ENV PROMETHEUS="http://0.0.0.0:9998/metrics"
+EXPOSE 9998/tcp
+LABEL prometheus.io/scrape="true"
+LABEL prometheus.io/port="9998"
+LABEL prometheus.io/path="/metrics"
+
 # Copy the sequencer binary
 COPY --from=build-env --chown=0:10001 --chmod=010 /src/target/release/signup-sequencer /bin/signup-sequencer
 

@@ -72,6 +72,7 @@ impl Error {
             InvalidPath => StatusCode::NOT_FOUND,
             InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             IndexOutOfBounds
+            | RootTooOld
             | IdentityCommitmentNotFound
             | InvalidCommitment
             | DuplicateCommitment

@@ -62,8 +62,8 @@ impl ProverMap<batch_insertion::Prover> {
         self.map
             .iter()
             .map(|(k, v)| ProverConfiguration {
-                url:        v.url(),
-                timeout_s:  v.timeout_s(),
+                url: v.url(),
+                timeout_s: v.timeout_s(),
                 batch_size: *k,
             })
             .collect()
@@ -78,6 +78,8 @@ impl<P> From<BTreeMap<usize, P>> for ProverMap<P> {
 
 /// A map of provers for batch insertion operations.
 pub type InsertionProverMap = SharedProverMap<batch_insertion::Prover>;
+/// A map of provers for batch deletion operations.
+pub type DeletionProverMap = SharedProverMap<batch_insertion::Prover>;
 
 /// The type of provers that can only be read from for insertion operations.
 pub type ReadOnlyInsertionProver<'a> = ReadOnlyProver<'a, batch_insertion::Prover>;

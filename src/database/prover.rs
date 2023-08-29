@@ -5,9 +5,16 @@ pub type Provers = HashSet<ProverConfiguration>;
 
 #[derive(Debug, Clone)]
 pub struct ProverConfiguration {
-    pub url:        String,
+    pub url: String,
     pub batch_size: usize,
-    pub timeout_s:  u64,
+    pub timeout_s: u64,
+    pub prover_type: ProverType,
+}
+
+#[derive(Debug, Clone)]
+pub enum ProverType {
+    Insertion,
+    Deletion,
 }
 
 impl Hash for ProverConfiguration {

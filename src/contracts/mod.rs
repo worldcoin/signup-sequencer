@@ -16,7 +16,7 @@ use self::abi::{BridgedWorldId, WorldId};
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::{Ethereum, ReadProvider};
 use crate::prover::batch_insertion::ProverConfiguration;
-use crate::prover::map::{InsertionProverMap, ReadOnlyInsertionProver};
+use crate::prover::map::{DeletionProverMap, InsertionProverMap, ReadOnlyInsertionProver};
 use crate::prover::{batch_insertion, Proof, ReadOnlyProver};
 use crate::serde_utils::JsonStrWrapper;
 use crate::server::error::Error as ServerError;
@@ -55,12 +55,13 @@ pub struct Options {
 /// contract.
 #[derive(Debug)]
 pub struct IdentityManager {
-    ethereum:             Ethereum,
+    ethereum: Ethereum,
     insertion_prover_map: InsertionProverMap,
-    abi:                  WorldId<ReadProvider>,
-    secondary_abis:       Vec<BridgedWorldId<ReadProvider>>,
-    initial_leaf_value:   Field,
-    tree_depth:           usize,
+    deletion_prover_map: DeletionProverMap,
+    abi: WorldId<ReadProvider>,
+    secondary_abis: Vec<BridgedWorldId<ReadProvider>>,
+    initial_leaf_value: Field,
+    tree_depth: usize,
 }
 
 impl IdentityManager {
@@ -69,6 +70,7 @@ impl IdentityManager {
         options: Options,
         ethereum: Ethereum,
         insertion_prover_map: InsertionProverMap,
+        deletion_prover_map: DeletionProverMap,
     ) -> anyhow::Result<Self>
     where
         Self: Sized,
@@ -118,6 +120,7 @@ impl IdentityManager {
         let identity_manager = Self {
             ethereum,
             insertion_prover_map,
+            deletion_prover_map,
             abi,
             secondary_abis,
             initial_leaf_value,

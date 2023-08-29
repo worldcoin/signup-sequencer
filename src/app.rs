@@ -159,6 +159,7 @@ impl App {
         database.insert_provers(non_inserted_provers).await?;
 
         let insertion_prover_map = make_insertion_map(provers)?;
+
         let identity_manager =
             IdentityManager::new(options.contracts, ethereum.clone(), insertion_prover_map).await?;
 

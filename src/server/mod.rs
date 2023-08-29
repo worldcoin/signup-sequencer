@@ -160,19 +160,18 @@ async fn add_batch_size(
 async fn delete_identity(
     State(app): State<Arc<App>>,
     Json(req): Json<DeletionRequest>,
-) -> Result<StatusCode, Error> {
+) -> Result<(), Error> {
     app.delete_identity(req.identity_commitment).await?;
-    todo!("TODO: return a status code")
+    Ok(())
 }
 
 async fn recover_identity(
     State(app): State<Arc<App>>,
     Json(req): Json<RecoveryRequest>,
-) -> Result<StatusCode, Error> {
+) -> Result<(), Error> {
     app.recover_identity(&req.prev_identity_commitment, &req.new_identity_commitment)
         .await?;
-
-    todo!("TODO: return a status code");
+    Ok(())
 }
 
 async fn remove_batch_size(

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Result as AnyhowResult;
+use chrono::Duration;
 use clap::Parser;
 use hyper::StatusCode;
 use semaphore::poseidon_tree::LazyPoseidonTree;
@@ -21,7 +22,7 @@ use crate::prover::batch_insertion::ProverConfiguration;
 use crate::prover::map::make_insertion_map;
 use crate::prover::{self, batch_insertion};
 use crate::server::error::Error as ServerError;
-use crate::server::{ToResponseCode, VerifySemaphoreProofRequest};
+use crate::server::{ToResponseCode, VerifySemaphoreProofQuery, VerifySemaphoreProofRequest};
 use crate::task_monitor::TaskMonitor;
 use crate::{contracts, task_monitor};
 
@@ -438,10 +439,15 @@ impl App {
     pub async fn verify_semaphore_proof(
         &self,
         request: &VerifySemaphoreProofRequest,
+        query: &VerifySemaphoreProofQuery,
     ) -> Result<VerifySemaphoreProofResponse, ServerError> {
         let Some(root_state) = self.database.get_root_state(&request.root).await? else {
             return Err(ServerError::InvalidRoot)
         };
+
+        if let Some(max_root_age_seconds) = query.max_root_age_seconds {
+            Self::validate_root_age(max_root_age_seconds, &root_state)?;
+        }
 
         let checked = verify_proof(
             request.root,
@@ -451,6 +457,7 @@ impl App {
             &request.proof,
             self.identity_manager.tree_depth(),
         );
+
         match checked {
             Ok(true) => Ok(VerifySemaphoreProofResponse(root_state)),
             Ok(false) => Err(ServerError::InvalidProof),
@@ -458,6 +465,31 @@ impl App {
                 info!(?err, "verify_proof failed with error");
                 Err(ServerError::ProverError)
             }
+        }
+    }
+
+    fn validate_root_age(
+        max_root_age_seconds: i64,
+        root_state: &RootItem,
+    ) -> Result<(), ServerError> {
+        let max_root_age = Duration::seconds(max_root_age_seconds);
+
+        let mined_at = root_state.mined_valid_as_of;
+        let pending_as_of = root_state.pending_valid_as_of;
+
+        let now = chrono::Utc::now();
+
+        let root_age = if root_state.status == Status::Pending {
+            now - pending_as_of
+        } else {
+            let mined_at = mined_at.ok_or(ServerError::InvalidRoot)?;
+            now - mined_at
+        };
+
+        if root_age > max_root_age {
+            Err(ServerError::RootTooOld)
+        } else {
+            Ok(())
         }
     }
 

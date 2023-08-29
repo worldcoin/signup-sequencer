@@ -31,6 +31,8 @@ pub enum Error {
     DuplicateCommitment,
     #[error("Root mismatch between tree and contract.")]
     RootMismatch,
+    #[error("Root provided in semaphore proof is too old.")]
+    RootTooOld,
     #[error("invalid JSON request: {0}")]
     InvalidSerialization(#[from] serde_json::Error),
     #[error(transparent)]

@@ -133,10 +133,10 @@ pub struct Options {
 }
 
 pub struct App {
-    database:           Arc<Database>,
-    identity_manager:   SharedIdentityManager,
+    database: Arc<Database>,
+    identity_manager: SharedIdentityManager,
     identity_committer: Arc<TaskMonitor>,
-    tree_state:         TreeState,
+    tree_state: TreeState,
     snark_scalar_field: Hash,
 }
 
@@ -347,7 +347,16 @@ impl App {
             return Err(ServerError::IdentityCommitmentNotFound);
         }
 
-        self.database.insert_new_deletion(commitment).await?;
+        let leaf_index = self
+            .database
+            .get_identity_leaf_index(&commitment)
+            .await?
+            .ok_or(ServerError::IdentityCommitmentNotFound)?
+            .leaf_index;
+
+        self.database
+            .insert_new_deletion(leaf_index, &commitment)
+            .await?;
 
         Ok(())
     }
@@ -359,24 +368,36 @@ impl App {
     /// Will return `Err` if identity is already queued, not in the tree, or the
     /// queue malfunctions.
     #[instrument(level = "debug", skip(self))]
-    pub async fn recover_identity(&self, commitment: Hash) -> Result<(), ServerError> {
+    pub async fn recover_identity(
+        &self,
+        existing_commitment: &Hash,
+        new_commitment: &Hash,
+    ) -> Result<(), ServerError> {
         // TODO: update this to check if there are deletion provers AND recovery provers
         if !self.identity_manager.has_provers().await {
             warn!(
-                ?commitment,
+                ?new_commitment,
                 "Identity Manager has no provers. Add provers with /addBatchSize request."
             );
             return Err(ServerError::NoProversOnIdInsert);
         }
 
-        todo!("TODO: update these checks before starting recovery");
+        //TODO: update these checks before starting recovery
 
-        // let identity_exists = self.database.identity_exists(commitment).await?;
-        // if !identity_exists {
-        //     return Err(ServerError::IdentityCommitmentNotFound);
-        // }
+        let leaf_index = self
+            .database
+            .get_identity_leaf_index(&existing_commitment)
+            .await?
+            .ok_or(ServerError::IdentityCommitmentNotFound)?
+            .leaf_index;
 
-        // self.database.insert_new_deletion(commitment).await?;
+        self.database
+            .insert_new_deletion(leaf_index, &existing_commitment)
+            .await?;
+
+        self.database
+            .insert_new_recovery(&existing_commitment, &new_commitment)
+            .await?;
 
         Ok(())
     }
@@ -390,9 +411,9 @@ impl App {
             .0
             .into_iter()
             .map(|opt| DbProverConf {
-                url:        opt.url,
+                url: opt.url,
                 batch_size: opt.batch_size,
-                timeout_s:  opt.timeout_s,
+                timeout_s: opt.timeout_s,
             })
             .collect();
 

@@ -76,6 +76,60 @@ pub async fn test_verify_proof(
     proof: protocol::Proof,
     expected_failure: Option<&str>,
 ) {
+    test_verify_proof_inner(
+        uri,
+        client,
+        root,
+        signal_hash,
+        nullifier_hash,
+        external_nullifier_hash,
+        proof,
+        None,
+        expected_failure,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
+pub async fn test_verify_proof_with_age(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    root: Field,
+    signal_hash: Field,
+    nullifier_hash: Field,
+    external_nullifier_hash: Field,
+    proof: protocol::Proof,
+    max_root_age_seconds: i64,
+    expected_failure: Option<&str>,
+) {
+    test_verify_proof_inner(
+        uri,
+        client,
+        root,
+        signal_hash,
+        nullifier_hash,
+        external_nullifier_hash,
+        proof,
+        Some(max_root_age_seconds),
+        expected_failure,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
+async fn test_verify_proof_inner(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    root: Field,
+    signal_hash: Field,
+    nullifier_hash: Field,
+    external_nullifier_hash: Field,
+    proof: protocol::Proof,
+    max_root_age_seconds: Option<i64>,
+    expected_failure: Option<&str>,
+) {
     let body = construct_verify_proof_body(
         root,
         signal_hash,
@@ -83,12 +137,21 @@ pub async fn test_verify_proof(
         external_nullifier_hash,
         proof,
     );
+
+    let uri = match max_root_age_seconds {
+        Some(max_root_age_seconds) => {
+            format!("{uri}/verifySemaphoreProof?maxRootAgeSeconds={max_root_age_seconds}")
+        }
+        None => format!("{uri}/verifySemaphoreProof"),
+    };
+
     let req = Request::builder()
         .method("POST")
-        .uri(uri.to_owned() + "/verifySemaphoreProof")
+        .uri(uri)
         .header("Content-Type", "application/json")
         .body(body)
         .expect("Failed to create verify proof hyper::Body");
+
     let mut response = client
         .request(req)
         .await

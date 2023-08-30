@@ -6,6 +6,7 @@ use anyhow::Result as AnyhowResult;
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use hyper::StatusCode;
+use ruint::Uint;
 use semaphore::poseidon_tree::LazyPoseidonTree;
 use semaphore::protocol::verify_proof;
 use serde::Serialize;
@@ -15,7 +16,7 @@ use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::{self, Database};
 use crate::ethereum::{self, Ethereum};
 use crate::identity_tree::{
-    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState,
+    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState, TreeVersionReadOps,
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::{self, ProverConfiguration, ProverType, Provers};
@@ -303,10 +304,11 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        if !self.identity_manager.has_provers().await {
+        if !self.identity_manager.has_insertion_provers().await {
             warn!(
                 ?commitment,
-                "Identity Manager has no provers. Add provers with /addBatchSize request."
+                "Identity Manager has no insertion provers. Add provers with /addBatchSize \
+                 request."
             );
             return Err(ServerError::NoProversOnIdInsert);
         }
@@ -338,24 +340,17 @@ impl App {
     /// Will return `Err` if identity is already queued, not in the tree, or the
     /// queue malfunctions.
     #[instrument(level = "debug", skip(self))]
-    pub async fn delete_identity(&self, commitment: Hash) -> Result<(), ServerError> {
-        // TODO: in the comment, it mentions the it will error if not in the tree,
-        // TODO: decide if we are to do this or not and the best way if so
-
-        // TODO: update this to check if there are deletion provers
-        if !self.identity_manager.has_provers().await {
+    pub async fn delete_identity(&self, commitment: &Hash) -> Result<(), ServerError> {
+        // Ensure that deletion provers exist
+        if !self.identity_manager.has_deletion_provers().await {
             warn!(
                 ?commitment,
-                "Identity Manager has no provers. Add provers with /addBatchSize request."
+                "Identity Manager has no deletion provers. Add provers with /addBatchSize request."
             );
-            return Err(ServerError::NoProversOnIdInsert);
+            return Err(ServerError::NoProversOnIdDeletion);
         }
 
-        let identity_exists = self.database.identity_exists(commitment).await?;
-        if !identity_exists {
-            return Err(ServerError::IdentityCommitmentNotFound);
-        }
-
+        // Get the leaf index for the id commitment
         let leaf_index = self
             .database
             .get_identity_leaf_index(&commitment)
@@ -363,6 +358,21 @@ impl App {
             .ok_or(ServerError::IdentityCommitmentNotFound)?
             .leaf_index;
 
+        // Check if the id has already been deleted
+        if self.tree_state.get_latest_tree().get_leaf(leaf_index) == Uint::ZERO {
+            return Err(ServerError::IdentityAlreadyDeleted);
+        }
+
+        // Check if the id is already queued for deletion
+        if self
+            .database
+            .identity_is_queued_for_deletion(commitment)
+            .await?
+        {
+            return Err(ServerError::IdentityQueuedForDeletion);
+        }
+
+        // If the id has not been deleted, insert into the deletions table
         self.database
             .insert_new_deletion(leaf_index, &commitment)
             .await?;
@@ -382,11 +392,18 @@ impl App {
         existing_commitment: &Hash,
         new_commitment: &Hash,
     ) -> Result<(), ServerError> {
-        // TODO: update this to check if there are deletion provers AND recovery provers
-        if !self.identity_manager.has_provers().await {
+        if !self.identity_manager.has_insertion_provers().await {
             warn!(
                 ?new_commitment,
                 "Identity Manager has no provers. Add provers with /addBatchSize request."
+            );
+            return Err(ServerError::NoProversOnIdInsert);
+        }
+
+        if !self.identity_manager.has_deletion_provers().await {
+            warn!(
+                ?new_commitment,
+                "Identity Manager has no deletion provers. Add provers with /addBatchSize request."
             );
             return Err(ServerError::NoProversOnIdInsert);
         }

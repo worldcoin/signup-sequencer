@@ -31,6 +31,10 @@ pub enum Error {
     DuplicateCommitment,
     #[error("Root mismatch between tree and contract.")]
     RootMismatch,
+    #[error("Identity is already queued for deletion.")]
+    IdentityQueuedForDeletion,
+    #[error("Identity has already been deleted.")]
+    IdentityAlreadyDeleted,
     #[error("invalid JSON request: {0}")]
     InvalidSerialization(#[from] serde_json::Error),
     #[error(transparent)]
@@ -55,6 +59,8 @@ pub enum Error {
     CannotRemoveLastBatchSize,
     #[error("Identity Manager had no provers on point of identity insertion.")]
     NoProversOnIdInsert,
+    #[error("Identity Manager had no provers on point of identity deletion.")]
+    NoProversOnIdDeletion,
     #[error(transparent)]
     Other(#[from] EyreError),
 }

@@ -362,8 +362,12 @@ impl IdentityManager {
             .as_configuration_vec())
     }
 
-    pub async fn has_provers(&self) -> bool {
+    pub async fn has_insertion_provers(&self) -> bool {
         self.insertion_prover_map.read().await.len() > 0
+    }
+
+    pub async fn has_deletion_provers(&self) -> bool {
+        self.deletion_prover_map.read().await.len() > 0
     }
 }
 

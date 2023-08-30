@@ -700,6 +700,7 @@ impl Database {
         Ok(())
     }
 
+    // TODO: add docs
     pub async fn update_eligibility_timestamp(
         &self,
         commitment: Hash,
@@ -721,14 +722,14 @@ impl Database {
 
     pub async fn identity_exists(&self, commitment: Hash) -> Result<bool, Error> {
         let query_unprocessed_identity = sqlx::query(
-            r#"SELECT exists(SELECT 1 from unprocessed_identities where commitment = $1)"#,
+            r#"SELECT exists(SELECT 1 FROM unprocessed_identities where commitment = $1)"#,
         )
         .bind(commitment);
 
         let row_unprocessed = self.pool.fetch_one(query_unprocessed_identity).await?;
 
         let query_processed_identity =
-            sqlx::query(r#"SELECT exists(SELECT 1 from identities where commitment = $1)"#)
+            sqlx::query(r#"SELECT exists(SELECT 1 FROM identities where commitment = $1)"#)
                 .bind(commitment);
 
         let row_processed = self.pool.fetch_one(query_processed_identity).await?;
@@ -736,6 +737,25 @@ impl Database {
         let exists = row_unprocessed.get::<bool, _>(0) || row_processed.get::<bool, _>(0);
 
         Ok(exists)
+    }
+
+    // TODO: add docs
+    pub async fn identity_is_queued_for_deletion(&self, commitment: &Hash) -> Result<bool, Error> {
+        let query_queued_deletion =
+            sqlx::query(r#"SELECT exists(SELECT 1 FROM deletions where commitment = $1)"#)
+                .bind(commitment);
+        let row_unprocessed = self.pool.fetch_one(query_queued_deletion).await?;
+        Ok(row_unprocessed.get::<bool, _>(0))
+    }
+
+    // TODO: add docs
+    pub async fn identity_has_been_deleted(&self, commitment: &Hash) -> Result<bool, Error> {
+        if let Some(tree_item) = self.get_identity_leaf_index(commitment).await? {
+            let query_queued_deletion =
+                sqlx::query(r#"SELECT leaf_index COUNT(*) FROM identities where leaf_index = $1)"#)
+                    .bind(tree_item.leaf_index as i64);
+        }
+        todo!()
     }
 }
 

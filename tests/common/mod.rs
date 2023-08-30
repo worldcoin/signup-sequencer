@@ -372,7 +372,7 @@ pub async fn spawn_app(options: Options) -> anyhow::Result<(JoinHandle<()>, Sock
 
 #[derive(Deserialize, Serialize, Debug)]
 struct CompiledContract {
-    abi: Abi,
+    abi:      Abi,
     bytecode: Bytecode,
 }
 

@@ -330,7 +330,7 @@ impl Database {
             .into_iter()
             .map(|row| TreeUpdate {
                 leaf_index: row.get::<i64, _>(0) as usize,
-                element: row.get::<Hash, _>(1),
+                element:    row.get::<Hash, _>(1),
             })
             .collect::<Vec<_>>())
     }
@@ -542,7 +542,7 @@ impl Database {
             .into_iter()
             .map(|row| RecoveryEntry {
                 existing_commitment: row.get::<Hash, _>(0),
-                new_commitment: row.get::<Hash, _>(1),
+                new_commitment:      row.get::<Hash, _>(1),
             })
             .collect::<Vec<RecoveryEntry>>())
     }
@@ -791,8 +791,8 @@ mod test {
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
         let db = Database::new(Options {
-            database: SecretUrl::from_str(&url)?,
-            database_migrate: true,
+            database:                 SecretUrl::from_str(&url)?,
+            database_migrate:         true,
             database_max_connections: 1,
         })
         .await?;

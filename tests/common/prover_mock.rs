@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProverError {
-    pub code: String,
+    pub code:    String,
     pub message: String,
 }
 
@@ -37,27 +37,27 @@ impl Display for ProverError {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProofInput {
-    input_hash: U256,
-    start_index: u32,
-    pre_root: U256,
-    post_root: U256,
+    input_hash:           U256,
+    start_index:          u32,
+    pre_root:             U256,
+    post_root:            U256,
     identity_commitments: Vec<U256>,
-    merkle_proofs: Vec<Vec<U256>>,
+    merkle_proofs:        Vec<Vec<U256>>,
 }
 
 /// The proof response from the prover.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Proof {
-    pub ar: [U256; 2],
-    pub bs: [[U256; 2]; 2],
+    pub ar:  [U256; 2],
+    pub bs:  [[U256; 2]; 2],
     pub krs: [U256; 2],
 }
 
 impl From<[U256; 8]> for Proof {
     fn from(value: [U256; 8]) -> Self {
         Self {
-            ar: [value[0], value[1]],
-            bs: [[value[2], value[3]], [value[4], value[5]]],
+            ar:  [value[0], value[1]],
+            bs:  [[value[2], value[3]], [value[4], value[5]]],
             krs: [value[6], value[7]],
         }
     }
@@ -83,7 +83,7 @@ impl ProveResponse {
     /// Constructs a failure response from the provided `code` and `message`.
     pub fn failure(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self::ProofFailure(ProverError {
-            code: code.into(),
+            code:    code.into(),
             message: message.into(),
         })
     }
@@ -91,14 +91,14 @@ impl ProveResponse {
 
 /// The mock prover service.
 pub struct ProverService {
-    server: Handle,
-    inner: Arc<Mutex<Prover>>,
-    address: SocketAddr,
-    batch_size: usize,
+    server:      Handle,
+    inner:       Arc<Mutex<Prover>>,
+    address:     SocketAddr,
+    batch_size:  usize,
     prover_type: ProverType,
 }
 
-//TODO: we could just import this from the sequencer
+// TODO: we could just import this from the sequencer
 #[derive(Debug, Copy, Clone, sqlx::Type, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 #[sqlx(type_name = "prover_enum", rename_all = "PascalCase")]
@@ -107,6 +107,7 @@ pub enum ProverType {
     Insertion,
     Deletion,
 }
+
 impl std::fmt::Display for ProverType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {

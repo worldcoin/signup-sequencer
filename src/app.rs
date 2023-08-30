@@ -132,10 +132,10 @@ pub struct Options {
 }
 
 pub struct App {
-    database: Arc<Database>,
-    identity_manager: SharedIdentityManager,
+    database:           Arc<Database>,
+    identity_manager:   SharedIdentityManager,
     identity_committer: Arc<TaskMonitor>,
-    tree_state: TreeState,
+    tree_state:         TreeState,
     snark_scalar_field: Hash,
 }
 
@@ -417,9 +417,9 @@ impl App {
             .0
             .into_iter()
             .map(|opt| ProverConfiguration {
-                url: opt.url,
-                batch_size: opt.batch_size,
-                timeout_s: opt.timeout_s,
+                url:         opt.url,
+                batch_size:  opt.batch_size,
+                timeout_s:   opt.timeout_s,
                 prover_type: opt.prover_type,
             })
             .collect();

@@ -392,6 +392,7 @@ impl App {
         existing_commitment: &Hash,
         new_commitment: &Hash,
     ) -> Result<(), ServerError> {
+        // Ensure that insertion provers exist
         if !self.identity_manager.has_insertion_provers().await {
             warn!(
                 ?new_commitment,
@@ -400,6 +401,7 @@ impl App {
             return Err(ServerError::NoProversOnIdInsert);
         }
 
+        // Ensure that deletion provers exist
         if !self.identity_manager.has_deletion_provers().await {
             warn!(
                 ?new_commitment,

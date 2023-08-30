@@ -747,16 +747,6 @@ impl Database {
         let row_unprocessed = self.pool.fetch_one(query_queued_deletion).await?;
         Ok(row_unprocessed.get::<bool, _>(0))
     }
-
-    // TODO: add docs
-    pub async fn identity_has_been_deleted(&self, commitment: &Hash) -> Result<bool, Error> {
-        if let Some(tree_item) = self.get_identity_leaf_index(commitment).await? {
-            let query_queued_deletion =
-                sqlx::query(r#"SELECT leaf_index COUNT(*) FROM identities where leaf_index = $1)"#)
-                    .bind(tree_item.leaf_index as i64);
-        }
-        todo!()
-    }
 }
 
 #[derive(Debug, Error)]

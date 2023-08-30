@@ -12,6 +12,7 @@ pub mod map;
 pub mod proof;
 
 use std::collections::HashSet;
+use std::default;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::mem::size_of;
@@ -56,11 +57,11 @@ static PROVER_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
 pub struct Options {
     /// The options for configuring the batch insertion prover service.
     ///
-    /// This should be a JSON array containing objects of the following format `{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}`
+    /// This should be a JSON array containing objects of the following format `{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30,"prover_type", "insertion"}`
     #[clap(
         long,
         env,
-        default_value = r#"[{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}]"#
+        default_value = r#"[{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30,"prover_type": "insertion"}]"# //TODO: update this and test
     )]
     pub prover_urls: JsonStrWrapper<Vec<ProverConfiguration>>,
 }
@@ -85,8 +86,11 @@ pub struct ProverConfiguration {
     pub prover_type: ProverType,
 }
 
-#[derive(Debug, Copy, Clone, sqlx::Type, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, sqlx::Type, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+#[sqlx(type_name = "prover_enum", rename_all = "PascalCase")]
 pub enum ProverType {
+    #[default]
     Insertion,
     Deletion,
 }
@@ -108,10 +112,10 @@ pub type Provers = HashSet<ProverConfiguration>;
 /// A representation of the connection to the MTB prover service.
 #[derive(Clone, Debug)]
 pub struct Prover {
-    target_url:  Url,
-    client:      reqwest::Client,
-    batch_size:  usize,
-    timeout_s:   u64,
+    target_url: Url,
+    client: reqwest::Client,
+    batch_size: usize,
+    timeout_s: u64,
     prover_type: ProverType,
 }
 
@@ -292,7 +296,7 @@ pub fn compute_input_hash(
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProverError {
-    pub code:    String,
+    pub code: String,
     pub message: String,
 }
 
@@ -309,12 +313,12 @@ impl Display for ProverError {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProofInput {
-    input_hash:           U256,
-    start_index:          u32,
-    pre_root:             U256,
-    post_root:            U256,
+    input_hash: U256,
+    start_index: u32,
+    pre_root: U256,
+    post_root: U256,
     identity_commitments: Vec<U256>,
-    merkle_proofs:        Vec<Vec<U256>>,
+    merkle_proofs: Vec<Vec<U256>>,
 }
 
 #[cfg(test)]
@@ -327,9 +331,9 @@ mod test {
         let mock_service = mock::Service::new(mock_url.clone()).await?;
 
         let options = ProverConfiguration {
-            url:         "http://localhost:3001".into(),
-            timeout_s:   30,
-            batch_size:  3,
+            url: "http://localhost:3001".into(),
+            timeout_s: 30,
+            batch_size: 3,
             prover_type: ProverType::Insertion,
         };
         let mtb = Prover::new(&options).unwrap();
@@ -359,9 +363,9 @@ mod test {
         let mock_service = mock::Service::new(mock_url.clone()).await?;
 
         let options = ProverConfiguration {
-            url:         "http://localhost:3002".into(),
-            timeout_s:   30,
-            batch_size:  3,
+            url: "http://localhost:3002".into(),
+            timeout_s: 30,
+            batch_size: 3,
             prover_type: ProverType::Insertion,
         };
         let mtb = Prover::new(&options).unwrap();
@@ -387,9 +391,9 @@ mod test {
     #[tokio::test]
     async fn prover_should_error_if_batch_size_wrong() -> anyhow::Result<()> {
         let options = ProverConfiguration {
-            url:         "http://localhost:3002".into(),
-            timeout_s:   30,
-            batch_size:  10,
+            url: "http://localhost:3002".into(),
+            timeout_s: 30,
+            batch_size: 10,
             prover_type: ProverType::Insertion,
         };
         let mtb = Prover::new(&options).unwrap();
@@ -600,7 +604,7 @@ pub mod mock {
                     }
                     _ => {
                         let error = ProverError {
-                            code:    "Oh no!".into(),
+                            code: "Oh no!".into(),
                             message: "Things went wrong.".into(),
                         };
                         Json(ProveResponse::ProofFailure(error))

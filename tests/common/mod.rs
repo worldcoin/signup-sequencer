@@ -366,7 +366,7 @@ pub async fn spawn_app(options: Options) -> anyhow::Result<(JoinHandle<()>, Sock
 
 #[derive(Deserialize, Serialize, Debug)]
 struct CompiledContract {
-    abi:      Abi,
+    abi: Abi,
     bytecode: Bytecode,
 }
 
@@ -413,7 +413,8 @@ async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {
 }
 
 pub async fn spawn_mock_prover(batch_size: usize) -> anyhow::Result<ProverService> {
-    let mock_prover_service = prover_mock::ProverService::new(batch_size).await?;
+    let mock_prover_service =
+        prover_mock::ProverService::new(batch_size, prover_mock::ProverType::Insertion).await?;
 
     Ok(mock_prover_service)
 }

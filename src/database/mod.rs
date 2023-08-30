@@ -330,7 +330,7 @@ impl Database {
             .into_iter()
             .map(|row| TreeUpdate {
                 leaf_index: row.get::<i64, _>(0) as usize,
-                element:    row.get::<Hash, _>(1),
+                element: row.get::<Hash, _>(1),
             })
             .collect::<Vec<_>>())
     }
@@ -455,14 +455,15 @@ impl Database {
 
         let mut query_builder = sqlx::QueryBuilder::new(
             r#"
-                  INSERT INTO provers (batch_size, url, timeout_s)
+                  INSERT INTO provers (batch_size, url, timeout_s, prover_type)
             "#,
         );
 
         query_builder.push_values(provers, |mut b, prover| {
             b.push_bind(prover.batch_size as i64)
                 .push_bind(prover.url)
-                .push_bind(prover.timeout_s as i64);
+                .push_bind(prover.timeout_s as i64)
+                .push_bind(prover.prover_type);
         });
 
         let query = query_builder.build();
@@ -489,15 +490,21 @@ impl Database {
         Ok(())
     }
 
-    pub async fn insert_new_identity(&self, identity: Hash) -> Result<Hash, Error> {
+    pub async fn insert_new_identity(
+        &self,
+        identity: Hash,
+        eligibility_timestamp: sqlx::types::chrono::DateTime<Utc>,
+    ) -> Result<Hash, Error> {
         let query = sqlx::query(
             r#"
-            INSERT INTO unprocessed_identities (commitment, status, created_at)
-            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            INSERT INTO unprocessed_identities (commitment, status, created_at, eligibility)
+            VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
             "#,
         )
         .bind(identity)
-        .bind(<&str>::from(Status::New));
+        .bind(<&str>::from(Status::New))
+        .bind(eligibility_timestamp);
+
         self.pool.execute(query).await?;
         Ok(identity)
     }
@@ -535,7 +542,7 @@ impl Database {
             .into_iter()
             .map(|row| RecoveryEntry {
                 existing_commitment: row.get::<Hash, _>(0),
-                new_commitment:      row.get::<Hash, _>(1),
+                new_commitment: row.get::<Hash, _>(1),
             })
             .collect::<Vec<RecoveryEntry>>())
     }
@@ -579,7 +586,7 @@ impl Database {
             .collect::<Vec<DeletionEntry>>())
     }
 
-    pub async fn get_unprocessed_commitments(
+    pub async fn get_eligible_unprocessed_commitments(
         &self,
         status: Status,
     ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
@@ -587,6 +594,35 @@ impl Database {
             r#"
                 SELECT * FROM unprocessed_identities
                 WHERE status = $1 AND CURRENT_TIMESTAMP > eligibility
+                LIMIT $2
+            "#,
+        )
+        .bind(<&str>::from(status))
+        .bind(MAX_UNPROCESSED_FETCH_COUNT);
+
+        let result = self.pool.fetch_all(query).await?;
+
+        Ok(result
+            .into_iter()
+            .map(|row| types::UnprocessedCommitment {
+                commitment: row.get::<Hash, _>(0),
+                status,
+                created_at: row.get::<_, _>(2),
+                processed_at: row.get::<_, _>(3),
+                error_message: row.get::<_, _>(4),
+                eligibility_timestamp: row.get::<_, _>(5),
+            })
+            .collect::<Vec<_>>())
+    }
+
+    pub async fn get_unprocessed_commitments(
+        &self,
+        status: Status,
+    ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
+        let query = sqlx::query(
+            r#"
+                SELECT * FROM unprocessed_identities
+                WHERE status = $1
                 LIMIT $2
             "#,
         )
@@ -755,8 +791,8 @@ mod test {
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
         let db = Database::new(Options {
-            database:                 SecretUrl::from_str(&url)?,
-            database_migrate:         true,
+            database: SecretUrl::from_str(&url)?,
+            database_migrate: true,
             database_max_connections: 1,
         })
         .await?;
@@ -796,7 +832,12 @@ mod test {
         let commit_hash: Hash = U256::from_dec_str(dec)
             .expect("cant convert to u256")
             .into();
-        let hash = db.insert_new_identity(commit_hash).await?;
+
+        let eligibility_timestamp = DateTime::from(Utc::now());
+
+        let hash = db
+            .insert_new_identity(commit_hash, eligibility_timestamp)
+            .await?;
 
         assert_eq!(commit_hash, hash);
 
@@ -807,6 +848,7 @@ mod test {
         assert_eq!(commit.0, Status::New);
 
         let identity_count = db.get_unprocessed_commitments(Status::New).await?.len();
+
         assert_eq!(identity_count, 1);
 
         assert!(db.remove_unprocessed_identity(&commit_hash).await.is_ok());
@@ -822,8 +864,24 @@ mod test {
             .expect("cant convert to u256")
             .into();
 
-        db.insert_new_identity(commit_hash).await?;
+        dbg!("here");
 
+        // Set eligibility to Utc::now() day and check db entries
+        let eligibility_timestamp = DateTime::from(Utc::now());
+        db.insert_new_identity(commit_hash, eligibility_timestamp)
+            .await?;
+
+        let eligible_commitments = db
+            .get_eligible_unprocessed_commitments(Status::Pending)
+            .await?;
+        assert_eq!(eligible_commitments.len(), 1);
+
+        dbg!("here");
+
+        let commitments = db.get_unprocessed_commitments(Status::Pending).await?;
+        assert_eq!(commitments.len(), 1);
+
+        // Set eligibility to Utc::now() + 7 days and check db entries
         let eligibility_timestamp = DateTime::from(Utc::now())
             .checked_add_days(Days::new(7))
             .expect("Could not create eligibility timestamp");
@@ -834,12 +892,10 @@ mod test {
         let commitments = db.get_unprocessed_commitments(Status::Pending).await?;
         assert_eq!(commitments.len(), 1);
 
-        assert_eq!(
-            commitments[0]
-                .eligibility_timestamp
-                .expect("Could not get eligibility_timestamp from commitment"),
-            eligibility_timestamp
-        );
+        let eligible_commitments = db
+            .get_eligible_unprocessed_commitments(Status::Pending)
+            .await?;
+        assert_eq!(eligible_commitments.len(), 0);
 
         Ok(())
     }
@@ -1244,8 +1300,9 @@ mod test {
         assert!(!db.identity_exists(identities[0]).await?);
 
         // When there's only unprocessed identity
+        let eligibility_timestamp = DateTime::from(Utc::now());
 
-        db.insert_new_identity(identities[0])
+        db.insert_new_identity(identities[0], eligibility_timestamp)
             .await
             .context("Inserting new identity")?;
         assert!(db.identity_exists(identities[0]).await?);

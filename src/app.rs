@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Result as AnyhowResult;
+use chrono::{DateTime, Utc};
 use clap::Parser;
 use hyper::StatusCode;
 use semaphore::poseidon_tree::LazyPoseidonTree;
@@ -131,10 +132,10 @@ pub struct Options {
 }
 
 pub struct App {
-    database:           Arc<Database>,
-    identity_manager:   SharedIdentityManager,
+    database: Arc<Database>,
+    identity_manager: SharedIdentityManager,
     identity_committer: Arc<TaskMonitor>,
-    tree_state:         TreeState,
+    tree_state: TreeState,
     snark_scalar_field: Hash,
 }
 
@@ -323,7 +324,9 @@ impl App {
             return Err(ServerError::DuplicateCommitment);
         }
 
-        self.database.insert_new_identity(commitment).await?;
+        self.database
+            .insert_new_identity(commitment, DateTime::from(Utc::now()))
+            .await?;
 
         Ok(())
     }
@@ -414,9 +417,9 @@ impl App {
             .0
             .into_iter()
             .map(|opt| ProverConfiguration {
-                url:         opt.url,
-                batch_size:  opt.batch_size,
-                timeout_s:   opt.timeout_s,
+                url: opt.url,
+                batch_size: opt.batch_size,
+                timeout_s: opt.timeout_s,
                 prover_type: opt.prover_type,
             })
             .collect();

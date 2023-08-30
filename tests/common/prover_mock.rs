@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProverError {
-    pub code:    String,
+    pub code: String,
     pub message: String,
 }
 
@@ -37,27 +37,27 @@ impl Display for ProverError {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProofInput {
-    input_hash:           U256,
-    start_index:          u32,
-    pre_root:             U256,
-    post_root:            U256,
+    input_hash: U256,
+    start_index: u32,
+    pre_root: U256,
+    post_root: U256,
     identity_commitments: Vec<U256>,
-    merkle_proofs:        Vec<Vec<U256>>,
+    merkle_proofs: Vec<Vec<U256>>,
 }
 
 /// The proof response from the prover.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Proof {
-    pub ar:  [U256; 2],
-    pub bs:  [[U256; 2]; 2],
+    pub ar: [U256; 2],
+    pub bs: [[U256; 2]; 2],
     pub krs: [U256; 2],
 }
 
 impl From<[U256; 8]> for Proof {
     fn from(value: [U256; 8]) -> Self {
         Self {
-            ar:  [value[0], value[1]],
-            bs:  [[value[2], value[3]], [value[4], value[5]]],
+            ar: [value[0], value[1]],
+            bs: [[value[2], value[3]], [value[4], value[5]]],
             krs: [value[6], value[7]],
         }
     }
@@ -83,7 +83,7 @@ impl ProveResponse {
     /// Constructs a failure response from the provided `code` and `message`.
     pub fn failure(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self::ProofFailure(ProverError {
-            code:    code.into(),
+            code: code.into(),
             message: message.into(),
         })
     }
@@ -91,10 +91,25 @@ impl ProveResponse {
 
 /// The mock prover service.
 pub struct ProverService {
-    server:     Handle,
-    inner:      Arc<Mutex<Prover>>,
-    address:    SocketAddr,
+    server: Handle,
+    inner: Arc<Mutex<Prover>>,
+    address: SocketAddr,
     batch_size: usize,
+    prover_type: ProverType,
+}
+
+// #[serde(rename_all = "camelCase")]
+pub enum ProverType {
+    Insertion,
+    Deletion,
+}
+impl std::fmt::Display for ProverType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ProverType::Insertion => write!(f, "insertion"),
+            ProverType::Deletion => write!(f, "deletion"),
+        }
+    }
 }
 
 struct Prover {
@@ -108,7 +123,7 @@ impl ProverService {
     /// It provides only a single endpoint for now, `/prove` in order to match
     /// the full service (`semaphore-mtb`). This can be extended in the future
     /// if needed.
-    pub async fn new(batch_size: usize) -> anyhow::Result<Self> {
+    pub async fn new(batch_size: usize, prover_type: ProverType) -> anyhow::Result<Self> {
         async fn prove(
             State(state): State<Arc<Mutex<Prover>>>,
             Json(input): Json<ProofInput>,
@@ -146,6 +161,7 @@ impl ProverService {
             inner,
             address,
             batch_size,
+            prover_type,
         };
 
         Ok(service)
@@ -180,12 +196,13 @@ impl ProverService {
     /// Produces an arg string that's compatible with this prover - needs to be
     /// wrapped in an array
     ///
-    /// e.g. `{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}`
+    /// e.g. `{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30,"prover_type": "insertion"}`
     pub fn arg_string_single(&self) -> String {
         format!(
-            r#"{{"url": "{}","batch_size": {},"timeout_s": 30}}"#,
+            r#"{{"url": "{}","batch_size": {},"timeout_s": 30, "prover_type": "{}"}}"#,
             self.url(),
-            self.batch_size
+            self.batch_size,
+            self.prover_type
         )
     }
 }

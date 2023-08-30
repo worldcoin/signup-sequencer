@@ -380,18 +380,24 @@ pub type SharedIdentityManager = Arc<IdentityManager>;
 #[cfg(test)]
 mod tests {
 
-    #[test]
-    fn test_add_batch_size() {
+    async fn new_mock_identity_manager() -> eyre::Result<IdentityManager> {
         todo!()
+    }
+
+    #[tokio::test]
+    async fn test_add_batch_size() -> eyre::Result<()> {
+        let identity_manager = new_mock_identity_manager().await?;
         // Add new insertion batch size
         // Add duplicate insertion batch size
 
         // Add new deletion batch size
         // Add duplicate deletion batch size
+
+        todo!()
     }
 
-    #[test]
-    fn test_remove_batch_size() {
+    #[tokio::test]
+    async fn test_remove_batch_size() {
         todo!()
 
         // Remove insertion batch size
@@ -403,13 +409,13 @@ mod tests {
         // Remove all deletion batch sizes
     }
 
-    #[test]
-    fn test_has_deletion_provers() {
+    #[tokio::test]
+    async fn test_has_deletion_provers() {
         todo!()
     }
 
-    #[test]
-    fn test_has_insertion_provers() {
+    #[tokio::test]
+    async fn test_has_insertion_provers() {
         todo!()
     }
 }

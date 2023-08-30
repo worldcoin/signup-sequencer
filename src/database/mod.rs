@@ -867,6 +867,61 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_get_provers() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_insert_prover_configuration() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_insert_provers() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_remove_prover() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_insert_new_recovery() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_get_recoveries() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_insert_new_deletion() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_get_deletions() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_get_eligible_unprocessed_commitments() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_get_unprocessed_commitments() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_identity_is_queued_for_deletion() {
+        todo!()
+    }
+
+    #[tokio::test]
     async fn test_update_eligibility_timestamp() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
         let dec = "1234500000000000000";

@@ -311,7 +311,10 @@ impl IdentityManager {
         timeout_seconds: u64,
         prover_type: ProverType,
     ) -> Result<(), ServerError> {
-        let mut map = self.insertion_prover_map.write().await;
+        let mut map = match prover_type {
+            ProverType::Insertion => self.insertion_prover_map.write().await,
+            ProverType::Deletion => self.deletion_prover_map.write().await,
+        };
 
         if map.batch_size_exists(batch_size) {
             return Err(ServerError::BatchSizeAlreadyExists);
@@ -373,3 +376,40 @@ impl IdentityManager {
 
 /// A type for an identity manager object that can be sent across threads.
 pub type SharedIdentityManager = Arc<IdentityManager>;
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_add_batch_size() {
+        todo!()
+        // Add new insertion batch size
+        // Add duplicate insertion batch size
+
+        // Add new deletion batch size
+        // Add duplicate deletion batch size
+    }
+
+    #[test]
+    fn test_remove_batch_size() {
+        todo!()
+
+        // Remove insertion batch size
+        // Remove insertion batch size that does not exist
+        // Remove all insertion batch sizes
+
+        // Remove deletion batch size
+        // Remove deletion batch size that does not exist
+        // Remove all deletion batch sizes
+    }
+
+    #[test]
+    fn test_has_deletion_provers() {
+        todo!()
+    }
+
+    #[test]
+    fn test_has_insertion_provers() {
+        todo!()
+    }
+}

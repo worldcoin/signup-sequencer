@@ -1,10 +1,9 @@
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 
 use tokio::sync::{RwLock, RwLockReadGuard};
 
-use crate::database::prover;
-use crate::prover::batch_insertion;
-use crate::prover::batch_insertion::ProverConfiguration;
+use crate::prover::{Prover, ProverConfiguration, ProverType, Provers};
 
 /// The type of a map containing a mapping from a usize to a locked item.
 type SharedProverMap<P> = RwLock<ProverMap<P>>;
@@ -23,6 +22,10 @@ pub struct ProverMap<P> {
 }
 
 impl<P> ProverMap<P> {
+    pub fn new(map: BTreeMap<usize, P>) -> Self {
+        Self { map }
+    }
+
     /// Get the smallest prover that can handle the given batch size.
     pub fn get(&self, batch_size: usize) -> Option<&P> {
         for (size, prover) in &self.map {
@@ -57,14 +60,15 @@ impl<P> ProverMap<P> {
     }
 }
 
-impl ProverMap<batch_insertion::Prover> {
+impl ProverMap<Prover> {
     pub fn as_configuration_vec(&self) -> Vec<ProverConfiguration> {
         self.map
             .iter()
             .map(|(k, v)| ProverConfiguration {
-                url: v.url(),
-                timeout_s: v.timeout_s(),
-                batch_size: *k,
+                url:         v.url(),
+                timeout_s:   v.timeout_s(),
+                batch_size:  *k,
+                prover_type: v.prover_type(),
             })
             .collect()
     }
@@ -77,26 +81,36 @@ impl<P> From<BTreeMap<usize, P>> for ProverMap<P> {
 }
 
 /// A map of provers for batch insertion operations.
-pub type InsertionProverMap = SharedProverMap<batch_insertion::Prover>;
+pub type InsertionProverMap = SharedProverMap<Prover>;
 /// A map of provers for batch deletion operations.
-pub type DeletionProverMap = SharedProverMap<batch_insertion::Prover>;
+pub type DeletionProverMap = SharedProverMap<Prover>;
 
 /// The type of provers that can only be read from for insertion operations.
-pub type ReadOnlyInsertionProver<'a> = ReadOnlyProver<'a, batch_insertion::Prover>;
+pub type ReadOnlyInsertionProver<'a> = ReadOnlyProver<'a, Prover>;
 
 /// Builds an insertion prover map from the provided configuration.
-pub fn make_insertion_map(db_provers: prover::Provers) -> anyhow::Result<InsertionProverMap> {
-    let mut map = BTreeMap::new();
+pub fn initialize_prover_maps(
+    db_provers: Provers,
+) -> anyhow::Result<(InsertionProverMap, DeletionProverMap)> {
+    let mut insertion_map = BTreeMap::new();
+    let mut deletion_map = BTreeMap::new();
 
     for prover in db_provers {
-        map.insert(
-            prover.batch_size,
-            batch_insertion::Prover::from_prover_conf(&prover)?,
-        );
-    }
-    let insertion_map = ProverMap::from(map);
+        match prover.prover_type {
+            ProverType::Insertion => {
+                insertion_map.insert(prover.batch_size, Prover::from_prover_conf(&prover)?);
+            }
 
-    Ok(RwLock::new(insertion_map))
+            ProverType::Deletion => {
+                deletion_map.insert(prover.batch_size, Prover::from_prover_conf(&prover)?);
+            }
+        }
+    }
+
+    Ok((
+        RwLock::new(ProverMap::new(insertion_map)),
+        RwLock::new(ProverMap::new(deletion_map)),
+    ))
 }
 
 #[cfg(test)]

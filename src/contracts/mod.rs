@@ -15,9 +15,9 @@ use tracing::{error, info, instrument, warn};
 use self::abi::{BridgedWorldId, WorldId};
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::{Ethereum, ReadProvider};
-use crate::prover::batch_insertion::ProverConfiguration;
+use crate::prover::identity::Identity;
 use crate::prover::map::{DeletionProverMap, InsertionProverMap, ReadOnlyInsertionProver};
-use crate::prover::{batch_insertion, Proof, ReadOnlyProver};
+use crate::prover::{Proof, Prover, ProverConfiguration, ProverType, ReadOnlyProver};
 use crate::serde_utils::JsonStrWrapper;
 use crate::server::error::Error as ServerError;
 
@@ -55,13 +55,13 @@ pub struct Options {
 /// contract.
 #[derive(Debug)]
 pub struct IdentityManager {
-    ethereum: Ethereum,
+    ethereum:             Ethereum,
     insertion_prover_map: InsertionProverMap,
-    deletion_prover_map: DeletionProverMap,
-    abi: WorldId<ReadProvider>,
-    secondary_abis: Vec<BridgedWorldId<ReadProvider>>,
-    initial_leaf_value: Field,
-    tree_depth: usize,
+    deletion_prover_map:  DeletionProverMap,
+    abi:                  WorldId<ReadProvider>,
+    secondary_abis:       Vec<BridgedWorldId<ReadProvider>>,
+    initial_leaf_value:   Field,
+    tree_depth:           usize,
 }
 
 impl IdentityManager {
@@ -146,10 +146,7 @@ impl IdentityManager {
 
     /// Validates that merkle proofs are of the correct length against tree
     /// depth
-    pub fn validate_merkle_proofs(
-        &self,
-        identity_commitments: &[batch_insertion::Identity],
-    ) -> anyhow::Result<()> {
+    pub fn validate_merkle_proofs(&self, identity_commitments: &[Identity]) -> anyhow::Result<()> {
         for id in identity_commitments {
             if id.merkle_proof.len() != self.tree_depth {
                 return Err(anyhow!(format!(
@@ -166,7 +163,7 @@ impl IdentityManager {
     pub async fn get_suitable_prover(
         &self,
         num_identities: usize,
-    ) -> anyhow::Result<ReadOnlyProver<batch_insertion::Prover>> {
+    ) -> anyhow::Result<ReadOnlyProver<Prover>> {
         let prover_map = self.insertion_prover_map.read().await;
 
         match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
@@ -183,7 +180,7 @@ impl IdentityManager {
         start_index: usize,
         pre_root: U256,
         post_root: U256,
-        identity_commitments: &[batch_insertion::Identity],
+        identity_commitments: &[Identity],
     ) -> anyhow::Result<Proof> {
         let batch_size = identity_commitments.len();
 
@@ -213,7 +210,7 @@ impl IdentityManager {
         start_index: usize,
         pre_root: U256,
         post_root: U256,
-        identity_commitments: Vec<batch_insertion::Identity>,
+        identity_commitments: Vec<Identity>,
         proof_data: Proof,
     ) -> anyhow::Result<TransactionId> {
         let actual_start_index: u32 = start_index.try_into()?;
@@ -312,6 +309,7 @@ impl IdentityManager {
         url: &impl ToString,
         batch_size: usize,
         timeout_seconds: u64,
+        prover_type: ProverType,
     ) -> Result<(), ServerError> {
         let mut map = self.insertion_prover_map.write().await;
 
@@ -319,9 +317,10 @@ impl IdentityManager {
             return Err(ServerError::BatchSizeAlreadyExists);
         }
 
-        let prover = batch_insertion::Prover::new(&ProverConfiguration {
+        let prover = Prover::new(&ProverConfiguration {
             url: url.to_string(),
             batch_size,
+            prover_type,
             timeout_s: timeout_seconds,
         })?;
 

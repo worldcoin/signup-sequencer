@@ -15,7 +15,7 @@ use crate::database::Database;
 use crate::identity_tree::{
     AppliedTreeUpdate, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
-use crate::prover::batch_insertion::Identity;
+use crate::prover::identity::Identity;
 use crate::prover::map::ReadOnlyInsertionProver;
 use crate::task_monitor::{PendingBatchSubmission, TaskMonitor};
 use crate::utils::async_queue::AsyncQueue;

@@ -15,12 +15,11 @@ use sqlx::{Executor, Pool, Postgres, Row};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
-use self::prover::ProverConfiguration;
 use self::types::{DeletionEntry, RecoveryEntry};
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
-pub mod prover;
 pub mod types;
+use crate::prover::{self, ProverConfiguration, ProverType, Provers};
 use crate::secret::SecretUrl;
 
 // Statically link in migration files
@@ -331,7 +330,7 @@ impl Database {
             .into_iter()
             .map(|row| TreeUpdate {
                 leaf_index: row.get::<i64, _>(0) as usize,
-                element: row.get::<Hash, _>(1),
+                element:    row.get::<Hash, _>(1),
             })
             .collect::<Vec<_>>())
     }
@@ -395,7 +394,7 @@ impl Database {
         Ok(result.get::<i64, _>(0) as i32)
     }
 
-    pub async fn get_provers(&self) -> Result<prover::Provers, Error> {
+    pub async fn get_provers(&self) -> Result<Provers, Error> {
         let query = sqlx::query(
             r#"
                 SELECT batch_size, url, timeout_s
@@ -411,13 +410,15 @@ impl Database {
                 let batch_size = row.get::<i64, _>(0) as usize;
                 let url = row.get::<String, _>(1);
                 let timeout_s = row.get::<i64, _>(2) as u64;
-                prover::ProverConfiguration {
+                let prover_type = row.get::<ProverType, _>(3);
+                ProverConfiguration {
                     url,
                     batch_size,
                     timeout_s,
+                    prover_type,
                 }
             })
-            .collect::<prover::Provers>())
+            .collect::<Provers>())
     }
 
     pub async fn insert_prover_configuration(
@@ -425,12 +426,13 @@ impl Database {
         batch_size: usize,
         url: impl ToString,
         timeout_seconds: u64,
+        prover_type: ProverType,
     ) -> Result<(), Error> {
         let url = url.to_string();
 
         let query = sqlx::query(
             r#"
-                INSERT INTO provers (batch_size, url, timeout_s)
+                INSERT INTO provers (batch_size, url, timeout_s. prover_type)
                 VALUES ($1, $2, $3)
                 ON CONFLICT (batch_size)
                 DO UPDATE SET (url, timeout_s) = ($2, $3)
@@ -438,7 +440,8 @@ impl Database {
         )
         .bind(batch_size as i64)
         .bind(url)
-        .bind(timeout_seconds as i64);
+        .bind(timeout_seconds as i64)
+        .bind(prover_type);
 
         self.pool.execute(query).await?;
 
@@ -511,7 +514,8 @@ impl Database {
         Ok(())
     }
 
-    //TODO: consider using a larger value than i64 for leaf index, ruint should have postgres compatibility for u256
+    // TODO: consider using a larger value than i64 for leaf index, ruint should
+    // have postgres compatibility for u256
     pub async fn get_recoveries(&self) -> Result<Vec<RecoveryEntry>, Error> {
         let query = sqlx::query(
             r#"
@@ -526,7 +530,7 @@ impl Database {
             .into_iter()
             .map(|row| RecoveryEntry {
                 existing_commitment: row.get::<Hash, _>(0),
-                new_commitment: row.get::<Hash, _>(1),
+                new_commitment:      row.get::<Hash, _>(1),
             })
             .collect::<Vec<RecoveryEntry>>())
     }
@@ -549,7 +553,8 @@ impl Database {
         Ok(())
     }
 
-    //TODO: consider using a larger value than i64 for leaf index, ruint should have postgres compatibility for u256
+    // TODO: consider using a larger value than i64 for leaf index, ruint should
+    // have postgres compatibility for u256
     pub async fn get_deletions(&self) -> Result<Vec<DeletionEntry>, Error> {
         let query = sqlx::query(
             r#"
@@ -745,8 +750,8 @@ mod test {
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
         let db = Database::new(Options {
-            database: SecretUrl::from_str(&url)?,
-            database_migrate: true,
+            database:                 SecretUrl::from_str(&url)?,
+            database_migrate:         true,
             database_max_connections: 1,
         })
         .await?;

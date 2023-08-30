@@ -22,6 +22,7 @@ use crate::app::{
     App, InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofResponse,
 };
 use crate::identity_tree::Hash;
+use crate::prover::ProverType;
 
 mod custom_middleware;
 
@@ -50,11 +51,13 @@ pub struct InsertCommitmentRequest {
 #[serde(deny_unknown_fields)]
 pub struct AddBatchSizeRequest {
     /// The URL of the prover for the provided batch size.
-    url: String,
+    url:             String,
     /// The batch size to add.
-    batch_size: usize,
+    batch_size:      usize,
     /// The timeout for communications with the prover service.
     timeout_seconds: u64,
+    // TODO: add docs
+    prover_type:     ProverType,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -76,11 +79,11 @@ pub struct InclusionProofRequest {
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct VerifySemaphoreProofRequest {
-    pub root: Field,
-    pub signal_hash: Field,
-    pub nullifier_hash: Field,
+    pub root:                    Field,
+    pub signal_hash:             Field,
+    pub nullifier_hash:          Field,
     pub external_nullifier_hash: Field,
-    pub proof: Proof,
+    pub proof:                   Proof,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -98,7 +101,7 @@ pub struct RecoveryRequest {
     /// The leaf index of the identity commitment to delete.
     prev_identity_commitment: Hash,
     /// The new identity commitment to insert.
-    new_identity_commitment: Hash,
+    new_identity_commitment:  Hash,
 }
 
 pub trait ToResponseCode {
@@ -151,8 +154,13 @@ async fn add_batch_size(
     State(app): State<Arc<App>>,
     Json(req): Json<AddBatchSizeRequest>,
 ) -> Result<(), Error> {
-    app.add_batch_size(req.url, req.batch_size, req.timeout_seconds)
-        .await?;
+    app.add_batch_size(
+        req.url,
+        req.batch_size,
+        req.timeout_seconds,
+        req.prover_type,
+    )
+    .await?;
 
     Ok(())
 }

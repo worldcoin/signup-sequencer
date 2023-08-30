@@ -11,15 +11,13 @@ use serde::Serialize;
 use tracing::{info, instrument, warn};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};
-use crate::database::prover::{ProverConfiguration as DbProverConf, Provers};
 use crate::database::{self, Database};
 use crate::ethereum::{self, Ethereum};
 use crate::identity_tree::{
     CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState,
 };
-use crate::prover::batch_insertion::ProverConfiguration;
-use crate::prover::map::make_insertion_map;
-use crate::prover::{self, batch_insertion};
+use crate::prover::map::initialize_prover_maps;
+use crate::prover::{self, ProverConfiguration, ProverType, Provers};
 use crate::server::error::Error as ServerError;
 use crate::server::{ToResponseCode, VerifySemaphoreProofRequest};
 use crate::task_monitor::TaskMonitor;
@@ -110,7 +108,7 @@ pub struct Options {
     pub database: database::Options,
 
     #[clap(flatten)]
-    pub batch_provers: prover::batch_insertion::Options,
+    pub batch_provers: prover::Options,
 
     #[clap(flatten)]
     pub committer: task_monitor::Options,
@@ -133,10 +131,10 @@ pub struct Options {
 }
 
 pub struct App {
-    database: Arc<Database>,
-    identity_manager: SharedIdentityManager,
+    database:           Arc<Database>,
+    identity_manager:   SharedIdentityManager,
     identity_committer: Arc<TaskMonitor>,
-    tree_state: TreeState,
+    tree_state:         TreeState,
     snark_scalar_field: Hash,
 }
 
@@ -154,14 +152,21 @@ impl App {
 
         let database = Arc::new(db);
         let mut provers = database.get_provers().await?;
+
+        // TODO: need to update this
         let non_inserted_provers = Self::merge_env_provers(options.batch_provers, &mut provers);
 
         database.insert_provers(non_inserted_provers).await?;
 
-        let insertion_prover_map = make_insertion_map(provers)?;
+        let (insertion_prover_map, deletion_prover_map) = initialize_prover_maps(provers)?;
 
-        let identity_manager =
-            IdentityManager::new(options.contracts, ethereum.clone(), insertion_prover_map).await?;
+        let identity_manager = IdentityManager::new(
+            options.contracts,
+            ethereum.clone(),
+            insertion_prover_map,
+            deletion_prover_map,
+        )
+        .await?;
 
         let identity_manager = Arc::new(identity_manager);
 
@@ -383,7 +388,7 @@ impl App {
             return Err(ServerError::NoProversOnIdInsert);
         }
 
-        //TODO: update these checks before starting recovery
+        // TODO: update these checks before starting recovery
 
         let leaf_index = self
             .database
@@ -403,18 +408,16 @@ impl App {
         Ok(())
     }
 
-    fn merge_env_provers(
-        options: batch_insertion::Options,
-        existing_provers: &mut Provers,
-    ) -> Provers {
-        let options_set: HashSet<DbProverConf> = options
+    fn merge_env_provers(options: prover::Options, existing_provers: &mut Provers) -> Provers {
+        let options_set: HashSet<ProverConfiguration> = options
             .prover_urls
             .0
             .into_iter()
-            .map(|opt| DbProverConf {
-                url: opt.url,
-                batch_size: opt.batch_size,
-                timeout_s: opt.timeout_s,
+            .map(|opt| ProverConfiguration {
+                url:         opt.url,
+                batch_size:  opt.batch_size,
+                timeout_s:   opt.timeout_s,
+                prover_type: opt.prover_type,
             })
             .collect();
 
@@ -441,13 +444,14 @@ impl App {
         url: String,
         batch_size: usize,
         timeout_seconds: u64,
+        prover_type: ProverType,
     ) -> Result<(), ServerError> {
         self.identity_manager
-            .add_batch_size(&url, batch_size, timeout_seconds)
+            .add_batch_size(&url, batch_size, timeout_seconds, prover_type)
             .await?;
 
         self.database
-            .insert_prover_configuration(batch_size, url, timeout_seconds)
+            .insert_prover_configuration(batch_size, url, timeout_seconds, prover_type)
             .await?;
 
         Ok(())

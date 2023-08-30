@@ -405,22 +405,11 @@ impl App {
                 ?new_commitment,
                 "Identity Manager has no deletion provers. Add provers with /addBatchSize request."
             );
-            return Err(ServerError::NoProversOnIdInsert);
+            return Err(ServerError::NoProversOnIdDeletion);
         }
 
-        // TODO: update these checks before starting recovery
-
-        let leaf_index = self
-            .database
-            .get_identity_leaf_index(&existing_commitment)
-            .await?
-            .ok_or(ServerError::IdentityCommitmentNotFound)?
-            .leaf_index;
-
-        self.database
-            .insert_new_deletion(leaf_index, &existing_commitment)
-            .await?;
-
+        // Delete the existing id and insert the commitments into the recovery table
+        self.delete_identity(&existing_commitment).await?;
         self.database
             .insert_new_recovery(&existing_commitment, &new_commitment)
             .await?;

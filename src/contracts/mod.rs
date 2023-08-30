@@ -379,6 +379,7 @@ pub type SharedIdentityManager = Arc<IdentityManager>;
 
 #[cfg(test)]
 mod tests {
+    use super::IdentityManager;
 
     async fn new_mock_identity_manager() -> eyre::Result<IdentityManager> {
         todo!()

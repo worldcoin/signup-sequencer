@@ -153,7 +153,7 @@ impl App {
         let (ethereum, db) = tokio::try_join!(ethereum, db)?;
 
         let database = Arc::new(db);
-        let mut provers = database.get_provers().await?;
+        let mut provers: HashSet<ProverConfiguration> = database.get_provers().await?;
 
         // TODO: need to update this
         let non_inserted_provers = Self::merge_env_provers(options.batch_provers, &mut provers);

@@ -65,7 +65,9 @@ pub struct AddBatchSizeRequest {
 #[serde(deny_unknown_fields)]
 pub struct RemoveBatchSizeRequest {
     /// The batch size to remove from the prover map.
-    batch_size: usize,
+    batch_size:  usize,
+    // TODO: add docs
+    prover_type: ProverType,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -186,7 +188,8 @@ async fn remove_batch_size(
     State(app): State<Arc<App>>,
     Json(req): Json<RemoveBatchSizeRequest>,
 ) -> Result<(), Error> {
-    app.remove_batch_size(req.batch_size).await?;
+    app.remove_batch_size(req.batch_size, req.prover_type)
+        .await?;
 
     Ok(())
 }

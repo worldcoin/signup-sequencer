@@ -471,13 +471,18 @@ impl Database {
         Ok(())
     }
 
-    pub async fn remove_prover(&self, batch_size: usize) -> Result<(), Error> {
+    pub async fn remove_prover(
+        &self,
+        batch_size: usize,
+        prover_type: ProverType,
+    ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
-              DELETE FROM provers WHERE batch_size = $1
+              DELETE FROM provers WHERE batch_size = $1 AND prover_type = $2
             "#,
         )
-        .bind(batch_size as i64);
+        .bind(batch_size as i64)
+        .bind(prover_type);
 
         self.pool.execute(query).await?;
 

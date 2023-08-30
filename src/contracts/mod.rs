@@ -333,8 +333,15 @@ impl IdentityManager {
     ///
     /// Will return `Err` if the batch size requested for removal doesn't exist
     /// in the prover map.
-    pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
-        let mut map = self.insertion_prover_map.write().await;
+    pub async fn remove_batch_size(
+        &self,
+        batch_size: usize,
+        prover_type: ProverType,
+    ) -> Result<(), ServerError> {
+        let mut map = match prover_type {
+            ProverType::Insertion => self.insertion_prover_map.write().await,
+            ProverType::Deletion => self.deletion_prover_map.write().await,
+        };
 
         if map.len() == 1 {
             warn!("Attempting to remove the last batch size.");

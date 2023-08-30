@@ -462,10 +462,16 @@ impl App {
     /// Will return `Err` if the requested batch size does not exist.
     /// Will return `Err` if batch size fails to be removed from database.
     #[instrument(level = "debug", skip(self))]
-    pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
-        self.identity_manager.remove_batch_size(batch_size).await?;
+    pub async fn remove_batch_size(
+        &self,
+        batch_size: usize,
+        prover_type: ProverType,
+    ) -> Result<(), ServerError> {
+        self.identity_manager
+            .remove_batch_size(batch_size, prover_type)
+            .await?;
 
-        self.database.remove_prover(batch_size).await?;
+        self.database.remove_prover(batch_size, prover_type).await?;
 
         Ok(())
     }

@@ -864,22 +864,16 @@ mod test {
             .expect("cant convert to u256")
             .into();
 
-        dbg!("here");
-
         // Set eligibility to Utc::now() day and check db entries
         let eligibility_timestamp = DateTime::from(Utc::now());
         db.insert_new_identity(commit_hash, eligibility_timestamp)
             .await?;
 
-        let eligible_commitments = db
-            .get_eligible_unprocessed_commitments(Status::Pending)
-            .await?;
-        assert_eq!(eligible_commitments.len(), 1);
-
-        dbg!("here");
-
-        let commitments = db.get_unprocessed_commitments(Status::Pending).await?;
+        let commitments = db.get_unprocessed_commitments(Status::New).await?;
         assert_eq!(commitments.len(), 1);
+
+        let eligible_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
+        assert_eq!(eligible_commitments.len(), 1);
 
         // Set eligibility to Utc::now() + 7 days and check db entries
         let eligibility_timestamp = DateTime::from(Utc::now())
@@ -889,12 +883,10 @@ mod test {
         db.update_eligibility_timestamp(commit_hash, eligibility_timestamp)
             .await?;
 
-        let commitments = db.get_unprocessed_commitments(Status::Pending).await?;
+        let commitments = db.get_unprocessed_commitments(Status::New).await?;
         assert_eq!(commitments.len(), 1);
 
-        let eligible_commitments = db
-            .get_eligible_unprocessed_commitments(Status::Pending)
-            .await?;
+        let eligible_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
         assert_eq!(eligible_commitments.len(), 0);
 
         Ok(())

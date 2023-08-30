@@ -98,8 +98,12 @@ pub struct ProverService {
     prover_type: ProverType,
 }
 
-// #[serde(rename_all = "camelCase")]
+//TODO: we could just import this from the sequencer
+#[derive(Debug, Copy, Clone, sqlx::Type, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+#[sqlx(type_name = "prover_enum", rename_all = "PascalCase")]
 pub enum ProverType {
+    #[default]
     Insertion,
     Deletion,
 }
@@ -183,6 +187,10 @@ impl ProverService {
 
     pub fn batch_size(&self) -> usize {
         self.batch_size
+    }
+
+    pub fn prover_type(&self) -> ProverType {
+        self.prover_type
     }
 
     /// Produces an arg string that's compatible with this prover - can be used

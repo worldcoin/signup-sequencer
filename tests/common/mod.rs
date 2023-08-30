@@ -63,6 +63,7 @@ use hyper::StatusCode;
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
+use self::prover_mock::ProverType;
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
@@ -207,14 +208,17 @@ pub async fn test_add_batch_size(
     uri: impl Into<String>,
     prover_url: impl Into<String>,
     batch_size: u64,
+    prover_type: ProverType,
     client: &Client<HttpConnector>,
 ) -> anyhow::Result<()> {
     let prover_url_string: String = prover_url.into();
+
     let body = Body::from(
         json!({
             "url": prover_url_string,
             "batchSize": batch_size,
-            "timeoutSeconds": 3
+            "timeoutSeconds": 3,
+            "proverType": prover_type
         })
         .to_string(),
     );
@@ -238,9 +242,11 @@ pub async fn test_remove_batch_size(
     uri: impl Into<String>,
     batch_size: u64,
     client: &Client<HttpConnector>,
+    prover_type: ProverType,
     expect_failure: bool,
 ) -> anyhow::Result<()> {
-    let body = Body::from(json!({ "batchSize": batch_size }).to_string());
+    let body =
+        Body::from(json!({ "batchSize": batch_size, "proverType": prover_type }).to_string());
     let request = Request::builder()
         .method("POST")
         .uri(uri.into() + "/removeBatchSize")

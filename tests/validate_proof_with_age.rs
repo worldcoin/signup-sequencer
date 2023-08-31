@@ -70,33 +70,29 @@ async fn validate_proofs_with_age() -> anyhow::Result<()> {
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
 
-    static IDENTITIES: Lazy<Vec<Identity>> = Lazy::new(|| {
-        vec![
-            Identity::from_secret(b"test_f0f0", None),
-            Identity::from_secret(b"test_f1f1", None),
-            Identity::from_secret(b"test_f2f2", None),
-        ]
-    });
+    let identities: Vec<Identity> = vec![
+        Identity::from_secret(b"test_b1i1", None),
+        Identity::from_secret(b"test_b1i2", None),
+    ];
 
-    static TEST_LEAVES: Lazy<Vec<Field>> =
-        Lazy::new(|| IDENTITIES.iter().map(|id| id.commitment()).collect());
+    let test_leaves: Vec<Field> = identities.iter().map(|id| id.commitment()).collect();
 
     let signal_hash = hash_to_field(b"signal_hash");
     let external_nullifier_hash = hash_to_field(b"external_hash");
 
-    // generate identity
+    // Insert only the 1st identity
     let (merkle_proof, root) =
-        test_insert_identity(&uri, &client, &mut ref_tree, &TEST_LEAVES, 0).await;
+        test_insert_identity(&uri, &client, &mut ref_tree, &test_leaves, 0).await;
 
     let sleep_duration_seconds = 5 + batch_timeout_seconds;
 
     tokio::time::sleep(Duration::from_secs(sleep_duration_seconds)).await;
 
     // simulate client generating a proof
-    let nullifier_hash = generate_nullifier_hash(&IDENTITIES[0], external_nullifier_hash);
+    let nullifier_hash = generate_nullifier_hash(&identities[0], external_nullifier_hash);
 
     let proof = generate_proof(
-        &IDENTITIES[0],
+        &identities[0],
         &merkle_proof,
         external_nullifier_hash,
         signal_hash,
@@ -106,7 +102,27 @@ async fn validate_proofs_with_age() -> anyhow::Result<()> {
     // Wait so the proof is at least 2 seconds old
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    // Test proof which is now too old
+    // Proof will be older than 2 seconds, but it's the latest root
+    test_verify_proof_with_age(
+        &uri,
+        &client,
+        root,
+        signal_hash,
+        nullifier_hash,
+        external_nullifier_hash,
+        proof,
+        2,
+        None,
+    )
+    .await;
+
+    // Insert the 2nd identity to produce new root
+    test_insert_identity(&uri, &client, &mut ref_tree, &test_leaves, 1).await;
+
+    // Wait for batch
+    tokio::time::sleep(Duration::from_secs(sleep_duration_seconds)).await;
+
+    // Now the old proof root is too old (definitely older than 2 seconds)
     test_verify_proof_with_age(
         &uri,
         &client,
@@ -129,7 +145,7 @@ async fn validate_proofs_with_age() -> anyhow::Result<()> {
         nullifier_hash,
         external_nullifier_hash,
         proof,
-        sleep_duration_seconds as i64 + 5, // 5 seconds margin
+        (2 * sleep_duration_seconds) as i64 + 5, // 5 seconds margin
         None,
     )
     .await;

@@ -16,7 +16,7 @@ use crate::database::prover::{ProverConfiguration as DbProverConf, Provers};
 use crate::database::{self, Database};
 use crate::ethereum::{self, Ethereum};
 use crate::identity_tree::{
-    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState,
+    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState, TreeVersionReadOps,
 };
 use crate::prover::batch_insertion::ProverConfiguration;
 use crate::prover::map::make_insertion_map;
@@ -446,7 +446,7 @@ impl App {
         };
 
         if let Some(max_root_age_seconds) = query.max_root_age_seconds {
-            Self::validate_root_age(max_root_age_seconds, &root_state)?;
+            self.validate_root_age(max_root_age_seconds, &root_state)?;
         }
 
         let checked = verify_proof(
@@ -469,9 +469,30 @@ impl App {
     }
 
     fn validate_root_age(
+        &self,
         max_root_age_seconds: i64,
         root_state: &RootItem,
     ) -> Result<(), ServerError> {
+        let latest_root = self.tree_state.get_latest_tree().get_root();
+        let processed_root = self.tree_state.get_processed_tree().get_root();
+        let mined_root = self.tree_state.get_mined_tree().get_root();
+
+        match root_state.status {
+            Status::Pending if latest_root == root_state.root => return Ok(()),
+            // Processed status is hidden - this should never happen
+            Status::Processed if processed_root == root_state.root => return Ok(()),
+            // Processed status is hidden so it could be either processed or mined
+            Status::Mined if processed_root == root_state.root || mined_root == root_state.root => {
+                return Ok(())
+            }
+            _ => (),
+        }
+
+        // Latest processed root is always valid
+        if root_state.root == processed_root {
+            return Ok(());
+        }
+
         let max_root_age = Duration::seconds(max_root_age_seconds);
 
         let mined_at = root_state.mined_valid_as_of;

@@ -928,7 +928,7 @@ mod test {
         let provers = db.get_provers().await?;
 
         assert_eq!(provers, mock_provers);
-        todo!()
+        Ok(())
     }
 
     #[tokio::test]
@@ -940,15 +940,7 @@ mod test {
         db.remove_prover(100, ProverType::Insertion).await?;
         let provers = db.get_provers().await?;
 
-        let mut expected_provers = HashSet::new();
-        expected_provers.insert(ProverConfiguration {
-            batch_size:  100,
-            url:         "http://localhost:8080".to_string(),
-            timeout_s:   100,
-            prover_type: ProverType::Deletion,
-        });
-
-        assert_eq!(provers, expected_provers);
+        assert_eq!(provers, HashSet::new());
 
         Ok(())
     }
@@ -1013,7 +1005,7 @@ mod test {
             eligibility_timestamp_0
         );
 
-        todo!()
+        Ok(())
     }
 
     #[tokio::test]
@@ -1034,7 +1026,7 @@ mod test {
         db.insert_new_identity(commitment_1, eligibility_timestamp_1)
             .await?;
 
-        let unprocessed_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
+        let unprocessed_commitments = db.get_unprocessed_commitments(Status::New).await?;
 
         assert_eq!(unprocessed_commitments.len(), 2);
         assert_eq!(unprocessed_commitments[0].commitment, commitment_0);

@@ -38,7 +38,7 @@ jobs:
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
       - name: Cache
-        uses: actions/cache@v3
+        uses: buildjet/cache@v3
         continue-on-error: false
         with:
           path: |
@@ -85,7 +85,7 @@ jobs:
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
       - name: Cache
-        uses: actions/cache@v3
+        uses: buildjet/cache@v3
         continue-on-error: false
         with:
           path: |
@@ -133,7 +133,7 @@ jobs:
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
       - name: Cache
-        uses: actions/cache@v3
+        uses: buildjet/cache@v3
         continue-on-error: false
         with:
           path: |
@@ -194,7 +194,7 @@ jobs:
     - uses: actions/checkout@master
     - name: Install Rust
       run: rustup update stable && rustup default stable
-    - uses: actions/cache@v3
+    - uses: buildjet/cache@v3
       with:
         path: ${{ runner.tool_cache }}/cargo-vet
         key: cargo-vet-bin-${{ env.CARGO_VET_VERSION }}

@@ -24,7 +24,7 @@ env:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -72,7 +72,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -115,7 +115,7 @@ jobs:
   codecov:
     # See <https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/source-based-code-coverage.html>
     name: Coverage
-    runs-on: ubuntu-latest
+    runs-on: buildjet-32vcpu-ubuntu-2204
     env:
       RUSTFLAGS: -Cinstrument-coverage
       RUSTDOCFLAGS: -C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins
@@ -187,7 +187,7 @@ jobs:
           verbose: true
   cargo-vet:
     name: Vet Dependencies
-    runs-on: ubuntu-latest
+    runs-on: buildjet-8vcpu-ubuntu-2204
     env:
       CARGO_VET_VERSION: 0.8.0
     steps:

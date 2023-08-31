@@ -7,7 +7,7 @@ on:
 
 jobs:
   update-deployment:
-    runs-on: ubuntu-latest
+    runs-on: buildjet-8vcpu-ubuntu-2204
 
     steps:
       - uses: 8BitJonny/gh-get-current-pr@2.1.3

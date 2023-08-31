@@ -16,7 +16,7 @@ env:
 jobs:
   security-audit:
     name: Dependency Security Audit
-    runs-on: ubuntu-latest
+    runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
       - uses: actions/checkout@v3
       - name: Set up Rust

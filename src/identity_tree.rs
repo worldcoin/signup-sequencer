@@ -183,6 +183,11 @@ where
         self.tree.root()
     }
 
+    /// Gets the leaf value at a given index.
+    fn get_leaf(&self, leaf: usize) -> Hash {
+        self.get_leaf(leaf)
+    }
+
     /// Gets the proof of the given leaf index element
     fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
         let proof = self.tree.proof(leaf);
@@ -401,6 +406,8 @@ pub trait TreeVersionReadOps {
     fn next_leaf(&self) -> usize;
     /// Returns the merkle proof and element at the given leaf.
     fn get_proof(&self, leaf: usize) -> (Hash, Proof);
+    /// Gets the leaf value at a given index.
+    fn get_leaf(&self, leaf: usize) -> Hash;
 }
 
 impl<V: Version> TreeVersionReadOps for TreeVersion<V>
@@ -418,6 +425,11 @@ where
     fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
         let tree = self.get_data();
         tree.get_proof(leaf)
+    }
+
+    fn get_leaf(&self, leaf: usize) -> Hash {
+        let tree = self.get_data();
+        tree.get_leaf(leaf)
     }
 }
 

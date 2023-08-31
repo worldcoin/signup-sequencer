@@ -401,17 +401,9 @@ impl App {
             return Err(ServerError::NoProversOnIdInsert);
         }
 
-        // Ensure that deletion provers exist
-        if !self.identity_manager.has_deletion_provers().await {
-            warn!(
-                ?new_commitment,
-                "Identity Manager has no deletion provers. Add provers with /addBatchSize request."
-            );
-            return Err(ServerError::NoProversOnIdDeletion);
-        }
-
         // Delete the existing id and insert the commitments into the recovery table
         self.delete_identity(&existing_commitment).await?;
+
         self.database
             .insert_new_recovery(&existing_commitment, &new_commitment)
             .await?;

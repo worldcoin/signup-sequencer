@@ -760,6 +760,7 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
     use std::str::FromStr;
     use std::time::Duration;
 
@@ -767,12 +768,14 @@ mod test {
     use chrono::{Days, Utc};
     use ethers::types::U256;
     use postgres_docker_utils::DockerContainerGuard;
+    use ruint::Uint;
     use semaphore::Field;
     use sqlx::types::chrono::DateTime;
     use sqlx::{PgPool, Row};
 
     use super::{Database, Options};
     use crate::identity_tree::{Hash, Status};
+    use crate::prover::{ProverConfiguration, ProverType};
     use crate::secret::SecretUrl;
 
     macro_rules! assert_same_time {
@@ -795,6 +798,8 @@ mod test {
         chrono::Duration::milliseconds(x.num_milliseconds().abs())
     }
 
+    // TODO: we should probably consolidate all tests that propagate errors to
+    // TODO: either use anyhow or eyre
     async fn setup_db() -> anyhow::Result<(Database, DockerContainerGuard)> {
         let db_container = postgres_docker_utils::setup().await?;
         let port = db_container.port();
@@ -866,59 +871,200 @@ mod test {
         Ok(())
     }
 
+    fn mock_provers() -> HashSet<ProverConfiguration> {
+        let mut provers = HashSet::new();
+
+        provers.insert(ProverConfiguration {
+            batch_size:  100,
+            url:         "http://localhost:8080".to_string(),
+            timeout_s:   100,
+            prover_type: ProverType::Insertion,
+        });
+
+        provers.insert(ProverConfiguration {
+            batch_size:  100,
+            url:         "http://localhost:8080".to_string(),
+            timeout_s:   100,
+            prover_type: ProverType::Deletion,
+        });
+
+        provers
+    }
+
     #[tokio::test]
-    async fn test_get_provers() {
+    async fn test_insert_prover_configuration() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let mock_prover_configuration = ProverConfiguration {
+            batch_size:  100,
+            url:         "http://localhost:8080".to_string(),
+            timeout_s:   100,
+            prover_type: ProverType::Insertion,
+        };
+
+        let mock_prover_configuration_clone = mock_prover_configuration.clone();
+
+        db.insert_prover_configuration(
+            mock_prover_configuration.batch_size,
+            mock_prover_configuration.url,
+            mock_prover_configuration.timeout_s,
+            mock_prover_configuration.prover_type,
+        )
+        .await?;
+
+        let provers = db.get_provers().await?;
+        assert!(provers.contains(&mock_prover_configuration_clone));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_insert_provers() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let mock_provers = mock_provers();
+
+        db.insert_provers(mock_provers.clone()).await?;
+
+        let provers = db.get_provers().await?;
+
+        assert_eq!(provers, mock_provers);
         todo!()
     }
 
     #[tokio::test]
-    async fn test_insert_prover_configuration() {
+    async fn test_remove_prover() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let mock_provers = mock_provers();
+
+        db.insert_provers(mock_provers.clone()).await?;
+        db.remove_prover(100, ProverType::Insertion).await?;
+        let provers = db.get_provers().await?;
+
+        let mut expected_provers = HashSet::new();
+        expected_provers.insert(ProverConfiguration {
+            batch_size:  100,
+            url:         "http://localhost:8080".to_string(),
+            timeout_s:   100,
+            prover_type: ProverType::Deletion,
+        });
+
+        assert_eq!(provers, expected_provers);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_insert_new_recovery() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let existing_commitment: Uint<256, 4> = Uint::from(1);
+        let new_commitment: Uint<256, 4> = Uint::from(2);
+
+        db.insert_new_recovery(&existing_commitment, &new_commitment)
+            .await?;
+
+        let recoveries = db.get_recoveries().await?;
+
+        assert_eq!(recoveries.len(), 1);
+        assert_eq!(recoveries[0].existing_commitment, existing_commitment);
+        assert_eq!(recoveries[0].new_commitment, new_commitment);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_insert_new_deletion() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let existing_commitment: Uint<256, 4> = Uint::from(1);
+
+        db.insert_new_deletion(0, &existing_commitment).await?;
+
+        let deletions = db.get_deletions().await?;
+        assert_eq!(deletions.len(), 1);
+        assert_eq!(deletions[0].leaf_index, 0);
+        assert_eq!(deletions[0].commitment, existing_commitment);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_eligible_unprocessed_commitments() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let commitment_0: Uint<256, 4> = Uint::from(1);
+        let eligibility_timestamp_0 = DateTime::from(Utc::now());
+
+        db.insert_new_identity(commitment_0, eligibility_timestamp_0)
+            .await?;
+
+        let commitment_1: Uint<256, 4> = Uint::from(2);
+        let eligibility_timestamp_1 = DateTime::from(Utc::now())
+            .checked_add_days(Days::new(7))
+            .expect("Could not create eligibility timestamp");
+
+        db.insert_new_identity(commitment_1, eligibility_timestamp_1)
+            .await?;
+
+        let unprocessed_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
+
+        assert_eq!(unprocessed_commitments.len(), 1);
+        assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
+        assert_eq!(
+            unprocessed_commitments[0].eligibility_timestamp,
+            eligibility_timestamp_0
+        );
+
         todo!()
     }
 
     #[tokio::test]
-    async fn test_insert_provers() {
-        todo!()
+    async fn test_get_unprocessed_commitments() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let commitment_0: Uint<256, 4> = Uint::from(1);
+        let eligibility_timestamp_0 = DateTime::from(Utc::now());
+
+        db.insert_new_identity(commitment_0, eligibility_timestamp_0)
+            .await?;
+
+        let commitment_1: Uint<256, 4> = Uint::from(2);
+        let eligibility_timestamp_1 = DateTime::from(Utc::now())
+            .checked_add_days(Days::new(7))
+            .expect("Could not create eligibility timestamp");
+
+        db.insert_new_identity(commitment_1, eligibility_timestamp_1)
+            .await?;
+
+        let unprocessed_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
+
+        assert_eq!(unprocessed_commitments.len(), 2);
+        assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
+        assert_eq!(
+            unprocessed_commitments[0].eligibility_timestamp,
+            eligibility_timestamp_0
+        );
+
+        assert_eq!(unprocessed_commitments[1].commitment, commitment_1);
+        assert_eq!(
+            unprocessed_commitments[1].eligibility_timestamp,
+            eligibility_timestamp_1
+        );
+
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_remove_prover() {
-        todo!()
-    }
+    async fn test_identity_is_queued_for_deletion() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let existing_commitment: Uint<256, 4> = Uint::from(1);
 
-    #[tokio::test]
-    async fn test_insert_new_recovery() {
-        todo!()
-    }
+        db.insert_new_deletion(0, &existing_commitment).await?;
 
-    #[tokio::test]
-    async fn test_get_recoveries() {
-        todo!()
-    }
+        assert!(
+            db.identity_is_queued_for_deletion(&existing_commitment)
+                .await?
+        );
 
-    #[tokio::test]
-    async fn test_insert_new_deletion() {
-        todo!()
-    }
-
-    #[tokio::test]
-    async fn test_get_deletions() {
-        todo!()
-    }
-
-    #[tokio::test]
-    async fn test_get_eligible_unprocessed_commitments() {
-        todo!()
-    }
-
-    #[tokio::test]
-    async fn test_get_unprocessed_commitments() {
-        todo!()
-    }
-
-    #[tokio::test]
-    async fn test_identity_is_queued_for_deletion() {
-        todo!()
+        Ok(())
     }
 
     #[tokio::test]

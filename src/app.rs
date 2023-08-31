@@ -3,23 +3,23 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Result as AnyhowResult;
+use chrono::{DateTime, Utc};
 use clap::Parser;
 use hyper::StatusCode;
+use ruint::Uint;
 use semaphore::poseidon_tree::LazyPoseidonTree;
 use semaphore::protocol::verify_proof;
 use serde::Serialize;
 use tracing::{info, instrument, warn};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};
-use crate::database::prover::{ProverConfiguration as DbProverConf, Provers};
 use crate::database::{self, Database};
 use crate::ethereum::{self, Ethereum};
 use crate::identity_tree::{
-    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState,
+    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState, TreeVersionReadOps,
 };
-use crate::prover::batch_insertion::ProverConfiguration;
-use crate::prover::map::make_insertion_map;
-use crate::prover::{self, batch_insertion};
+use crate::prover::map::initialize_prover_maps;
+use crate::prover::{self, ProverConfiguration, ProverType, Provers};
 use crate::server::error::Error as ServerError;
 use crate::server::{ToResponseCode, VerifySemaphoreProofRequest};
 use crate::task_monitor::TaskMonitor;
@@ -110,7 +110,7 @@ pub struct Options {
     pub database: database::Options,
 
     #[clap(flatten)]
-    pub batch_provers: prover::batch_insertion::Options,
+    pub batch_provers: prover::Options,
 
     #[clap(flatten)]
     pub committer: task_monitor::Options,
@@ -153,14 +153,22 @@ impl App {
         let (ethereum, db) = tokio::try_join!(ethereum, db)?;
 
         let database = Arc::new(db);
-        let mut provers = database.get_provers().await?;
+        let mut provers: HashSet<ProverConfiguration> = database.get_provers().await?;
+
+        // TODO: need to update this
         let non_inserted_provers = Self::merge_env_provers(options.batch_provers, &mut provers);
 
         database.insert_provers(non_inserted_provers).await?;
 
-        let insertion_prover_map = make_insertion_map(provers)?;
-        let identity_manager =
-            IdentityManager::new(options.contracts, ethereum.clone(), insertion_prover_map).await?;
+        let (insertion_prover_map, deletion_prover_map) = initialize_prover_maps(provers)?;
+
+        let identity_manager = IdentityManager::new(
+            options.contracts,
+            ethereum.clone(),
+            insertion_prover_map,
+            deletion_prover_map,
+        )
+        .await?;
 
         let identity_manager = Arc::new(identity_manager);
 
@@ -296,10 +304,11 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        if !self.identity_manager.has_provers().await {
+        if !self.identity_manager.has_insertion_provers().await {
             warn!(
                 ?commitment,
-                "Identity Manager has no provers. Add provers with /addBatchSize request."
+                "Identity Manager has no insertion provers. Add provers with /addBatchSize \
+                 request."
             );
             return Err(ServerError::NoProversOnIdInsert);
         }
@@ -317,23 +326,109 @@ impl App {
             return Err(ServerError::DuplicateCommitment);
         }
 
-        self.database.insert_new_identity(commitment).await?;
+        self.database
+            .insert_new_identity(commitment, DateTime::from(Utc::now()))
+            .await?;
 
         Ok(())
     }
 
-    fn merge_env_provers(
-        options: batch_insertion::Options,
-        existing_provers: &mut Provers,
-    ) -> Provers {
-        let options_set: HashSet<DbProverConf> = options
+    /// Queues a deletion from the merkle tree.
+    ///
+    /// # Errors
+    ///
+    /// Will return `Err` if identity is already queued, not in the tree, or the
+    /// queue malfunctions.
+    #[instrument(level = "debug", skip(self))]
+    pub async fn delete_identity(&self, commitment: &Hash) -> Result<(), ServerError> {
+        // Ensure that deletion provers exist
+        if !self.identity_manager.has_deletion_provers().await {
+            warn!(
+                ?commitment,
+                "Identity Manager has no deletion provers. Add provers with /addBatchSize request."
+            );
+            return Err(ServerError::NoProversOnIdDeletion);
+        }
+
+        // Get the leaf index for the id commitment
+        let leaf_index = self
+            .database
+            .get_identity_leaf_index(&commitment)
+            .await?
+            .ok_or(ServerError::IdentityCommitmentNotFound)?
+            .leaf_index;
+
+        // Check if the id has already been deleted
+        if self.tree_state.get_latest_tree().get_leaf(leaf_index) == Uint::ZERO {
+            return Err(ServerError::IdentityAlreadyDeleted);
+        }
+
+        // Check if the id is already queued for deletion
+        if self
+            .database
+            .identity_is_queued_for_deletion(commitment)
+            .await?
+        {
+            return Err(ServerError::IdentityQueuedForDeletion);
+        }
+
+        // If the id has not been deleted, insert into the deletions table
+        self.database
+            .insert_new_deletion(leaf_index, &commitment)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Queues a deletion from the merkle tree.
+    ///
+    /// # Errors
+    ///
+    /// Will return `Err` if identity is already queued, not in the tree, or the
+    /// queue malfunctions.
+    #[instrument(level = "debug", skip(self))]
+    pub async fn recover_identity(
+        &self,
+        existing_commitment: &Hash,
+        new_commitment: &Hash,
+    ) -> Result<(), ServerError> {
+        // Ensure that insertion provers exist
+        if !self.identity_manager.has_insertion_provers().await {
+            warn!(
+                ?new_commitment,
+                "Identity Manager has no provers. Add provers with /addBatchSize request."
+            );
+            return Err(ServerError::NoProversOnIdInsert);
+        }
+
+        // Ensure that deletion provers exist
+        if !self.identity_manager.has_deletion_provers().await {
+            warn!(
+                ?new_commitment,
+                "Identity Manager has no deletion provers. Add provers with /addBatchSize request."
+            );
+            return Err(ServerError::NoProversOnIdDeletion);
+        }
+
+        // Delete the existing id and insert the commitments into the recovery table
+        self.delete_identity(&existing_commitment).await?;
+        self.database
+            .insert_new_recovery(&existing_commitment, &new_commitment)
+            .await?;
+
+        Ok(())
+    }
+
+    fn merge_env_provers(options: prover::Options, existing_provers: &mut Provers) -> Provers {
+        let options_set: HashSet<ProverConfiguration> = options
             .prover_urls
             .0
             .into_iter()
-            .map(|opt| DbProverConf {
-                url:        opt.url,
-                batch_size: opt.batch_size,
-                timeout_s:  opt.timeout_s,
+            .map(|opt| ProverConfiguration {
+                url:         opt.url,
+                batch_size:  opt.batch_size,
+                timeout_s:   opt.timeout_s,
+                prover_type: opt.prover_type,
             })
             .collect();
 
@@ -360,13 +455,14 @@ impl App {
         url: String,
         batch_size: usize,
         timeout_seconds: u64,
+        prover_type: ProverType,
     ) -> Result<(), ServerError> {
         self.identity_manager
-            .add_batch_size(&url, batch_size, timeout_seconds)
+            .add_batch_size(&url, batch_size, timeout_seconds, prover_type)
             .await?;
 
         self.database
-            .insert_prover_configuration(batch_size, url, timeout_seconds)
+            .insert_prover_configuration(batch_size, url, timeout_seconds, prover_type)
             .await?;
 
         Ok(())
@@ -377,10 +473,16 @@ impl App {
     /// Will return `Err` if the requested batch size does not exist.
     /// Will return `Err` if batch size fails to be removed from database.
     #[instrument(level = "debug", skip(self))]
-    pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
-        self.identity_manager.remove_batch_size(batch_size).await?;
+    pub async fn remove_batch_size(
+        &self,
+        batch_size: usize,
+        prover_type: ProverType,
+    ) -> Result<(), ServerError> {
+        self.identity_manager
+            .remove_batch_size(batch_size, prover_type)
+            .await?;
 
-        self.database.remove_prover(batch_size).await?;
+        self.database.remove_prover(batch_size, prover_type).await?;
 
         Ok(())
     }

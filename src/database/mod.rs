@@ -15,12 +15,11 @@ use sqlx::{Executor, Pool, Postgres, Row};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
-use self::prover::ProverConfiguration;
 use self::types::{DeletionEntry, RecoveryEntry};
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
-pub mod prover;
 pub mod types;
+use crate::prover::{self, ProverConfiguration, ProverType, Provers};
 use crate::secret::SecretUrl;
 
 // Statically link in migration files
@@ -331,7 +330,7 @@ impl Database {
             .into_iter()
             .map(|row| TreeUpdate {
                 leaf_index: row.get::<i64, _>(0) as usize,
-                element: row.get::<Hash, _>(1),
+                element:    row.get::<Hash, _>(1),
             })
             .collect::<Vec<_>>())
     }
@@ -395,10 +394,10 @@ impl Database {
         Ok(result.get::<i64, _>(0) as i32)
     }
 
-    pub async fn get_provers(&self) -> Result<prover::Provers, Error> {
+    pub async fn get_provers(&self) -> Result<Provers, Error> {
         let query = sqlx::query(
             r#"
-                SELECT batch_size, url, timeout_s
+                SELECT batch_size, url, timeout_s, prover_type
                 FROM provers
             "#,
         );
@@ -411,13 +410,15 @@ impl Database {
                 let batch_size = row.get::<i64, _>(0) as usize;
                 let url = row.get::<String, _>(1);
                 let timeout_s = row.get::<i64, _>(2) as u64;
-                prover::ProverConfiguration {
+                let prover_type = row.get::<ProverType, _>(3);
+                ProverConfiguration {
                     url,
                     batch_size,
                     timeout_s,
+                    prover_type,
                 }
             })
-            .collect::<prover::Provers>())
+            .collect::<Provers>())
     }
 
     pub async fn insert_prover_configuration(
@@ -425,20 +426,20 @@ impl Database {
         batch_size: usize,
         url: impl ToString,
         timeout_seconds: u64,
+        prover_type: ProverType,
     ) -> Result<(), Error> {
         let url = url.to_string();
 
         let query = sqlx::query(
             r#"
-                INSERT INTO provers (batch_size, url, timeout_s)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (batch_size)
-                DO UPDATE SET (url, timeout_s) = ($2, $3)
+                INSERT INTO provers (batch_size, url, timeout_s, prover_type)
+                VALUES ($1, $2, $3, $4)
             "#,
         )
         .bind(batch_size as i64)
         .bind(url)
-        .bind(timeout_seconds as i64);
+        .bind(timeout_seconds as i64)
+        .bind(prover_type);
 
         self.pool.execute(query).await?;
 
@@ -452,14 +453,15 @@ impl Database {
 
         let mut query_builder = sqlx::QueryBuilder::new(
             r#"
-                  INSERT INTO provers (batch_size, url, timeout_s)
+                  INSERT INTO provers (batch_size, url, timeout_s, prover_type)
             "#,
         );
 
         query_builder.push_values(provers, |mut b, prover| {
             b.push_bind(prover.batch_size as i64)
                 .push_bind(prover.url)
-                .push_bind(prover.timeout_s as i64);
+                .push_bind(prover.timeout_s as i64)
+                .push_bind(prover.prover_type);
         });
 
         let query = query_builder.build();
@@ -468,36 +470,47 @@ impl Database {
         Ok(())
     }
 
-    pub async fn remove_prover(&self, batch_size: usize) -> Result<(), Error> {
+    pub async fn remove_prover(
+        &self,
+        batch_size: usize,
+        prover_type: ProverType,
+    ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
-              DELETE FROM provers WHERE batch_size = $1
+              DELETE FROM provers WHERE batch_size = $1 AND prover_type = $2
             "#,
         )
-        .bind(batch_size as i64);
+        .bind(batch_size as i64)
+        .bind(prover_type);
 
         self.pool.execute(query).await?;
 
         Ok(())
     }
 
-    pub async fn insert_new_identity(&self, identity: Hash) -> Result<Hash, Error> {
+    pub async fn insert_new_identity(
+        &self,
+        identity: Hash,
+        eligibility_timestamp: sqlx::types::chrono::DateTime<Utc>,
+    ) -> Result<Hash, Error> {
         let query = sqlx::query(
             r#"
-            INSERT INTO unprocessed_identities (commitment, status, created_at)
-            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            INSERT INTO unprocessed_identities (commitment, status, created_at, eligibility)
+            VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
             "#,
         )
         .bind(identity)
-        .bind(<&str>::from(Status::New));
+        .bind(<&str>::from(Status::New))
+        .bind(eligibility_timestamp);
+
         self.pool.execute(query).await?;
         Ok(identity)
     }
 
     pub async fn insert_new_recovery(
         &self,
-        existing_commitment: Hash,
-        new_commitment: Hash,
+        existing_commitment: &Hash,
+        new_commitment: &Hash,
     ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
@@ -511,7 +524,8 @@ impl Database {
         Ok(())
     }
 
-    //TODO: consider using a larger value than i64 for leaf index, ruint should have postgres compatibility for u256
+    // TODO: consider using a larger value than i64 for leaf index, ruint should
+    // have postgres compatibility for u256
     pub async fn get_recoveries(&self) -> Result<Vec<RecoveryEntry>, Error> {
         let query = sqlx::query(
             r#"
@@ -526,26 +540,31 @@ impl Database {
             .into_iter()
             .map(|row| RecoveryEntry {
                 existing_commitment: row.get::<Hash, _>(0),
-                new_commitment: row.get::<Hash, _>(1),
+                new_commitment:      row.get::<Hash, _>(1),
             })
             .collect::<Vec<RecoveryEntry>>())
     }
 
-    pub async fn insert_new_deletion(&self, leaf_index: i64, identity: &Hash) -> Result<(), Error> {
+    pub async fn insert_new_deletion(
+        &self,
+        leaf_index: usize,
+        identity: &Hash,
+    ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
             INSERT INTO deletions (leaf_index, commitment)
             VALUES ($1, $2)
             "#,
         )
-        .bind(leaf_index)
+        .bind(leaf_index as i64)
         .bind(identity);
 
         self.pool.execute(query).await?;
         Ok(())
     }
 
-    //TODO: consider using a larger value than i64 for leaf index, ruint should have postgres compatibility for u256
+    // TODO: consider using a larger value than i64 for leaf index, ruint should
+    // have postgres compatibility for u256
     pub async fn get_deletions(&self) -> Result<Vec<DeletionEntry>, Error> {
         let query = sqlx::query(
             r#"
@@ -565,7 +584,7 @@ impl Database {
             .collect::<Vec<DeletionEntry>>())
     }
 
-    pub async fn get_unprocessed_commitments(
+    pub async fn get_eligible_unprocessed_commitments(
         &self,
         status: Status,
     ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
@@ -573,6 +592,35 @@ impl Database {
             r#"
                 SELECT * FROM unprocessed_identities
                 WHERE status = $1 AND CURRENT_TIMESTAMP > eligibility
+                LIMIT $2
+            "#,
+        )
+        .bind(<&str>::from(status))
+        .bind(MAX_UNPROCESSED_FETCH_COUNT);
+
+        let result = self.pool.fetch_all(query).await?;
+
+        Ok(result
+            .into_iter()
+            .map(|row| types::UnprocessedCommitment {
+                commitment: row.get::<Hash, _>(0),
+                status,
+                created_at: row.get::<_, _>(2),
+                processed_at: row.get::<_, _>(3),
+                error_message: row.get::<_, _>(4),
+                eligibility_timestamp: row.get::<_, _>(5),
+            })
+            .collect::<Vec<_>>())
+    }
+
+    pub async fn get_unprocessed_commitments(
+        &self,
+        status: Status,
+    ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
+        let query = sqlx::query(
+            r#"
+                SELECT * FROM unprocessed_identities
+                WHERE status = $1
                 LIMIT $2
             "#,
         )
@@ -650,6 +698,7 @@ impl Database {
         Ok(())
     }
 
+    // TODO: add docs
     pub async fn update_eligibility_timestamp(
         &self,
         commitment: Hash,
@@ -671,14 +720,14 @@ impl Database {
 
     pub async fn identity_exists(&self, commitment: Hash) -> Result<bool, Error> {
         let query_unprocessed_identity = sqlx::query(
-            r#"SELECT exists(SELECT 1 from unprocessed_identities where commitment = $1)"#,
+            r#"SELECT exists(SELECT 1 FROM unprocessed_identities where commitment = $1)"#,
         )
         .bind(commitment);
 
         let row_unprocessed = self.pool.fetch_one(query_unprocessed_identity).await?;
 
         let query_processed_identity =
-            sqlx::query(r#"SELECT exists(SELECT 1 from identities where commitment = $1)"#)
+            sqlx::query(r#"SELECT exists(SELECT 1 FROM identities where commitment = $1)"#)
                 .bind(commitment);
 
         let row_processed = self.pool.fetch_one(query_processed_identity).await?;
@@ -686,6 +735,15 @@ impl Database {
         let exists = row_unprocessed.get::<bool, _>(0) || row_processed.get::<bool, _>(0);
 
         Ok(exists)
+    }
+
+    // TODO: add docs
+    pub async fn identity_is_queued_for_deletion(&self, commitment: &Hash) -> Result<bool, Error> {
+        let query_queued_deletion =
+            sqlx::query(r#"SELECT exists(SELECT 1 FROM deletions where commitment = $1)"#)
+                .bind(commitment);
+        let row_unprocessed = self.pool.fetch_one(query_queued_deletion).await?;
+        Ok(row_unprocessed.get::<bool, _>(0))
     }
 }
 
@@ -700,6 +758,7 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
     use std::str::FromStr;
     use std::time::Duration;
 
@@ -707,12 +766,14 @@ mod test {
     use chrono::{Days, Utc};
     use ethers::types::U256;
     use postgres_docker_utils::DockerContainerGuard;
+    use ruint::Uint;
     use semaphore::Field;
     use sqlx::types::chrono::DateTime;
     use sqlx::{PgPool, Row};
 
     use super::{Database, Options};
     use crate::identity_tree::{Hash, Status};
+    use crate::prover::{ProverConfiguration, ProverType};
     use crate::secret::SecretUrl;
 
     macro_rules! assert_same_time {
@@ -735,14 +796,16 @@ mod test {
         chrono::Duration::milliseconds(x.num_milliseconds().abs())
     }
 
+    // TODO: we should probably consolidate all tests that propagate errors to
+    // TODO: either use anyhow or eyre
     async fn setup_db() -> anyhow::Result<(Database, DockerContainerGuard)> {
         let db_container = postgres_docker_utils::setup().await?;
         let port = db_container.port();
         let url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
         let db = Database::new(Options {
-            database: SecretUrl::from_str(&url)?,
-            database_migrate: true,
+            database:                 SecretUrl::from_str(&url)?,
+            database_migrate:         true,
             database_max_connections: 1,
         })
         .await?;
@@ -782,7 +845,12 @@ mod test {
         let commit_hash: Hash = U256::from_dec_str(dec)
             .expect("cant convert to u256")
             .into();
-        let hash = db.insert_new_identity(commit_hash).await?;
+
+        let eligibility_timestamp = DateTime::from(Utc::now());
+
+        let hash = db
+            .insert_new_identity(commit_hash, eligibility_timestamp)
+            .await?;
 
         assert_eq!(commit_hash, hash);
 
@@ -793,9 +861,213 @@ mod test {
         assert_eq!(commit.0, Status::New);
 
         let identity_count = db.get_unprocessed_commitments(Status::New).await?.len();
+
         assert_eq!(identity_count, 1);
 
         assert!(db.remove_unprocessed_identity(&commit_hash).await.is_ok());
+
+        Ok(())
+    }
+
+    fn mock_provers() -> HashSet<ProverConfiguration> {
+        let mut provers = HashSet::new();
+
+        provers.insert(ProverConfiguration {
+            batch_size:  100,
+            url:         "http://localhost:8080".to_string(),
+            timeout_s:   100,
+            prover_type: ProverType::Insertion,
+        });
+
+        provers.insert(ProverConfiguration {
+            batch_size:  100,
+            url:         "http://localhost:8080".to_string(),
+            timeout_s:   100,
+            prover_type: ProverType::Deletion,
+        });
+
+        provers
+    }
+
+    #[tokio::test]
+    async fn test_insert_prover_configuration() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let mock_prover_configuration_0 = ProverConfiguration {
+            batch_size:  100,
+            url:         "http://localhost:8080".to_string(),
+            timeout_s:   100,
+            prover_type: ProverType::Insertion,
+        };
+
+        let mock_prover_configuration_1 = ProverConfiguration {
+            batch_size:  100,
+            url:         "http://localhost:8081".to_string(),
+            timeout_s:   100,
+            prover_type: ProverType::Deletion,
+        };
+
+        db.insert_prover_configuration(
+            mock_prover_configuration_0.batch_size,
+            mock_prover_configuration_0.url.clone(),
+            mock_prover_configuration_0.timeout_s,
+            mock_prover_configuration_0.prover_type,
+        )
+        .await?;
+
+        db.insert_prover_configuration(
+            mock_prover_configuration_1.batch_size,
+            mock_prover_configuration_1.url.clone(),
+            mock_prover_configuration_1.timeout_s,
+            mock_prover_configuration_1.prover_type,
+        )
+        .await?;
+
+        let provers = db.get_provers().await?;
+
+        assert!(provers.contains(&mock_prover_configuration_0));
+        assert!(provers.contains(&mock_prover_configuration_1));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_insert_provers() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let mock_provers = mock_provers();
+
+        db.insert_provers(mock_provers.clone()).await?;
+
+        let provers = db.get_provers().await?;
+
+        assert_eq!(provers, mock_provers);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_remove_prover() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let mock_provers = mock_provers();
+
+        db.insert_provers(mock_provers.clone()).await?;
+        db.remove_prover(100, ProverType::Insertion).await?;
+        let provers = db.get_provers().await?;
+
+        assert_eq!(provers, HashSet::new());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_insert_new_recovery() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let existing_commitment: Uint<256, 4> = Uint::from(1);
+        let new_commitment: Uint<256, 4> = Uint::from(2);
+
+        db.insert_new_recovery(&existing_commitment, &new_commitment)
+            .await?;
+
+        let recoveries = db.get_recoveries().await?;
+
+        assert_eq!(recoveries.len(), 1);
+        assert_eq!(recoveries[0].existing_commitment, existing_commitment);
+        assert_eq!(recoveries[0].new_commitment, new_commitment);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_insert_new_deletion() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let existing_commitment: Uint<256, 4> = Uint::from(1);
+
+        db.insert_new_deletion(0, &existing_commitment).await?;
+
+        let deletions = db.get_deletions().await?;
+        assert_eq!(deletions.len(), 1);
+        assert_eq!(deletions[0].leaf_index, 0);
+        assert_eq!(deletions[0].commitment, existing_commitment);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_eligible_unprocessed_commitments() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let commitment_0: Uint<256, 4> = Uint::from(1);
+        let eligibility_timestamp_0 = DateTime::from(Utc::now());
+
+        db.insert_new_identity(commitment_0, eligibility_timestamp_0)
+            .await?;
+
+        let commitment_1: Uint<256, 4> = Uint::from(2);
+        let eligibility_timestamp_1 = DateTime::from(Utc::now())
+            .checked_add_days(Days::new(7))
+            .expect("Could not create eligibility timestamp");
+
+        db.insert_new_identity(commitment_1, eligibility_timestamp_1)
+            .await?;
+
+        let unprocessed_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
+
+        assert_eq!(unprocessed_commitments.len(), 1);
+        assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
+        assert_eq!(
+            unprocessed_commitments[0].eligibility_timestamp,
+            eligibility_timestamp_0
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_unprocessed_commitments() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let commitment_0: Uint<256, 4> = Uint::from(1);
+        let eligibility_timestamp_0 = DateTime::from(Utc::now());
+
+        db.insert_new_identity(commitment_0, eligibility_timestamp_0)
+            .await?;
+
+        let commitment_1: Uint<256, 4> = Uint::from(2);
+        let eligibility_timestamp_1 = DateTime::from(Utc::now())
+            .checked_add_days(Days::new(7))
+            .expect("Could not create eligibility timestamp");
+
+        db.insert_new_identity(commitment_1, eligibility_timestamp_1)
+            .await?;
+
+        let unprocessed_commitments = db.get_unprocessed_commitments(Status::New).await?;
+
+        assert_eq!(unprocessed_commitments.len(), 2);
+        assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
+        assert_eq!(
+            unprocessed_commitments[0].eligibility_timestamp,
+            eligibility_timestamp_0
+        );
+
+        assert_eq!(unprocessed_commitments[1].commitment, commitment_1);
+        assert_eq!(
+            unprocessed_commitments[1].eligibility_timestamp,
+            eligibility_timestamp_1
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_identity_is_queued_for_deletion() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let existing_commitment: Uint<256, 4> = Uint::from(1);
+
+        db.insert_new_deletion(0, &existing_commitment).await?;
+
+        assert!(
+            db.identity_is_queued_for_deletion(&existing_commitment)
+                .await?
+        );
 
         Ok(())
     }
@@ -808,8 +1080,18 @@ mod test {
             .expect("cant convert to u256")
             .into();
 
-        db.insert_new_identity(commit_hash).await?;
+        // Set eligibility to Utc::now() day and check db entries
+        let eligibility_timestamp = DateTime::from(Utc::now());
+        db.insert_new_identity(commit_hash, eligibility_timestamp)
+            .await?;
 
+        let commitments = db.get_unprocessed_commitments(Status::New).await?;
+        assert_eq!(commitments.len(), 1);
+
+        let eligible_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
+        assert_eq!(eligible_commitments.len(), 1);
+
+        // Set eligibility to Utc::now() + 7 days and check db entries
         let eligibility_timestamp = DateTime::from(Utc::now())
             .checked_add_days(Days::new(7))
             .expect("Could not create eligibility timestamp");
@@ -817,15 +1099,11 @@ mod test {
         db.update_eligibility_timestamp(commit_hash, eligibility_timestamp)
             .await?;
 
-        let commitments = db.get_unprocessed_commitments(Status::Pending).await?;
+        let commitments = db.get_unprocessed_commitments(Status::New).await?;
         assert_eq!(commitments.len(), 1);
 
-        assert_eq!(
-            commitments[0]
-                .eligibility_timestamp
-                .expect("Could not get eligibility_timestamp from commitment"),
-            eligibility_timestamp
-        );
+        let eligible_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
+        assert_eq!(eligible_commitments.len(), 0);
 
         Ok(())
     }
@@ -854,7 +1132,7 @@ mod test {
         let new_identities = mock_identities(3);
 
         for (old, new) in old_identities.into_iter().zip(new_identities) {
-            db.insert_new_recovery(old, new).await?;
+            db.insert_new_recovery(&old, &new).await?;
         }
 
         let recoveries = db.get_recoveries().await?;
@@ -1230,8 +1508,9 @@ mod test {
         assert!(!db.identity_exists(identities[0]).await?);
 
         // When there's only unprocessed identity
+        let eligibility_timestamp = DateTime::from(Utc::now());
 
-        db.insert_new_identity(identities[0])
+        db.insert_new_identity(identities[0], eligibility_timestamp)
             .await
             .context("Inserting new identity")?;
         assert!(db.identity_exists(identities[0]).await?);

@@ -22,6 +22,7 @@ use crate::app::{
     App, InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofResponse,
 };
 use crate::identity_tree::Hash;
+use crate::prover::ProverType;
 
 mod custom_middleware;
 
@@ -55,6 +56,8 @@ pub struct AddBatchSizeRequest {
     batch_size:      usize,
     /// The timeout for communications with the prover service.
     timeout_seconds: u64,
+    // TODO: add docs
+    prover_type:     ProverType,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -62,7 +65,9 @@ pub struct AddBatchSizeRequest {
 #[serde(deny_unknown_fields)]
 pub struct RemoveBatchSizeRequest {
     /// The batch size to remove from the prover map.
-    batch_size: usize,
+    batch_size:  usize,
+    // TODO: add docs
+    prover_type: ProverType,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -81,6 +86,24 @@ pub struct VerifySemaphoreProofRequest {
     pub nullifier_hash:          Field,
     pub external_nullifier_hash: Field,
     pub proof:                   Proof,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct DeletionRequest {
+    /// The identity commitment to delete.
+    identity_commitment: Hash,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct RecoveryRequest {
+    /// The leaf index of the identity commitment to delete.
+    prev_identity_commitment: Hash,
+    /// The new identity commitment to insert.
+    new_identity_commitment:  Hash,
 }
 
 pub trait ToResponseCode {
@@ -133,16 +156,40 @@ async fn add_batch_size(
     State(app): State<Arc<App>>,
     Json(req): Json<AddBatchSizeRequest>,
 ) -> Result<(), Error> {
-    app.add_batch_size(req.url, req.batch_size, req.timeout_seconds)
-        .await?;
+    app.add_batch_size(
+        req.url,
+        req.batch_size,
+        req.timeout_seconds,
+        req.prover_type,
+    )
+    .await?;
 
     Ok(())
 }
+
+async fn delete_identity(
+    State(app): State<Arc<App>>,
+    Json(req): Json<DeletionRequest>,
+) -> Result<(), Error> {
+    app.delete_identity(&req.identity_commitment).await?;
+    Ok(())
+}
+
+async fn recover_identity(
+    State(app): State<Arc<App>>,
+    Json(req): Json<RecoveryRequest>,
+) -> Result<(), Error> {
+    app.recover_identity(&req.prev_identity_commitment, &req.new_identity_commitment)
+        .await?;
+    Ok(())
+}
+
 async fn remove_batch_size(
     State(app): State<Arc<App>>,
     Json(req): Json<RemoveBatchSizeRequest>,
 ) -> Result<(), Error> {
-    app.remove_batch_size(req.batch_size).await?;
+    app.remove_batch_size(req.batch_size, req.prover_type)
+        .await?;
 
     Ok(())
 }
@@ -202,6 +249,8 @@ pub async fn bind_from_listener(
         .route("/inclusionProof", post(inclusion_proof))
         .route("/insertIdentity", post(insert_identity))
         .route("/addBatchSize", post(add_batch_size))
+        .route("/deleteIdentity", post(delete_identity))
+        .route("/recoverIdentity", post(recover_identity))
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
         .layer(middleware::from_fn(

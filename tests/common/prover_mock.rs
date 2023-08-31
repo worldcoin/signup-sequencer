@@ -91,10 +91,30 @@ impl ProveResponse {
 
 /// The mock prover service.
 pub struct ProverService {
-    server:     Handle,
-    inner:      Arc<Mutex<Prover>>,
-    address:    SocketAddr,
-    batch_size: usize,
+    server:      Handle,
+    inner:       Arc<Mutex<Prover>>,
+    address:     SocketAddr,
+    batch_size:  usize,
+    prover_type: ProverType,
+}
+
+// TODO: we could just import this from the sequencer
+#[derive(Debug, Copy, Clone, sqlx::Type, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+#[sqlx(type_name = "prover_enum", rename_all = "PascalCase")]
+pub enum ProverType {
+    #[default]
+    Insertion,
+    Deletion,
+}
+
+impl std::fmt::Display for ProverType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ProverType::Insertion => write!(f, "insertion"),
+            ProverType::Deletion => write!(f, "deletion"),
+        }
+    }
 }
 
 struct Prover {
@@ -108,7 +128,7 @@ impl ProverService {
     /// It provides only a single endpoint for now, `/prove` in order to match
     /// the full service (`semaphore-mtb`). This can be extended in the future
     /// if needed.
-    pub async fn new(batch_size: usize) -> anyhow::Result<Self> {
+    pub async fn new(batch_size: usize, prover_type: ProverType) -> anyhow::Result<Self> {
         async fn prove(
             State(state): State<Arc<Mutex<Prover>>>,
             Json(input): Json<ProofInput>,
@@ -146,6 +166,7 @@ impl ProverService {
             inner,
             address,
             batch_size,
+            prover_type,
         };
 
         Ok(service)
@@ -169,6 +190,10 @@ impl ProverService {
         self.batch_size
     }
 
+    pub fn prover_type(&self) -> ProverType {
+        self.prover_type
+    }
+
     /// Produces an arg string that's compatible with this prover - can be used
     /// as is in the CLI args
     ///
@@ -180,12 +205,13 @@ impl ProverService {
     /// Produces an arg string that's compatible with this prover - needs to be
     /// wrapped in an array
     ///
-    /// e.g. `{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}`
+    /// e.g. `{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30,"prover_type": "insertion"}`
     pub fn arg_string_single(&self) -> String {
         format!(
-            r#"{{"url": "{}","batch_size": {},"timeout_s": 30}}"#,
+            r#"{{"url": "{}","batch_size": {},"timeout_s": 30, "prover_type": "{}"}}"#,
             self.url(),
-            self.batch_size
+            self.batch_size,
+            self.prover_type
         )
     }
 }

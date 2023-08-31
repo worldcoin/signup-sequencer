@@ -15,14 +15,3 @@ ALTER TABLE provers DROP CONSTRAINT provers_pkey;
 
 -- Drop the url uniqueness constraint
 ALTER TABLE provers DROP CONSTRAINT  IF EXISTS  provers_url_key;
-
-
-
-
-
-
-
-
-
-
-

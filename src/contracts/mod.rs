@@ -175,7 +175,7 @@ impl IdentityManager {
     }
 
     #[instrument(level = "debug", skip(prover, identity_commitments))]
-    pub async fn prepare_proof(
+    pub async fn prepare_insertion_proof(
         prover: ReadOnlyInsertionProver<'_>,
         start_index: usize,
         pre_root: U256,
@@ -193,7 +193,7 @@ impl IdentityManager {
         );
 
         let proof_data: Proof = prover
-            .generate_proof(
+            .generate_insertion_proof(
                 actual_start_index,
                 pre_root,
                 post_root,

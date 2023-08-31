@@ -186,7 +186,7 @@ impl Prover {
     ///   were inserted.
     /// - `identities`: A list of identity insertions, ordered in the order the
     ///   identities were inserted into the merkle tree.
-    pub async fn generate_proof(
+    pub async fn generate_insertion_proof(
         &self,
         start_index: u32,
         pre_root: U256,
@@ -240,6 +240,16 @@ impl Prover {
         total_proving_time_timer.observe_duration();
 
         Ok(proof)
+    }
+
+    pub async fn generate_deletion_proof(
+        &self,
+        start_index: u32,
+        pre_root: U256,
+        post_root: U256,
+        identities: &[Identity],
+    ) -> anyhow::Result<Proof> {
+        todo!("TODO:");
     }
 
     pub fn url(&self) -> String {
@@ -342,7 +352,7 @@ mod test {
 
         let expected_proof = get_default_proof_output();
         let proof = mtb
-            .generate_proof(
+            .generate_insertion_proof(
                 input_data.start_index,
                 input_data.pre_root,
                 input_data.post_root,
@@ -374,7 +384,7 @@ mod test {
         input_data.post_root = U256::from(2);
 
         let prover_result = mtb
-            .generate_proof(
+            .generate_insertion_proof(
                 input_data.start_index,
                 input_data.pre_root,
                 input_data.post_root,
@@ -401,7 +411,7 @@ mod test {
         let identities = extract_identities_from(&input_data);
 
         let prover_result = mtb
-            .generate_proof(
+            .generate_insertion_proof(
                 input_data.start_index,
                 input_data.pre_root,
                 input_data.post_root,

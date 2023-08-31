@@ -328,7 +328,7 @@ async fn commit_identities(
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
     // We prepare the proof before reserving a slot in the pending identities
-    let proof = IdentityManager::prepare_proof(
+    let proof = IdentityManager::prepare_insertion_proof(
         insertion_prover,
         start_index,
         pre_root,

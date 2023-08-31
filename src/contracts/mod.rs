@@ -379,7 +379,10 @@ pub type SharedIdentityManager = Arc<IdentityManager>;
 
 #[cfg(test)]
 mod tests {
+
     use super::IdentityManager;
+    use crate::contracts::ServerError;
+    use crate::prover::ProverType;
 
     async fn new_mock_identity_manager() -> eyre::Result<IdentityManager> {
         todo!()
@@ -389,34 +392,128 @@ mod tests {
     async fn test_add_batch_size() -> eyre::Result<()> {
         let identity_manager = new_mock_identity_manager().await?;
         // Add new insertion batch size
+        identity_manager
+            .add_batch_size(&"http://localhost:8545", 100, 1000, ProverType::Insertion)
+            .await?;
         // Add duplicate insertion batch size
+        let result = identity_manager
+            .add_batch_size(&"http://localhost:8545", 100, 1000, ProverType::Insertion)
+            .await;
+
+        if let Err(ServerError::BatchSizeAlreadyExists) = result {
+        } else {
+            panic!("Unexpected result: {:?}", result);
+        }
 
         // Add new deletion batch size
+        identity_manager
+            .add_batch_size(&"http://localhost:8545", 100, 1000, ProverType::Deletion)
+            .await?;
         // Add duplicate deletion batch size
+        let result = identity_manager
+            .add_batch_size(&"http://localhost:8545", 100, 1000, ProverType::Deletion)
+            .await;
 
-        todo!()
+        if let Err(ServerError::BatchSizeAlreadyExists) = result {
+        } else {
+            panic!("Unexpected result: {:?}", result);
+        }
+
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_remove_batch_size() {
-        todo!()
+    async fn test_remove_batch_size() -> eyre::Result<()> {
+        let identity_manager = new_mock_identity_manager().await?;
+        // Add new insertion batch size
+        identity_manager
+            .add_batch_size(&"http://localhost:8545", 100, 1000, ProverType::Insertion)
+            .await?;
+        // Add new deletion batch size
+        identity_manager
+            .add_batch_size(&"http://localhost:8545", 100, 1000, ProverType::Deletion)
+            .await?;
 
         // Remove insertion batch size
+        identity_manager
+            .remove_batch_size(100, ProverType::Insertion)
+            .await?;
+
         // Remove insertion batch size that does not exist
+
+        let result = identity_manager
+            .remove_batch_size(10, ProverType::Insertion)
+            .await;
+
+        if let Err(ServerError::NoSuchBatchSize) = result {
+        } else {
+            panic!("Unexpected result: {:?}", result);
+        }
+
         // Remove all insertion batch sizes
+        let result = identity_manager
+            .remove_batch_size(100, ProverType::Insertion)
+            .await;
+
+        if let Err(ServerError::CannotRemoveLastBatchSize) = result {
+        } else {
+            panic!("Unexpected result: {:?}", result);
+        }
 
         // Remove deletion batch size
+        identity_manager
+            .remove_batch_size(100, ProverType::Deletion)
+            .await?;
+
         // Remove deletion batch size that does not exist
+
+        let result = identity_manager
+            .remove_batch_size(10, ProverType::Deletion)
+            .await;
+
+        if let Err(ServerError::NoSuchBatchSize) = result {
+        } else {
+            panic!("Unexpected result: {:?}", result);
+        }
+
         // Remove all deletion batch sizes
+        let result = identity_manager
+            .remove_batch_size(100, ProverType::Deletion)
+            .await;
+
+        if let Err(ServerError::CannotRemoveLastBatchSize) = result {
+        } else {
+            panic!("Unexpected result: {:?}", result);
+        }
+
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_has_deletion_provers() {
-        todo!()
+    async fn test_has_deletion_provers() -> eyre::Result<()> {
+        let identity_manager = new_mock_identity_manager().await?;
+
+        // Add new deletion batch size
+        identity_manager
+            .add_batch_size(&"http://localhost:8545", 100, 1000, ProverType::Deletion)
+            .await?;
+
+        assert!(identity_manager.has_deletion_provers().await);
+
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_has_insertion_provers() {
-        todo!()
+    async fn test_has_insertion_provers() -> eyre::Result<()> {
+        let identity_manager = new_mock_identity_manager().await?;
+
+        // Add new insertion batch size
+        identity_manager
+            .add_batch_size(&"http://localhost:8545", 100, 1000, ProverType::Insertion)
+            .await?;
+
+        assert!(identity_manager.has_insertion_provers().await);
+
+        Ok(())
     }
 }

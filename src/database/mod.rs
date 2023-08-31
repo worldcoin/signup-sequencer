@@ -397,7 +397,7 @@ impl Database {
     pub async fn get_provers(&self) -> Result<Provers, Error> {
         let query = sqlx::query(
             r#"
-                SELECT batch_size, url, timeout_s
+                SELECT batch_size, url, timeout_s, prover_type
                 FROM provers
             "#,
         );
@@ -432,9 +432,9 @@ impl Database {
 
         let query = sqlx::query(
             r#"
-                INSERT INTO provers (batch_size, url, timeout_s. prover_type)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (batch_size)
+                INSERT INTO provers (batch_size, url, timeout_s, prover_type)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (batch_size, prover_type)
                 DO UPDATE SET (url, timeout_s) = ($2, $3)
             "#,
         )
@@ -895,25 +895,64 @@ mod test {
     async fn test_insert_prover_configuration() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
-        let mock_prover_configuration = ProverConfiguration {
+        let mock_prover_configuration_0 = ProverConfiguration {
             batch_size:  100,
             url:         "http://localhost:8080".to_string(),
             timeout_s:   100,
             prover_type: ProverType::Insertion,
         };
 
-        let mock_prover_configuration_clone = mock_prover_configuration.clone();
+        let mock_prover_configuration_1 = ProverConfiguration {
+            batch_size:  100,
+            url:         "http://localhost:8081".to_string(),
+            timeout_s:   100,
+            prover_type: ProverType::Insertion,
+        };
 
+        let mock_prover_configuration_2 = ProverConfiguration {
+            batch_size:  100,
+            url:         "http://localhost:8081".to_string(),
+            timeout_s:   100,
+            prover_type: ProverType::Deletion,
+        };
+
+        // Insert and check that the table has been populated correctly
         db.insert_prover_configuration(
-            mock_prover_configuration.batch_size,
-            mock_prover_configuration.url,
-            mock_prover_configuration.timeout_s,
-            mock_prover_configuration.prover_type,
+            mock_prover_configuration_0.batch_size,
+            mock_prover_configuration_0.url.clone(),
+            mock_prover_configuration_0.timeout_s,
+            mock_prover_configuration_0.prover_type,
         )
         .await?;
 
         let provers = db.get_provers().await?;
-        assert!(provers.contains(&mock_prover_configuration_clone));
+        assert!(provers.contains(&mock_prover_configuration_0));
+
+        // Insert another insertion prover with the same batch size, but with a
+        // different url, which should overwrite the current insertion prover
+        db.insert_prover_configuration(
+            mock_prover_configuration_1.batch_size,
+            mock_prover_configuration_1.url.clone(),
+            mock_prover_configuration_1.timeout_s,
+            mock_prover_configuration_1.prover_type,
+        )
+        .await?;
+
+        // Insert a deletion prover
+        db.insert_prover_configuration(
+            mock_prover_configuration_2.batch_size,
+            mock_prover_configuration_2.url.clone(),
+            mock_prover_configuration_2.timeout_s,
+            mock_prover_configuration_2.prover_type,
+        )
+        .await?;
+
+        // Assert that provers does not contain the first insertion prover, but contains
+        // the second insertion prover and the deletion prover
+        let provers = db.get_provers().await?;
+        assert!(!provers.contains(&mock_prover_configuration_0));
+        assert!(provers.contains(&mock_prover_configuration_1));
+        assert!(provers.contains(&mock_prover_configuration_2));
 
         Ok(())
     }

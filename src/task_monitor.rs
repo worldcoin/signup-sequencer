@@ -206,7 +206,7 @@ impl TaskMonitor {
 
         handles.push(mine_identities_handle);
 
-        // Prcess identities task
+        // Process identities task
         let process_identities = ProcessIdentities::new(
             self.database.clone(),
             self.identity_manager.clone(),

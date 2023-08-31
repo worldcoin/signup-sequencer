@@ -451,7 +451,6 @@ impl Database {
             return Ok(());
         }
 
-        // TODO: add the constraint here as well to only update
         let mut query_builder = sqlx::QueryBuilder::new(
             r#"
                   INSERT INTO provers (batch_size, url, timeout_s, prover_type)

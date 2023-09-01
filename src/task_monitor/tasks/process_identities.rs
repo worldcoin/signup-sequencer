@@ -42,6 +42,8 @@ pub struct ProcessIdentities {
 }
 
 impl ProcessIdentities {
+    // TODO: I think we need a notify for the deletion task to notify the process
+    // identies that it can do its work TODO: and then we need
     pub fn new(
         database: Arc<Database>,
         identity_manager: SharedIdentityManager,
@@ -119,7 +121,7 @@ async fn process_identities(
                     continue;
                 }
 
-                let prover = identity_manager.get_suitable_prover(updates.len()).await?;
+                let prover = identity_manager.get_suitable_insertion_prover(updates.len()).await?;
 
                 info!(
                     "Sending timed-out batch with {}/{} updates.",
@@ -179,7 +181,7 @@ async fn process_identities(
                     continue;
                 }
 
-                let prover = identity_manager.get_suitable_prover(updates.len()).await?;
+                let prover = identity_manager.get_suitable_insertion_prover(updates.len()).await?;
 
                 commit_identities(
                     database,

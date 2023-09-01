@@ -155,7 +155,6 @@ impl App {
         let database = Arc::new(db);
         let mut provers: HashSet<ProverConfiguration> = database.get_provers().await?;
 
-        // TODO: need to update this
         let non_inserted_provers = Self::merge_env_provers(options.batch_provers, &mut provers);
 
         database.insert_provers(non_inserted_provers).await?;

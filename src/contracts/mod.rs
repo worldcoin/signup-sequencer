@@ -160,11 +160,25 @@ impl IdentityManager {
         Ok(())
     }
 
-    pub async fn get_suitable_prover(
+    pub async fn get_suitable_insertion_prover(
         &self,
         num_identities: usize,
     ) -> anyhow::Result<ReadOnlyProver<Prover>> {
         let prover_map = self.insertion_prover_map.read().await;
+
+        match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
+            Ok(p) => anyhow::Ok(p),
+            Err(_) => Err(anyhow!(
+                "No available prover for batch size: {num_identities}"
+            )),
+        }
+    }
+
+    pub async fn get_suitable_deletion_prover(
+        &self,
+        num_identities: usize,
+    ) -> anyhow::Result<ReadOnlyProver<Prover>> {
+        let prover_map = self.deletion_prover_map.read().await;
 
         match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
             Ok(p) => anyhow::Ok(p),

@@ -456,6 +456,24 @@ impl TreeVersion<Latest> {
 
         output
     }
+
+    /// Deletes many identities from the tree, returns a list with the root
+    /// and proof of inclusion
+    pub fn delete_many(&self, leaf_indices: &[usize]) -> Vec<(Hash, Proof)> {
+        let mut data = self.get_data();
+        let next_leaf = data.next_leaf;
+
+        let mut output = Vec::with_capacity(leaf_indices.len());
+
+        for leaf_index in leaf_indices {
+            data.update(*leaf_index, Hash::ZERO);
+            let (root, proof) = data.get_proof(*leaf_index);
+
+            output.push((root, proof));
+        }
+
+        output
+    }
 }
 
 /// Public API for working with versions that have a successor. Such versions

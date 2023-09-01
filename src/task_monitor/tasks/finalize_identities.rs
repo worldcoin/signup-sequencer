@@ -10,16 +10,14 @@ use crate::database::Database;
 use crate::identity_tree::{Canonical, TreeVersion, TreeWithNextVersion};
 use crate::utils::async_queue::{AsyncPopGuard, AsyncQueue};
 
-// It can take up to 40 minutes to bridge the root
-const FINALIZE_ROOT_SLEEP_TIME: Duration = Duration::from_secs(30);
-
-const MAX_FINALIZATION_ATTEMPTS: usize = 100;
-
 pub struct FinalizeRoots {
     database:          Arc<Database>,
     identity_manager:  SharedIdentityManager,
     finalized_tree:    TreeVersion<Canonical>,
     mined_roots_queue: AsyncQueue<U256>,
+
+    finalization_max_attempts: usize,
+    finalization_attempt_time: Duration,
 }
 
 impl FinalizeRoots {
@@ -28,12 +26,16 @@ impl FinalizeRoots {
         identity_manager: SharedIdentityManager,
         finalized_tree: TreeVersion<Canonical>,
         mined_roots_queue: AsyncQueue<U256>,
+        finalization_max_attempts: usize,
+        finalization_attempt_time: Duration,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
             identity_manager,
             finalized_tree,
             mined_roots_queue,
+            finalization_max_attempts,
+            finalization_attempt_time,
         })
     }
 
@@ -43,6 +45,8 @@ impl FinalizeRoots {
             &self.identity_manager,
             &self.finalized_tree,
             &self.mined_roots_queue,
+            self.finalization_max_attempts,
+            self.finalization_attempt_time,
         )
         .await
     }
@@ -53,11 +57,21 @@ async fn finalize_roots_loop(
     identity_manager: &IdentityManager,
     finalized_tree: &TreeVersion<Canonical>,
     mined_roots_queue: &AsyncQueue<U256>,
+    finalization_max_attempts: usize,
+    finalization_attempt_time: Duration,
 ) -> AnyhowResult<()> {
     loop {
         let mined_root = mined_roots_queue.pop().await;
 
-        finalize_root(&mined_root, database, identity_manager, finalized_tree).await?;
+        finalize_root(
+            &mined_root,
+            database,
+            identity_manager,
+            finalized_tree,
+            finalization_max_attempts,
+            finalization_attempt_time,
+        )
+        .await?;
 
         mined_root.commit().await;
     }
@@ -69,6 +83,8 @@ async fn finalize_root(
     database: &Database,
     identity_manager: &IdentityManager,
     finalized_tree: &TreeVersion<Canonical>,
+    finalization_max_attempts: usize,
+    finalization_attempt_time: Duration,
 ) -> AnyhowResult<()> {
     let root = mined_root.read().await;
 
@@ -84,11 +100,11 @@ async fn finalize_root(
 
         num_attempts += 1;
 
-        if num_attempts > MAX_FINALIZATION_ATTEMPTS {
+        if num_attempts > finalization_max_attempts {
             anyhow::bail!("Root {root} not finalized after {num_attempts} attempts, giving up",);
         }
 
-        tokio::time::sleep(FINALIZE_ROOT_SLEEP_TIME).await;
+        tokio::time::sleep(finalization_attempt_time).await;
     }
 
     finalized_tree.apply_updates_up_to(root.into());

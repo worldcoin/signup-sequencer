@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, ensure, Result as AnyhowResult};
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::routing::{get, post};
 use axum::{middleware, Json, Router};
 use clap::Parser;
@@ -83,6 +83,14 @@ pub struct VerifySemaphoreProofRequest {
     pub proof:                   Proof,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct VerifySemaphoreProofQuery {
+    #[serde(default)]
+    pub max_root_age_seconds: Option<i64>,
+}
+
 pub trait ToResponseCode {
     fn to_response_code(&self) -> StatusCode;
 }
@@ -118,10 +126,14 @@ async fn insert_identity(
 
 async fn verify_semaphore_proof(
     State(app): State<Arc<App>>,
+    Query(verify_semaphore_proof_query): Query<VerifySemaphoreProofQuery>,
     Json(verify_semaphore_proof_request): Json<VerifySemaphoreProofRequest>,
 ) -> Result<(StatusCode, Json<VerifySemaphoreProofResponse>), Error> {
     let result = app
-        .verify_semaphore_proof(&verify_semaphore_proof_request)
+        .verify_semaphore_proof(
+            &verify_semaphore_proof_request,
+            &verify_semaphore_proof_query,
+        )
         .await?;
 
     let result = result.hide_processed_status();

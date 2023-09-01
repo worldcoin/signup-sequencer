@@ -446,7 +446,8 @@ impl App {
         };
 
         if let Some(max_root_age_seconds) = query.max_root_age_seconds {
-            self.validate_root_age(max_root_age_seconds, &root_state)?;
+            let max_root_age = Duration::seconds(max_root_age_seconds);
+            self.validate_root_age(max_root_age, &root_state)?;
         }
 
         let checked = verify_proof(
@@ -470,7 +471,7 @@ impl App {
 
     fn validate_root_age(
         &self,
-        max_root_age_seconds: i64,
+        max_root_age: Duration,
         root_state: &RootItem,
     ) -> Result<(), ServerError> {
         let latest_root = self.tree_state.get_latest_tree().get_root();
@@ -493,17 +494,14 @@ impl App {
             return Ok(());
         }
 
-        let max_root_age = Duration::seconds(max_root_age_seconds);
-
-        let mined_at = root_state.mined_valid_as_of;
-        let pending_as_of = root_state.pending_valid_as_of;
-
         let now = chrono::Utc::now();
 
         let root_age = if root_state.status == Status::Pending {
-            now - pending_as_of
+            now - root_state.pending_valid_as_of
         } else {
-            let mined_at = mined_at.ok_or(ServerError::InvalidRoot)?;
+            let mined_at = root_state
+                .mined_valid_as_of
+                .ok_or(ServerError::InvalidRoot)?;
             now - mined_at
         };
 

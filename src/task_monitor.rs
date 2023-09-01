@@ -109,7 +109,7 @@ pub struct Options {
 
     /// The number of seconds to wait between attempts to finalize a root.
     #[clap(long, env, default_value = "30")]
-    pub finalization_attempt_time_seconds: u64,
+    pub finalization_sleep_time_seconds: u64,
 }
 
 /// A worker that commits identities to the blockchain.
@@ -131,8 +131,8 @@ pub struct TaskMonitor {
     pending_identities_capacity: usize,
     mined_roots_capacity:        usize,
 
-    finalization_max_attempts:         usize,
-    finalization_attempt_time_seconds: u64,
+    finalization_max_attempts:       usize,
+    finalization_sleep_time_seconds: u64,
 }
 
 impl TaskMonitor {
@@ -147,7 +147,7 @@ impl TaskMonitor {
             pending_identities_capacity,
             mined_roots_capacity,
             finalization_max_attempts,
-            finalization_attempt_time_seconds,
+            finalization_sleep_time_seconds,
         } = *options;
 
         Self {
@@ -159,7 +159,7 @@ impl TaskMonitor {
             pending_identities_capacity,
             mined_roots_capacity,
             finalization_max_attempts,
-            finalization_attempt_time_seconds,
+            finalization_sleep_time_seconds,
         }
     }
 
@@ -191,7 +191,7 @@ impl TaskMonitor {
             self.tree_state.get_mined_tree(),
             mined_roots_queue.clone(),
             self.finalization_max_attempts,
-            Duration::from_secs(self.finalization_attempt_time_seconds),
+            Duration::from_secs(self.finalization_sleep_time_seconds),
         );
 
         let finalize_identities_handle = crate::utils::spawn_monitored_with_backoff(

@@ -17,7 +17,7 @@ pub struct FinalizeRoots {
     mined_roots_queue: AsyncQueue<U256>,
 
     finalization_max_attempts: usize,
-    finalization_attempt_time: Duration,
+    finalization_sleep_time:   Duration,
 }
 
 impl FinalizeRoots {
@@ -27,7 +27,7 @@ impl FinalizeRoots {
         finalized_tree: TreeVersion<Canonical>,
         mined_roots_queue: AsyncQueue<U256>,
         finalization_max_attempts: usize,
-        finalization_attempt_time: Duration,
+        finalization_sleep_time: Duration,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
@@ -35,7 +35,7 @@ impl FinalizeRoots {
             finalized_tree,
             mined_roots_queue,
             finalization_max_attempts,
-            finalization_attempt_time,
+            finalization_sleep_time,
         })
     }
 
@@ -46,7 +46,7 @@ impl FinalizeRoots {
             &self.finalized_tree,
             &self.mined_roots_queue,
             self.finalization_max_attempts,
-            self.finalization_attempt_time,
+            self.finalization_sleep_time,
         )
         .await
     }
@@ -58,7 +58,7 @@ async fn finalize_roots_loop(
     finalized_tree: &TreeVersion<Canonical>,
     mined_roots_queue: &AsyncQueue<U256>,
     finalization_max_attempts: usize,
-    finalization_attempt_time: Duration,
+    finalization_sleep_time: Duration,
 ) -> AnyhowResult<()> {
     loop {
         let mined_root = mined_roots_queue.pop().await;
@@ -69,7 +69,7 @@ async fn finalize_roots_loop(
             identity_manager,
             finalized_tree,
             finalization_max_attempts,
-            finalization_attempt_time,
+            finalization_sleep_time,
         )
         .await?;
 
@@ -84,7 +84,7 @@ async fn finalize_root(
     identity_manager: &IdentityManager,
     finalized_tree: &TreeVersion<Canonical>,
     finalization_max_attempts: usize,
-    finalization_attempt_time: Duration,
+    finalization_sleep_time: Duration,
 ) -> AnyhowResult<()> {
     let root = mined_root.read().await;
 
@@ -104,7 +104,7 @@ async fn finalize_root(
             anyhow::bail!("Root {root} not finalized after {num_attempts} attempts, giving up",);
         }
 
-        tokio::time::sleep(finalization_attempt_time).await;
+        tokio::time::sleep(finalization_sleep_time).await;
     }
 
     finalized_tree.apply_updates_up_to(root.into());

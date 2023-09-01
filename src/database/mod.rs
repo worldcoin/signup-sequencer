@@ -432,15 +432,8 @@ impl Database {
 
         let query = sqlx::query(
             r#"
-<<<<<<< HEAD
-                INSERT INTO provers (batch_size, url, timeout_s. prover_type)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (batch_size)
-                DO UPDATE SET (url, timeout_s) = ($2, $3)
-=======
                 INSERT INTO provers (batch_size, url, timeout_s, prover_type)
                 VALUES ($1, $2, $3, $4)
->>>>>>> 0xkitsune/deletion-recovery
             "#,
         )
         .bind(batch_size as i64)
@@ -585,10 +578,31 @@ impl Database {
         Ok(result
             .into_iter()
             .map(|row| DeletionEntry {
-                leaf_index: row.get::<i64, _>(0),
+                leaf_index: row.get::<i64, _>(0) as usize,
                 commitment: row.get::<Hash, _>(1),
             })
             .collect::<Vec<DeletionEntry>>())
+    }
+
+    /// Remove a list of entries from the deletions table
+    pub async fn remove_deletions(
+        &self,
+        commitments: Vec<Hash>,
+    ) -> Result<Vec<DeletionEntry>, Error> {
+        let mut query_builder = sqlx::QueryBuilder::new(
+            r#"
+                  DELETE FROM deletions where commitment = $1
+            "#,
+        );
+
+        query_builder.push_values(commitments, |mut b, commitment| {
+            b.push_bind(commitment);
+        });
+
+        let query = query_builder.build();
+
+        self.pool.execute(query).await?;
+        todo!()
     }
 
     pub async fn get_eligible_unprocessed_commitments(

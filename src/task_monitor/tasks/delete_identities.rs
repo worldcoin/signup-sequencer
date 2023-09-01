@@ -114,10 +114,10 @@ async fn delete_identities(
              database: {next_db_index}"
         );
 
-        let leaf_indices = deletions
+        let (leaf_indices, previous_commitments) = deletions
             .iter()
-            .map(|d| d.leaf_index)
-            .collect::<Vec<usize>>();
+            .map(|d| (d.leaf_index, d.commitment))
+            .unzip();
 
         let data = latest_tree.delete_many(&leaf_indices);
 
@@ -132,11 +132,14 @@ async fn delete_identities(
         // TODO: insert into identities
         for ((root, _proof), leaf_index) in items {
             database
-                .insert_pending_identity(leaf_index, &Hash::ZERO, &root)
+                .insert_pending_identity(*leaf_index, &Hash::ZERO, &root)
                 .await?;
         }
 
-        // TODO: remove all deletions
+        database.remove_deletions(previous_commitments).await?;
+
+        // TODO: remove all deletions, make note if we should do this as a batch
+        // or one by one
 
         // Lock mutex
 

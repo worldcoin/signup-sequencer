@@ -194,15 +194,21 @@ where
         (self.tree.root(), proof)
     }
 
-    /// Returns _up to_ `maximum_update_count` updates that are to be applied to
-    /// the tree.
+    /// Returns _up to_ `maximum_update_count` contiguous deletion or insertion
+    /// updates that are to be applied to the tree.
     fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
-        let Some(next) = self.next.as_ref() else { return Vec::new(); };
-
+        let Some(next) = self.next.as_ref() else { return vec![]; };
         let next = next.get_data();
+
+        let first_is_zero = match next.metadata.diff.first() {
+            Some(first) => first.update.element == Hash::ZERO,
+            None => return vec![],
+        };
+
         next.metadata
             .diff
             .iter()
+            .take_while(|&update| (update.update.element == Hash::ZERO) == first_is_zero)
             .take(maximum_update_count)
             .cloned()
             .collect()

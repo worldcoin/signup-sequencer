@@ -43,7 +43,8 @@ pub struct ProcessIdentities {
 
 impl ProcessIdentities {
     // TODO: I think we need a notify for the deletion task to notify the process
-    // identies that it can do its work TODO: and then we need
+    // identies that it can do its work TODO: and then we need a notify for insert
+    // identities to get notified and do its work
     pub fn new(
         database: Arc<Database>,
         identity_manager: SharedIdentityManager,
@@ -164,6 +165,8 @@ async fn process_identities(
                     timeout_secs.abs_diff(diff_secs) <= DEBOUNCE_THRESHOLD_SECS;
 
                 // We have _at most_ one complete batch here.
+
+                //TODO: need to get deletion or insertion batch
                 let updates = batching_tree.peek_next_updates(batch_size);
 
                 // If there are not enough identities to insert at this

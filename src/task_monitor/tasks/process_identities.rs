@@ -13,7 +13,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
 use crate::identity_tree::{
-    AppliedTreeUpdate, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
+    AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
 use crate::prover::identity::Identity;
 use crate::prover::map::ReadOnlyInsertionProver;
@@ -122,6 +122,8 @@ async fn process_identities(
                     continue;
                 }
 
+
+
                 let prover = identity_manager.get_suitable_insertion_prover(updates.len()).await?;
 
                 info!(
@@ -165,8 +167,6 @@ async fn process_identities(
                     timeout_secs.abs_diff(diff_secs) <= DEBOUNCE_THRESHOLD_SECS;
 
                 // We have _at most_ one complete batch here.
-
-                //TODO: need to get deletion or insertion batch
                 let updates = batching_tree.peek_next_updates(batch_size);
 
                 // If there are not enough identities to insert at this
@@ -184,7 +184,11 @@ async fn process_identities(
                     continue;
                 }
 
-                let prover = identity_manager.get_suitable_insertion_prover(updates.len()).await?;
+                let prover = if updates.first().expect("TODO: propagate error but updates should be > 1").update.element == Hash::ZERO {
+                    identity_manager.get_suitable_insertion_prover(updates.len()).await?
+                }else{
+                    identity_manager.get_suitable_deletion_prover(updates.len()).await?
+                };
 
                 commit_identities(
                     database,
@@ -215,7 +219,7 @@ async fn commit_identities(
     batching_tree: &TreeVersion<Intermediate>,
     pending_batch_submissions_queue: &AsyncQueue<PendingBatchSubmission>,
     updates: &[AppliedTreeUpdate],
-    insertion_prover: ReadOnlyInsertionProver<'_>,
+    insertion_prover: ReadOnlyInsertionProver<'_>, // TODO: update this type to be read only prover
 ) -> AnyhowResult<()> {
     TaskMonitor::log_identities_queues(database).await?;
 
@@ -234,6 +238,8 @@ async fn commit_identities(
         .leaf_index;
 
     for update in updates[1..].iter() {
+        // TODO: this check needs to be updated, no logner will the next leaf index be
+        // last_index +1 due to deletions
         assert_eq!(
             last_index + 1,
             update.update.leaf_index,
@@ -278,6 +284,7 @@ async fn commit_identities(
         "Number of identities does not match the number of merkle proofs."
     );
 
+    // TODO: update this to be insertion prover or deletion prover batch size
     let batch_size = insertion_prover.batch_size();
 
     // The verifier and prover can only work with a given batch size, so we need to
@@ -389,6 +396,8 @@ async fn commit_identities(
             start_index,
         })
         .await;
+
+    // TODO: if it was a deletion/recovery, update all of the recovery data here
 
     // Update the batching tree only after submitting the identities to the chain
     batching_tree.apply_updates_up_to(post_root.into());

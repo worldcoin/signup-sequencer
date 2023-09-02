@@ -23,8 +23,9 @@ pub struct DeleteIdentities {
     database:                Arc<Database>,
     identity_manager:        SharedIdentityManager,
     latest_tree:             TreeVersion<Latest>,
-    deletion_time_interval:  Duration,
+    deletion_time_interval:  u64,
     min_deletion_batch_size: usize,
+    wake_up_notify:          Arc<Notify>,
 }
 
 impl DeleteIdentities {
@@ -32,8 +33,9 @@ impl DeleteIdentities {
         database: Arc<Database>,
         identity_manager: SharedIdentityManager,
         latest_tree: TreeVersion<Latest>,
-        deletion_time_interval: Duration,
+        deletion_time_interval: u64,
         min_deletion_batch_size: usize,
+        wake_up_notify: Arc<Notify>,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
@@ -41,6 +43,7 @@ impl DeleteIdentities {
             latest_tree,
             deletion_time_interval,
             min_deletion_batch_size,
+            wake_up_notify,
         })
     }
 
@@ -51,18 +54,22 @@ impl DeleteIdentities {
             &self.latest_tree,
             self.deletion_time_interval,
             self.min_deletion_batch_size,
+            self.wake_up_notify.clone(),
         )
         .await
     }
 }
 
-// TODO: maybe update to be &self
+// TODO: we might want to keep track of the last time we completed a deletion
+// batch and make sure that there is a batch run at least once every n days to
+// be compliant
 async fn delete_identities(
     database: &Database,
     identity_manager: &IdentityManager,
     latest_tree: &TreeVersion<Latest>,
-    deletion_time_interval: Duration,
+    deletion_time_interval: u64,
     min_deletion_batch_size: usize,
+    wake_up_notify: Arc<Notify>,
 ) -> AnyhowResult<()> {
     // TODO: do we need to do this for this step?
     info!("Awaiting for a clean slate");
@@ -70,6 +77,7 @@ async fn delete_identities(
 
     info!("Starting deletion processor.");
 
+    let deletion_time_interval = Duration::from_secs(deletion_time_interval);
     let mut last_deletion = Instant::now();
     loop {
         let deletions = database.get_deletions().await?;
@@ -84,6 +92,9 @@ async fn delete_identities(
         if deletions.len() >= min_deletion_batch_size
             || Instant::now() - last_deletion > deletion_time_interval
         {
+            // TODO: do we need to lock something here to avoid anything else inserting into
+            // the latest tree
+
             // Dedup deletion entries
             let deletions = deletions
                 .into_iter()
@@ -128,7 +139,7 @@ async fn delete_identities(
 
             // TODO: unlock mutex
 
-            // TODO: notify to start task to insert on chain
+            wake_up_notify.notify_one();
 
             // Update the last deletion time
             last_deletion = Instant::now();

@@ -26,6 +26,7 @@ const PROCESS_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const FINALIZE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const MINE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const INSERT_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
+const DELETE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 
 struct RunningInstance {
     handles:         Vec<JoinHandle<()>>,
@@ -89,6 +90,10 @@ pub struct Options {
     #[clap(long, env, default_value = "180")]
     pub batch_timeout_seconds: u64,
 
+    /// TODO:
+    #[clap(long, env, default_value = "3600")]
+    pub deletion_time_interval: u64,
+
     /// How many identities can be held in the API insertion queue at any given
     /// time Past this limit the API request will block until the queue has
     /// space for the insertion.
@@ -128,6 +133,7 @@ pub struct TaskMonitor {
     batch_insert_timeout_secs:   u64,
     pending_identities_capacity: usize,
     mined_roots_capacity:        usize,
+    deletion_time_interval:      u64,
 }
 
 impl TaskMonitor {
@@ -140,7 +146,6 @@ impl TaskMonitor {
         let batch_insert_timeout_secs = options.batch_timeout_seconds;
         let pending_identities_capacity = options.pending_identities_capacity;
         let mined_roots_capacity = options.mined_roots_capacity;
-
         Self {
             instance: RwLock::new(None),
             database,
@@ -149,6 +154,7 @@ impl TaskMonitor {
             batch_insert_timeout_secs,
             pending_identities_capacity,
             mined_roots_capacity,
+            deletion_time_interval: options.deletion_time_interval,
         }
     }
 
@@ -238,6 +244,8 @@ impl TaskMonitor {
         );
 
         handles.push(insert_identities_handle);
+
+        // TODO: add delete identities task here
 
         *instance = Some(RunningInstance {
             handles,

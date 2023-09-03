@@ -467,7 +467,6 @@ impl TreeVersion<Latest> {
     /// and proof of inclusion
     pub fn delete_many(&self, leaf_indices: &[usize]) -> Vec<(Hash, Proof)> {
         let mut data = self.get_data();
-        let next_leaf = data.next_leaf;
 
         let mut output = Vec::with_capacity(leaf_indices.len());
 

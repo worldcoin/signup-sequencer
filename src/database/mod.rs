@@ -585,10 +585,7 @@ impl Database {
     }
 
     /// Remove a list of entries from the deletions table
-    pub async fn remove_deletions(
-        &self,
-        commitments: Vec<Hash>,
-    ) -> Result<Vec<DeletionEntry>, Error> {
+    pub async fn remove_deletions(&self, commitments: Vec<Hash>) -> Result<(), Error> {
         let mut query_builder = sqlx::QueryBuilder::new(
             r#"
                   DELETE FROM deletions where commitment = $1
@@ -602,7 +599,8 @@ impl Database {
         let query = query_builder.build();
 
         self.pool.execute(query).await?;
-        todo!()
+
+        Ok(())
     }
 
     pub async fn get_eligible_unprocessed_commitments(

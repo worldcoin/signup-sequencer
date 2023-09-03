@@ -78,7 +78,11 @@ async fn delete_identities(
     info!("Starting deletion processor.");
 
     let deletion_time_interval = Duration::from_secs(deletion_time_interval);
+
+    // TODO: we should track this with persistance to eunsure we are deleting at
+    // least once every n days if there are deletions in the queue
     let mut last_deletion = Instant::now();
+
     loop {
         let deletions = database.get_deletions().await?;
         if deletions.is_empty() {

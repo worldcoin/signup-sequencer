@@ -10,6 +10,7 @@ use tokio::sync::{broadcast, Notify, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{info, instrument, warn};
 
+use self::tasks::delete_identities::DeleteIdentities;
 use self::tasks::finalize_identities::FinalizeRoots;
 use self::tasks::insert_identities::InsertIdentities;
 use self::tasks::mine_identities::MineIdentities;
@@ -94,6 +95,10 @@ pub struct Options {
     #[clap(long, env, default_value = "3600")]
     pub deletion_time_interval: u64,
 
+    /// TODO:
+    #[clap(long, env, default_value = "100")]
+    pub min_batch_deletion_size: usize,
+
     /// How many identities can be held in the API insertion queue at any given
     /// time Past this limit the API request will block until the queue has
     /// space for the insertion.
@@ -133,7 +138,10 @@ pub struct TaskMonitor {
     batch_insert_timeout_secs:   u64,
     pending_identities_capacity: usize,
     mined_roots_capacity:        usize,
+    // TODO: docs
     deletion_time_interval:      u64,
+    // TODO: docs
+    min_batch_deletion_size:     usize,
 }
 
 impl TaskMonitor {
@@ -155,6 +163,7 @@ impl TaskMonitor {
             pending_identities_capacity,
             mined_roots_capacity,
             deletion_time_interval: options.deletion_time_interval,
+            min_batch_deletion_size: options.min_batch_deletion_size,
         }
     }
 
@@ -234,7 +243,7 @@ impl TaskMonitor {
         let insert_identities = InsertIdentities::new(
             self.database.clone(),
             self.tree_state.get_latest_tree(),
-            wake_up_notify,
+            wake_up_notify.clone(),
         );
 
         let insert_identities_handle = crate::utils::spawn_monitored_with_backoff(
@@ -245,7 +254,23 @@ impl TaskMonitor {
 
         handles.push(insert_identities_handle);
 
-        // TODO: add delete identities task here
+        // // Delete identities task
+        let delete_identites = DeleteIdentities::new(
+            self.database.clone(),
+            self.identity_manager.clone(),
+            self.tree_state.get_latest_tree(),
+            self.deletion_time_interval,
+            self.min_batch_deletion_size,
+            wake_up_notify,
+        );
+
+        let delete_identities_handle = crate::utils::spawn_monitored_with_backoff(
+            move || delete_identites.clone().run(),
+            shutdown_sender.clone(),
+            DELETE_IDENTITIES_BACKOFF,
+        );
+
+        handles.push(delete_identities_handle);
 
         *instance = Some(RunningInstance {
             handles,

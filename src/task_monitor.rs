@@ -89,12 +89,6 @@ pub struct Options {
     #[clap(long, env, default_value = "180")]
     pub batch_timeout_seconds: u64,
 
-    /// How many identities can be held in the API insertion queue at any given
-    /// time Past this limit the API request will block until the queue has
-    /// space for the insertion.
-    #[clap(long, env, default_value = "100")]
-    pub insert_identities_capacity: usize,
-
     /// How many transactions can be sent "at once" to the blockchain via the
     /// write provider.
     #[clap(long, env, default_value = "1")]
@@ -108,6 +102,14 @@ pub struct Options {
     /// This is just a limit on memory usage for this channel.
     #[clap(long, env, default_value = "10")]
     pub mined_roots_capacity: usize,
+
+    /// The maximum number of attempts to finalize a root before giving up.
+    #[clap(long, env, default_value = "100")]
+    pub finalization_max_attempts: usize,
+
+    /// The number of seconds to wait between attempts to finalize a root.
+    #[clap(long, env, default_value = "30")]
+    pub finalization_sleep_time_seconds: u64,
 }
 
 /// A worker that commits identities to the blockchain.
@@ -128,6 +130,9 @@ pub struct TaskMonitor {
     batch_insert_timeout_secs:   u64,
     pending_identities_capacity: usize,
     mined_roots_capacity:        usize,
+
+    finalization_max_attempts:       usize,
+    finalization_sleep_time_seconds: u64,
 }
 
 impl TaskMonitor {
@@ -137,18 +142,24 @@ impl TaskMonitor {
         tree_state: TreeState,
         options: &Options,
     ) -> Self {
-        let batch_insert_timeout_secs = options.batch_timeout_seconds;
-        let pending_identities_capacity = options.pending_identities_capacity;
-        let mined_roots_capacity = options.mined_roots_capacity;
+        let Options {
+            batch_timeout_seconds,
+            pending_identities_capacity,
+            mined_roots_capacity,
+            finalization_max_attempts,
+            finalization_sleep_time_seconds,
+        } = *options;
 
         Self {
             instance: RwLock::new(None),
             database,
             identity_manager: contracts,
             tree_state,
-            batch_insert_timeout_secs,
+            batch_insert_timeout_secs: batch_timeout_seconds,
             pending_identities_capacity,
             mined_roots_capacity,
+            finalization_max_attempts,
+            finalization_sleep_time_seconds,
         }
     }
 
@@ -179,6 +190,8 @@ impl TaskMonitor {
             self.identity_manager.clone(),
             self.tree_state.get_mined_tree(),
             mined_roots_queue.clone(),
+            self.finalization_max_attempts,
+            Duration::from_secs(self.finalization_sleep_time_seconds),
         );
 
         let finalize_identities_handle = crate::utils::spawn_monitored_with_backoff(

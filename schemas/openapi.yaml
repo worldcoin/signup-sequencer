@@ -82,6 +82,13 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/VerifySemaphoreProofRequest"
+      parameters:
+        - in: query
+          name: maxRootAgeSeconds
+          schema:
+            type: integer
+          description: The max age in seconds of the provided root.
+                       If the root is older than this value this endpoint will return an error and a 400 response.
       responses:
         '200':
           description: Valid proof response

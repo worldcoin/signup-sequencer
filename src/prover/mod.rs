@@ -517,7 +517,7 @@ mod test {
         let input = get_default_proof_input();
 
         assert_eq!(
-            compute_input_hash(
+            compute_insertion_proof_input_hash(
                 input.start_index,
                 input.pre_root,
                 input.post_root,

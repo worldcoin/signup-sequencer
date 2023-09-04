@@ -1786,18 +1786,6 @@ criteria = "safe-to-deploy"
 version = "0.2.2"
 criteria = "safe-to-deploy"
 
-[[exemptions.test-case]]
-version = "3.0.0"
-criteria = "safe-to-run"
-
-[[exemptions.test-case-core]]
-version = "3.0.0"
-criteria = "safe-to-run"
-
-[[exemptions.test-case-macros]]
-version = "3.0.0"
-criteria = "safe-to-run"
-
 [[exemptions.textwrap]]
 version = "0.11.0"
 criteria = "safe-to-deploy"

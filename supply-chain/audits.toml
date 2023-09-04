@@ -6,6 +6,31 @@ who = "Dzejkop <jakubtrad@gmail.com>"
 criteria = "safe-to-deploy"
 version = "0.5.0@git:fc1186d1aba6a25120570fe04ad3362b08c8adfd"
 
+[[audits.test-case]]
+who = "Dzejkop <jakubtrad@gmail.com>"
+criteria = "safe-to-deploy"
+version = "3.1.0"
+
+[[audits.test-case-core]]
+who = "Dzejkop <jakubtrad@gmail.com>"
+criteria = "safe-to-deploy"
+version = "3.1.0"
+
+[[audits.test-case-core]]
+who = "Dzejkop <jakubtrad@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "3.1.0 -> 3.0.0"
+
+[[audits.test-case-macros]]
+who = "Dzejkop <jakubtrad@gmail.com>"
+criteria = "safe-to-deploy"
+version = "3.1.0"
+
+[[audits.test-case-macros]]
+who = "Dzejkop <jakubtrad@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "3.1.0 -> 3.0.0"
+
 [[audits.tracing-opentelemetry]]
 who = "Dzejkop <jakubtrad@gmail.com>"
 criteria = "safe-to-deploy"

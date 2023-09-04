@@ -442,7 +442,7 @@ impl App {
         query: &VerifySemaphoreProofQuery,
     ) -> Result<VerifySemaphoreProofResponse, ServerError> {
         let Some(root_state) = self.database.get_root_state(&request.root).await? else {
-            return Err(ServerError::InvalidRoot)
+            return Err(ServerError::InvalidRoot);
         };
 
         if let Some(max_root_age_seconds) = query.max_root_age_seconds {

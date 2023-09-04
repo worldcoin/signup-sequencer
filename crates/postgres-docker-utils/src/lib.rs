@@ -77,25 +77,57 @@ fn run_cmd(cmd_str: &str) -> anyhow::Result<()> {
 }
 
 fn parse_exposed_port(s: &str) -> anyhow::Result<u16> {
-    let parts: Vec<_> = s.split(':').collect();
+    let parts: Vec<_> = s
+        .split_whitespace()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
 
-    parts[1]
-        .trim()
-        .parse()
-        .with_context(|| format!("Parsing `{s}`"))
+    let ports: Vec<_> = parts.into_iter().filter_map(extract_port).collect();
+
+    let mut parsed_port = None;
+
+    for port in ports {
+        let port: u16 = port.parse().with_context(|| format!("Parsing `{port}`"))?;
+
+        if let Some(current) = parsed_port {
+            if current != port {
+                anyhow::bail!(
+                    "Multiple different ports exposed: `{}` and `{}`",
+                    current,
+                    port
+                );
+            }
+        } else {
+            parsed_port = Some(port);
+        }
+    }
+
+    parsed_port.context("No ports parsed")
+}
+
+fn extract_port(s: &str) -> Option<&str> {
+    s.split(':').last()
 }
 
 #[cfg(test)]
 mod tests {
+    use test_case::test_case;
+
     use super::*;
 
+    #[test_case("0.0.0.0:55837" => 55837 ; "base case")]
+    #[test_case("   0.0.0.0:55837    " => 55837 ; "ignore whitespace")]
+    #[test_case("[::]:12345" => 12345 ; "works with ipv6")]
+    #[test_case("0.0.0.0:12345 \n [::]:12345" => 12345 ; "works with multiple ips")]
+    fn test_parse_exposed_port(s: &str) -> u16 {
+        parse_exposed_port(s).unwrap()
+    }
+
     #[test]
-    fn test_parse_exposed_port() {
-        assert_eq!(parse_exposed_port("0.0.0.0:55837 ").unwrap(), 55837);
-        assert_eq!(parse_exposed_port("0.0.0.0:55837").unwrap(), 55837);
-        assert_eq!(
-            parse_exposed_port("  0.0.0.0  :   55837   ").unwrap(),
-            55837
-        );
+    fn different_ports_result_in_failure() {
+        const S: &str = "0.0.0.0:12345 [::]:54321";
+
+        let _err = parse_exposed_port(S).unwrap_err();
     }
 }

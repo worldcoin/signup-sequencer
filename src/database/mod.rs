@@ -189,9 +189,7 @@ impl Database {
         let root_leaf_index = Self::get_leaf_index_by_root(&mut tx, root).await?;
 
         let Some(root_leaf_index) = root_leaf_index else {
-            return Err(Error::MissingRoot {
-                root: *root
-            });
+            return Err(Error::MissingRoot { root: *root });
         };
 
         let root_leaf_index = root_leaf_index as i64;
@@ -239,9 +237,7 @@ impl Database {
         let root_leaf_index = Self::get_leaf_index_by_root(&mut tx, root).await?;
 
         let Some(root_leaf_index) = root_leaf_index else {
-            return Err(Error::MissingRoot {
-                root: *root
-            });
+            return Err(Error::MissingRoot { root: *root });
         };
 
         let root_leaf_index = root_leaf_index as i64;

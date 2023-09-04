@@ -192,7 +192,9 @@ where
     /// Returns _up to_ `maximum_update_count` updates that are to be applied to
     /// the tree.
     fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
-        let Some(next) = self.next.as_ref() else { return Vec::new(); };
+        let Some(next) = self.next.as_ref() else {
+            return Vec::new();
+        };
 
         let next = next.get_data();
         next.metadata
@@ -204,7 +206,9 @@ where
     }
 
     fn apply_updates_up_to(&mut self, root: Hash) -> usize {
-        let Some(next) = self.next.clone() else { return 0; };
+        let Some(next) = self.next.clone() else {
+            return 0;
+        };
 
         let num_updates;
         {

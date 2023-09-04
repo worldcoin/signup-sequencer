@@ -460,7 +460,6 @@ pub async fn delete_identities(
     debug!("Starting identity commit for {} identities.", updates.len());
 
     // Grab the initial conditions before the updates are applied to the tree.
-    let start_index = updates[0].update.leaf_index;
     let pre_root: U256 = batching_tree.get_root().into();
     let mut commitments: Vec<U256> = updates
         .iter()
@@ -551,16 +550,9 @@ pub async fn delete_identities(
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
     // We prepare the proof before reserving a slot in the pending identities
-    // TODO: here you can just prepare deletion proof and similarly, you can just
-    // TODO: prepare insertion proof in the insert identities function
-    let proof = IdentityManager::prepare_deletion_proof(
-        prover,
-        start_index,
-        pre_root,
-        &identity_commitments,
-        post_root,
-    )
-    .await?;
+    let proof =
+        IdentityManager::prepare_deletion_proof(prover, pre_root, &identity_commitments, post_root)
+            .await?;
 
     #[allow(clippy::cast_precision_loss)]
     PENDING_IDENTITIES_CHANNEL_CAPACITY.observe(pending_batch_submissions_queue.len().await as f64);
@@ -569,6 +561,12 @@ pub async fn delete_identities(
     // to ensure that we don't overwhelm the identity manager with too many
     // identities to mine.
     let permit = pending_batch_submissions_queue.reserve().await;
+
+    todo!(
+        "TODO, FIXME: do we need start_index for deletions? This value is set for deletions to \
+         compile for now"
+    );
+    let start_index = 0;
 
     info!(start_index, ?pre_root, ?post_root, "Submitting batch");
 

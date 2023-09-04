@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use anyhow::Result as AnyhowResult;
+use chrono::{Days, Utc};
 use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{register_histogram, Histogram};
@@ -24,6 +26,8 @@ use crate::utils::async_queue::AsyncQueue;
 /// The number of seconds either side of the timer tick to treat as enough to
 /// trigger a forced batch insertion.
 const DEBOUNCE_THRESHOLD_SECS: u64 = 1;
+
+const RECOVERY_WAIT_TIME: Days = Days::new(7);
 
 static PENDING_IDENTITIES_CHANNEL_CAPACITY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
@@ -607,6 +611,31 @@ pub async fn delete_identities(
     batching_tree.apply_updates_up_to(post_root.into());
 
     info!(start_index, ?pre_root, ?post_root, "Tree updated");
+
+    // TODO: check if any deleted commitments correspond with entries in the
+    // recoveries table and insert the new commitment into the unprocessed
+    // identities table with the proper eligibility timestamp
+
+    let recoveries = database
+        .get_recoveries()
+        .await?
+        .iter()
+        .map(|f| (f.existing_commitment, f.new_commitment))
+        .collect::<HashMap<Hash, Hash>>();
+
+    // TODO: we should keep u256s consistent either from ruint or ethers instead of
+    // using both
+    let eligibility_timestamp = Utc::now()
+        .checked_add_days(RECOVERY_WAIT_TIME)
+        .expect("TODO: propagate an error ");
+
+    for prev_commitment in commitments {
+        if let Some(new_commitment) = recoveries.get(&prev_commitment.into()) {
+            database
+                .insert_new_identity(*new_commitment, eligibility_timestamp)
+                .await?;
+        }
+    }
 
     TaskMonitor::log_batch_size(updates.len());
 

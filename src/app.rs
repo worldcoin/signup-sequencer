@@ -440,7 +440,7 @@ impl App {
         request: &VerifySemaphoreProofRequest,
     ) -> Result<VerifySemaphoreProofResponse, ServerError> {
         let Some(root_state) = self.database.get_root_state(&request.root).await? else {
-            return Err(ServerError::InvalidRoot)
+            return Err(ServerError::InvalidRoot);
         };
 
         let checked = verify_proof(

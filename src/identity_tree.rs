@@ -205,6 +205,7 @@ where
             None => return vec![],
         };
 
+        // Gets the next contiguous of insertion or deletion updates from the diff
         next.metadata
             .diff
             .iter()

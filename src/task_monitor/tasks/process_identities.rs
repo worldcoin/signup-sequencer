@@ -17,6 +17,7 @@ use crate::identity_tree::{
 };
 use crate::prover::identity::Identity;
 use crate::prover::map::ReadOnlyInsertionProver;
+use crate::prover::{Prover, ReadOnlyProver};
 use crate::task_monitor::{PendingBatchSubmission, TaskMonitor};
 use crate::utils::async_queue::AsyncQueue;
 
@@ -122,9 +123,11 @@ async fn process_identities(
                     continue;
                 }
 
-
-
-                let prover = identity_manager.get_suitable_insertion_prover(updates.len()).await?;
+                let prover = if updates.first().expect("TODO: propagate error, updates should be > 1").update.element != Hash::ZERO {
+                    identity_manager.get_suitable_insertion_prover(updates.len()).await?
+                }else{
+                    identity_manager.get_suitable_deletion_prover(updates.len()).await?
+                };
 
                 info!(
                     "Sending timed-out batch with {}/{} updates.",
@@ -184,7 +187,7 @@ async fn process_identities(
                     continue;
                 }
 
-                let prover = if updates.first().expect("TODO: propagate error but updates should be > 1").update.element == Hash::ZERO {
+                let prover = if updates.first().expect("TODO: propagate error, updates should be > 1").update.element != Hash::ZERO {
                     identity_manager.get_suitable_insertion_prover(updates.len()).await?
                 }else{
                     identity_manager.get_suitable_deletion_prover(updates.len()).await?
@@ -219,7 +222,7 @@ async fn commit_identities(
     batching_tree: &TreeVersion<Intermediate>,
     pending_batch_submissions_queue: &AsyncQueue<PendingBatchSubmission>,
     updates: &[AppliedTreeUpdate],
-    insertion_prover: ReadOnlyInsertionProver<'_>, // TODO: update this type to be read only prover
+    prover: ReadOnlyProver<'_, Prover>,
 ) -> AnyhowResult<()> {
     TaskMonitor::log_identities_queues(database).await?;
 
@@ -284,8 +287,7 @@ async fn commit_identities(
         "Number of identities does not match the number of merkle proofs."
     );
 
-    // TODO: update this to be insertion prover or deletion prover batch size
-    let batch_size = insertion_prover.batch_size();
+    let batch_size = prover.batch_size();
 
     // The verifier and prover can only work with a given batch size, so we need to
     // ensure that our batches match that size. We do this by padding with
@@ -340,18 +342,39 @@ async fn commit_identities(
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
     // We prepare the proof before reserving a slot in the pending identities
-    let proof = IdentityManager::prepare_insertion_proof(
-        insertion_prover,
-        start_index,
-        pre_root,
-        post_root,
-        &identity_commitments,
-    )
-    .await
-    .map_err(|e| {
-        error!(?e, "Failed to prepare proof.");
-        e
-    })?;
+    let proof = if identity_commitments
+        .first()
+        .expect("Updates is non empty.")
+        .commitment
+        != U256::zero()
+    {
+        IdentityManager::prepare_insertion_proof(
+            prover,
+            start_index,
+            pre_root,
+            post_root,
+            &identity_commitments,
+        )
+        .await
+        .map_err(|e| {
+            error!(?e, "Failed to prepare proof.");
+            e
+        })?
+    } else {
+        // TODO: need to update inputs
+        IdentityManager::prepare_deletion_proof(
+            prover,
+            start_index,
+            pre_root,
+            post_root,
+            &identity_commitments,
+        )
+        .await
+        .map_err(|e| {
+            error!(?e, "Failed to prepare proof.");
+            e
+        })?
+    };
 
     #[allow(clippy::cast_precision_loss)]
     PENDING_IDENTITIES_CHANNEL_CAPACITY.observe(pending_batch_submissions_queue.len().await as f64);
@@ -365,6 +388,8 @@ async fn commit_identities(
 
     // With all the data prepared we can submit the identities to the on-chain
     // identity manager and wait for that transaction to be mined.
+
+    // TODO: update for deletions
     let transaction_id = identity_manager
         .register_identities(
             start_index,
@@ -396,8 +421,6 @@ async fn commit_identities(
             start_index,
         })
         .await;
-
-    // TODO: if it was a deletion/recovery, update all of the recovery data here
 
     // Update the batching tree only after submitting the identities to the chain
     batching_tree.apply_updates_up_to(post_root.into());

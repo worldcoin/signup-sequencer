@@ -96,9 +96,6 @@ async fn delete_identities(
         if deletions.len() >= min_deletion_batch_size
             || Instant::now() - last_deletion > deletion_time_interval
         {
-            // TODO: do we need to lock something here to avoid anything else inserting into
-            // the latest tree
-
             // Dedup deletion entries
             let deletions = deletions
                 .into_iter()
@@ -140,9 +137,6 @@ async fn delete_identities(
 
             // Remove the previous commitments from the deletions table
             database.remove_deletions(previous_commitments).await?;
-
-            // TODO: unlock mutex
-
             wake_up_notify.notify_one();
 
             // Update the last deletion time

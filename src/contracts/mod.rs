@@ -193,8 +193,8 @@ impl IdentityManager {
         prover: ReadOnlyInsertionProver<'_>,
         start_index: usize,
         pre_root: U256,
-        post_root: U256,
         identity_commitments: &[Identity],
+        post_root: U256,
     ) -> anyhow::Result<Proof> {
         let batch_size = identity_commitments.len();
 
@@ -223,8 +223,8 @@ impl IdentityManager {
         prover: ReadOnlyProver<'_, Prover>,
         start_index: usize,
         pre_root: U256,
-        post_root: U256,
         identity_commitments: &[Identity],
+        post_root: U256,
     ) -> anyhow::Result<Proof> {
         let batch_size = identity_commitments.len();
         let actual_start_index: u32 = start_index.try_into()?;
@@ -276,6 +276,31 @@ impl IdentityManager {
                 identities,
                 post_root,
             )
+            .tx;
+
+        self.ethereum
+            .send_transaction(register_identities_transaction, true)
+            .await
+            .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
+    }
+
+    // TODO: docs
+    #[instrument(level = "debug")]
+    pub async fn delete_identities(
+        &self,
+        deletion_proof: Proof,
+        pre_root: U256,
+        deletion_indices: Vec<u32>,
+        post_root: U256,
+    ) -> anyhow::Result<TransactionId> {
+        let proof_points_array: [U256; 8] = deletion_proof.into();
+
+        // We want to send the transaction through our ethereum provider rather than
+        // directly now. To that end, we create it, and then send it later, waiting for
+        // it to complete.
+        let register_identities_transaction = self
+            .abi
+            .delete_identities(proof_points_array, pre_root, deletion_indices, post_root)
             .tx;
 
         self.ethereum

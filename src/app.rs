@@ -371,6 +371,13 @@ impl App {
             return Err(ServerError::IdentityQueuedForDeletion);
         }
 
+        // Check if there are any deletions, if not, set the latest deletion timestamp
+        // to now to ensure that the new deletion is processed by the next deletion
+        // interval
+        if self.database.get_deletions().await?.is_empty() {
+            self.database.update_latest_deletion(Utc::now()).await?;
+        }
+
         // If the id has not been deleted, insert into the deletions table
         self.database
             .insert_new_deletion(leaf_index, &commitment)

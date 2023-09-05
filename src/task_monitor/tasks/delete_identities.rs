@@ -70,7 +70,7 @@ async fn delete_identities(
             continue;
         }
 
-        let last_deletion_timestamp = database.get_latest_deletion_root().await?.timestamp;
+        let last_deletion_timestamp = database.get_latest_deletion().await?.timestamp;
         // If the minimum deletions batch size is reached or the deletion time interval
         // has elapsed, run a batch of deletions
         if deletions.len() >= min_deletion_batch_size

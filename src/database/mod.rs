@@ -15,7 +15,7 @@ use sqlx::{Executor, Pool, Postgres, Row};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
-use self::types::{DeletionEntry, LatestDeletionRootEntry, RecoveryEntry};
+use self::types::{DeletionEntry, LatestDeletionEntry, RecoveryEntry};
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
 pub mod types;
@@ -524,16 +524,39 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_latest_deletion_root(&self) -> Result<LatestDeletionRootEntry, Error> {
-        todo!()
+    pub async fn get_latest_deletion(&self) -> Result<LatestDeletionEntry, Error> {
+        let query =
+            sqlx::query("SELECT deletion_timestamp FROM latest_deletion_root WHERE Lock = 'X';");
+
+        let row = self.pool.fetch_optional(query).await?;
+
+        if let Some(row) = row {
+            Ok(LatestDeletionEntry {
+                timestamp: row.get(0),
+            })
+        } else {
+            Ok(LatestDeletionEntry {
+                timestamp: DateTime::from(Utc::now()),
+            })
+        }
     }
 
-    pub async fn update_latest_deletion_root(
+    pub async fn update_latest_deletion(
         &self,
-        root: &Hash,
         deletion_timestamp: DateTime<Utc>,
-    ) -> Result<LatestDeletionRootEntry, Error> {
-        todo!()
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO latest_deletion_root (Lock, deletion_timestamp)
+            VALUES ('X', $1)
+            ON CONFLICT (Lock) 
+            DO UPDATE SET deletion_timestamp = EXCLUDED.deletion_timestamp;
+            "#,
+        )
+        .bind(&deletion_timestamp);
+
+        self.pool.execute(query).await?;
+        Ok(())
     }
 
     // TODO: consider using a larger value than i64 for leaf index, ruint should
@@ -1562,6 +1585,33 @@ mod test {
         let deletions = db.get_deletions().await?;
 
         assert_eq!(deletions.len(), 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_latest_deletion_root() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        // Update with initial timestamp
+        let initial_timestamp = chrono::Utc::now();
+        db.update_latest_deletion(initial_timestamp)
+            .await
+            .context("Inserting initial root")?;
+
+        // Assert values
+        let initial_entry = db.get_latest_deletion().await?;
+        assert_eq!(initial_entry.timestamp, initial_timestamp);
+
+        // Update with a new timestamp
+        let new_timestamp = chrono::Utc::now();
+        db.update_latest_deletion(new_timestamp)
+            .await
+            .context("Updating with new root")?;
+
+        // Assert values
+        let new_entry = db.get_latest_deletion().await?;
+        assert_eq!(new_entry.timestamp, new_timestamp);
 
         Ok(())
     }

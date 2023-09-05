@@ -183,10 +183,8 @@ async fn mine_deletions(
     // agree with the database and chain.
     database.mark_root_as_processed(&post_root.into()).await?;
 
-    // Update the latest deletion root
-    database
-        .update_latest_deletion_root(&post_root.into(), Utc::now())
-        .await?;
+    // Update the latest deletion
+    database.update_latest_deletion(Utc::now()).await?;
 
     info!(?pre_root, ?post_root, "Deletion batch mined");
 

@@ -139,7 +139,7 @@ pub struct Options {
 
     /// TODO:
     #[clap(long, env, default_value = "3600")]
-    pub deletion_time_interval: u64,
+    pub deletion_time_interval: i64,
 
     /// TODO:
     #[clap(long, env, default_value = "100")]
@@ -185,7 +185,7 @@ pub struct TaskMonitor {
     pending_identities_capacity: usize,
     mined_roots_capacity:        usize,
     // TODO: docs
-    deletion_time_interval:      u64,
+    deletion_time_interval:      i64,
     // TODO: docs
     min_batch_deletion_size:     usize,
 }

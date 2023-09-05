@@ -521,6 +521,11 @@ pub async fn delete_identities(
         }
     }
 
+    let deletion_indices = updates
+        .iter()
+        .map(|f| f.update.leaf_index as u32)
+        .collect::<Vec<u32>>();
+
     assert_eq!(
         commitments.len(),
         batch_size,
@@ -554,9 +559,14 @@ pub async fn delete_identities(
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
     // We prepare the proof before reserving a slot in the pending identities
-    let proof =
-        IdentityManager::prepare_deletion_proof(prover, pre_root, &identity_commitments, post_root)
-            .await?;
+    let proof = IdentityManager::prepare_deletion_proof(
+        prover,
+        pre_root,
+        deletion_indices,
+        identity_commitments,
+        post_root,
+    )
+    .await?;
 
     #[allow(clippy::cast_precision_loss)]
     PENDING_IDENTITIES_CHANNEL_CAPACITY.observe(pending_batch_submissions_queue.len().await as f64);
@@ -576,10 +586,6 @@ pub async fn delete_identities(
 
     // With all the data prepared we can submit the identities to the on-chain
     // identity manager and wait for that transaction to be mined.
-    let deletion_indices = updates
-        .iter()
-        .map(|f| f.update.leaf_index as u32)
-        .collect::<Vec<u32>>();
 
     let transaction_id = identity_manager
         .delete_identities(proof, pre_root, deletion_indices, post_root)

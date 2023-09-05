@@ -250,7 +250,8 @@ impl Prover {
         &self,
         pre_root: U256,
         post_root: U256,
-        identities: &[Identity],
+        deletion_indices: Vec<u32>,
+        identities: Vec<Identity>,
     ) -> anyhow::Result<Proof> {
         if identities.len() != self.batch_size {
             return Err(anyhow::Error::msg(
@@ -260,20 +261,19 @@ impl Prover {
 
         let total_proving_time_timer = TOTAL_PROVING_TIME.start_timer();
 
-        let identity_commitments: Vec<U256> = identities.iter().map(|id| id.commitment).collect();
+        let (identity_commitments, merkle_proofs): (Vec<U256>, Vec<Vec<U256>>) = identities
+            .into_iter()
+            .map(|id| (id.commitment, id.merkle_proof))
+            .unzip();
 
         let input_hash =
             compute_deletion_proof_input_hash(pre_root, post_root, &identity_commitments);
-
-        let merkle_proofs = identities
-            .iter()
-            .map(|id| id.merkle_proof.clone())
-            .collect();
 
         let proof_input = DeletionProofInput {
             input_hash,
             pre_root,
             post_root,
+            deletion_indices,
             identity_commitments,
             merkle_proofs,
         };
@@ -411,6 +411,7 @@ struct DeletionProofInput {
     input_hash:           U256,
     pre_root:             U256,
     post_root:            U256,
+    deletion_indices:     Vec<u32>,
     identity_commitments: Vec<U256>,
     merkle_proofs:        Vec<Vec<U256>>,
 }

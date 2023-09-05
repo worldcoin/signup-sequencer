@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use anyhow::Result as AnyhowResult;
+use anyhow::{Context, Result as AnyhowResult};
 use chrono::{Days, Utc};
 use ethers::types::U256;
 use once_cell::sync::Lazy;
@@ -209,7 +209,7 @@ async fn commit_identities(
     // If the update is an insertion
     if updates
         .first()
-        .expect("TODO: propagate error, updates should be > 1")
+        .context("Updates should be > 1")?
         .update
         .element
         != Hash::ZERO

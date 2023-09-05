@@ -586,19 +586,25 @@ impl Database {
 
     /// Remove a list of entries from the deletions table
     pub async fn remove_deletions(&self, commitments: Vec<Hash>) -> Result<(), Error> {
-        let mut query_builder = sqlx::QueryBuilder::new(
-            r#"
-                  DELETE FROM deletions where commitment = $1
-            "#,
+        let placeholders: String = commitments
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("${}", i + 1))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let query = format!(
+            "DELETE FROM deletions WHERE commitment IN ({})",
+            placeholders
         );
 
-        query_builder.push_values(commitments, |mut b, commitment| {
-            b.push_bind(commitment);
-        });
+        let mut query = sqlx::query(&query);
 
-        let query = query_builder.build();
+        for commitment in commitments.iter() {
+            query = query.bind(commitment);
+        }
 
-        self.pool.execute(query).await?;
+        query.execute(&self.pool).await?;
 
         Ok(())
     }
@@ -1513,6 +1519,37 @@ mod test {
             .context("Inserting identity")?;
 
         assert!(db.identity_exists(identities[1]).await?);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_remove_deletions() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(4);
+
+        // Insert new identities
+        db.insert_new_deletion(0, &identities[0])
+            .await
+            .context("Inserting new identity")?;
+
+        db.insert_new_deletion(1, &identities[1])
+            .await
+            .context("Inserting new identity")?;
+
+        db.insert_new_deletion(2, &identities[2])
+            .await
+            .context("Inserting new identity")?;
+        db.insert_new_deletion(3, &identities[3])
+            .await
+            .context("Inserting new identity")?;
+
+        // Remove identities 0 to 2
+        db.remove_deletions(identities[0..=2].to_vec()).await?;
+        let deletions = db.get_deletions().await?;
+
+        assert_eq!(deletions.len(), 1);
 
         Ok(())
     }

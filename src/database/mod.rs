@@ -632,36 +632,6 @@ impl Database {
             .collect::<Vec<_>>())
     }
 
-    pub async fn get_unprocessed_commitments(
-        &self,
-        status: Status,
-    ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
-        let query = sqlx::query(
-            r#"
-                SELECT * FROM unprocessed_identities
-                WHERE status = $1
-                LIMIT $2
-            "#,
-        )
-        .bind(<&str>::from(status))
-        .bind(MAX_UNPROCESSED_FETCH_COUNT);
-
-        let result = self.pool.fetch_all(query).await?;
-
-        Ok(result
-            .into_iter()
-            .map(|row| types::UnprocessedCommitment {
-                commitment: row.get::<Hash, _>(0),
-                status,
-                created_at: row.get::<_, _>(2),
-                processed_at: row.get::<_, _>(3),
-                error_message: row.get::<_, _>(4),
-
-                eligibility_timestamp: row.get::<_, _>(5),
-            })
-            .collect::<Vec<_>>())
-    }
-
     pub async fn get_unprocessed_commit_status(
         &self,
         commitment: &Hash,
@@ -879,7 +849,10 @@ mod test {
             .expect("expected commitment status");
         assert_eq!(commit.0, Status::New);
 
-        let identity_count = db.get_unprocessed_commitments(Status::New).await?.len();
+        let identity_count = db
+            .get_eligible_unprocessed_commitments(Status::New)
+            .await?
+            .len();
 
         assert_eq!(identity_count, 1);
 
@@ -1058,7 +1031,7 @@ mod test {
         db.insert_new_identity(commitment_1, eligibility_timestamp_1)
             .await?;
 
-        let unprocessed_commitments = db.get_unprocessed_commitments(Status::New).await?;
+        let unprocessed_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
 
         assert_eq!(unprocessed_commitments.len(), 2);
         assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
@@ -1104,7 +1077,7 @@ mod test {
         db.insert_new_identity(commit_hash, eligibility_timestamp)
             .await?;
 
-        let commitments = db.get_unprocessed_commitments(Status::New).await?;
+        let commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
         assert_eq!(commitments.len(), 1);
 
         let eligible_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
@@ -1118,7 +1091,7 @@ mod test {
         db.update_eligibility_timestamp(commit_hash, eligibility_timestamp)
             .await?;
 
-        let commitments = db.get_unprocessed_commitments(Status::New).await?;
+        let commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
         assert_eq!(commitments.len(), 1);
 
         let eligible_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;

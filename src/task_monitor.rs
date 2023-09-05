@@ -257,7 +257,6 @@ impl TaskMonitor {
         // // Delete identities task
         let delete_identites = DeleteIdentities::new(
             self.database.clone(),
-            self.identity_manager.clone(),
             self.tree_state.get_latest_tree(),
             self.deletion_time_interval,
             self.min_batch_deletion_size,

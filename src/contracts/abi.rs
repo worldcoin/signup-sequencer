@@ -11,6 +11,7 @@ abigen!(
         function latestRoot() public view virtual returns (uint256 root)
         function owner() public view virtual returns (address)
         function queryRoot(uint256 root) public view virtual returns (RootInfo memory)
+        function getRootHistoryExpiry() external view returns (uint256)
     ]"#,
 );
 

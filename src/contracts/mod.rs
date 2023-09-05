@@ -1,5 +1,5 @@
 //! Functionality for interacting with smart contracts deployed on chain.
-mod abi;
+pub mod abi;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -186,6 +186,10 @@ impl IdentityManager {
                 "No available prover for batch size: {num_identities}"
             )),
         }
+    }
+
+    pub async fn root_history_expiry(&self) -> anyhow::Result<U256> {
+        Ok(self.abi.get_root_history_expiry().call().await?)
     }
 
     #[instrument(level = "debug", skip(prover, identity_commitments))]

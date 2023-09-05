@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::Result as AnyhowResult;
-use chrono::{Days, Utc};
+use anyhow::{Context, Result as AnyhowResult};
+use chrono::{DateTime, Days, Utc};
 use ethers::types::U256;
 use tracing::{info, instrument};
 
+use crate::contracts::abi::WorldId;
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
 use crate::identity_tree::{Hash, Intermediate, TreeVersion, TreeWithNextVersion};
@@ -200,11 +201,22 @@ async fn mine_deletions(
         .map(|f| (f.existing_commitment, f.new_commitment))
         .collect::<HashMap<Hash, Hash>>();
 
-    // TODO: get recovery wait time on chain
-    let eligibility_timestamp = Utc::now()
-        .checked_add_days(Days::new(7))
-        .expect("TODO: propagate an error ");
+    // Fetch the root history expiry time on chain
+    let root_history_expiry = identity_manager.root_history_expiry().await?;
 
+    // Use the root history expiry to calcuate the eligibility timestamp for the new
+    // insertion
+    let eligibility_timestamp = DateTime::from_utc(
+        chrono::NaiveDateTime::from_timestamp_opt(
+            Utc::now().timestamp() + root_history_expiry.as_u64() as i64,
+            0,
+        )
+        .context("Could not convert eligibility timestamp to NaiveDateTime")?,
+        Utc,
+    );
+
+    // For each deletion, if there is a corresponding recovery, insert a new
+    // identity with the specified eligibility timestamp
     for prev_commitment in commitments {
         if let Some(new_commitment) = recoveries.get(&prev_commitment.into()) {
             database

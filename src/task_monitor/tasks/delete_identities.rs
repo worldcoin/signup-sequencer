@@ -50,7 +50,6 @@ impl DeleteIdentities {
     pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
         delete_identities(
             &self.database,
-            &self.identity_manager,
             &self.latest_tree,
             self.deletion_time_interval,
             self.min_deletion_batch_size,
@@ -65,16 +64,11 @@ impl DeleteIdentities {
 // be compliant
 async fn delete_identities(
     database: &Database,
-    identity_manager: &IdentityManager,
     latest_tree: &TreeVersion<Latest>,
     deletion_time_interval: u64,
     min_deletion_batch_size: usize,
     wake_up_notify: Arc<Notify>,
 ) -> AnyhowResult<()> {
-    // TODO: do we need to do this for this step?
-    info!("Awaiting for a clean slate");
-    identity_manager.await_clean_slate().await?;
-
     info!("Starting deletion processor.");
 
     let deletion_time_interval = Duration::from_secs(deletion_time_interval);

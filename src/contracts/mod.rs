@@ -222,7 +222,7 @@ impl IdentityManager {
     pub async fn prepare_deletion_proof(
         prover: ReadOnlyProver<'_, Prover>,
         pre_root: U256,
-        deletion_indices: Vec<u32>,
+        deletion_indices: &[u32],
         identity_commitments: Vec<Identity>,
         post_root: U256,
     ) -> anyhow::Result<Proof> {

@@ -250,7 +250,7 @@ impl Prover {
         &self,
         pre_root: U256,
         post_root: U256,
-        deletion_indices: Vec<u32>,
+        deletion_indices: &[u32],
         identities: Vec<Identity>,
     ) -> anyhow::Result<Proof> {
         if identities.len() != self.batch_size {
@@ -273,7 +273,7 @@ impl Prover {
             input_hash,
             pre_root,
             post_root,
-            deletion_indices,
+            deletion_indices: deletion_indices.to_vec(),
             identity_commitments,
             merkle_proofs,
         };

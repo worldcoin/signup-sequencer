@@ -20,14 +20,14 @@ use crate::identity_tree::{
 use crate::prover::identity::Identity;
 use crate::prover::map::ReadOnlyInsertionProver;
 use crate::prover::{Proof, Prover, ReadOnlyProver};
-use crate::task_monitor::{PendingBatchSubmission, TaskMonitor};
+use crate::task_monitor::{
+    PendingBatchDeletion, PendingBatchInsertion, PendingBatchSubmission, TaskMonitor,
+};
 use crate::utils::async_queue::AsyncQueue;
 
 /// The number of seconds either side of the timer tick to treat as enough to
 /// trigger a forced batch insertion.
 const DEBOUNCE_THRESHOLD_SECS: u64 = 1;
-
-const RECOVERY_WAIT_TIME: Days = Days::new(7);
 
 static PENDING_IDENTITIES_CHANNEL_CAPACITY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
@@ -400,7 +400,12 @@ pub async fn insert_identities(
     // identities to mine.
     let permit = pending_batch_submissions_queue.reserve().await;
 
-    info!(start_index, ?pre_root, ?post_root, "Submitting batch");
+    info!(
+        start_index,
+        ?pre_root,
+        ?post_root,
+        "Submitting insertion batch"
+    );
 
     // With all the data prepared we can submit the identities to the on-chain
     // identity manager and wait for that transaction to be mined.
@@ -423,17 +428,14 @@ pub async fn insert_identities(
         ?pre_root,
         ?post_root,
         ?transaction_id,
-        "Batch submitted"
+        "Insertion batch submitted"
     );
 
     // The transaction will be awaited on asynchronously
     permit
-        .send(PendingBatchSubmission {
-            transaction_id,
-            pre_root,
-            post_root,
-            start_index,
-        })
+        .send(PendingBatchSubmission::Insertion(
+            PendingBatchInsertion::new(transaction_id, pre_root, post_root, start_index),
+        ))
         .await;
 
     // Update the batching tree only after submitting the identities to the chain
@@ -562,7 +564,7 @@ pub async fn delete_identities(
     let proof = IdentityManager::prepare_deletion_proof(
         prover,
         pre_root,
-        deletion_indices,
+        &deletion_indices,
         identity_commitments,
         post_root,
     )
@@ -576,17 +578,10 @@ pub async fn delete_identities(
     // identities to mine.
     let permit = pending_batch_submissions_queue.reserve().await;
 
-    todo!(
-        "TODO, FIXME: do we need start_index for deletions? This value is set for deletions to \
-         compile for now"
-    );
-    let start_index = 0;
-
-    info!(start_index, ?pre_root, ?post_root, "Submitting batch");
+    info!(?pre_root, ?post_root, "Submitting deletion batch");
 
     // With all the data prepared we can submit the identities to the on-chain
     // identity manager and wait for that transaction to be mined.
-
     let transaction_id = identity_manager
         .delete_identities(proof, pre_root, deletion_indices, post_root)
         .await
@@ -596,52 +591,26 @@ pub async fn delete_identities(
         })?;
 
     info!(
-        start_index,
         ?pre_root,
         ?post_root,
         ?transaction_id,
-        "Batch submitted"
+        "Deletion batch submitted"
     );
 
     // The transaction will be awaited on asynchronously
     permit
-        .send(PendingBatchSubmission {
+        .send(PendingBatchSubmission::Deletion(PendingBatchDeletion::new(
             transaction_id,
             pre_root,
+            commitments,
             post_root,
-            start_index,
-        })
+        )))
         .await;
 
     // Update the batching tree only after submitting the identities to the chain
     batching_tree.apply_updates_up_to(post_root.into());
 
-    info!(start_index, ?pre_root, ?post_root, "Tree updated");
-
-    // TODO: check if any deleted commitments correspond with entries in the
-    // recoveries table and insert the new commitment into the unprocessed
-    // identities table with the proper eligibility timestamp
-
-    let recoveries = database
-        .get_recoveries()
-        .await?
-        .iter()
-        .map(|f| (f.existing_commitment, f.new_commitment))
-        .collect::<HashMap<Hash, Hash>>();
-
-    // TODO: we should keep u256s consistent either from ruint or ethers instead of
-    // using both
-    let eligibility_timestamp = Utc::now()
-        .checked_add_days(RECOVERY_WAIT_TIME)
-        .expect("TODO: propagate an error ");
-
-    for prev_commitment in commitments {
-        if let Some(new_commitment) = recoveries.get(&prev_commitment.into()) {
-            database
-                .insert_new_identity(*new_commitment, eligibility_timestamp)
-                .await?;
-        }
-    }
+    info!(?pre_root, ?post_root, "Tree updated");
 
     TaskMonitor::log_batch_size(updates.len());
 

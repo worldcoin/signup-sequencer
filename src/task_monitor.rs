@@ -18,7 +18,7 @@ use self::tasks::process_identities::ProcessIdentities;
 use crate::contracts::SharedIdentityManager;
 use crate::database::Database;
 use crate::ethereum::write::TransactionId;
-use crate::identity_tree::TreeState;
+use crate::identity_tree::{Hash, TreeState};
 use crate::utils::async_queue::AsyncQueue;
 
 pub mod tasks;
@@ -35,11 +35,57 @@ struct RunningInstance {
 }
 
 #[derive(Debug, Clone)]
-pub struct PendingBatchSubmission {
+pub struct PendingBatchInsertion {
     transaction_id: TransactionId,
     pre_root:       U256,
     post_root:      U256,
     start_index:    usize,
+}
+
+impl PendingBatchInsertion {
+    pub fn new(
+        transaction_id: TransactionId,
+        pre_root: U256,
+        post_root: U256,
+        start_index: usize,
+    ) -> Self {
+        Self {
+            transaction_id,
+            pre_root,
+            post_root,
+            start_index,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingBatchDeletion {
+    transaction_id: TransactionId,
+    pre_root:       U256,
+    commitments:    Vec<U256>,
+    post_root:      U256,
+}
+
+impl PendingBatchDeletion {
+    pub fn new(
+        transaction_id: TransactionId,
+        pre_root: U256,
+        commitments: Vec<U256>,
+        post_root: U256,
+    ) -> Self {
+        Self {
+            transaction_id,
+            pre_root,
+            commitments,
+            post_root,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum PendingBatchSubmission {
+    Insertion(PendingBatchInsertion),
+    Deletion(PendingBatchDeletion),
 }
 
 static PENDING_IDENTITIES: Lazy<Gauge> = Lazy::new(|| {

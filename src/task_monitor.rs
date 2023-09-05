@@ -300,7 +300,7 @@ impl TaskMonitor {
 
         handles.push(insert_identities_handle);
 
-        // // Delete identities task
+        // Delete identities task
         let delete_identites = DeleteIdentities::new(
             self.database.clone(),
             self.tree_state.get_latest_tree(),

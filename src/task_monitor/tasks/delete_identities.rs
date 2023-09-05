@@ -61,10 +61,8 @@ async fn delete_identities(
     info!("Starting deletion processor.");
 
     let deletion_time_interval = Duration::from_secs(deletion_time_interval);
-
-    // TODO: we should track this with persistance to eunsure we are deleting at
-    // least once every n days if there are deletions in the queue
-    let mut last_deletion = Instant::now();
+    todo!("TODO: calculate the time until next deletion");
+    let time_until_next_deletion = database.get_latest_deletion_root().await?.timestamp;
 
     loop {
         let deletions = database.get_deletions().await?;
@@ -77,7 +75,7 @@ async fn delete_identities(
         // If the minimum deletions batch size is reached or the deletion time interval
         // has elapsed, run a batch of deletions
         if deletions.len() >= min_deletion_batch_size
-            || Instant::now() - last_deletion > deletion_time_interval
+            || Instant::now() - last_deletion_timestamp > deletion_time_interval
         {
             // Dedup deletion entries
             let deletions = deletions

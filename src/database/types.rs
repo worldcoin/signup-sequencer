@@ -16,6 +16,11 @@ pub struct RecoveryEntry {
     pub new_commitment:      Hash,
 }
 
+pub struct LatestDeletionRootEntry {
+    pub deletion_root: Hash,
+    pub timestamp:     DateTime<Utc>,
+}
+
 #[derive(Hash, PartialEq, Eq)]
 pub struct DeletionEntry {
     pub leaf_index: usize,

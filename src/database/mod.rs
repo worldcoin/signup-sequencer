@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 
 use anyhow::{anyhow, Context, Error as ErrReport};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use clap::Parser;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
@@ -15,7 +15,7 @@ use sqlx::{Executor, Pool, Postgres, Row};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
-use self::types::{DeletionEntry, RecoveryEntry};
+use self::types::{DeletionEntry, LatestDeletionRootEntry, RecoveryEntry};
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
 pub mod types;
@@ -522,6 +522,18 @@ impl Database {
         .bind(new_commitment);
         self.pool.execute(query).await?;
         Ok(())
+    }
+
+    pub async fn get_latest_deletion_root(&self) -> Result<LatestDeletionRootEntry, Error> {
+        todo!()
+    }
+
+    pub async fn update_latest_deletion_root(
+        &self,
+        root: &Hash,
+        root_expiry: DateTime<Utc>,
+    ) -> Result<LatestDeletionRootEntry, Error> {
+        todo!()
     }
 
     // TODO: consider using a larger value than i64 for leaf index, ruint should

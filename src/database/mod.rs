@@ -531,7 +531,7 @@ impl Database {
     pub async fn update_latest_deletion_root(
         &self,
         root: &Hash,
-        root_expiry: DateTime<Utc>,
+        deletion_timestamp: DateTime<Utc>,
     ) -> Result<LatestDeletionRootEntry, Error> {
         todo!()
     }

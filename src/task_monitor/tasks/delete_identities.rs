@@ -2,26 +2,17 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
-use ethers::types::U256;
-use tokio::select;
 use tokio::sync::Notify;
 use tokio::time::{Duration, Instant};
-use tracing::{info, instrument};
+use tracing::info;
 
-use crate::contracts::{IdentityManager, SharedIdentityManager};
+use crate::contracts::SharedIdentityManager;
 use crate::database::types::DeletionEntry;
 use crate::database::Database;
-use crate::identity_tree::{
-    Canonical, Hash, Intermediate, Latest, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
-};
-use crate::task_monitor::PendingBatchSubmission;
-use crate::utils::async_queue::{AsyncPopGuard, AsyncQueue};
-
-// It can take up to 40 minutes to bridge the root
+use crate::identity_tree::{Hash, Latest, TreeVersion};
 
 pub struct DeleteIdentities {
     database:                Arc<Database>,
-    identity_manager:        SharedIdentityManager,
     latest_tree:             TreeVersion<Latest>,
     deletion_time_interval:  u64,
     min_deletion_batch_size: usize,
@@ -31,7 +22,6 @@ pub struct DeleteIdentities {
 impl DeleteIdentities {
     pub fn new(
         database: Arc<Database>,
-        identity_manager: SharedIdentityManager,
         latest_tree: TreeVersion<Latest>,
         deletion_time_interval: u64,
         min_deletion_batch_size: usize,
@@ -39,7 +29,6 @@ impl DeleteIdentities {
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
-            identity_manager,
             latest_tree,
             deletion_time_interval,
             min_deletion_batch_size,
@@ -95,16 +84,6 @@ async fn delete_identities(
                 .into_iter()
                 .map(|f| f)
                 .collect::<HashSet<DeletionEntry>>();
-
-            // Ensure that the next leaf matches in the db and the latest tree
-            let next_db_index = database.get_next_leaf_index().await?;
-            let next_leaf = latest_tree.next_leaf();
-
-            assert_eq!(
-                next_leaf, next_db_index,
-                "Database and tree are out of sync. Next leaf index in tree is: {next_leaf}, in \
-                 database: {next_db_index}"
-            );
 
             let (leaf_indices, previous_commitments): (Vec<usize>, Vec<Hash>) = deletions
                 .iter()

@@ -301,7 +301,7 @@ impl TaskMonitor {
         handles.push(insert_identities_handle);
 
         // Delete identities task
-        let delete_identites = DeleteIdentities::new(
+        let delete_identities = DeleteIdentities::new(
             self.database.clone(),
             self.tree_state.get_latest_tree(),
             self.deletion_time_interval,
@@ -310,7 +310,7 @@ impl TaskMonitor {
         );
 
         let delete_identities_handle = crate::utils::spawn_monitored_with_backoff(
-            move || delete_identites.clone().run(),
+            move || delete_identities.clone().run(),
             shutdown_sender.clone(),
             DELETE_IDENTITIES_BACKOFF,
         );

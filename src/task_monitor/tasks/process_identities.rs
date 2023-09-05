@@ -47,9 +47,6 @@ pub struct ProcessIdentities {
 }
 
 impl ProcessIdentities {
-    // TODO: I think we need a notify for the deletion task to notify the process
-    // identies that it can do its work TODO: and then we need a notify for insert
-    // identities to get notified and do its work
     pub fn new(
         database: Arc<Database>,
         identity_manager: SharedIdentityManager,
@@ -507,6 +504,7 @@ pub async fn delete_identities(
     // subsequent zero identities and their associated merkle proofs if the batch is
     // too small.
     if commitment_count != batch_size {
+        // FIXME: I dont think this is going to work for deletions
         // TODO: need to check this, but basically we are getting the most recent leaf
         // and then using that as the start since deletions can happen out of sequence
 

@@ -48,9 +48,6 @@ impl DeleteIdentities {
     }
 }
 
-// TODO: we might want to keep track of the last time we completed a deletion
-// batch and make sure that there is a batch run at least once every n days to
-// be compliant
 async fn delete_identities(
     database: &Database,
     latest_tree: &TreeVersion<Latest>,

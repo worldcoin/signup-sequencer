@@ -10,6 +10,7 @@ use tokio::sync::{broadcast, Notify, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{info, instrument, warn};
 
+use self::tasks::delete_identities::DeleteIdentities;
 use self::tasks::finalize_identities::FinalizeRoots;
 use self::tasks::insert_identities::InsertIdentities;
 use self::tasks::mine_identities::MineIdentities;
@@ -17,7 +18,7 @@ use self::tasks::process_identities::ProcessIdentities;
 use crate::contracts::SharedIdentityManager;
 use crate::database::Database;
 use crate::ethereum::write::TransactionId;
-use crate::identity_tree::TreeState;
+use crate::identity_tree::{Hash, TreeState};
 use crate::utils::async_queue::AsyncQueue;
 
 pub mod tasks;
@@ -26,6 +27,7 @@ const PROCESS_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const FINALIZE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const MINE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const INSERT_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
+const DELETE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 
 struct RunningInstance {
     handles:         Vec<JoinHandle<()>>,
@@ -33,11 +35,57 @@ struct RunningInstance {
 }
 
 #[derive(Debug, Clone)]
-pub struct PendingBatchSubmission {
+pub struct PendingBatchInsertion {
     transaction_id: TransactionId,
     pre_root:       U256,
     post_root:      U256,
     start_index:    usize,
+}
+
+impl PendingBatchInsertion {
+    pub fn new(
+        transaction_id: TransactionId,
+        pre_root: U256,
+        post_root: U256,
+        start_index: usize,
+    ) -> Self {
+        Self {
+            transaction_id,
+            pre_root,
+            post_root,
+            start_index,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingBatchDeletion {
+    transaction_id: TransactionId,
+    pre_root:       U256,
+    commitments:    Vec<U256>,
+    post_root:      U256,
+}
+
+impl PendingBatchDeletion {
+    pub fn new(
+        transaction_id: TransactionId,
+        pre_root: U256,
+        commitments: Vec<U256>,
+        post_root: U256,
+    ) -> Self {
+        Self {
+            transaction_id,
+            pre_root,
+            commitments,
+            post_root,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum PendingBatchSubmission {
+    Insertion(PendingBatchInsertion),
+    Deletion(PendingBatchDeletion),
 }
 
 static PENDING_IDENTITIES: Lazy<Gauge> = Lazy::new(|| {
@@ -89,6 +137,20 @@ pub struct Options {
     #[clap(long, env, default_value = "180")]
     pub batch_timeout_seconds: u64,
 
+    /// TODO:
+    #[clap(long, env, default_value = "3600")]
+    pub deletion_time_interval: i64,
+
+    /// TODO:
+    #[clap(long, env, default_value = "100")]
+    pub min_batch_deletion_size: usize,
+
+    /// How many identities can be held in the API insertion queue at any given
+    /// time Past this limit the API request will block until the queue has
+    /// space for the insertion.
+    #[clap(long, env, default_value = "100")]
+    pub insert_identities_capacity: usize,
+
     /// How many transactions can be sent "at once" to the blockchain via the
     /// write provider.
     #[clap(long, env, default_value = "1")]
@@ -122,8 +184,12 @@ pub struct TaskMonitor {
     pending_identities_capacity: usize,
 
     // Finalization params
-    scanning_window_size: u64,
-    time_between_scans:   Duration,
+    scanning_window_size:    u64,
+    time_between_scans:      Duration,
+    // TODO: docs
+    deletion_time_interval:  i64,
+    // TODO: docs
+    min_batch_deletion_size: usize,
 }
 
 impl TaskMonitor {
@@ -138,6 +204,9 @@ impl TaskMonitor {
             pending_identities_capacity,
             scanning_window_size,
             time_between_scans_seconds,
+            deletion_time_interval,
+            min_batch_deletion_size,
+            insert_identities_capacity,
         } = *options;
 
         Self {
@@ -149,6 +218,8 @@ impl TaskMonitor {
             pending_identities_capacity,
             scanning_window_size,
             time_between_scans: Duration::from_secs(time_between_scans_seconds),
+            deletion_time_interval: options.deletion_time_interval,
+            min_batch_deletion_size: options.min_batch_deletion_size,
         }
     }
 
@@ -206,7 +277,7 @@ impl TaskMonitor {
 
         handles.push(mine_identities_handle);
 
-        // Prcess identities task
+        // Process identities task
         let process_identities = ProcessIdentities::new(
             self.database.clone(),
             self.identity_manager.clone(),
@@ -228,7 +299,7 @@ impl TaskMonitor {
         let insert_identities = InsertIdentities::new(
             self.database.clone(),
             self.tree_state.get_latest_tree(),
-            wake_up_notify,
+            wake_up_notify.clone(),
         );
 
         let insert_identities_handle = crate::utils::spawn_monitored_with_backoff(
@@ -238,6 +309,23 @@ impl TaskMonitor {
         );
 
         handles.push(insert_identities_handle);
+
+        // Delete identities task
+        let delete_identities = DeleteIdentities::new(
+            self.database.clone(),
+            self.tree_state.get_latest_tree(),
+            self.deletion_time_interval,
+            self.min_batch_deletion_size,
+            wake_up_notify,
+        );
+
+        let delete_identities_handle = crate::utils::spawn_monitored_with_backoff(
+            move || delete_identities.clone().run(),
+            shutdown_sender.clone(),
+            DELETE_IDENTITIES_BACKOFF,
+        );
+
+        handles.push(delete_identities_handle);
 
         *instance = Some(RunningInstance {
             handles,

@@ -155,7 +155,6 @@ impl App {
         let database = Arc::new(db);
         let mut provers: HashSet<ProverConfiguration> = database.get_provers().await?;
 
-        // TODO: need to update this
         let non_inserted_provers = Self::merge_env_provers(options.batch_provers, &mut provers);
 
         database.insert_provers(non_inserted_provers).await?;
@@ -370,6 +369,13 @@ impl App {
             .await?
         {
             return Err(ServerError::IdentityQueuedForDeletion);
+        }
+
+        // Check if there are any deletions, if not, set the latest deletion timestamp
+        // to now to ensure that the new deletion is processed by the next deletion
+        // interval
+        if self.database.get_deletions().await?.is_empty() {
+            self.database.update_latest_deletion(Utc::now()).await?;
         }
 
         // If the id has not been deleted, insert into the deletions table

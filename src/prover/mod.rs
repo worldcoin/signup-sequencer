@@ -202,14 +202,18 @@ impl Prover {
         let total_proving_time_timer = TOTAL_PROVING_TIME.start_timer();
 
         let identity_commitments: Vec<U256> = identities.iter().map(|id| id.commitment).collect();
-        let input_hash =
-            compute_input_hash(start_index, pre_root, post_root, &identity_commitments);
+        let input_hash = compute_insertion_proof_input_hash(
+            start_index,
+            pre_root,
+            post_root,
+            &identity_commitments,
+        );
         let merkle_proofs = identities
             .iter()
             .map(|id| id.merkle_proof.clone())
             .collect();
 
-        let proof_input = ProofInput {
+        let proof_input = InsertionProofInput {
             input_hash,
             start_index,
             pre_root,
@@ -244,12 +248,58 @@ impl Prover {
 
     pub async fn generate_deletion_proof(
         &self,
-        start_index: u32,
         pre_root: U256,
         post_root: U256,
-        identities: &[Identity],
+        deletion_indices: &[u32],
+        identities: Vec<Identity>,
     ) -> anyhow::Result<Proof> {
-        todo!("TODO:");
+        if identities.len() != self.batch_size {
+            return Err(anyhow::Error::msg(
+                "Provided batch does not match prover batch size.",
+            ));
+        }
+
+        let total_proving_time_timer = TOTAL_PROVING_TIME.start_timer();
+
+        let (identity_commitments, merkle_proofs): (Vec<U256>, Vec<Vec<U256>>) = identities
+            .into_iter()
+            .map(|id| (id.commitment, id.merkle_proof))
+            .unzip();
+
+        let input_hash =
+            compute_deletion_proof_input_hash(pre_root, post_root, &identity_commitments);
+
+        let proof_input = DeletionProofInput {
+            input_hash,
+            pre_root,
+            post_root,
+            deletion_indices: deletion_indices.to_vec(),
+            identity_commitments,
+            merkle_proofs,
+        };
+
+        let request = self
+            .client
+            .post(self.target_url.join(MTB_PROVE_ENDPOINT)?)
+            .body("OH MY GOD")
+            .json(&proof_input)
+            .build()?;
+
+        let prover_proving_time_timer = PROVER_PROVING_TIME.start_timer();
+        let proof_term = self.client.execute(request).await?;
+        let proof_term = proof_term.error_for_status()?;
+        prover_proving_time_timer.observe_duration();
+
+        let json = proof_term.text().await?;
+
+        let Ok(proof) = serde_json::from_str::<Proof>(&json) else {
+            let error: ProverError = serde_json::from_str(&json)?;
+            return Err(anyhow::Error::msg(format!("{error}")))
+        };
+
+        total_proving_time_timer.observe_duration();
+
+        Ok(proof)
     }
 
     pub fn url(&self) -> String {
@@ -278,7 +328,7 @@ impl Prover {
 ///   provided in the order that they were inserted into the tree.
 ///
 /// The result is computed using the inputs in _big-endian_ byte ordering.
-pub fn compute_input_hash(
+pub fn compute_insertion_proof_input_hash(
     start_index: u32,
     pre_root: U256,
     post_root: U256,
@@ -291,6 +341,30 @@ pub fn compute_input_hash(
 
     let mut bytes: Vec<u8> = vec![];
     bytes.extend_from_slice(&start_index.to_be_bytes());
+    bytes.extend(pre_root_bytes.iter());
+    bytes.extend(post_root_bytes.iter());
+
+    for commitment in identity_commitments.iter() {
+        let mut commitment_bytes: [u8; size_of::<U256>()] = Default::default();
+        commitment.to_big_endian(commitment_bytes.as_mut_slice());
+        bytes.extend(commitment_bytes.iter());
+    }
+
+    keccak256(bytes).into()
+}
+
+// TODO: check this and update docs
+pub fn compute_deletion_proof_input_hash(
+    pre_root: U256,
+    post_root: U256,
+    identity_commitments: &[U256],
+) -> U256 {
+    let mut pre_root_bytes: [u8; size_of::<U256>()] = Default::default();
+    pre_root.to_big_endian(pre_root_bytes.as_mut_slice());
+    let mut post_root_bytes: [u8; size_of::<U256>()] = Default::default();
+    post_root.to_big_endian(post_root_bytes.as_mut_slice());
+
+    let mut bytes: Vec<u8> = vec![];
     bytes.extend(pre_root_bytes.iter());
     bytes.extend(post_root_bytes.iter());
 
@@ -322,11 +396,22 @@ impl Display for ProverError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProofInput {
+struct InsertionProofInput {
     input_hash:           U256,
     start_index:          u32,
     pre_root:             U256,
     post_root:            U256,
+    identity_commitments: Vec<U256>,
+    merkle_proofs:        Vec<Vec<U256>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeletionProofInput {
+    input_hash:           U256,
+    pre_root:             U256,
+    post_root:            U256,
+    deletion_indices:     Vec<u32>,
     identity_commitments: Vec<U256>,
     merkle_proofs:        Vec<Vec<U256>>,
 }
@@ -433,7 +518,7 @@ mod test {
         let input = get_default_proof_input();
 
         assert_eq!(
-            compute_input_hash(
+            compute_insertion_proof_input_hash(
                 input.start_index,
                 input.pre_root,
                 input.post_root,
@@ -445,13 +530,13 @@ mod test {
 
     #[test]
     fn proof_input_should_serde() {
-        let expected_data: ProofInput = serde_json::from_str(EXPECTED_JSON).unwrap();
+        let expected_data: InsertionProofInput = serde_json::from_str(EXPECTED_JSON).unwrap();
         let proof_input = get_default_proof_input();
 
         assert_eq!(proof_input, expected_data);
     }
 
-    fn extract_identities_from(proof_input: &ProofInput) -> Vec<Identity> {
+    fn extract_identities_from(proof_input: &InsertionProofInput) -> Vec<Identity> {
         proof_input
             .identity_commitments
             .iter()
@@ -473,7 +558,7 @@ mod test {
         ])
     }
 
-    fn get_default_proof_input() -> ProofInput {
+    fn get_default_proof_input() -> InsertionProofInput {
         let start_index: u32 = 0;
         let pre_root: U256 =
             "0x1b7201da72494f1e28717ad1a52eb469f95892f957713533de6175e5da190af2".into();
@@ -521,7 +606,7 @@ mod test {
         let input_hash: U256 =
             "0xa2d9c54a0aecf0f2aeb502c4a14ac45209d636986294c5e3168a54a7f143b1d8".into();
 
-        ProofInput {
+        InsertionProofInput {
             input_hash,
             start_index,
             pre_root,
@@ -607,7 +692,7 @@ pub mod mock {
 
     impl Service {
         pub async fn new(url: String) -> anyhow::Result<Self> {
-            let prove = |Json(payload): Json<ProofInput>| async move {
+            let prove = |Json(payload): Json<InsertionProofInput>| async move {
                 match payload.post_root.div_mod(U256::from(2)) {
                     (_, y) if y != U256::zero() => {
                         Json(ProveResponse::ProofSuccess(test::get_default_proof_output()))

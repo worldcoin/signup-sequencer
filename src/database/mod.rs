@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 
 use anyhow::{anyhow, Context, Error as ErrReport};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use clap::Parser;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
@@ -15,7 +15,7 @@ use sqlx::{Executor, Pool, Postgres, Row};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
-use self::types::{DeletionEntry, RecoveryEntry};
+use self::types::{DeletionEntry, LatestDeletionEntry, RecoveryEntry};
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
 pub mod types;
@@ -524,6 +524,41 @@ impl Database {
         Ok(())
     }
 
+    pub async fn get_latest_deletion(&self) -> Result<LatestDeletionEntry, Error> {
+        let query =
+            sqlx::query("SELECT deletion_timestamp FROM latest_deletion_root WHERE Lock = 'X';");
+
+        let row = self.pool.fetch_optional(query).await?;
+
+        if let Some(row) = row {
+            Ok(LatestDeletionEntry {
+                timestamp: row.get(0),
+            })
+        } else {
+            Ok(LatestDeletionEntry {
+                timestamp: DateTime::from(Utc::now()),
+            })
+        }
+    }
+
+    pub async fn update_latest_deletion(
+        &self,
+        deletion_timestamp: DateTime<Utc>,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO latest_deletion_root (Lock, deletion_timestamp)
+            VALUES ('X', $1)
+            ON CONFLICT (Lock) 
+            DO UPDATE SET deletion_timestamp = EXCLUDED.deletion_timestamp;
+            "#,
+        )
+        .bind(&deletion_timestamp);
+
+        self.pool.execute(query).await?;
+        Ok(())
+    }
+
     // TODO: consider using a larger value than i64 for leaf index, ruint should
     // have postgres compatibility for u256
     pub async fn get_recoveries(&self) -> Result<Vec<RecoveryEntry>, Error> {
@@ -578,10 +613,35 @@ impl Database {
         Ok(result
             .into_iter()
             .map(|row| DeletionEntry {
-                leaf_index: row.get::<i64, _>(0),
+                leaf_index: row.get::<i64, _>(0) as usize,
                 commitment: row.get::<Hash, _>(1),
             })
             .collect::<Vec<DeletionEntry>>())
+    }
+
+    /// Remove a list of entries from the deletions table
+    pub async fn remove_deletions(&self, commitments: Vec<Hash>) -> Result<(), Error> {
+        let placeholders: String = commitments
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("${}", i + 1))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let query = format!(
+            "DELETE FROM deletions WHERE commitment IN ({})",
+            placeholders
+        );
+
+        let mut query = sqlx::query(&query);
+
+        for commitment in commitments.iter() {
+            query = query.bind(commitment);
+        }
+
+        query.execute(&self.pool).await?;
+
+        Ok(())
     }
 
     pub async fn get_eligible_unprocessed_commitments(
@@ -608,36 +668,6 @@ impl Database {
                 created_at: row.get::<_, _>(2),
                 processed_at: row.get::<_, _>(3),
                 error_message: row.get::<_, _>(4),
-                eligibility_timestamp: row.get::<_, _>(5),
-            })
-            .collect::<Vec<_>>())
-    }
-
-    pub async fn get_unprocessed_commitments(
-        &self,
-        status: Status,
-    ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
-        let query = sqlx::query(
-            r#"
-                SELECT * FROM unprocessed_identities
-                WHERE status = $1
-                LIMIT $2
-            "#,
-        )
-        .bind(<&str>::from(status))
-        .bind(MAX_UNPROCESSED_FETCH_COUNT);
-
-        let result = self.pool.fetch_all(query).await?;
-
-        Ok(result
-            .into_iter()
-            .map(|row| types::UnprocessedCommitment {
-                commitment: row.get::<Hash, _>(0),
-                status,
-                created_at: row.get::<_, _>(2),
-                processed_at: row.get::<_, _>(3),
-                error_message: row.get::<_, _>(4),
-
                 eligibility_timestamp: row.get::<_, _>(5),
             })
             .collect::<Vec<_>>())
@@ -860,7 +890,10 @@ mod test {
             .expect("expected commitment status");
         assert_eq!(commit.0, Status::New);
 
-        let identity_count = db.get_unprocessed_commitments(Status::New).await?.len();
+        let identity_count = db
+            .get_eligible_unprocessed_commitments(Status::New)
+            .await?
+            .len();
 
         assert_eq!(identity_count, 1);
 
@@ -1039,7 +1072,7 @@ mod test {
         db.insert_new_identity(commitment_1, eligibility_timestamp_1)
             .await?;
 
-        let unprocessed_commitments = db.get_unprocessed_commitments(Status::New).await?;
+        let unprocessed_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
 
         assert_eq!(unprocessed_commitments.len(), 2);
         assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
@@ -1085,7 +1118,7 @@ mod test {
         db.insert_new_identity(commit_hash, eligibility_timestamp)
             .await?;
 
-        let commitments = db.get_unprocessed_commitments(Status::New).await?;
+        let commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
         assert_eq!(commitments.len(), 1);
 
         let eligible_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
@@ -1099,7 +1132,7 @@ mod test {
         db.update_eligibility_timestamp(commit_hash, eligibility_timestamp)
             .await?;
 
-        let commitments = db.get_unprocessed_commitments(Status::New).await?;
+        let commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
         assert_eq!(commitments.len(), 1);
 
         let eligible_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
@@ -1521,6 +1554,64 @@ mod test {
             .context("Inserting identity")?;
 
         assert!(db.identity_exists(identities[1]).await?);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_remove_deletions() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(4);
+
+        // Insert new identities
+        db.insert_new_deletion(0, &identities[0])
+            .await
+            .context("Inserting new identity")?;
+
+        db.insert_new_deletion(1, &identities[1])
+            .await
+            .context("Inserting new identity")?;
+
+        db.insert_new_deletion(2, &identities[2])
+            .await
+            .context("Inserting new identity")?;
+        db.insert_new_deletion(3, &identities[3])
+            .await
+            .context("Inserting new identity")?;
+
+        // Remove identities 0 to 2
+        db.remove_deletions(identities[0..=2].to_vec()).await?;
+        let deletions = db.get_deletions().await?;
+
+        assert_eq!(deletions.len(), 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_latest_deletion_root() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        // Update with initial timestamp
+        let initial_timestamp = chrono::Utc::now();
+        db.update_latest_deletion(initial_timestamp)
+            .await
+            .context("Inserting initial root")?;
+
+        // Assert values
+        let initial_entry = db.get_latest_deletion().await?;
+        assert_eq!(initial_entry.timestamp, initial_timestamp);
+
+        // Update with a new timestamp
+        let new_timestamp = chrono::Utc::now();
+        db.update_latest_deletion(new_timestamp)
+            .await
+            .context("Updating with new root")?;
+
+        // Assert values
+        let new_entry = db.get_latest_deletion().await?;
+        assert_eq!(new_entry.timestamp, new_timestamp);
 
         Ok(())
     }

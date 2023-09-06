@@ -1,5 +1,5 @@
 //! Functionality for interacting with smart contracts deployed on chain.
-mod abi;
+pub mod abi;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -55,13 +55,13 @@ pub struct Options {
 /// contract.
 #[derive(Debug)]
 pub struct IdentityManager {
-    ethereum: Ethereum,
+    ethereum:             Ethereum,
     insertion_prover_map: InsertionProverMap,
-    deletion_prover_map: DeletionProverMap,
-    abi: WorldId<ReadProvider>,
-    secondary_abis: Vec<BridgedWorldId<ReadProvider>>,
-    initial_leaf_value: Field,
-    tree_depth: usize,
+    deletion_prover_map:  DeletionProverMap,
+    abi:                  WorldId<ReadProvider>,
+    secondary_abis:       Vec<BridgedWorldId<ReadProvider>>,
+    initial_leaf_value:   Field,
+    tree_depth:           usize,
 }
 
 impl IdentityManager {
@@ -160,7 +160,7 @@ impl IdentityManager {
         Ok(())
     }
 
-    pub async fn get_suitable_prover(
+    pub async fn get_suitable_insertion_prover(
         &self,
         num_identities: usize,
     ) -> anyhow::Result<ReadOnlyProver<Prover>> {
@@ -174,13 +174,31 @@ impl IdentityManager {
         }
     }
 
+    pub async fn get_suitable_deletion_prover(
+        &self,
+        num_identities: usize,
+    ) -> anyhow::Result<ReadOnlyProver<Prover>> {
+        let prover_map = self.deletion_prover_map.read().await;
+
+        match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
+            Ok(p) => anyhow::Ok(p),
+            Err(_) => Err(anyhow!(
+                "No available prover for batch size: {num_identities}"
+            )),
+        }
+    }
+
+    pub async fn root_history_expiry(&self) -> anyhow::Result<U256> {
+        Ok(self.abi.get_root_history_expiry().call().await?)
+    }
+
     #[instrument(level = "debug", skip(prover, identity_commitments))]
     pub async fn prepare_insertion_proof(
         prover: ReadOnlyInsertionProver<'_>,
         start_index: usize,
         pre_root: U256,
-        post_root: U256,
         identity_commitments: &[Identity],
+        post_root: U256,
     ) -> anyhow::Result<Proof> {
         let batch_size = identity_commitments.len();
 
@@ -199,6 +217,27 @@ impl IdentityManager {
                 post_root,
                 identity_commitments,
             )
+            .await?;
+
+        Ok(proof_data)
+    }
+
+    #[instrument(level = "debug", skip(prover, identity_commitments))]
+    pub async fn prepare_deletion_proof(
+        prover: ReadOnlyProver<'_, Prover>,
+        pre_root: U256,
+        deletion_indices: &[u32],
+        identity_commitments: Vec<Identity>,
+        post_root: U256,
+    ) -> anyhow::Result<Proof> {
+        info!(
+            "Sending {} identities to prover of batch size {}",
+            identity_commitments.len(),
+            prover.batch_size()
+        );
+
+        let proof_data: Proof = prover
+            .generate_deletion_proof(pre_root, post_root, deletion_indices, identity_commitments)
             .await?;
 
         Ok(proof_data)
@@ -233,6 +272,31 @@ impl IdentityManager {
                 identities,
                 post_root,
             )
+            .tx;
+
+        self.ethereum
+            .send_transaction(register_identities_transaction, true)
+            .await
+            .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
+    }
+
+    // TODO: docs
+    #[instrument(level = "debug")]
+    pub async fn delete_identities(
+        &self,
+        deletion_proof: Proof,
+        pre_root: U256,
+        deletion_indices: Vec<u32>,
+        post_root: U256,
+    ) -> anyhow::Result<TransactionId> {
+        let proof_points_array: [U256; 8] = deletion_proof.into();
+
+        // We want to send the transaction through our ethereum provider rather than
+        // directly now. To that end, we create it, and then send it later, waiting for
+        // it to complete.
+        let register_identities_transaction = self
+            .abi
+            .delete_identities(proof_points_array, pre_root, deletion_indices, post_root)
             .tx;
 
         self.ethereum

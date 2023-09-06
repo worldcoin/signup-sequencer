@@ -724,26 +724,6 @@ impl Database {
         Ok(())
     }
 
-    // TODO: add docs
-    pub async fn update_eligibility_timestamp(
-        &self,
-        commitment: Hash,
-        eligibility_timestamp: sqlx::types::chrono::DateTime<Utc>,
-    ) -> Result<(), Error> {
-        let query = sqlx::query(
-            r#"
-                UPDATE unprocessed_identities SET eligibility = $1
-                WHERE commitment = $2
-            "#,
-        )
-        .bind(eligibility_timestamp)
-        .bind(commitment);
-
-        self.pool.execute(query).await?;
-
-        Ok(())
-    }
-
     pub async fn identity_exists(&self, commitment: Hash) -> Result<bool, Error> {
         let query_unprocessed_identity = sqlx::query(
             r#"SELECT exists(SELECT 1 FROM unprocessed_identities where commitment = $1)"#,
@@ -1054,29 +1034,29 @@ mod test {
     async fn test_get_unprocessed_commitments() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
+        // Insert new identity with a valid eligibility timestamp
         let commitment_0: Uint<256, 4> = Uint::from(1);
         let eligibility_timestamp_0 = DateTime::from(Utc::now());
-
         db.insert_new_identity(commitment_0, eligibility_timestamp_0)
             .await?;
 
+        // Insert new identity with eligibility timestamp in the future
         let commitment_1: Uint<256, 4> = Uint::from(2);
         let eligibility_timestamp_1 = DateTime::from(Utc::now())
             .checked_add_days(Days::new(7))
             .expect("Could not create eligibility timestamp");
-
         db.insert_new_identity(commitment_1, eligibility_timestamp_1)
             .await?;
 
         let unprocessed_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
 
-        assert_eq!(unprocessed_commitments.len(), 2);
+        // Assert unprocessed commitments against expected values
+        assert_eq!(unprocessed_commitments.len(), 1);
         assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
         assert_eq!(
             unprocessed_commitments[0].eligibility_timestamp,
             eligibility_timestamp_0
         );
-
         assert_eq!(unprocessed_commitments[1].commitment, commitment_1);
         assert_eq!(
             unprocessed_commitments[1].eligibility_timestamp,
@@ -1125,14 +1105,13 @@ mod test {
             .checked_add_days(Days::new(7))
             .expect("Could not create eligibility timestamp");
 
-        db.update_eligibility_timestamp(commit_hash, eligibility_timestamp)
+        // Insert new identity with an eligibility timestamp in the future
+        let commit_hash: Hash = Hash::from(1);
+        db.insert_new_identity(commit_hash, eligibility_timestamp)
             .await?;
 
-        let commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
-        assert_eq!(commitments.len(), 1);
-
         let eligible_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
-        assert_eq!(eligible_commitments.len(), 0);
+        assert_eq!(eligible_commitments.len(), 1);
 
         Ok(())
     }

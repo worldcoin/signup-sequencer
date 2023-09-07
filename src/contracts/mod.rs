@@ -1,6 +1,6 @@
 //! Functionality for interacting with smart contracts deployed on chain.
-mod abi;
-mod scanner;
+pub mod abi;
+pub mod scanner;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -65,6 +65,15 @@ pub struct IdentityManager {
 }
 
 impl IdentityManager {
+    // TODO: I don't like these public getters
+    pub fn abi(&self) -> &WorldId<ReadProvider> {
+        &self.abi
+    }
+
+    pub fn secondary_abis(&self) -> &[BridgedWorldId<ReadProvider>] {
+        &self.secondary_abis
+    }
+
     #[instrument(level = "debug", skip_all)]
     pub async fn new(
         options: Options,
@@ -280,6 +289,8 @@ impl IdentityManager {
     #[instrument(level = "debug", skip_all)]
     pub async fn is_root_mined_multi_chain(&self, root: U256) -> anyhow::Result<bool> {
         let (root_on_mainnet, ..) = self.abi.query_root(root).call().await?;
+
+        // self.abi.
 
         if root_on_mainnet.is_zero() {
             return Ok(false);

@@ -1,18 +1,27 @@
-use std::time::Duration;
-
 use ethers::providers::Middleware;
 use ethers::types::{Address, BlockNumber, Filter, FilterBlockOption, Log, Topic, ValueOrArray};
 
-use crate::ethereum::ReadProvider;
-
-pub struct BlockScanner {
-    read_provider:      ReadProvider,
-    current_block:      u64,
-    window_size:        u64,
-    time_between_scans: Duration,
+pub struct BlockScanner<T> {
+    read_provider: T,
+    current_block: u64,
+    window_size:   u64,
 }
 
-impl BlockScanner {
+impl<T> BlockScanner<T>
+where
+    T: Middleware,
+    <T as Middleware>::Error: 'static,
+{
+    pub async fn new_latest(read_provider: T, window_size: u64) -> anyhow::Result<Self> {
+        let latest_block = read_provider.get_block_number().await?;
+
+        Ok(Self {
+            read_provider,
+            current_block: latest_block.as_u64(),
+            window_size,
+        })
+    }
+
     pub async fn next(
         &mut self,
         address: Option<ValueOrArray<Address>>,

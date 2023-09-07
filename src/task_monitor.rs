@@ -94,22 +94,13 @@ pub struct Options {
     #[clap(long, env, default_value = "1")]
     pub pending_identities_capacity: usize,
 
-    /// How many roots can be held in the mined roots queue at any given time.
-    ///
-    /// There is no reason why we shouldn't be able to wait for multiple
-    /// roots to be finalized across chains at the same time.
-    ///
-    /// This is just a limit on memory usage for this channel.
-    #[clap(long, env, default_value = "10")]
-    pub mined_roots_capacity: usize,
-
-    /// The maximum number of attempts to finalize a root before giving up.
+    /// The maximum number of windows to scan for finalization logs
     #[clap(long, env, default_value = "100")]
-    pub finalization_max_attempts: usize,
+    pub scanning_window_size: u64,
 
-    /// The number of seconds to wait between attempts to finalize a root.
+    /// The number of seconds to wait between fetching logs
     #[clap(long, env, default_value = "30")]
-    pub finalization_sleep_time_seconds: u64,
+    pub time_between_scans_seconds: u64,
 }
 
 /// A worker that commits identities to the blockchain.
@@ -129,10 +120,10 @@ pub struct TaskMonitor {
     tree_state:                  TreeState,
     batch_insert_timeout_secs:   u64,
     pending_identities_capacity: usize,
-    mined_roots_capacity:        usize,
 
-    finalization_max_attempts:       usize,
-    finalization_sleep_time_seconds: u64,
+    // Finalization params
+    scanning_window_size: u64,
+    time_between_scans:   Duration,
 }
 
 impl TaskMonitor {
@@ -145,9 +136,8 @@ impl TaskMonitor {
         let Options {
             batch_timeout_seconds,
             pending_identities_capacity,
-            mined_roots_capacity,
-            finalization_max_attempts,
-            finalization_sleep_time_seconds,
+            scanning_window_size,
+            time_between_scans_seconds,
         } = *options;
 
         Self {
@@ -157,9 +147,8 @@ impl TaskMonitor {
             tree_state,
             batch_insert_timeout_secs: batch_timeout_seconds,
             pending_identities_capacity,
-            mined_roots_capacity,
-            finalization_max_attempts,
-            finalization_sleep_time_seconds,
+            scanning_window_size,
+            time_between_scans: Duration::from_secs(time_between_scans_seconds),
         }
     }
 
@@ -188,8 +177,8 @@ impl TaskMonitor {
             self.database.clone(),
             self.identity_manager.clone(),
             self.tree_state.get_mined_tree(),
-            self.finalization_max_attempts,
-            Duration::from_secs(self.finalization_sleep_time_seconds),
+            self.scanning_window_size,
+            self.time_between_scans,
         );
 
         let finalize_identities_handle = crate::utils::spawn_monitored_with_backoff(

@@ -20,8 +20,8 @@ pub struct FinalizeRoots {
     identity_manager: SharedIdentityManager,
     finalized_tree:   TreeVersion<Canonical>,
 
-    finalization_max_attempts: usize,
-    finalization_sleep_time:   Duration,
+    scanning_window_size: u64,
+    time_between_scans:   Duration,
 }
 
 impl FinalizeRoots {
@@ -29,15 +29,15 @@ impl FinalizeRoots {
         database: Arc<Database>,
         identity_manager: SharedIdentityManager,
         finalized_tree: TreeVersion<Canonical>,
-        finalization_max_attempts: usize,
-        finalization_sleep_time: Duration,
+        scanning_window_size: u64,
+        time_between_scans: Duration,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
             identity_manager,
             finalized_tree,
-            finalization_max_attempts,
-            finalization_sleep_time,
+            scanning_window_size,
+            time_between_scans,
         })
     }
 
@@ -46,8 +46,8 @@ impl FinalizeRoots {
             &self.database,
             &self.identity_manager,
             &self.finalized_tree,
-            self.finalization_max_attempts,
-            self.finalization_sleep_time,
+            self.scanning_window_size,
+            self.time_between_scans,
         )
         .await
     }
@@ -60,8 +60,8 @@ async fn finalize_roots_loop(
     database: &Database,
     identity_manager: &IdentityManager,
     finalized_tree: &TreeVersion<Canonical>,
-    finalization_max_attempts: usize,
-    finalization_sleep_time: Duration,
+    scanning_window_size: u64,
+    time_between_scans: Duration,
 ) -> AnyhowResult<()> {
     let mainnet_abi = identity_manager.abi();
     let secondary_abis = identity_manager.secondary_abis();

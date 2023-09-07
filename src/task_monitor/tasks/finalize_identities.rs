@@ -88,40 +88,76 @@ async fn finalize_roots_loop(
     ];
 
     loop {
-        let mainnet_logs = mainnet_scanner
-            .next(mainnet_address.clone(), mainnet_topics.clone())
+        let all_roots = fetch_logs(
+            &mut mainnet_scanner,
+            &mut secondary_scanners,
+            &mainnet_address,
+            &mainnet_topics,
+            &bridged_topics,
+        )
+        .await?;
+
+        finalize_roots(database, identity_manager, finalized_tree, all_roots).await?;
+
+        tokio::time::sleep(TIME_BETWEEN_SCANS).await;
+    }
+}
+
+async fn finalize_roots(
+    database: &Database,
+    identity_manager: &IdentityManager,
+    finalized_tree: &TreeVersion<Canonical>,
+    all_roots: Vec<U256>,
+) -> Result<(), anyhow::Error> {
+    Ok(for root in all_roots {
+        info!(?root, "Finalizing root");
+
+        let is_root_finalized = identity_manager.is_root_mined_multi_chain(root).await?;
+
+        if is_root_finalized {
+            finalized_tree.apply_updates_up_to(root.into());
+            database.mark_root_as_mined(&root.into()).await?;
+
+            info!(?root, "Root finalized");
+        }
+    })
+}
+
+async fn fetch_logs<A, B>(
+    mainnet_scanner: &mut BlockScanner<A>,
+    secondary_scanners: &mut HashMap<ethers::types::H160, BlockScanner<B>>,
+    mainnet_address: &Option<ValueOrArray<ethers::types::H160>>,
+    mainnet_topics: &[Option<ValueOrArray<Option<ethers::types::H256>>>; 4],
+    bridged_topics: &[Option<ValueOrArray<Option<ethers::types::H256>>>; 4],
+) -> Result<Vec<U256>, anyhow::Error>
+where
+    A: Middleware,
+    <A as Middleware>::Error: 'static,
+    B: Middleware,
+    <B as Middleware>::Error: 'static,
+{
+    let mainnet_logs = mainnet_scanner
+        .next(mainnet_address.clone(), mainnet_topics.clone())
+        .await?;
+    let mut secondary_logs = vec![];
+
+    for (address, scanner) in secondary_scanners {
+        let logs = scanner
+            .next(Some(ValueOrArray::Value(*address)), bridged_topics.clone())
             .await?;
 
-        let mut secondary_logs = vec![];
-
-        for (address, scanner) in &mut secondary_scanners {
-            let logs = scanner
-                .next(Some(ValueOrArray::Value(*address)), bridged_topics.clone())
-                .await?;
-
-            secondary_logs.extend(logs);
-        }
-
-        let mut all_roots = vec![];
-        let mainnet_roots = extract_root_from_mainnet_logs(&mainnet_logs);
-        let secondary_roots = extract_roots_from_secondary_logs(&secondary_logs);
-
-        all_roots.extend(mainnet_roots);
-        all_roots.extend(secondary_roots);
-
-        for root in all_roots {
-            info!(?root, "Finalizing root");
-
-            let is_root_finalized = identity_manager.is_root_mined_multi_chain(root).await?;
-
-            if is_root_finalized {
-                finalized_tree.apply_updates_up_to(root.into());
-                database.mark_root_as_mined(&root.into()).await?;
-
-                info!(?root, "Root finalized");
-            }
-        }
+        secondary_logs.extend(logs);
     }
+
+    let mut all_roots = vec![];
+
+    let mainnet_roots = extract_root_from_mainnet_logs(&mainnet_logs);
+    let secondary_roots = extract_roots_from_secondary_logs(&secondary_logs);
+
+    all_roots.extend(mainnet_roots);
+    all_roots.extend(secondary_roots);
+
+    Ok(all_roots)
 }
 
 async fn init_secondary_scanners<T>(

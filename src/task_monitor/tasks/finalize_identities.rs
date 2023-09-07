@@ -125,15 +125,10 @@ where
         secondary_logs.extend(logs);
     }
 
-    let mut all_roots = vec![];
+    let mut roots = extract_root_from_mainnet_logs(&mainnet_logs);
+    roots.extend(extract_roots_from_secondary_logs(&secondary_logs));
 
-    let mainnet_roots = extract_root_from_mainnet_logs(&mainnet_logs);
-    let secondary_roots = extract_roots_from_secondary_logs(&secondary_logs);
-
-    all_roots.extend(mainnet_roots);
-    all_roots.extend(secondary_roots);
-
-    Ok(all_roots)
+    Ok(roots)
 }
 
 #[instrument(level = "info", skip_all)]

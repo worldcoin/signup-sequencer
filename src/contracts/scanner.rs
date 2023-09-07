@@ -27,9 +27,7 @@ where
         address: Option<ValueOrArray<Address>>,
         topics: [Option<Topic>; 4],
     ) -> anyhow::Result<Vec<Log>> {
-        let latest_block = self.read_provider.get_block_number().await?;
-
-        let latest_block = latest_block.as_u64();
+        let latest_block = self.read_provider.get_block_number().await?.as_u64();
 
         let from_block = self.current_block;
         let to_block = latest_block.min(from_block + self.window_size);

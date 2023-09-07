@@ -84,26 +84,7 @@ async fn finalize_roots_loop(
     }
 }
 
-async fn finalize_roots(
-    database: &Database,
-    identity_manager: &IdentityManager,
-    finalized_tree: &TreeVersion<Canonical>,
-    all_roots: Vec<U256>,
-) -> Result<(), anyhow::Error> {
-    Ok(for root in all_roots {
-        info!(?root, "Finalizing root");
-
-        let is_root_finalized = identity_manager.is_root_mined_multi_chain(root).await?;
-
-        if is_root_finalized {
-            finalized_tree.apply_updates_up_to(root.into());
-            database.mark_root_as_mined(&root.into()).await?;
-
-            info!(?root, "Root finalized");
-        }
-    })
-}
-
+#[instrument(level = "info", skip_all)]
 async fn fetch_logs<A, B>(
     mainnet_scanner: &mut BlockScanner<A>,
     secondary_scanners: &mut HashMap<Address, BlockScanner<B>>,
@@ -153,6 +134,27 @@ where
     all_roots.extend(secondary_roots);
 
     Ok(all_roots)
+}
+
+#[instrument(level = "info", skip_all)]
+async fn finalize_roots(
+    database: &Database,
+    identity_manager: &IdentityManager,
+    finalized_tree: &TreeVersion<Canonical>,
+    all_roots: Vec<U256>,
+) -> Result<(), anyhow::Error> {
+    Ok(for root in all_roots {
+        info!(?root, "Finalizing root");
+
+        let is_root_finalized = identity_manager.is_root_mined_multi_chain(root).await?;
+
+        if is_root_finalized {
+            finalized_tree.apply_updates_up_to(root.into());
+            database.mark_root_as_mined(&root.into()).await?;
+
+            info!(?root, "Root finalized");
+        }
+    })
 }
 
 async fn init_secondary_scanners<T>(

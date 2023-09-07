@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use anyhow::Result as AnyhowResult;
 use ethers::abi::RawLog;
-use ethers::contract::{Contract, EthEvent};
+use ethers::contract::EthEvent;
 use ethers::providers::Middleware;
-use ethers::types::{Address, Log, Topic, ValueOrArray, U256};
+use ethers::types::{Address, Log, Topic, ValueOrArray, H256, U256};
 use tracing::{info, instrument};
 
 use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangedFilter, WorldId};
@@ -69,29 +69,12 @@ async fn finalize_roots_loop(
         init_secondary_scanners(secondary_abis, scanning_window_size).await?;
 
     let mainnet_address = mainnet_abi.address();
-    let mainnet_address = Some(ValueOrArray::Value(mainnet_address));
-
-    let mainnet_topics = [
-        Some(Topic::from(TreeChangedFilter::signature())),
-        None,
-        None,
-        None,
-    ];
-
-    let bridged_topics = [
-        Some(Topic::from(RootAddedFilter::signature())),
-        None,
-        None,
-        None,
-    ];
 
     loop {
         let all_roots = fetch_logs(
             &mut mainnet_scanner,
             &mut secondary_scanners,
-            &mainnet_address,
-            &mainnet_topics,
-            &bridged_topics,
+            mainnet_address,
         )
         .await?;
 
@@ -123,19 +106,33 @@ async fn finalize_roots(
 
 async fn fetch_logs<A, B>(
     mainnet_scanner: &mut BlockScanner<A>,
-    secondary_scanners: &mut HashMap<ethers::types::H160, BlockScanner<B>>,
-    mainnet_address: &Option<ValueOrArray<ethers::types::H160>>,
-    mainnet_topics: &[Option<ValueOrArray<Option<ethers::types::H256>>>; 4],
-    bridged_topics: &[Option<ValueOrArray<Option<ethers::types::H256>>>; 4],
-) -> Result<Vec<U256>, anyhow::Error>
+    secondary_scanners: &mut HashMap<Address, BlockScanner<B>>,
+    mainnet_address: Address,
+) -> anyhow::Result<Vec<U256>>
 where
     A: Middleware,
     <A as Middleware>::Error: 'static,
     B: Middleware,
     <B as Middleware>::Error: 'static,
 {
+    let mainnet_topics = [
+        Some(Topic::from(TreeChangedFilter::signature())),
+        None,
+        None,
+        None,
+    ];
+
+    let bridged_topics = [
+        Some(Topic::from(RootAddedFilter::signature())),
+        None,
+        None,
+        None,
+    ];
+
+    let mainnet_address = Some(ValueOrArray::Value(mainnet_address));
+
     let mainnet_logs = mainnet_scanner
-        .next(mainnet_address.clone(), mainnet_topics.clone())
+        .next(mainnet_address, mainnet_topics.clone())
         .await?;
     let mut secondary_logs = vec![];
 

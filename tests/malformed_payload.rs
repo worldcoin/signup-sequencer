@@ -50,6 +50,8 @@ async fn malformed_payload() -> anyhow::Result<()> {
         &micro_oz.endpoint(),
         "--oz-address",
         &format!("{:?}", micro_oz.address()),
+        "--time-between-scans-seconds",
+        "1",
     ])
     .context("Failed to create options")?;
 

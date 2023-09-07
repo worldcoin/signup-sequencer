@@ -29,6 +29,10 @@ where
     ) -> anyhow::Result<Vec<Log>> {
         let latest_block = self.read_provider.get_block_number().await?.as_u64();
 
+        if latest_block >= self.current_block {
+            return Ok(Vec::new());
+        }
+
         let from_block = self.current_block;
         let to_block = latest_block.min(from_block + self.window_size);
 

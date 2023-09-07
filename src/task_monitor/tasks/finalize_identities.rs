@@ -6,10 +6,10 @@ use anyhow::Result as AnyhowResult;
 use ethers::abi::RawLog;
 use ethers::contract::EthEvent;
 use ethers::providers::Middleware;
-use ethers::types::{Address, Log, Topic, ValueOrArray, H256, U256};
+use ethers::types::{Address, Log, Topic, ValueOrArray, U256};
 use tracing::{info, instrument};
 
-use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangedFilter, WorldId};
+use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangedFilter};
 use crate::contracts::scanner::BlockScanner;
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;

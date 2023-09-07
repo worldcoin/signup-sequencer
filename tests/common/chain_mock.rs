@@ -32,7 +32,7 @@ pub async fn spawn_mock_chain(
     batch_sizes: &[usize],
     tree_depth: u8,
 ) -> anyhow::Result<MockChain> {
-    let chain = Anvil::new().block_time(2u64).spawn();
+    let chain = Anvil::new().spawn();
     let private_key = H256::from_slice(&chain.keys()[0].to_be_bytes());
 
     let provider = Provider::<Http>::try_from(chain.endpoint())

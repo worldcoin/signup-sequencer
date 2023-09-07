@@ -53,9 +53,6 @@ impl FinalizeRoots {
     }
 }
 
-const SCANNING_WINDOW_SIZE: u64 = 100;
-const TIME_BETWEEN_SCANS: Duration = Duration::from_secs(5);
-
 async fn finalize_roots_loop(
     database: &Database,
     identity_manager: &IdentityManager,
@@ -67,8 +64,9 @@ async fn finalize_roots_loop(
     let secondary_abis = identity_manager.secondary_abis();
 
     let mut mainnet_scanner =
-        BlockScanner::new_latest(mainnet_abi.client().clone(), SCANNING_WINDOW_SIZE).await?;
-    let mut secondary_scanners = init_secondary_scanners(secondary_abis).await?;
+        BlockScanner::new_latest(mainnet_abi.client().clone(), scanning_window_size).await?;
+    let mut secondary_scanners =
+        init_secondary_scanners(secondary_abis, scanning_window_size).await?;
 
     let mainnet_address = mainnet_abi.address();
     let mainnet_address = Some(ValueOrArray::Value(mainnet_address));
@@ -99,7 +97,7 @@ async fn finalize_roots_loop(
 
         finalize_roots(database, identity_manager, finalized_tree, all_roots).await?;
 
-        tokio::time::sleep(TIME_BETWEEN_SCANS).await;
+        tokio::time::sleep(time_between_scans).await;
     }
 }
 
@@ -162,6 +160,7 @@ where
 
 async fn init_secondary_scanners<T>(
     providers: &[BridgedWorldId<T>],
+    scanning_window_size: u64,
 ) -> anyhow::Result<HashMap<Address, BlockScanner<Arc<T>>>>
 where
     T: Middleware,
@@ -171,7 +170,7 @@ where
 
     for bridged_abi in providers {
         let scanner =
-            BlockScanner::new_latest(bridged_abi.client().clone(), SCANNING_WINDOW_SIZE).await?;
+            BlockScanner::new_latest(bridged_abi.client().clone(), scanning_window_size).await?;
 
         let address = bridged_abi.address();
 

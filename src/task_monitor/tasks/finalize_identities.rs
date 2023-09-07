@@ -3,18 +3,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result as AnyhowResult;
-use ethers::contract::Contract;
+use ethers::abi::RawLog;
+use ethers::contract::{Contract, EthEvent};
 use ethers::providers::Middleware;
-use ethers::types::{Address, Topic, ValueOrArray, U256};
+use ethers::types::{Address, Log, Topic, ValueOrArray, U256};
 use tracing::{info, instrument};
 
 use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangedFilter, WorldId};
 use crate::contracts::scanner::BlockScanner;
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
-use crate::ethereum::ReadProvider;
 use crate::identity_tree::{Canonical, TreeVersion, TreeWithNextVersion};
-use crate::utils::async_queue::{AsyncPopGuard, AsyncQueue};
 
 pub struct FinalizeRoots {
     database:         Arc<Database>,
@@ -74,8 +73,6 @@ async fn finalize_roots_loop(
     let mainnet_address = mainnet_abi.address();
     let mainnet_address = Some(ValueOrArray::Value(mainnet_address));
 
-    use ethers::contract::EthEvent;
-
     let mainnet_topics = [
         Some(Topic::from(TreeChangedFilter::signature())),
         None,
@@ -104,6 +101,26 @@ async fn finalize_roots_loop(
 
             secondary_logs.extend(logs);
         }
+
+        let mut all_roots = vec![];
+        let mainnet_roots = extract_root_from_mainnet_logs(&mainnet_logs);
+        let secondary_roots = extract_roots_from_secondary_logs(&secondary_logs);
+
+        all_roots.extend(mainnet_roots);
+        all_roots.extend(secondary_roots);
+
+        for root in all_roots {
+            info!(?root, "Finalizing root");
+
+            let is_root_finalized = identity_manager.is_root_mined_multi_chain(root).await?;
+
+            if is_root_finalized {
+                finalized_tree.apply_updates_up_to(root.into());
+                database.mark_root_as_mined(&root.into()).await?;
+
+                info!(?root, "Root finalized");
+            }
+        }
     }
 }
 
@@ -128,4 +145,28 @@ where
     Ok(secondary_scanners)
 }
 
-async fn fetch_logs() {}
+fn extract_root_from_mainnet_logs(logs: &[Log]) -> Vec<U256> {
+    let mut roots = vec![];
+
+    for log in logs {
+        let raw_log = RawLog::from((log.topics.clone(), log.data.to_vec()));
+        if let Ok(event) = TreeChangedFilter::decode_log(&raw_log) {
+            roots.push(event.post_root);
+        }
+    }
+
+    roots
+}
+
+fn extract_roots_from_secondary_logs(logs: &[Log]) -> Vec<U256> {
+    let mut roots = vec![];
+
+    for log in logs {
+        let raw_log = RawLog::from((log.topics.clone(), log.data.to_vec()));
+        if let Ok(event) = RootAddedFilter::decode_log(&raw_log) {
+            roots.push(event.root);
+        }
+    }
+
+    roots
+}

@@ -1,5 +1,6 @@
 //! Functionality for interacting with smart contracts deployed on chain.
 mod abi;
+mod scanner;
 
 use std::collections::HashMap;
 use std::sync::Arc;

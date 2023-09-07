@@ -143,7 +143,7 @@ async fn finalize_roots(
     finalized_tree: &TreeVersion<Canonical>,
     all_roots: Vec<U256>,
 ) -> Result<(), anyhow::Error> {
-    Ok(for root in all_roots {
+    for root in all_roots {
         info!(?root, "Finalizing root");
 
         let is_root_finalized = identity_manager.is_root_mined_multi_chain(root).await?;
@@ -154,7 +154,9 @@ async fn finalize_roots(
 
             info!(?root, "Root finalized");
         }
-    })
+    }
+
+    Ok(())
 }
 
 async fn init_secondary_scanners<T>(

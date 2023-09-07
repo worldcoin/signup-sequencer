@@ -14,7 +14,6 @@ pub struct FinalizeRoots {
     database:          Arc<Database>,
     identity_manager:  SharedIdentityManager,
     finalized_tree:    TreeVersion<Canonical>,
-    mined_roots_queue: AsyncQueue<U256>,
 
     finalization_max_attempts: usize,
     finalization_sleep_time:   Duration,
@@ -25,7 +24,6 @@ impl FinalizeRoots {
         database: Arc<Database>,
         identity_manager: SharedIdentityManager,
         finalized_tree: TreeVersion<Canonical>,
-        mined_roots_queue: AsyncQueue<U256>,
         finalization_max_attempts: usize,
         finalization_sleep_time: Duration,
     ) -> Arc<Self> {
@@ -33,7 +31,6 @@ impl FinalizeRoots {
             database,
             identity_manager,
             finalized_tree,
-            mined_roots_queue,
             finalization_max_attempts,
             finalization_sleep_time,
         })
@@ -44,7 +41,6 @@ impl FinalizeRoots {
             &self.database,
             &self.identity_manager,
             &self.finalized_tree,
-            &self.mined_roots_queue,
             self.finalization_max_attempts,
             self.finalization_sleep_time,
         )
@@ -56,15 +52,11 @@ async fn finalize_roots_loop(
     database: &Database,
     identity_manager: &IdentityManager,
     finalized_tree: &TreeVersion<Canonical>,
-    mined_roots_queue: &AsyncQueue<U256>,
     finalization_max_attempts: usize,
     finalization_sleep_time: Duration,
 ) -> AnyhowResult<()> {
     loop {
-        let mined_root = mined_roots_queue.pop().await;
-
         finalize_root(
-            &mined_root,
             database,
             identity_manager,
             finalized_tree,
@@ -72,21 +64,18 @@ async fn finalize_roots_loop(
             finalization_sleep_time,
         )
         .await?;
-
-        mined_root.commit().await;
     }
 }
 
 #[instrument(level = "info", skip_all)]
 async fn finalize_root(
-    mined_root: &AsyncPopGuard<'_, U256>,
     database: &Database,
     identity_manager: &IdentityManager,
     finalized_tree: &TreeVersion<Canonical>,
     finalization_max_attempts: usize,
     finalization_sleep_time: Duration,
 ) -> AnyhowResult<()> {
-    let root = mined_root.read().await;
+    let root = todo!();
 
     info!(?root, "Finalizing root");
 

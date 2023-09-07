@@ -189,7 +189,6 @@ impl TaskMonitor {
             self.database.clone(),
             self.identity_manager.clone(),
             self.tree_state.get_mined_tree(),
-            mined_roots_queue.clone(),
             self.finalization_max_attempts,
             Duration::from_secs(self.finalization_sleep_time_seconds),
         );

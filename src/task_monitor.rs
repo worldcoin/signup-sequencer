@@ -180,7 +180,6 @@ impl TaskMonitor {
         wake_up_notify.notify_one();
 
         let pending_batch_submissions_queue = AsyncQueue::new(self.pending_identities_capacity);
-        let mined_roots_queue = AsyncQueue::new(self.mined_roots_capacity);
 
         let mut handles = Vec::new();
 
@@ -207,7 +206,6 @@ impl TaskMonitor {
             self.identity_manager.clone(),
             self.tree_state.get_processed_tree(),
             pending_batch_submissions_queue.clone(),
-            mined_roots_queue,
         );
 
         let mine_identities_handle = crate::utils::spawn_monitored_with_backoff(

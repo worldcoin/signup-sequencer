@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
-use ethers::types::U256;
 use tracing::{info, instrument};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};
@@ -15,7 +14,6 @@ pub struct MineIdentities {
     identity_manager: SharedIdentityManager,
     mined_tree: TreeVersion<Intermediate>,
     pending_batch_submissions_queue: AsyncQueue<PendingBatchSubmission>,
-    mined_roots_queue: AsyncQueue<U256>,
 }
 
 impl MineIdentities {
@@ -24,14 +22,12 @@ impl MineIdentities {
         identity_manager: SharedIdentityManager,
         mined_tree: TreeVersion<Intermediate>,
         pending_batch_submissions_queue: AsyncQueue<PendingBatchSubmission>,
-        mined_roots_queue: AsyncQueue<U256>,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
             identity_manager,
             mined_tree,
             pending_batch_submissions_queue,
-            mined_roots_queue,
         })
     }
 
@@ -41,7 +37,6 @@ impl MineIdentities {
             &self.identity_manager,
             &self.mined_tree,
             &self.pending_batch_submissions_queue,
-            &self.mined_roots_queue,
         )
         .await
     }
@@ -52,19 +47,11 @@ async fn mine_identities_loop(
     identity_manager: &IdentityManager,
     mined_tree: &TreeVersion<Intermediate>,
     pending_batch_submissions_queue: &AsyncQueue<PendingBatchSubmission>,
-    mined_roots_queue: &AsyncQueue<U256>,
 ) -> AnyhowResult<()> {
     loop {
         let pending_identity = pending_batch_submissions_queue.pop().await;
 
-        mine_identities(
-            &pending_identity,
-            database,
-            identity_manager,
-            mined_tree,
-            mined_roots_queue,
-        )
-        .await?;
+        mine_identities(&pending_identity, database, identity_manager, mined_tree).await?;
 
         pending_identity.commit().await;
     }
@@ -76,7 +63,6 @@ async fn mine_identities(
     database: &Database,
     identity_manager: &IdentityManager,
     mined_tree: &TreeVersion<Intermediate>,
-    mined_roots_queue: &AsyncQueue<U256>,
 ) -> AnyhowResult<()> {
     let PendingBatchSubmission {
         transaction_id,
@@ -111,8 +97,6 @@ async fn mine_identities(
     info!(start_index, ?pre_root, ?post_root, "Batch mined");
 
     let updates_count = mined_tree.apply_updates_up_to(post_root.into());
-
-    mined_roots_queue.push(post_root).await;
 
     info!(
         start_index,

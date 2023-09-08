@@ -269,16 +269,11 @@ impl Prover {
         let input_hash =
             compute_deletion_proof_input_hash(pre_root, post_root, &identity_commitments);
 
-        let deletion_indices = deletion_indices
-            .iter()
-            .flat_map(|&idx| idx.to_be_bytes().to_vec())
-            .collect::<Vec<u8>>();
-
         let proof_input = DeletionProofInput {
             input_hash,
             pre_root,
             post_root,
-            deletion_indices,
+            deletion_indices: deletion_indices.to_vec(),
             identity_commitments,
             merkle_proofs,
         };
@@ -416,8 +411,7 @@ struct DeletionProofInput {
     input_hash:           U256,
     pre_root:             U256,
     post_root:            U256,
-    // Packed byte array of u32s representing deletion indices
-    deletion_indices:     Vec<u8>,
+    deletion_indices:     Vec<u32>,
     identity_commitments: Vec<U256>,
     merkle_proofs:        Vec<Vec<U256>>,
 }

@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use clap::Parser;
+use ethers::abi::ethabi::Bytes;
 use ethers::providers::Middleware;
 use ethers::types::{Address, U256};
 use semaphore::Field;
@@ -294,9 +295,19 @@ impl IdentityManager {
         // We want to send the transaction through our ethereum provider rather than
         // directly now. To that end, we create it, and then send it later, waiting for
         // it to complete.
+        let deletion_indices = deletion_indices
+            .iter()
+            .flat_map(|&idx| idx.to_be_bytes().to_vec())
+            .collect::<Vec<u8>>();
+
         let register_identities_transaction = self
             .abi
-            .delete_identities(proof_points_array, pre_root, deletion_indices, post_root)
+            .delete_identities(
+                proof_points_array,
+                pre_root,
+                deletion_indices.into(),
+                post_root,
+            )
             .tx;
 
         self.ethereum

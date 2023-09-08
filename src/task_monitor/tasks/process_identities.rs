@@ -7,6 +7,7 @@ use chrono::{Days, Utc};
 use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{register_histogram, Histogram};
+use ruint::Uint;
 use semaphore::merkle_tree::Proof;
 use semaphore::poseidon_tree::{Branch, PoseidonHash};
 use tokio::sync::Notify;
@@ -515,7 +516,13 @@ pub async fn delete_identities(
         let padding = batch_size - commitment_count;
         commitments.extend(vec![U256::zero(); padding]);
         deletion_indices.extend(vec![pad_index; padding]);
-        merkle_proofs.extend(vec![Proof::<PoseidonHash>(vec![]); padding]);
+
+        let zeroed_proof = Proof(vec![
+            Branch::Left(Uint::ZERO);
+            latest_tree_from_updates.depth()
+        ]);
+
+        merkle_proofs.extend(vec![zeroed_proof; padding]);
     }
 
     assert_eq!(

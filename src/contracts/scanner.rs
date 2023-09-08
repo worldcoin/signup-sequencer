@@ -29,7 +29,7 @@ where
     ) -> anyhow::Result<Vec<Log>> {
         let latest_block = self.read_provider.get_block_number().await?.as_u64();
 
-        if latest_block >= self.current_block {
+        if self.current_block >= latest_block {
             return Ok(Vec::new());
         }
 

@@ -176,6 +176,7 @@ impl TaskMonitor {
         let finalize_identities = FinalizeRoots::new(
             self.database.clone(),
             self.identity_manager.clone(),
+            self.tree_state.get_processed_tree(),
             self.tree_state.get_mined_tree(),
             self.scanning_window_size,
             self.time_between_scans,

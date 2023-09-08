@@ -13,11 +13,12 @@ use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangedFilter};
 use crate::contracts::scanner::BlockScanner;
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
-use crate::identity_tree::{Canonical, TreeVersion, TreeWithNextVersion};
+use crate::identity_tree::{Canonical, Intermediate, TreeVersion, TreeWithNextVersion};
 
 pub struct FinalizeRoots {
     database:         Arc<Database>,
     identity_manager: SharedIdentityManager,
+    processed_tree:   TreeVersion<Intermediate>,
     finalized_tree:   TreeVersion<Canonical>,
 
     scanning_window_size: u64,
@@ -28,6 +29,7 @@ impl FinalizeRoots {
     pub fn new(
         database: Arc<Database>,
         identity_manager: SharedIdentityManager,
+        processed_tree: TreeVersion<Intermediate>,
         finalized_tree: TreeVersion<Canonical>,
         scanning_window_size: u64,
         time_between_scans: Duration,
@@ -35,6 +37,7 @@ impl FinalizeRoots {
         Arc::new(Self {
             database,
             identity_manager,
+            processed_tree,
             finalized_tree,
             scanning_window_size,
             time_between_scans,
@@ -45,6 +48,7 @@ impl FinalizeRoots {
         finalize_roots_loop(
             &self.database,
             &self.identity_manager,
+            &self.processed_tree,
             &self.finalized_tree,
             self.scanning_window_size,
             self.time_between_scans,
@@ -56,6 +60,7 @@ impl FinalizeRoots {
 async fn finalize_roots_loop(
     database: &Database,
     identity_manager: &IdentityManager,
+    processed_tree: &TreeVersion<Intermediate>,
     finalized_tree: &TreeVersion<Canonical>,
     scanning_window_size: u64,
     time_between_scans: Duration,
@@ -78,7 +83,14 @@ async fn finalize_roots_loop(
         )
         .await?;
 
-        finalize_roots(database, identity_manager, finalized_tree, all_roots).await?;
+        finalize_roots(
+            database,
+            identity_manager,
+            processed_tree,
+            finalized_tree,
+            all_roots,
+        )
+        .await?;
 
         tokio::time::sleep(time_between_scans).await;
     }
@@ -135,6 +147,7 @@ where
 async fn finalize_roots(
     database: &Database,
     identity_manager: &IdentityManager,
+    processed_tree: &TreeVersion<Intermediate>,
     finalized_tree: &TreeVersion<Canonical>,
     all_roots: Vec<U256>,
 ) -> Result<(), anyhow::Error> {
@@ -144,7 +157,14 @@ async fn finalize_roots(
         let is_root_finalized = identity_manager.is_root_mined_multi_chain(root).await?;
 
         if is_root_finalized {
+            // What can sometimes happen is that this finalize roots function is faster
+            // than the mine_identities task. In which case we'll try to finalize a given
+            // root, but it's not yet present in the processed tree.
+            //
+            // In that case we can safely apply updates to the processed tree as well.
+            processed_tree.apply_updates_up_to(root.into());
             finalized_tree.apply_updates_up_to(root.into());
+
             database.mark_root_as_mined(&root.into()).await?;
 
             info!(?root, "Root finalized");

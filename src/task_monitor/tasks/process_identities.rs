@@ -505,14 +505,12 @@ pub async fn delete_identities(
         .collect::<Vec<u32>>();
 
     // The verifier and prover can only work with a given batch size, so we need to
-    // ensure that our batches match that size. We do this by padding with
-    // subsequent zero identities and their associated merkle proofs if the batch is
-    // too small.
-
-    // TODO: add note that prover will ignore these if the index is 32, add this to
-    // a const
+    // ensure that our batches match that size. We do this by padding deletion
+    // indices with tree.depth() ^ 2. The deletion prover will skip the proof for
+    // any deletion with an index greater than the max tree depth
+    let pad_index = latest_tree_from_updates.depth().pow(2) as u32;
     if commitment_count != batch_size {
-        deletion_indices.extend(vec![32; batch_size - commitment_count]);
+        deletion_indices.extend(vec![pad_index; batch_size - commitment_count]);
     }
 
     assert_eq!(

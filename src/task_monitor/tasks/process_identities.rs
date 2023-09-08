@@ -7,7 +7,7 @@ use chrono::{Days, Utc};
 use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{register_histogram, Histogram};
-use semaphore::poseidon_tree::{Branch, PoseidonHash};
+use semaphore::poseidon_tree::Branch;
 use tokio::sync::Notify;
 use tokio::{select, time};
 use tracing::{debug, error, info, instrument, warn};

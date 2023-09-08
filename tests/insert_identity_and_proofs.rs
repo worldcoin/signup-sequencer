@@ -1,6 +1,12 @@
 mod common;
 
+use std::collections::HashMap;
+use std::str::FromStr;
+
+use anyhow::Ok;
 use common::prelude::*;
+
+use crate::common::spawn_and_add_provers;
 
 const SUPPORTED_DEPTH: usize = 20;
 const IDLE_TIME: u64 = 7;
@@ -19,10 +25,8 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, prover_map, micro_oz) =
+    let (mock_chain, db_container, micro_oz) =
         spawn_deps(initial_root, &[batch_size], tree_depth).await?;
-
-    let prover_mock = &prover_map[&batch_size];
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
@@ -37,8 +41,6 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         "10",
         "--dense-tree-prefix-depth",
@@ -76,6 +78,11 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
+
+    // Insert provers to database
+    let prover_map = spawn_and_add_provers(&uri, &client, &[batch_size], 10).await?;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    validate_prover_map(&uri, &client, &prover_map, batch_size).await?;
 
     // Check that we can get inclusion proofs for things that already exist in the
     // database and on chain.
@@ -180,6 +187,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
 
+    validate_prover_map(&uri, &client, &prover_map, batch_size).await?;
     // Check that we can still get inclusion proofs for identities we know to have
     // been inserted previously. Here we check the first and last ones we inserted.
     test_inclusion_proof(
@@ -217,6 +225,8 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
 
+    validate_prover_map(&uri, &client, &prover_map, batch_size).await?;
+
     // Check that we can still get inclusion proofs for identities we know to have
     // been inserted previously. Here we check the first and last ones we inserted.
     test_inclusion_proof(
@@ -247,6 +257,41 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         prover.stop();
     }
     reset_shutdown();
+
+    Ok(())
+}
+
+async fn validate_prover_map(
+    uri: &String,
+    client: &Client<HttpConnector>,
+    prover_map: &HashMap<usize, ProverService>,
+    batch_size: usize,
+) -> anyhow::Result<()> {
+    // fech provers
+    let batch_sizes_uri: hyper::Uri =
+        hyper::Uri::from_str(&format!("{}/listBatchSizes", uri.as_str()))
+            .expect("Unable to parse URI.");
+    let mut batch_sizes = client
+        .get(batch_sizes_uri)
+        .await
+        .expect("Failed to execute get request");
+    let batch_sizes_bytes = hyper::body::to_bytes(batch_sizes.body_mut())
+        .await
+        .expect("Failed to get response bytes");
+    let batch_size_str = String::from_utf8(batch_sizes_bytes.into_iter().collect())
+        .expect("Failed to decode response");
+    let batch_size_json =
+        serde_json::from_str::<serde_json::Value>(&batch_size_str).expect("JSON wasn't decoded");
+    assert_eq!(
+        batch_size_json,
+        json!([
+            {
+                "url": format!("{}{}", prover_map[&batch_size].url(), "/"),
+                "timeout_s": 10,
+                "batch_size": batch_size,
+            }
+        ])
+    );
 
     Ok(())
 }

@@ -57,12 +57,28 @@ pub struct AddBatchSizeRequest {
     timeout_seconds: u64,
 }
 
+impl AddBatchSizeRequest {
+    pub fn new(url: String, batch_size: usize, timeout_seconds: u64) -> AddBatchSizeRequest {
+        Self {
+            url,
+            batch_size,
+            timeout_seconds,
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct RemoveBatchSizeRequest {
     /// The batch size to remove from the prover map.
     batch_size: usize,
+}
+
+impl RemoveBatchSizeRequest {
+    pub fn new(batch_size: usize) -> RemoveBatchSizeRequest {
+        Self { batch_size }
+    }
 }
 
 #[derive(Serialize, Deserialize)]

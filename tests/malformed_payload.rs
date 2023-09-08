@@ -3,6 +3,8 @@ mod common;
 use common::prelude::*;
 use hyper::StatusCode;
 
+use crate::common::spawn_and_add_provers;
+
 /// Tests that the app rejects payloads which are too large or are not valid
 /// UTF-8 strings
 #[tokio::test]
@@ -17,10 +19,8 @@ async fn malformed_payload() -> anyhow::Result<()> {
 
     let batch_size: usize = 3;
 
-    let (mock_chain, db_container, prover_map, micro_oz) =
+    let (mock_chain, db_container, micro_oz) =
         spawn_deps(initial_root, &[batch_size], tree_depth).await?;
-
-    let prover_mock = &prover_map[&batch_size];
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
@@ -34,8 +34,6 @@ async fn malformed_payload() -> anyhow::Result<()> {
         "1",
         "--tree-depth",
         &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_mock.arg_string(),
         "--batch-timeout-seconds",
         "10",
         "--dense-tree-prefix-depth",
@@ -66,6 +64,9 @@ async fn malformed_payload() -> anyhow::Result<()> {
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
+
+    // Insert provers to database
+    let prover_map = spawn_and_add_provers(&uri, &client, &[batch_size], 10).await?;
 
     // 20 MiB zero bytes
     let body = vec![0u8; 1024 * 1024 * 20];

@@ -90,7 +90,7 @@ docker run --rm -ti -p 5432:5432 -e POSTGRES_PASSWORD=password postgres
 
 Now you are ready to start up sequencer service!  
 ```shell
-TREE_DEPTH=*your tree depth (eg. 16)* cargo run -- --batch-size *batch size for semaphore-mtb (eg. 3)* --batch-timeout-seconds 10 --database postgres://postgres:password@0.0.0.0:5432 --identity-manager-address *address from worldcoin id contracts identity manager* 
+TREE_DEPTH=*your tree depth (eg. 16)* cargo run -- --database postgres://postgres:password@0.0.0.0:5432 --identity-manager-address *address from worldcoin id contracts identity manager* 
 --signing-key *private key you used to deploy smart contracts*
 ```
 

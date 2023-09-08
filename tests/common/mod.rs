@@ -60,6 +60,7 @@ use std::sync::Arc;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use hyper::StatusCode;
+use signup_sequencer::server::{AddBatchSizeRequest, RemoveBatchSizeRequest};
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
@@ -271,70 +272,6 @@ pub async fn test_inclusion_proof(
 }
 
 #[instrument(skip_all)]
-pub async fn test_add_batch_size(
-    uri: impl Into<String>,
-    prover_url: impl Into<String>,
-    batch_size: u64,
-    client: &Client<HttpConnector>,
-) -> anyhow::Result<()> {
-    let prover_url_string: String = prover_url.into();
-    let body = Body::from(
-        json!({
-            "url": prover_url_string,
-            "batchSize": batch_size,
-            "timeoutSeconds": 3
-        })
-        .to_string(),
-    );
-    let request = Request::builder()
-        .method("POST")
-        .uri(uri.into() + "/addBatchSize")
-        .header("Content-Type", "application/json")
-        .body(body)
-        .expect("Failed to create add batch size hyper::Body");
-
-    client
-        .request(request)
-        .await
-        .expect("Failed to execute request.");
-
-    Ok(())
-}
-
-#[instrument(skip_all)]
-pub async fn test_remove_batch_size(
-    uri: impl Into<String>,
-    batch_size: u64,
-    client: &Client<HttpConnector>,
-    expect_failure: bool,
-) -> anyhow::Result<()> {
-    let body = Body::from(json!({ "batchSize": batch_size }).to_string());
-    let request = Request::builder()
-        .method("POST")
-        .uri(uri.into() + "/removeBatchSize")
-        .header("Content-Type", "application/json")
-        .body(body)
-        .expect("Failed to create remove batch size hyper::Body");
-
-    let mut result = client
-        .request(request)
-        .await
-        .expect("Request didn't return.");
-
-    let body_bytes = hyper::body::to_bytes(result.body_mut())
-        .await
-        .expect("Failed to get response bytes.");
-    let body_str =
-        String::from_utf8(body_bytes.into_iter().collect()).expect("Failed to decode response.");
-
-    if expect_failure && body_str != "The last batch size cannot be removed" {
-        anyhow::bail!("Expected failure, but got success");
-    } else {
-        Ok(())
-    }
-}
-
-#[instrument(skip_all)]
 pub async fn test_insert_identity(
     uri: &str,
     client: &Client<HttpConnector>,
@@ -365,6 +302,66 @@ pub async fn test_insert_identity(
     ref_tree.set(leaf_index, test_leaves[leaf_index]);
 
     (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())
+}
+
+#[instrument(skip_all)]
+pub async fn test_add_provers(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    provers: &[&ProverService],
+    timeout_seconds: u64,
+) -> anyhow::Result<()> {
+    for prover in provers {
+        let body = construct_add_batch_size_body(prover, timeout_seconds);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(uri.to_owned() + "/addBatchSize")
+            .header("Content-Type", "application/json")
+            .body(body)
+            .expect("Failed to create add_batch_size hyper::Body");
+
+        let response = client
+            .request(req)
+            .await
+            .expect("Failed to execute request.");
+
+        if !response.status().is_success() {
+            panic!(
+                "Failed to add prover with batch size {}",
+                prover.batch_size()
+            );
+        }
+    }
+    Ok(())
+}
+
+#[instrument(skip_all)]
+pub async fn test_remove_prover(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    batch_size: usize,
+    should_fail: bool,
+) -> anyhow::Result<()> {
+    let body = construct_remove_batch_size_body(batch_size);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri.to_owned() + "/removeBatchSize")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create add_batch_size hyper::Body");
+
+    let response = client
+        .request(req)
+        .await
+        .expect("Failed to execute request.");
+
+    if !response.status().is_success() && !should_fail {
+        panic!("Failed to remove prover with batch size {}", batch_size);
+    }
+
+    Ok(())
 }
 
 fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
@@ -402,6 +399,20 @@ fn construct_verify_proof_body(
         })
         .to_string(),
     )
+}
+
+fn construct_add_batch_size_body(prover: &ProverService, timeout_seconds: u64) -> Body {
+    let req = AddBatchSizeRequest::new(prover.url(), prover.batch_size(), timeout_seconds);
+    let serialized_req = serde_json::to_string(&req).unwrap();
+
+    Body::from(serialized_req)
+}
+
+fn construct_remove_batch_size_body(batch_size: usize) -> Body {
+    let req = RemoveBatchSizeRequest::new(batch_size);
+    let serialized_req = serde_json::to_string(&req).unwrap();
+
+    Body::from(serialized_req)
 }
 
 #[instrument(skip_all)]
@@ -442,36 +453,45 @@ pub async fn spawn_deps(
     initial_root: U256,
     batch_sizes: &[usize],
     tree_depth: u8,
-) -> anyhow::Result<(
-    MockChain,
-    DockerContainerGuard,
-    HashMap<usize, ProverService>,
-    micro_oz::ServerHandle,
-)> {
+) -> anyhow::Result<(MockChain, DockerContainerGuard, micro_oz::ServerHandle)> {
     let chain = spawn_mock_chain(initial_root, batch_sizes, tree_depth);
     let db_container = spawn_db();
 
-    let prover_futures = FuturesUnordered::new();
-    for batch_size in batch_sizes {
-        prover_futures.push(spawn_mock_prover(*batch_size));
-    }
-
-    let (chain, db_container, provers) =
-        tokio::join!(chain, db_container, prover_futures.collect::<Vec<_>>());
+    let (chain, db_container) = tokio::join!(chain, db_container);
 
     let chain = chain?;
 
     let signing_key = SigningKey::from_bytes(chain.private_key.as_bytes())?;
     let micro_oz = micro_oz::spawn(chain.anvil.endpoint(), signing_key).await?;
 
-    let provers = provers.into_iter().collect::<Result<Vec<_>, _>>()?;
+    Ok((chain, db_container?, micro_oz))
+}
 
-    let prover_map = provers
+pub async fn spawn_and_add_provers(
+    uri: &String,
+    client: &Client<HttpConnector>,
+    batch_sizes: &[usize],
+    timeout_seconds: u64,
+) -> anyhow::Result<HashMap<usize, ProverService>> {
+    let prover_futures = FuturesUnordered::new();
+    for batch_size in batch_sizes {
+        prover_futures.push(spawn_mock_prover(*batch_size));
+    }
+
+    let prover_map: HashMap<usize, ProverService> = prover_futures
+        .collect::<Vec<_>>()
+        .await
         .into_iter()
-        .map(|prover| (prover.batch_size(), prover))
+        .map(|prover| {
+            let prover = prover.unwrap();
+            (prover.batch_size(), prover)
+        })
         .collect();
 
-    Ok((chain, db_container?, prover_map, micro_oz))
+    let provers: Vec<_> = prover_map.values().collect();
+    test_add_provers(&uri, client, &provers, timeout_seconds).await?;
+
+    Ok(prover_map)
 }
 
 async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {

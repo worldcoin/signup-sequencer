@@ -85,7 +85,18 @@ async fn process_identities(
     identity_manager.await_clean_slate().await?;
 
     info!("Starting identity processor.");
-    let batch_size = identity_manager.max_batch_size().await;
+    let mut batch_size = identity_manager.max_batch_size().await;
+    loop {
+        // If batch size is zero, that probably means that prover map is empty
+        if batch_size == 0 {
+            warn!("Batch size is 0. Process identities task is waiting for prover insertion.");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            batch_size = identity_manager.max_batch_size().await;
+            continue;
+        } else {
+            break;
+        }
+    }
 
     // We start a timer and force it to perform one initial tick to avoid an
     // immediate trigger.
@@ -158,6 +169,7 @@ async fn process_identities(
                     warn!("Identity committer thinks that the last batch is in the future.");
                     continue
                 };
+
                 let should_process_anyway =
                     timeout_secs.abs_diff(diff_secs) <= DEBOUNCE_THRESHOLD_SECS;
 

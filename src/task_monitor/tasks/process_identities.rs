@@ -20,7 +20,7 @@ use crate::identity_tree::{
 };
 use crate::prover::identity::Identity;
 use crate::prover::map::ReadOnlyInsertionProver;
-use crate::prover::{Proof, Prover, ReadOnlyProver};
+use crate::prover::{Prover, ReadOnlyProver};
 use crate::task_monitor::{
     PendingBatchDeletion, PendingBatchInsertion, PendingBatchSubmission, TaskMonitor,
 };

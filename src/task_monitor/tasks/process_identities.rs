@@ -7,7 +7,8 @@ use chrono::{Days, Utc};
 use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{register_histogram, Histogram};
-use semaphore::poseidon_tree::Branch;
+use semaphore::merkle_tree::Proof;
+use semaphore::poseidon_tree::{Branch, PoseidonHash};
 use tokio::sync::Notify;
 use tokio::{select, time};
 use tracing::{debug, error, info, instrument, warn};
@@ -477,7 +478,7 @@ pub async fn delete_identities(
 
     // Next get merkle proofs for each update - note the proofs are acquired from
     // intermediate versions of the tree
-    let merkle_proofs: Vec<_> = updates
+    let mut merkle_proofs: Vec<_> = updates
         .iter()
         .map(|update_with_tree| {
             update_with_tree
@@ -509,8 +510,12 @@ pub async fn delete_identities(
     // indices with tree.depth() ^ 2. The deletion prover will skip the proof for
     // any deletion with an index greater than the max tree depth
     let pad_index = latest_tree_from_updates.depth().pow(2) as u32;
+
     if commitment_count != batch_size {
-        deletion_indices.extend(vec![pad_index; batch_size - commitment_count]);
+        let padding = batch_size - commitment_count;
+        commitments.extend(vec![U256::zero(); padding]);
+        deletion_indices.extend(vec![pad_index; padding]);
+        merkle_proofs.extend(vec![Proof::<PoseidonHash>(vec![]); padding]);
     }
 
     assert_eq!(

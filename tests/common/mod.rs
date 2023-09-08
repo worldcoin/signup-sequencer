@@ -165,7 +165,12 @@ async fn test_verify_proof_inner(
 
     if let Some(expected_failure) = expected_failure {
         assert!(!response.status().is_success());
-        assert!(result.contains(expected_failure));
+        assert!(
+            result.contains(expected_failure),
+            "Result (`{}`) did not contain expected failure (`{}`)",
+            result,
+            expected_failure
+        );
     } else {
         assert!(response.status().is_success());
     }

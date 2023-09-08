@@ -7,7 +7,7 @@ use crate::common::test_verify_proof_with_age;
 const SUPPORTED_DEPTH: usize = 20;
 
 #[tokio::test]
-async fn validate_proofs_with_age() -> anyhow::Result<()> {
+async fn validate_proof_with_age() -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -86,7 +86,7 @@ async fn validate_proofs_with_age() -> anyhow::Result<()> {
     let (merkle_proof, root) =
         test_insert_identity(&uri, &client, &mut ref_tree, &test_leaves, 0).await;
 
-    let sleep_duration_seconds = 5 + batch_timeout_seconds;
+    let sleep_duration_seconds = 15 + batch_timeout_seconds;
 
     tokio::time::sleep(Duration::from_secs(sleep_duration_seconds)).await;
 

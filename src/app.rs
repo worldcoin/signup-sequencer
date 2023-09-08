@@ -475,28 +475,25 @@ impl App {
         root_state: &RootItem,
     ) -> Result<(), ServerError> {
         let latest_root = self.tree_state.get_latest_tree().get_root();
+        let batching_root = self.tree_state.get_batching_tree().get_root();
         let processed_root = self.tree_state.get_processed_tree().get_root();
         let mined_root = self.tree_state.get_mined_tree().get_root();
 
-        match root_state.status {
-            Status::Pending if latest_root == root_state.root => return Ok(()),
-            // Processed status is hidden - this should never happen
-            Status::Processed if processed_root == root_state.root => return Ok(()),
-            // Processed status is hidden so it could be either processed or mined
-            Status::Mined if processed_root == root_state.root || mined_root == root_state.root => {
-                return Ok(())
-            }
-            _ => (),
-        }
+        let root = root_state.root;
 
-        // Latest processed root is always valid
-        if root_state.root == processed_root {
-            return Ok(());
+        match root_state.status {
+            // Pending status implies the batching or latest tree
+            Status::Pending if latest_root == root || batching_root == root => return Ok(()),
+            // Processed status is hidden - this should never happen
+            Status::Processed if processed_root == root => return Ok(()),
+            // Processed status is hidden so it could be either processed or mined
+            Status::Mined if processed_root == root || mined_root == root => return Ok(()),
+            _ => (),
         }
 
         let now = chrono::Utc::now();
 
-        let root_age = if root_state.status == Status::Pending {
+        let root_age = if matches!(root_state.status, Status::Pending | Status::Processed) {
             now - root_state.pending_valid_as_of
         } else {
             let mined_at = root_state

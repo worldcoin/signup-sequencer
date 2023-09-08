@@ -163,8 +163,12 @@ async fn finalize_roots(
             //
             // In that case we can safely apply updates to the processed tree as well.
             processed_tree.apply_updates_up_to(root.into());
-            finalized_tree.apply_updates_up_to(root.into());
 
+            // We also need to run this update to mark the root as processed
+            // and apply a mined_at timestamp
+            database.mark_root_as_processed(&root.into()).await?;
+
+            finalized_tree.apply_updates_up_to(root.into());
             database.mark_root_as_mined(&root.into()).await?;
 
             info!(?root, "Root finalized");

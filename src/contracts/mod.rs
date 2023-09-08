@@ -1,5 +1,6 @@
 //! Functionality for interacting with smart contracts deployed on chain.
-mod abi;
+pub mod abi;
+pub mod scanner;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -64,6 +65,15 @@ pub struct IdentityManager {
 }
 
 impl IdentityManager {
+    // TODO: I don't like these public getters
+    pub fn abi(&self) -> &WorldId<ReadProvider> {
+        &self.abi
+    }
+
+    pub fn secondary_abis(&self) -> &[BridgedWorldId<ReadProvider>] {
+        &self.secondary_abis
+    }
+
     #[instrument(level = "debug", skip_all)]
     pub async fn new(
         options: Options,

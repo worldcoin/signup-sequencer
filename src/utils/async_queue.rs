@@ -69,7 +69,7 @@ impl<T> AsyncQueue<T> {
     /// Pushes an item to the queue
     ///
     /// Blocks until the queue has space for a new item
-    pub async fn push(&self, item: T) {
+    pub async fn _push(&self, item: T) {
         loop {
             let mut items = self.inner.items.lock().await;
 
@@ -176,11 +176,11 @@ mod tests {
     async fn read_and_commit_single_item() {
         let queue: AsyncQueue<i32> = AsyncQueue::new(2);
 
-        queue.push(1).await;
+        queue._push(1).await;
 
         let pop_guard = queue.pop().await;
 
-        queue.push(2).await;
+        queue._push(2).await;
 
         assert_eq!(pop_guard.read().await, 1);
 
@@ -195,11 +195,11 @@ mod tests {
     async fn drop_without_commit_does_not_remove_item() {
         let queue: AsyncQueue<i32> = AsyncQueue::new(2);
 
-        queue.push(1).await;
+        queue._push(1).await;
 
         let pop_guard = queue.pop().await;
 
-        queue.push(2).await;
+        queue._push(2).await;
 
         assert_eq!(pop_guard.read().await, 1);
 
@@ -214,7 +214,7 @@ mod tests {
     async fn only_a_single_pop_guard_can_exist() {
         let queue: AsyncQueue<i32> = AsyncQueue::new(2);
 
-        queue.push(1).await;
+        queue._push(1).await;
 
         let first_guard = queue.pop().await;
         assert_eq!(first_guard.read().await, 1);
@@ -233,10 +233,10 @@ mod tests {
     async fn pushing_over_capacity_blocks() {
         let queue: AsyncQueue<i32> = AsyncQueue::new(2);
 
-        queue.push(1).await;
-        queue.push(2).await;
+        queue._push(1).await;
+        queue._push(2).await;
 
-        let result = timeout(Duration::from_secs_f32(0.5), queue.push(3)).await;
+        let result = timeout(Duration::from_secs_f32(0.5), queue._push(3)).await;
 
         assert!(result.is_err(), "Push on full queue should timeout");
     }
@@ -245,8 +245,8 @@ mod tests {
     async fn reserve_blocks_until_queue_has_space() {
         let queue: AsyncQueue<i32> = AsyncQueue::new(2);
 
-        queue.push(1).await;
-        queue.push(2).await;
+        queue._push(1).await;
+        queue._push(2).await;
 
         let reserve_guard = timeout(Duration::from_secs_f32(0.5), queue.reserve()).await;
         assert!(
@@ -272,8 +272,8 @@ mod tests {
     async fn queue_is_fifo() {
         let queue: AsyncQueue<i32> = AsyncQueue::new(2);
 
-        queue.push(1).await;
-        queue.push(2).await;
+        queue._push(1).await;
+        queue._push(2).await;
 
         let pop_guard = queue.pop().await;
         assert_eq!(pop_guard.read().await, 1);

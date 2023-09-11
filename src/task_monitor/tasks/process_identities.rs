@@ -7,7 +7,9 @@ use chrono::{Days, Utc};
 use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{register_histogram, Histogram};
-use semaphore::poseidon_tree::Branch;
+use ruint::Uint;
+use semaphore::merkle_tree::Proof;
+use semaphore::poseidon_tree::{Branch, PoseidonHash};
 use tokio::sync::Notify;
 use tokio::{select, time};
 use tracing::{debug, error, info, instrument, warn};
@@ -19,7 +21,7 @@ use crate::identity_tree::{
 };
 use crate::prover::identity::Identity;
 use crate::prover::map::ReadOnlyInsertionProver;
-use crate::prover::{Proof, Prover, ReadOnlyProver};
+use crate::prover::{Prover, ReadOnlyProver};
 use crate::task_monitor::{
     PendingBatchDeletion, PendingBatchInsertion, PendingBatchSubmission, TaskMonitor,
 };
@@ -499,42 +501,34 @@ pub async fn delete_identities(
 
     let batch_size = prover.batch_size();
 
-    // The verifier and prover can only work with a given batch size, so we need to
-    // ensure that our batches match that size. We do this by padding with
-    // subsequent zero identities and their associated merkle proofs if the batch is
-    // too small.
-    if commitment_count != batch_size {
-        // FIXME: I dont think this is going to work for deletions
-        // TODO: need to check this, but basically we are getting the most recent leaf
-        // and then using that as the start since deletions can happen out of sequence
-
-        // TODO: Calling count is inefficient because it calls `next()` until the
-        // iterator is exhausted. Update this to be more efficient
-        let start_index = latest_tree_from_updates.leaves().count();
-        let padding = batch_size - commitment_count;
-        commitments.append(&mut vec![U256::zero(); padding]);
-
-        // TODO: need to check these indices are correct
-        for i in start_index..(start_index + padding) {
-            let proof = latest_tree_from_updates.proof(i);
-            merkle_proofs.push(proof);
-        }
-    }
-
-    let deletion_indices = updates
+    let mut deletion_indices = updates
         .iter()
         .map(|f| f.update.leaf_index as u32)
         .collect::<Vec<u32>>();
 
+    // The verifier and prover can only work with a given batch size, so we need to
+    // ensure that our batches match that size. We do this by padding deletion
+    // indices with tree.depth() ^ 2. The deletion prover will skip the proof for
+    // any deletion with an index greater than the max tree depth
+    let pad_index = latest_tree_from_updates.depth().pow(2) as u32;
+
+    if commitment_count != batch_size {
+        let padding = batch_size - commitment_count;
+        commitments.extend(vec![U256::zero(); padding]);
+        deletion_indices.extend(vec![pad_index; padding]);
+
+        let zeroed_proof = Proof(vec![
+            Branch::Left(Uint::ZERO);
+            latest_tree_from_updates.depth()
+        ]);
+
+        merkle_proofs.extend(vec![zeroed_proof; padding]);
+    }
+
     assert_eq!(
-        commitments.len(),
+        deletion_indices.len(),
         batch_size,
-        "Mismatch between commitments and batch size."
-    );
-    assert_eq!(
-        merkle_proofs.len(),
-        batch_size,
-        "Mismatch between merkle proofs and batch size."
+        "Mismatch between deletion indices length and batch size."
     );
 
     // With the updates applied we can grab the value of the tree's new root and

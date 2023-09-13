@@ -17,88 +17,92 @@ async fn malformed_payload() -> anyhow::Result<()> {
 
     let batch_size: usize = 3;
 
-    let (mock_chain, db_container, prover_map, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], tree_depth).await?;
+    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
+        spawn_deps(initial_root, &[batch_size], &vec![], tree_depth).await?;
 
-    let prover_mock = &prover_map[&batch_size];
+    if let Some(insertion_prover_map) = insertion_prover_map {
+        let prover_mock = &insertion_prover_map[&batch_size];
 
-    let port = db_container.port();
-    let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
-    let mut options = Options::try_parse_from([
-        "signup-sequencer",
-        "--identity-manager-address",
-        "0x0000000000000000000000000000000000000000", // placeholder, updated below
-        "--database",
-        &db_url,
-        "--database-max-connections",
-        "1",
-        "--tree-depth",
-        &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_mock.arg_string(),
-        "--batch-timeout-seconds",
-        "10",
-        "--dense-tree-prefix-depth",
-        "10",
-        "--tree-gc-threshold",
-        "1",
-        "--oz-api-key",
-        "",
-        "--oz-api-secret",
-        "",
-        "--oz-api-url",
-        &micro_oz.endpoint(),
-        "--oz-address",
-        &format!("{:?}", micro_oz.address()),
-    ])
-    .context("Failed to create options")?;
+        let port = db_container.port();
+        let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
+        let mut options = Options::try_parse_from([
+            "signup-sequencer",
+            "--identity-manager-address",
+            "0x0000000000000000000000000000000000000000", // placeholder, updated below
+            "--database",
+            &db_url,
+            "--database-max-connections",
+            "1",
+            "--tree-depth",
+            &format!("{tree_depth}"),
+            "--prover-urls",
+            &prover_mock.arg_string(),
+            "--batch-timeout-seconds",
+            "10",
+            "--dense-tree-prefix-depth",
+            "10",
+            "--tree-gc-threshold",
+            "1",
+            "--oz-api-key",
+            "",
+            "--oz-api-secret",
+            "",
+            "--oz-api-url",
+            &micro_oz.endpoint(),
+            "--oz-address",
+            &format!("{:?}", micro_oz.address()),
+        ])
+        .context("Failed to create options")?;
 
-    options.server.server = Url::parse("http://127.0.0.1:0/")?;
+        options.server.server = Url::parse("http://127.0.0.1:0/")?;
 
-    options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
-    options.app.ethereum.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint())?;
+        options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
+        options.app.ethereum.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint())?;
 
-    let (app, local_addr) = spawn_app(options.clone())
-        .await
-        .expect("Failed to spawn app.");
+        let (app, local_addr) = spawn_app(options.clone())
+            .await
+            .expect("Failed to spawn app.");
 
-    let uri = "http://".to_owned() + &local_addr.to_string();
-    let client = Client::new();
+        let uri = "http://".to_owned() + &local_addr.to_string();
+        let client = Client::new();
 
-    // 20 MiB zero bytes
-    let body = vec![0u8; 1024 * 1024 * 20];
+        // 20 MiB zero bytes
+        let body = vec![0u8; 1024 * 1024 * 20];
 
-    let too_large_payload = Request::builder()
-        .method("POST")
-        .uri(format!("{uri}/insertIdentity"))
-        .header("Content-Type", "application/json")
-        .body(Body::from(body))
-        .unwrap();
+        let too_large_payload = Request::builder()
+            .method("POST")
+            .uri(format!("{uri}/insertIdentity"))
+            .header("Content-Type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
 
-    let response = client.request(too_large_payload).await?;
+        let response = client.request(too_large_payload).await?;
 
-    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
 
-    // A KiB of 0xffs is not a valid UTF-8 string
-    let body = vec![0xffu8; 1024];
+        // A KiB of 0xffs is not a valid UTF-8 string
+        let body = vec![0xffu8; 1024];
 
-    let invalid_payload = Request::builder()
-        .method("POST")
-        .uri(format!("{uri}/insertIdentity"))
-        .header("Content-Type", "application/json")
-        .body(Body::from(body))
-        .unwrap();
+        let invalid_payload = Request::builder()
+            .method("POST")
+            .uri(format!("{uri}/insertIdentity"))
+            .header("Content-Type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
 
-    let response = client.request(invalid_payload).await?;
+        let response = client.request(invalid_payload).await?;
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-    shutdown();
-    app.await?;
-    for (_, prover) in prover_map.into_iter() {
-        prover.stop();
+        shutdown();
+        app.await?;
+        for (_, prover) in insertion_prover_map.into_iter() {
+            prover.stop();
+        }
+        reset_shutdown();
+
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("No insertion prover map found"))
     }
-    reset_shutdown();
-
-    Ok(())
 }

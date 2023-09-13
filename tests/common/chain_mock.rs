@@ -29,7 +29,8 @@ pub struct MockChain {
 #[instrument(skip_all)]
 pub async fn spawn_mock_chain(
     initial_root: U256,
-    batch_sizes: &[usize],
+    insertion_batch_sizes: &[usize],
+    deletion_batch_sizes: &[usize],
     tree_depth: u8,
 ) -> anyhow::Result<MockChain> {
     let chain = Anvil::new().block_time(2u64).spawn();
@@ -126,7 +127,7 @@ pub async fn spawn_mock_chain(
     let verifier_lookup_table_factory =
         load_and_build_contract("./sol/VerifierLookupTable.json", client.clone())?;
 
-    let first_batch_size = batch_sizes[0];
+    let first_batch_size = insertion_batch_sizes[0];
 
     let insert_verifiers = verifier_lookup_table_factory
         .clone()
@@ -141,16 +142,7 @@ pub async fn spawn_mock_chain(
         .send()
         .await?;
 
-    let identity_manager_impl_factory =
-        load_and_build_contract("./sol/WorldIDIdentityManagerImplV1.json", client.clone())?;
-
-    let identity_manager_impl = identity_manager_impl_factory
-        .deploy(())?
-        .confirmations(0usize)
-        .send()
-        .await?;
-
-    for batch_size in &batch_sizes[1..] {
+    for batch_size in &insertion_batch_sizes[1..] {
         let batch_size = *batch_size as u64;
 
         info!("Adding verifier for batch size {}", batch_size);
@@ -160,6 +152,17 @@ pub async fn spawn_mock_chain(
             .await?
             .await?;
     }
+
+    // TODO: update with deletion batch sizes as well
+
+    let identity_manager_impl_factory =
+        load_and_build_contract("./sol/WorldIDIdentityManagerImplV1.json", client.clone())?;
+
+    let identity_manager_impl = identity_manager_impl_factory
+        .deploy(())?
+        .confirmations(0usize)
+        .send()
+        .await?;
 
     let identity_manager_factory =
         load_and_build_contract("./sol/WorldIDIdentityManager.json", client.clone())?;

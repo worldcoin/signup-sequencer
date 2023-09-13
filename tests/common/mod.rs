@@ -379,39 +379,84 @@ struct CompiledContract {
 
 pub async fn spawn_deps(
     initial_root: U256,
-    batch_sizes: &[usize],
+    insertion_batch_sizes: &[usize],
+    deletion_batch_sizes: &[usize],
     tree_depth: u8,
 ) -> anyhow::Result<(
     MockChain,
     DockerContainerGuard,
-    HashMap<usize, ProverService>,
+    Option<HashMap<usize, ProverService>>,
+    Option<HashMap<usize, ProverService>>,
     micro_oz::ServerHandle,
 )> {
-    let chain = spawn_mock_chain(initial_root, batch_sizes, tree_depth);
+    let chain = spawn_mock_chain(
+        initial_root,
+        insertion_batch_sizes,
+        deletion_batch_sizes,
+        tree_depth,
+    );
+
     let db_container = spawn_db();
 
-    let prover_futures = FuturesUnordered::new();
-    for batch_size in batch_sizes {
-        prover_futures.push(spawn_mock_insertion_prover(*batch_size));
-        prover_futures.push(spawn_mock_deletion_prover(*batch_size));
+    let insertion_prover_futures = FuturesUnordered::new();
+    for batch_size in insertion_batch_sizes {
+        insertion_prover_futures.push(spawn_mock_insertion_prover(*batch_size));
     }
 
-    let (chain, db_container, provers) =
-        tokio::join!(chain, db_container, prover_futures.collect::<Vec<_>>());
+    let deletion_prover_futures = FuturesUnordered::new();
+    for batch_size in deletion_batch_sizes {
+        deletion_prover_futures.push(spawn_mock_deletion_prover(*batch_size));
+    }
+
+    let (chain, db_container, insertion_provers, deletion_provers) = tokio::join!(
+        chain,
+        db_container,
+        insertion_prover_futures.collect::<Vec<_>>(),
+        deletion_prover_futures.collect::<Vec<_>>()
+    );
 
     let chain = chain?;
 
     let signing_key = SigningKey::from_bytes(chain.private_key.as_bytes())?;
     let micro_oz = micro_oz::spawn(chain.anvil.endpoint(), signing_key).await?;
 
-    let provers = provers.into_iter().collect::<Result<Vec<_>, _>>()?;
+    let insertion_prover_map = if insertion_provers.is_empty() {
+        None
+    } else {
+        let insertion_provers = insertion_provers
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
 
-    let prover_map = provers
-        .into_iter()
-        .map(|prover| (prover.batch_size(), prover))
-        .collect();
+        Some(
+            insertion_provers
+                .into_iter()
+                .map(|prover| (prover.batch_size(), prover))
+                .collect::<HashMap<usize, ProverService>>(),
+        )
+    };
 
-    Ok((chain, db_container?, prover_map, micro_oz))
+    let deletion_prover_map = if deletion_provers.is_empty() {
+        None
+    } else {
+        let provers = deletion_provers
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Some(
+            provers
+                .into_iter()
+                .map(|prover| (prover.batch_size(), prover))
+                .collect::<HashMap<usize, ProverService>>(),
+        )
+    };
+
+    Ok((
+        chain,
+        db_container?,
+        insertion_prover_map,
+        deletion_prover_map,
+        micro_oz,
+    ))
 }
 
 async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {

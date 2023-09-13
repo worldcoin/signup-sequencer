@@ -48,8 +48,9 @@ pub mod prelude {
     pub use super::prover_mock::ProverService;
     pub use super::{
         abi as ContractAbi, generate_reference_proof_json, generate_test_identities,
-        init_tracing_subscriber, spawn_app, spawn_deps, spawn_mock_prover, test_inclusion_proof,
-        test_insert_identity, test_verify_proof, test_verify_proof_on_chain,
+        init_tracing_subscriber, spawn_app, spawn_deps, spawn_mock_deletion_prover,
+        spawn_mock_insertion_prover, test_inclusion_proof, test_insert_identity, test_verify_proof,
+        test_verify_proof_on_chain,
     };
 }
 
@@ -391,7 +392,8 @@ pub async fn spawn_deps(
 
     let prover_futures = FuturesUnordered::new();
     for batch_size in batch_sizes {
-        prover_futures.push(spawn_mock_prover(*batch_size));
+        prover_futures.push(spawn_mock_insertion_prover(*batch_size));
+        prover_futures.push(spawn_mock_deletion_prover(*batch_size));
     }
 
     let (chain, db_container, provers) =
@@ -418,9 +420,16 @@ async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {
     Ok(db_container)
 }
 
-pub async fn spawn_mock_prover(batch_size: usize) -> anyhow::Result<ProverService> {
+pub async fn spawn_mock_insertion_prover(batch_size: usize) -> anyhow::Result<ProverService> {
     let mock_prover_service =
         prover_mock::ProverService::new(batch_size, prover_mock::ProverType::Insertion).await?;
+
+    Ok(mock_prover_service)
+}
+
+pub async fn spawn_mock_deletion_prover(batch_size: usize) -> anyhow::Result<ProverService> {
+    let mock_prover_service =
+        prover_mock::ProverService::new(batch_size, prover_mock::ProverType::Deletion).await?;
 
     Ok(mock_prover_service)
 }

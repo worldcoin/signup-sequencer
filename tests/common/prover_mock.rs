@@ -147,13 +147,13 @@ impl ProverService {
     pub async fn new(batch_size: usize, prover_type: ProverType) -> anyhow::Result<Self> {
         async fn prove(
             state: State<Arc<Mutex<Prover>>>,
-            input: Json<Value>,
+            Json(input): Json<serde_json::Value>,
         ) -> Result<Json<ProveResponse>, StatusCode> {
-            let mut state = state.lock().await;
+            let state = state.lock().await;
 
             // Attempt to deserialize into InsertionProofInput
             if let Ok(deserialized_insertion_input) =
-                serde_json::from_value::<InsertionProofInput>(input.0.clone())
+                serde_json::from_value::<InsertionProofInput>(input.clone())
             {
                 return state
                     .prove_insertion(deserialized_insertion_input)
@@ -162,7 +162,7 @@ impl ProverService {
 
             // If the above fails, attempt to deserialize into DeletionProofInput
             if let Ok(deserialized_deletion_input) =
-                serde_json::from_value::<DeletionProofInput>(input.0.clone())
+                serde_json::from_value::<DeletionProofInput>(input)
             {
                 return state.prove_deletion(deserialized_deletion_input).map(Json);
             }

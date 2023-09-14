@@ -117,115 +117,49 @@ async fn delete_identities() -> anyhow::Result<()> {
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
-    // // Delete enough identities to trigger a batch
-    test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 1).await;
-    // test_delete_identity(&uri, &client, &mut ref_tree,
-    // &identities_ref, 2).await; // test_delete_identity(&uri, &client, &mut
-    // ref_tree, &identities_ref, 3).await;
+    // Delete enough identities to trigger a batch
+    for i in 0..deletion_batch_size {
+        test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, i).await;
+    }
 
-    // // // TODO: wait for batch to complete
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
-    // // todo!("not implemented");
+    // Ensure that identities have been deleted
+    for i in 0..deletion_batch_size {
+        test_inclusion_proof(
+            &uri,
+            &client,
+            i,
+            &ref_tree,
+            &Hash::from_str_radix(&test_identities[i], 16)
+                .expect("Failed to parse Hash from test leaf 0"),
+            true,
+        )
+        .await;
+    }
 
-    // // // Test that inclusion proofs fail for deleted identities
-    // // test_inclusion_proof(
-    // //     &uri,
-    // //     &client,
-    // //     1,
-    // //     &ref_tree,
-    // //     &Hash::from_str_radix(&test_identities[1], 16)
-    // //         .expect("Failed to parse Hash from test leaf 0"),
-    // //     true,
-    // // )
-    // // .await;
+    // TODO: try to delete when already deleted
 
-    // // test_inclusion_proof(
-    // //     &uri,
-    // //     &client,
-    // //     2,
-    // //     &ref_tree,
-    // //     &Hash::from_str_radix(&test_identities[2], 16)
-    // //         .expect("Failed to parse Hash from test leaf 0"),
-    // //     true,
-    // // )
-    // // .await;
-    // // test_inclusion_proof(
-    // //     &uri,
-    // //     &client,
-    // //     3,
-    // //     &ref_tree,
-    // //     &Hash::from_str_radix(&test_identities[3], 16)
-    // //         .expect("Failed to parse Hash from test leaf 0"),
-    // //     true,
-    // // )
-    // // .await;
+    // TODO: try to delete identity that is not found
 
-    // // // Create two deletions which will not be enough to trigger a batch
-    // // test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref,
-    // 4).await; // test_delete_identity(&uri, &client, &mut ref_tree,
-    // &identities_ref, 5).await;
+    // TODO: try to delete when already queued for deletion
 
-    // // test_inclusion_proof(
-    // //     &uri,
-    // //     &client,
-    // //     4,
-    // //     &ref_tree,
-    // //     &Hash::from_str_radix(&test_identities[4], 16)
-    // //         .expect("Failed to parse Hash from test leaf 0"),
-    // //     false,
-    // // )
-    // // .await;
-    // // test_inclusion_proof(
-    // //     &uri,
-    // //     &client,
-    // //     5,
-    // //     &ref_tree,
-    // //     &Hash::from_str_radix(&test_identities[5], 16)
-    // //         .expect("Failed to parse Hash from test leaf 0"),
-    // //     false,
-    // // )
-    // // .await;
-
-    // // // Sleep for the batch_deletion_timeout_seconds
-    // // tokio::time::sleep(Duration::from_secs(5)).await;
-
-    // // // Inclusion proof should fail after deletion
-    // // test_inclusion_proof(
-    // //     &uri,
-    // //     &client,
-    // //     4,
-    // //     &ref_tree,
-    // //     &Hash::from_str_radix(&test_identities[4], 16)
-    // //         .expect("Failed to parse Hash from test leaf 0"),
-    // //     true,
-    // // )
-    // // .await;
-
-    // // test_inclusion_proof(
-    // //     &uri,
-    // //     &client,
-    // //     5,
-    // //     &ref_tree,
-    // //     &Hash::from_str_radix(&test_identities[5], 16)
-    // //         .expect("Failed to parse Hash from test leaf 0"),
-    // //     true,
-    // // )
-    // // .await;
+    // TODO: trigger deletion from batch time
 
     // // // TODO: create one deletion, will this trigger a batch?
 
-    // // // TODO: need to test recoveries
+    // TODO: need to test recoveries
 
-    // // // Shutdown the app properly for the final time
-    // // shutdown();
-    // // app.await.unwrap();
-    // // for (_, prover) in insertion_prover_map.into_iter() {
-    // //     prover.stop();
-    // // }
-    // // for (_, prover) in deletion_prover_map.into_iter() {
-    // //     prover.stop();
-    // // }
-    // // reset_shutdown();
+    // Shutdown the app properly for the final time
+    shutdown();
+    app.await.unwrap();
+    for (_, prover) in insertion_prover_map.into_iter() {
+        prover.stop();
+    }
+    for (_, prover) in deletion_prover_map.into_iter() {
+        prover.stop();
+    }
+    reset_shutdown();
 
     Ok(())
 }

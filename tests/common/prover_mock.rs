@@ -152,7 +152,7 @@ impl ProverService {
         let service = app.into_make_service();
 
         tokio::spawn(async move {
-            axum_server::bind(x)
+            axum_server::bind(addr)
                 .handle(serverside_handle)
                 .serve(service)
                 .await
@@ -216,8 +216,8 @@ impl ProverService {
     }
 }
 
-// Do we need to create a different type of prover
 impl Prover {
+    // TODO: we need a mock deletion proof
     fn prove(&self, input: ProofInput) -> Result<ProveResponse, StatusCode> {
         if !self.is_available {
             return Err(StatusCode::SERVICE_UNAVAILABLE);

@@ -132,9 +132,3 @@ async fn recover_identities() -> anyhow::Result<()> {
 
     Ok(())
 }
-
-#[tokio::test]
-#[serial_test::serial]
-async fn recover_identities() -> anyhow::Result<()> {
-    todo!("")
-}

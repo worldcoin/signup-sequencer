@@ -54,9 +54,9 @@ struct InsertionProofInput {
 #[serde(rename_all = "camelCase")]
 struct DeletionProofInput {
     input_hash:           U256,
-    start_index:          u32,
     pre_root:             U256,
     post_root:            U256,
+    deletion_indices:     Vec<u32>,
     identity_commitments: Vec<U256>,
     merkle_proofs:        Vec<Vec<U256>>,
 }
@@ -305,7 +305,58 @@ impl Prover {
     }
 
     fn prove_deletion(&self, input: DeletionProofInput) -> Result<ProveResponse, StatusCode> {
-        todo!()
+        if !self.is_available {
+            return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+
+        // Calculate the input hash based on the prover parameters.
+        let input_hash = Self::calculate_identity_deletion_input_hash(&input);
+
+        // If the hashes aren't the same something's wrong so we return an error.
+        if input_hash != input.input_hash {
+            return Ok(ProveResponse::failure("42", "Input hash mismatch."));
+        }
+
+        // Next we verify the merkle proofs.
+        let empty_leaf = U256::zero();
+        let mut last_root = input.pre_root;
+
+        for (index, (identity, merkle_proof)) in input
+            .identity_commitments
+            .iter()
+            .zip(input.merkle_proofs)
+            .enumerate()
+        {
+            let leaf_index = input.deletion_indices[index];
+            let proof = Self::reconstruct_proof_with_directions(leaf_index as usize, &merkle_proof);
+
+            let root: U256 = proof.root(empty_leaf.into()).into();
+
+            if root != last_root {
+                break;
+            }
+
+            last_root = proof.root((*identity).into()).into();
+        }
+
+        // If the final root doesn't match the post root something's broken so we error.
+        if last_root != input.post_root {
+            return Ok(ProveResponse::failure(
+                "43",
+                "Merkle proof verification failure.",
+            ));
+        }
+
+        Ok(ProveResponse::success([
+            "0x2".into(),
+            input_hash,
+            "0x2413396a2af3add6fbe8137cfe7657917e31a5cdab0b7d1d645bd5eeb47ba601".into(),
+            "0x1ad029539528b32ba70964ce43dbf9bba2501cdb3aaa04e4d58982e2f6c34752".into(),
+            "0x5bb975296032b135458bd49f92d5e9d363367804440d4692708de92e887cf17".into(),
+            "0x14932600f53a1ceb11d79a7bdd9688a2f8d1919176f257f132587b2b3274c41e".into(),
+            "0x13d7b19c7b67bf5d3adf2ac2d3885fd5d49435b6069c0656939cd1fb7bef9dc9".into(),
+            "0x142e14f90c49c79b4edf5f6b7acbcdb0b0f376a4311fc036f1006679bd53ca9e".into(),
+        ]))
     }
 
     /// Reconstructs the proof with directions as required by `semaphore-rs`.
@@ -361,5 +412,29 @@ impl Prover {
         });
 
         keccak256(hashable_bytes).into()
+    }
+
+    /// Calculates the input hash based on the `input` parameters to the prover.
+    ///
+    /// We keccak hash all input to save verification gas. Inputs are arranged
+    /// as follows:
+    /// ```
+    /// PackedDeletionIndices || PreRoot || PostRoot
+    ///   32 bits * batchSize ||   256   ||    256
+    /// ```
+    fn calculate_identity_deletion_input_hash(input: &DeletionProofInput) -> U256 {
+        let mut data = vec![];
+
+        // Loop through deletion_indices, convert each to bytes, and append to data
+        for &index in &input.deletion_indices {
+            data.extend_from_slice(&index.to_be_bytes());
+        }
+
+        // Append pre_root and post_root as bytes
+        input.pre_root.to_big_endian(&mut data);
+        input.post_root.to_big_endian(&mut data);
+
+        let output = keccak256(data);
+        U256::from_big_endian(&output)
     }
 }

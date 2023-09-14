@@ -309,16 +309,12 @@ impl Prover {
             return Err(StatusCode::SERVICE_UNAVAILABLE);
         }
 
-        dbg!("proving deletion, service available");
-
         // Calculate the input hash based on the prover parameters.
         let input_hash = Self::compute_deletion_proof_input_hash(
             input.pre_root,
             &input.identity_commitments,
             input.post_root,
         );
-
-        dbg!("id deletion input hash calculated");
 
         // If the hashes aren't the same something's wrong so we return an error.
         if input_hash != input.input_hash {
@@ -329,22 +325,10 @@ impl Prover {
         let empty_leaf = U256::zero();
         let mut last_root = input.pre_root;
 
-        for (index, (identity, merkle_proof)) in input
-            .identity_commitments
-            .iter()
-            .zip(input.merkle_proofs)
-            .enumerate()
-        {
-            let leaf_index = input.deletion_indices[index];
-            let proof = Self::reconstruct_proof_with_directions(leaf_index as usize, &merkle_proof);
-
-            let root: U256 = proof.root(empty_leaf.into()).into();
-
-            if root != last_root {
-                break;
-            }
-
-            last_root = proof.root((*identity).into()).into();
+        for (leaf_index, merkle_proof) in input.deletion_indices.iter().zip(input.merkle_proofs) {
+            let proof =
+                Self::reconstruct_proof_with_directions(*leaf_index as usize, &merkle_proof);
+            last_root = proof.root(empty_leaf.into()).into();
         }
 
         // If the final root doesn't match the post root something's broken so we error.

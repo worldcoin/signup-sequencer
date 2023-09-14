@@ -251,7 +251,8 @@ impl Prover {
         pre_root: U256,
         post_root: U256,
         deletion_indices: &[u32],
-        identities: Vec<Identity>,
+        identities: Vec<Identity>, /* TODO: FIXME: can cretae a proof of prev identities and
+                                    * merkle proofs */
     ) -> anyhow::Result<Proof> {
         if identities.len() != self.batch_size {
             return Err(anyhow::Error::msg(
@@ -265,6 +266,8 @@ impl Prover {
             .into_iter()
             .map(|id| (id.commitment, id.merkle_proof))
             .unzip();
+
+        // TODO: FIXME: need to send previous identity_commitments not the new ones
 
         let input_hash =
             compute_deletion_proof_input_hash(pre_root, &identity_commitments, post_root);

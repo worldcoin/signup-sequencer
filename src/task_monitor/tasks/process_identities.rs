@@ -534,6 +534,7 @@ pub async fn delete_identities(
     // With the updates applied we can grab the value of the tree's new root and
     // build our identities for sending to the identity manager.
     let post_root: U256 = latest_tree_from_updates.root().into();
+
     let identity_commitments: Vec<Identity> = commitments
         .iter()
         .zip(merkle_proofs)

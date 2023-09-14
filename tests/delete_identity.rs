@@ -2,7 +2,9 @@ mod common;
 
 use common::prelude::*;
 
-const SUPPORTED_DEPTH: usize = 20;
+use crate::common::test_delete_identity;
+
+const SUPPORTED_DEPTH: usize = 18;
 const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
@@ -12,243 +14,224 @@ async fn delete_identities() -> anyhow::Result<()> {
     init_tracing_subscriber();
     info!("Starting integration test");
 
-    let batch_size: usize = 3;
+    let insertion_batch_size: usize = 8;
+    let deletion_batch_size: usize = 3;
+
     #[allow(clippy::cast_possible_truncation)]
     let tree_depth: u8 = SUPPORTED_DEPTH as u8;
 
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &vec![], tree_depth).await?;
-
-    if let Some(insertion_prover_map) = insertion_prover_map {
-        let prover_mock = &insertion_prover_map[&batch_size];
-
-        let port = db_container.port();
-        let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
-
-        let mut options = Options::try_parse_from([
-            "signup-sequencer",
-            "--identity-manager-address",
-            "0x0000000000000000000000000000000000000000", // placeholder, updated below
-            "--database",
-            &db_url,
-            "--database-max-connections",
-            "1",
-            "--tree-depth",
-            &format!("{tree_depth}"),
-            "--prover-urls",
-            &prover_mock.arg_string(),
-            "--batch-timeout-seconds",
-            "10",
-            "--dense-tree-prefix-depth",
-            "10",
-            "--tree-gc-threshold",
-            "1",
-            "--oz-api-key",
-            "",
-            "--oz-api-secret",
-            "",
-            "--oz-api-url",
-            &micro_oz.endpoint(),
-            "--oz-address",
-            &format!("{:?}", micro_oz.address()),
-        ])
-        .context("Failed to create options")?;
-
-        options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
-
-        options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
-        options.app.ethereum.ethereum_provider =
-            Url::parse(&mock_chain.anvil.endpoint()).expect("Failed to parse Anvil url");
-
-        let (app, local_addr) = spawn_app(options.clone())
-            .await
-            .expect("Failed to spawn app.");
-
-        let test_identities = generate_test_identities(batch_size * 3);
-        let identities_ref: Vec<Field> = test_identities
-            .iter()
-            .map(|i| Hash::from_str_radix(i, 16).unwrap())
-            .collect();
-
-        let uri = "http://".to_owned() + &local_addr.to_string();
-        let client = Client::new();
-
-        // Check that we can get inclusion proofs for things that already exist in the
-        // database and on chain.
-        test_inclusion_proof(
-            &uri,
-            &client,
-            0,
-            &ref_tree,
-            &options.app.contracts.initial_leaf_value,
-            true,
+    let (mock_chain, db_container, insertion_prover_map, deletion_prover_map, micro_oz) =
+        spawn_deps(
+            initial_root,
+            &[insertion_batch_size],
+            &[deletion_batch_size],
+            tree_depth,
         )
-        .await;
-        test_inclusion_proof(
-            &uri,
-            &client,
-            1,
-            &ref_tree,
-            &options.app.contracts.initial_leaf_value,
-            true,
-        )
-        .await;
+        .await?;
 
-        // Insert enough identities to trigger an batch to be sent to the blockchain
-        // based on the current batch size of 3.
-        test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 0).await;
-        test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 1).await;
-        test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 2).await;
+    let mock_insertion_prover = &insertion_prover_map[&insertion_batch_size];
+    let mock_deletion_prover = &deletion_prover_map[&deletion_batch_size];
 
-        tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
-        // Check that we can get their inclusion proofs back.
-        test_inclusion_proof(
-            &uri,
-            &client,
-            0,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[0], 16)
-                .expect("Failed to parse Hash from test leaf 0"),
-            false,
-        )
-        .await;
-        test_inclusion_proof(
-            &uri,
-            &client,
-            1,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[1], 16)
-                .expect("Failed to parse Hash from test leaf 0"),
-            false,
-        )
-        .await;
-        test_inclusion_proof(
-            &uri,
-            &client,
-            2,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[2], 16)
-                .expect("Failed to parse Hash from test leaf 0"),
-            false,
-        )
-        .await;
+    let port = db_container.port();
+    let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
 
-        // Insert too few identities to trigger a batch, and then force the timeout to
-        // complete and submit a partial batch to the chain.
-        test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 3).await;
-        test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 4).await;
-        tokio::time::pause();
-        tokio::time::resume();
+    let mut options = Options::try_parse_from([
+        "signup-sequencer",
+        "--identity-manager-address",
+        "0x0000000000000000000000000000000000000000", // placeholder, updated below
+        "--database",
+        &db_url,
+        "--database-max-connections",
+        "1",
+        "--tree-depth",
+        &format!("{tree_depth}"),
+        "--prover-urls",
+        &format!(
+            "[{}, {}]",
+            mock_insertion_prover.arg_string_single(),
+            mock_deletion_prover.arg_string_single()
+        ),
+        "--batch-timeout-seconds",
+        "10",
+        "--batch-deletion-timeout-seconds",
+        "5",
+        "--dense-tree-prefix-depth",
+        "10",
+        "--tree-gc-threshold",
+        "1",
+        "--oz-api-key",
+        "",
+        "--oz-api-secret",
+        "",
+        "--oz-api-url",
+        &micro_oz.endpoint(),
+        "--oz-address",
+        &format!("{:?}", micro_oz.address()),
+    ])
+    .context("Failed to create options")?;
 
-        tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
-        // Check that we can also get these inclusion proofs back.
-        test_inclusion_proof(
-            &uri,
-            &client,
-            3,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[3], 16)
-                .expect("Failed to parse Hash from test leaf 0"),
-            false,
-        )
-        .await;
-        test_inclusion_proof(
-            &uri,
-            &client,
-            4,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[4], 16)
-                .expect("Failed to parse Hash from test leaf 0"),
-            false,
-        )
-        .await;
+    options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
-        // Shutdown the app and reset the mock shutdown, allowing us to test the
-        // behaviour with saved data.
-        info!("Stopping the app for testing purposes");
-        shutdown();
-        app.await.unwrap();
-        reset_shutdown();
+    options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
+    options.app.ethereum.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint()).expect(
+        "
+    Failed to parse Anvil url",
+    );
 
-        // Test loading the state from a file when the on-chain contract has the state.
-        let (app, local_addr) = spawn_app(options.clone())
-            .await
-            .expect("Failed to spawn app.");
-        let uri = "http://".to_owned() + &local_addr.to_string();
+    let (app, local_addr) = spawn_app(options.clone())
+        .await
+        .expect("Failed to spawn app.");
 
-        // Check that we can still get inclusion proofs for identities we know to have
-        // been inserted previously. Here we check the first and last ones we inserted.
-        test_inclusion_proof(
-            &uri,
-            &client,
-            0,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[0], 16)
-                .expect("Failed to parse Hash from test leaf 0"),
-            false,
-        )
-        .await;
-        test_inclusion_proof(
-            &uri,
-            &client,
-            4,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[4], 16)
-                .expect("Failed to parse Hash from test leaf 0"),
-            false,
-        )
-        .await;
+    let test_identities = generate_test_identities(insertion_batch_size * 3);
+    let identities_ref: Vec<Field> = test_identities
+        .iter()
+        .map(|i| Hash::from_str_radix(i, 16).unwrap())
+        .collect();
 
-        // Shutdown the app and reset the mock shutdown, allowing us to test the
-        // behaviour with the saved tree.
-        info!("Stopping the app for testing purposes");
-        shutdown();
-        app.await.unwrap();
-        reset_shutdown();
+    let uri = "http://".to_owned() + &local_addr.to_string();
+    let client = Client::new();
 
-        // Test loading the state from the saved tree when the on-chain contract has the
-        // state.
-        let (app, local_addr) = spawn_app(options.clone())
-            .await
-            .expect("Failed to spawn app.");
-        let uri = "http://".to_owned() + &local_addr.to_string();
-
-        // Check that we can still get inclusion proofs for identities we know to have
-        // been inserted previously. Here we check the first and last ones we inserted.
-        test_inclusion_proof(
-            &uri,
-            &client,
-            0,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[0], 16)
-                .expect("Failed to parse Hash from test leaf 0"),
-            false,
-        )
-        .await;
-        test_inclusion_proof(
-            &uri,
-            &client,
-            4,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[4], 16)
-                .expect("Failed to parse Hash from test leaf 0"),
-            false,
-        )
-        .await;
-
-        // Shutdown the app properly for the final time
-        shutdown();
-        app.await.unwrap();
-        for (_, prover) in insertion_prover_map.into_iter() {
-            prover.stop();
-        }
-        reset_shutdown();
-
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!("No insertion prover map found"))
+    // Insert enough identities to trigger an batch to be sent to the blockchain.
+    for i in 0..insertion_batch_size {
+        test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, i).await;
     }
+
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
+
+    // Check that we can also get these inclusion proofs back.
+    for i in 0..insertion_batch_size {
+        test_inclusion_proof(
+            &uri,
+            &client,
+            i,
+            &ref_tree,
+            &Hash::from_str_radix(&test_identities[i], 16)
+                .expect("Failed to parse Hash from test leaf 0"),
+            false,
+        )
+        .await;
+    }
+
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
+
+    // // Delete enough identities to trigger a batch
+    test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 1).await;
+    // test_delete_identity(&uri, &client, &mut ref_tree,
+    // &identities_ref, 2).await; // test_delete_identity(&uri, &client, &mut
+    // ref_tree, &identities_ref, 3).await;
+
+    // // // TODO: wait for batch to complete
+
+    // // todo!("not implemented");
+
+    // // // Test that inclusion proofs fail for deleted identities
+    // // test_inclusion_proof(
+    // //     &uri,
+    // //     &client,
+    // //     1,
+    // //     &ref_tree,
+    // //     &Hash::from_str_radix(&test_identities[1], 16)
+    // //         .expect("Failed to parse Hash from test leaf 0"),
+    // //     true,
+    // // )
+    // // .await;
+
+    // // test_inclusion_proof(
+    // //     &uri,
+    // //     &client,
+    // //     2,
+    // //     &ref_tree,
+    // //     &Hash::from_str_radix(&test_identities[2], 16)
+    // //         .expect("Failed to parse Hash from test leaf 0"),
+    // //     true,
+    // // )
+    // // .await;
+    // // test_inclusion_proof(
+    // //     &uri,
+    // //     &client,
+    // //     3,
+    // //     &ref_tree,
+    // //     &Hash::from_str_radix(&test_identities[3], 16)
+    // //         .expect("Failed to parse Hash from test leaf 0"),
+    // //     true,
+    // // )
+    // // .await;
+
+    // // // Create two deletions which will not be enough to trigger a batch
+    // // test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref,
+    // 4).await; // test_delete_identity(&uri, &client, &mut ref_tree,
+    // &identities_ref, 5).await;
+
+    // // test_inclusion_proof(
+    // //     &uri,
+    // //     &client,
+    // //     4,
+    // //     &ref_tree,
+    // //     &Hash::from_str_radix(&test_identities[4], 16)
+    // //         .expect("Failed to parse Hash from test leaf 0"),
+    // //     false,
+    // // )
+    // // .await;
+    // // test_inclusion_proof(
+    // //     &uri,
+    // //     &client,
+    // //     5,
+    // //     &ref_tree,
+    // //     &Hash::from_str_radix(&test_identities[5], 16)
+    // //         .expect("Failed to parse Hash from test leaf 0"),
+    // //     false,
+    // // )
+    // // .await;
+
+    // // // Sleep for the batch_deletion_timeout_seconds
+    // // tokio::time::sleep(Duration::from_secs(5)).await;
+
+    // // // Inclusion proof should fail after deletion
+    // // test_inclusion_proof(
+    // //     &uri,
+    // //     &client,
+    // //     4,
+    // //     &ref_tree,
+    // //     &Hash::from_str_radix(&test_identities[4], 16)
+    // //         .expect("Failed to parse Hash from test leaf 0"),
+    // //     true,
+    // // )
+    // // .await;
+
+    // // test_inclusion_proof(
+    // //     &uri,
+    // //     &client,
+    // //     5,
+    // //     &ref_tree,
+    // //     &Hash::from_str_radix(&test_identities[5], 16)
+    // //         .expect("Failed to parse Hash from test leaf 0"),
+    // //     true,
+    // // )
+    // // .await;
+
+    // // // TODO: create one deletion, will this trigger a batch?
+
+    // // // TODO: need to test recoveries
+
+    // // // Shutdown the app properly for the final time
+    // // shutdown();
+    // // app.await.unwrap();
+    // // for (_, prover) in insertion_prover_map.into_iter() {
+    // //     prover.stop();
+    // // }
+    // // for (_, prover) in deletion_prover_map.into_iter() {
+    // //     prover.stop();
+    // // }
+    // // reset_shutdown();
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn recover_identities() -> anyhow::Result<()> {
+    todo!("")
 }

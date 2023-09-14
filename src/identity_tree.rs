@@ -185,7 +185,7 @@ where
 
     /// Gets the leaf value at a given index.
     fn get_leaf(&self, leaf: usize) -> Hash {
-        self.get_leaf(leaf)
+        self.tree.get_leaf(leaf)
     }
 
     /// Gets the proof of the given leaf index element

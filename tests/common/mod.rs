@@ -205,6 +205,40 @@ pub async fn test_inclusion_proof(
 }
 
 #[instrument(skip_all)]
+pub async fn test_delete_identity(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    ref_tree: &mut PoseidonTree,
+    test_leaves: &[Field],
+    leaf_index: usize,
+) -> (merkle_tree::Proof<PoseidonHash>, Field) {
+    let body = construct_delete_identity_body(&test_leaves[leaf_index]);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri.to_owned() + "/deleteIdentity")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create insert identity hyper::Body");
+
+    let mut response = client
+        .request(req)
+        .await
+        .expect("Failed to execute request.");
+    let bytes = hyper::body::to_bytes(response.body_mut())
+        .await
+        .expect("Failed to convert response body to bytes");
+    if !response.status().is_success() {
+        panic!("Failed to delete identity");
+    }
+
+    assert!(bytes.is_empty());
+    ref_tree.set(leaf_index, Hash::ZERO);
+
+    (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())
+}
+
+#[instrument(skip_all)]
 pub async fn test_add_batch_size(
     uri: impl Into<String>,
     prover_url: impl Into<String>,
@@ -315,6 +349,15 @@ fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
     )
 }
 
+fn construct_delete_identity_body(identity_commitment: &Hash) -> Body {
+    Body::from(
+        json!({
+            "identityCommitment": identity_commitment,
+        })
+        .to_string(),
+    )
+}
+
 fn construct_insert_identity_body(identity_commitment: &Field) -> Body {
     Body::from(
         json!({
@@ -385,8 +428,8 @@ pub async fn spawn_deps(
 ) -> anyhow::Result<(
     MockChain,
     DockerContainerGuard,
-    Option<HashMap<usize, ProverService>>,
-    Option<HashMap<usize, ProverService>>,
+    HashMap<usize, ProverService>,
+    HashMap<usize, ProverService>,
     micro_oz::ServerHandle,
 )> {
     let chain = spawn_mock_chain(
@@ -420,35 +463,23 @@ pub async fn spawn_deps(
     let signing_key = SigningKey::from_bytes(chain.private_key.as_bytes())?;
     let micro_oz = micro_oz::spawn(chain.anvil.endpoint(), signing_key).await?;
 
-    let insertion_prover_map = if insertion_provers.is_empty() {
-        None
-    } else {
-        let insertion_provers = insertion_provers
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()?;
+    let insertion_provers = insertion_provers
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
 
-        Some(
-            insertion_provers
-                .into_iter()
-                .map(|prover| (prover.batch_size(), prover))
-                .collect::<HashMap<usize, ProverService>>(),
-        )
-    };
+    let insertion_prover_map = insertion_provers
+        .into_iter()
+        .map(|prover| (prover.batch_size(), prover))
+        .collect::<HashMap<usize, ProverService>>();
 
-    let deletion_prover_map = if deletion_provers.is_empty() {
-        None
-    } else {
-        let provers = deletion_provers
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()?;
+    let deletion_provers = deletion_provers
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
 
-        Some(
-            provers
-                .into_iter()
-                .map(|prover| (prover.batch_size(), prover))
-                .collect::<HashMap<usize, ProverService>>(),
-        )
-    };
+    let deletion_prover_map = deletion_provers
+        .into_iter()
+        .map(|prover| (prover.batch_size(), prover))
+        .collect::<HashMap<usize, ProverService>>();
 
     Ok((
         chain,

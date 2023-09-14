@@ -349,6 +349,10 @@ impl App {
             return Err(ServerError::NoProversOnIdDeletion);
         }
 
+        if !self.database.identity_exists(*commitment).await? {
+            return Err(ServerError::IdentityCommitmentNotFound);
+        }
+
         // Get the leaf index for the id commitment
         let leaf_index = self
             .database

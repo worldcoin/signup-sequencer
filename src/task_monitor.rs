@@ -134,12 +134,13 @@ impl RunningInstance {
 pub struct Options {
     /// The maximum number of seconds the sequencer will wait before sending a
     /// batch of identities to the chain, even if the batch is not full.
+    // TODO: do we want to change this to batch_insertion_timeout_secs
     #[clap(long, env, default_value = "180")]
     pub batch_timeout_seconds: u64,
 
     /// TODO:
     #[clap(long, env, default_value = "3600")]
-    pub deletion_time_interval: i64,
+    pub batch_deletion_timeout_seconds: i64,
 
     /// TODO:
     #[clap(long, env, default_value = "100")]
@@ -185,7 +186,7 @@ pub struct TaskMonitor {
     pending_identities_capacity: usize,
     mined_roots_capacity:        usize,
     // TODO: docs
-    deletion_time_interval:      i64,
+    batch_deletion_timeout_secs: i64,
     // TODO: docs
     min_batch_deletion_size:     usize,
 }
@@ -208,7 +209,7 @@ impl TaskMonitor {
             batch_insert_timeout_secs,
             pending_identities_capacity,
             mined_roots_capacity,
-            deletion_time_interval: options.deletion_time_interval,
+            batch_deletion_timeout_secs: options.batch_deletion_timeout_seconds,
             min_batch_deletion_size: options.min_batch_deletion_size,
         }
     }
@@ -304,7 +305,7 @@ impl TaskMonitor {
         let delete_identities = DeleteIdentities::new(
             self.database.clone(),
             self.tree_state.get_latest_tree(),
-            self.deletion_time_interval,
+            self.batch_deletion_timeout_secs,
             self.min_batch_deletion_size,
             wake_up_notify,
         );

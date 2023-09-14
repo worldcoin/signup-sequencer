@@ -339,6 +339,7 @@ impl Prover {
             ));
         }
 
+        // TODO: need to generate deletion proof from semaphore-mock
         Ok(ProveResponse::success([
             "0x2".into(),
             input_hash,

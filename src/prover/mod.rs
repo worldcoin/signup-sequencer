@@ -268,7 +268,6 @@ impl Prover {
             .unzip();
 
         // TODO: FIXME: need to send previous identity_commitments not the new ones
-
         let input_hash =
             compute_deletion_proof_input_hash(pre_root, &identity_commitments, post_root);
 

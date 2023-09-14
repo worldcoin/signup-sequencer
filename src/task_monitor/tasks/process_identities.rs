@@ -466,10 +466,19 @@ pub async fn delete_identities(
 
     // Grab the initial conditions before the updates are applied to the tree.
     let pre_root: U256 = batching_tree.get_root().into();
-    let mut commitments: Vec<U256> = updates
+
+    let mut deletion_indices = updates
         .iter()
-        .map(|update| update.update.element.into())
-        .collect();
+        .map(|f| f.update.leaf_index as u32)
+        .collect::<Vec<u32>>();
+
+    // TODO: note that using `batching_tree.get_leaf()` locks the tree every time
+    // to speed this up we could write a new function that takes an input array,
+    // locks it once and gets all the commitments
+    let mut commitments = deletion_indices
+        .iter()
+        .map(|i| batching_tree.get_leaf(*i as usize).into())
+        .collect::<Vec<U256>>();
 
     let latest_tree_from_updates = updates
         .last()
@@ -501,11 +510,6 @@ pub async fn delete_identities(
 
     let batch_size = prover.batch_size();
 
-    let mut deletion_indices = updates
-        .iter()
-        .map(|f| f.update.leaf_index as u32)
-        .collect::<Vec<u32>>();
-
     // The verifier and prover can only work with a given batch size, so we need to
     // ensure that our batches match that size. We do this by padding deletion
     // indices with tree.depth() ^ 2. The deletion prover will skip the proof for
@@ -535,11 +539,13 @@ pub async fn delete_identities(
     // build our identities for sending to the identity manager.
     let post_root: U256 = latest_tree_from_updates.root().into();
 
+    // Get the previous identity
     let identity_commitments: Vec<Identity> = commitments
         .iter()
         .zip(merkle_proofs)
         .map(|(id, prf)| {
             let commitment: U256 = id.into();
+            dbg!(&commitment);
             let proof: Vec<U256> = prf
                 .0
                 .iter()

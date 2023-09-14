@@ -36,7 +36,23 @@ impl Display for ProverError {
 /// The input to the prover.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProofInput {
+struct InsertionProofInput {
+    input_hash:           U256,
+    start_index:          u32,
+    pre_root:             U256,
+    post_root:            U256,
+    identity_commitments: Vec<U256>,
+    merkle_proofs:        Vec<Vec<U256>>,
+}
+
+// TODO: ideally we just import the InsertionProofInput and DeletionProofInput
+// from the signup sequencer so that we can know e2e breaks when any interface
+// changes occur
+
+/// The input to the prover.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeletionProofInput {
     input_hash:           U256,
     start_index:          u32,
     pre_root:             U256,
@@ -130,12 +146,29 @@ impl ProverService {
     /// if needed.
     pub async fn new(batch_size: usize, prover_type: ProverType) -> anyhow::Result<Self> {
         async fn prove(
-            State(state): State<Arc<Mutex<Prover>>>,
-            Json(input): Json<ProofInput>,
+            state: State<Arc<Mutex<Prover>>>,
+            input: Json<Value>,
         ) -> Result<Json<ProveResponse>, StatusCode> {
-            let state = state.lock().await;
+            let mut state = state.lock().await;
 
-            state.prove(input).map(Json)
+            // Attempt to deserialize into InsertionProofInput
+            if let Ok(deserialized_insertion_input) =
+                serde_json::from_value::<InsertionProofInput>(input.0.clone())
+            {
+                return state
+                    .prove_insertion(deserialized_insertion_input)
+                    .map(Json);
+            }
+
+            // If the above fails, attempt to deserialize into DeletionProofInput
+            if let Ok(deserialized_deletion_input) =
+                serde_json::from_value::<DeletionProofInput>(input.0.clone())
+            {
+                return state.prove_deletion(deserialized_deletion_input).map(Json);
+            }
+
+            // If both fail, return an error
+            Err(StatusCode::BAD_REQUEST)
         }
 
         let inner = Arc::new(Mutex::new(Prover { is_available: true }));
@@ -217,8 +250,7 @@ impl ProverService {
 }
 
 impl Prover {
-    // TODO: we need a mock deletion proof
-    fn prove(&self, input: ProofInput) -> Result<ProveResponse, StatusCode> {
+    fn prove_insertion(&self, input: InsertionProofInput) -> Result<ProveResponse, StatusCode> {
         if !self.is_available {
             return Err(StatusCode::SERVICE_UNAVAILABLE);
         }
@@ -272,6 +304,10 @@ impl Prover {
         ]))
     }
 
+    fn prove_deletion(&self, input: DeletionProofInput) -> Result<ProveResponse, StatusCode> {
+        todo!()
+    }
+
     /// Reconstructs the proof with directions as required by `semaphore-rs`.
     ///
     /// This allows us to utilise the proof verification procedure from that
@@ -309,7 +345,7 @@ impl Prover {
     /// StartIndex || PreRoot || PostRoot || IdComms[0] || IdComms[1] || ... || IdComms[batchSize-1]
     ///     32     ||   256   ||   256    ||    256     ||    256     || ... ||     256 bits
     /// ```
-    fn calculate_identity_registration_input_hash(input: &ProofInput) -> U256 {
+    fn calculate_identity_registration_input_hash(input: &InsertionProofInput) -> U256 {
         // Calculate the input hash as described by the prover.
         let mut hashable_bytes: Vec<u8> = vec![];
         let mut buffer: [u8; size_of::<U256>()] = Default::default();

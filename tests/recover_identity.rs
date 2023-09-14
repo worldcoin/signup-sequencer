@@ -12,7 +12,7 @@ const IDLE_TIME: u64 = 7;
 async fn recover_identities() -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
-    info!("Starting integration test");
+    info!("Starting recovery integration test");
 
     let insertion_batch_size: usize = 8;
     let deletion_batch_size: usize = 3;

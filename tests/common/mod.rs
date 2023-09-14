@@ -211,6 +211,7 @@ pub async fn test_delete_identity(
     ref_tree: &mut PoseidonTree,
     test_leaves: &[Field],
     leaf_index: usize,
+    expect_failure: bool,
 ) -> (merkle_tree::Proof<PoseidonHash>, Field) {
     let body = construct_delete_identity_body(&test_leaves[leaf_index]);
 
@@ -228,8 +229,11 @@ pub async fn test_delete_identity(
     let bytes = hyper::body::to_bytes(response.body_mut())
         .await
         .expect("Failed to convert response body to bytes");
-    if !response.status().is_success() {
-        panic!("Failed to delete identity");
+
+    if expect_failure {
+        assert!(!response.status().is_success());
+    } else {
+        assert!(response.status().is_success());
     }
 
     assert!(bytes.is_empty());

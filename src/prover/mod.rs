@@ -267,7 +267,7 @@ impl Prover {
             .unzip();
 
         let input_hash =
-            compute_deletion_proof_input_hash(pre_root, post_root, &identity_commitments);
+            compute_deletion_proof_input_hash(pre_root, &identity_commitments, post_root);
 
         let proof_input = DeletionProofInput {
             input_hash,
@@ -356,8 +356,8 @@ pub fn compute_insertion_proof_input_hash(
 // TODO: check this and update docs
 pub fn compute_deletion_proof_input_hash(
     pre_root: U256,
-    post_root: U256,
     identity_commitments: &[U256],
+    post_root: U256,
 ) -> U256 {
     let mut pre_root_bytes: [u8; size_of::<U256>()] = Default::default();
     pre_root.to_big_endian(pre_root_bytes.as_mut_slice());

@@ -309,8 +309,16 @@ impl Prover {
             return Err(StatusCode::SERVICE_UNAVAILABLE);
         }
 
+        dbg!("proving deletion, service available");
+
         // Calculate the input hash based on the prover parameters.
-        let input_hash = Self::calculate_identity_deletion_input_hash(&input);
+        let input_hash = Self::compute_deletion_proof_input_hash(
+            input.pre_root,
+            &input.identity_commitments,
+            input.post_root,
+        );
+
+        dbg!("id deletion input hash calculated");
 
         // If the hashes aren't the same something's wrong so we return an error.
         if input_hash != input.input_hash {
@@ -422,19 +430,26 @@ impl Prover {
     /// PackedDeletionIndices || PreRoot || PostRoot
     ///   32 bits * batchSize ||   256   ||    256
     /// ```
-    fn calculate_identity_deletion_input_hash(input: &DeletionProofInput) -> U256 {
-        let mut data = vec![];
+    pub fn compute_deletion_proof_input_hash(
+        pre_root: U256,
+        identity_commitments: &[U256],
+        post_root: U256,
+    ) -> U256 {
+        let mut pre_root_bytes: [u8; size_of::<U256>()] = Default::default();
+        pre_root.to_big_endian(pre_root_bytes.as_mut_slice());
+        let mut post_root_bytes: [u8; size_of::<U256>()] = Default::default();
+        post_root.to_big_endian(post_root_bytes.as_mut_slice());
 
-        // Loop through deletion_indices, convert each to bytes, and append to data
-        for &index in &input.deletion_indices {
-            data.extend_from_slice(&index.to_be_bytes());
+        let mut bytes: Vec<u8> = vec![];
+        bytes.extend(pre_root_bytes.iter());
+        bytes.extend(post_root_bytes.iter());
+
+        for commitment in identity_commitments.iter() {
+            let mut commitment_bytes: [u8; size_of::<U256>()] = Default::default();
+            commitment.to_big_endian(commitment_bytes.as_mut_slice());
+            bytes.extend(commitment_bytes.iter());
         }
 
-        // Append pre_root and post_root as bytes
-        input.pre_root.to_big_endian(&mut data);
-        input.post_root.to_big_endian(&mut data);
-
-        let output = keccak256(data);
-        U256::from_big_endian(&output)
+        keccak256(bytes).into()
     }
 }

@@ -96,16 +96,6 @@ pub async fn spawn_mock_chain(
         .send()
         .await?;
 
-    // The rest of the contracts can be deployed to the mock chain normally.
-    let mock_state_bridge_factory =
-        load_and_build_contract("./sol/SimpleStateBridge.json", client.clone())?;
-
-    let mock_state_bridge = mock_state_bridge_factory
-        .deploy(())?
-        .confirmations(0usize)
-        .send()
-        .await?;
-
     let mock_verifier_factory =
         load_and_build_contract("./sol/SequencerVerifier.json", client.clone())?;
 
@@ -127,23 +117,37 @@ pub async fn spawn_mock_chain(
     let verifier_lookup_table_factory =
         load_and_build_contract("./sol/VerifierLookupTable.json", client.clone())?;
 
-    let first_batch_size = insertion_batch_sizes[0];
+    let first_insertion_batch_size = insertion_batch_sizes.first().copied().unwrap_or(1);
+    let first_deletion_batch_size = deletion_batch_sizes.first().copied().unwrap_or(1);
 
     let insert_verifiers = verifier_lookup_table_factory
         .clone()
-        .deploy((first_batch_size as u64, mock_verifier.address()))?
+        .deploy((first_insertion_batch_size as u64, mock_verifier.address()))?
         .confirmations(0usize)
         .send()
         .await?;
 
     let update_verifiers = verifier_lookup_table_factory
-        .deploy((first_batch_size as u64, unimplemented_verifier.address()))?
+        .clone()
+        .deploy((
+            first_insertion_batch_size as u64,
+            unimplemented_verifier.address(),
+        ))?
         .confirmations(0usize)
         .send()
         .await?;
 
-    for batch_size in &insertion_batch_sizes[1..] {
-        let batch_size = *batch_size as u64;
+    let delete_verifiers = verifier_lookup_table_factory
+        .deploy((
+            first_deletion_batch_size as u64,
+            unimplemented_verifier.address(),
+        ))?
+        .confirmations(0usize)
+        .send()
+        .await?;
+
+    for batch_size in insertion_batch_sizes.iter().skip(1).copied() {
+        let batch_size = batch_size as u64;
 
         info!("Adding verifier for batch size {}", batch_size);
         insert_verifiers
@@ -153,10 +157,21 @@ pub async fn spawn_mock_chain(
             .await?;
     }
 
+    for batch_size in deletion_batch_sizes.iter().skip(1).copied() {
+        let batch_size = batch_size as u64;
+
+        info!("Adding verifier for batch size {}", batch_size);
+        delete_verifiers
+            .method::<_, ()>("addVerifier", (batch_size, mock_verifier.address()))?
+            .send()
+            .await?
+            .await?;
+    }
+
     // TODO: update with deletion batch sizes as well
 
     let identity_manager_impl_factory =
-        load_and_build_contract("./sol/WorldIDIdentityManagerImplV1.json", client.clone())?;
+        load_and_build_contract("./sol/WorldIDIdentityManagerImplV2.json", client.clone())?;
 
     let identity_manager_impl = identity_manager_impl_factory
         .deploy(())?
@@ -166,8 +181,7 @@ pub async fn spawn_mock_chain(
 
     let identity_manager_factory =
         load_and_build_contract("./sol/WorldIDIdentityManager.json", client.clone())?;
-    let state_bridge_address = mock_state_bridge.address();
-    let enable_state_bridge = true;
+
     let identity_manager_impl_address = identity_manager_impl.address();
 
     let init_call_data = ContractAbi::InitializeCall {
@@ -176,8 +190,6 @@ pub async fn spawn_mock_chain(
         batch_insertion_verifiers: insert_verifiers.address(),
         batch_update_verifiers: update_verifiers.address(),
         semaphore_verifier: semaphore_verifier.address(),
-        enable_state_bridge,
-        state_bridge: state_bridge_address,
     };
     let init_call_encoded: Bytes = Bytes::from(init_call_data.encode());
 
@@ -192,6 +204,12 @@ pub async fn spawn_mock_chain(
         ContractAbi::BATCHINGCONTRACT_ABI.clone(),
         client.clone(),
     );
+
+    identity_manager
+        .method::<_, ()>("initializeV2", delete_verifiers.address())?
+        .send()
+        .await?
+        .await?;
 
     Ok(MockChain {
         anvil: chain,

@@ -103,7 +103,6 @@ async fn recover_identities() -> anyhow::Result<()> {
     }
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
-
     // Check that we can also get these inclusion proofs back.
     for i in 0..insertion_batch_size {
         test_inclusion_proof(
@@ -117,6 +116,15 @@ async fn recover_identities() -> anyhow::Result<()> {
         )
         .await;
     }
+
+    // Set the root history expirty to 15 seconds
+    let updated_root_history_expiry = U256::from(15);
+    mock_chain
+        .identity_manager
+        .method::<_, ()>("setRootHistoryExpiry", updated_root_history_expiry)?
+        .send()
+        .await?
+        .await?;
 
     // Insert enough recoveries to trigger a batch
     for i in 0..deletion_batch_size {
@@ -149,7 +157,7 @@ async fn recover_identities() -> anyhow::Result<()> {
         )
         .await;
 
-        // Check that the new identity has not been inserted yet
+        // Check that the replacement identity has not been inserted yet
         test_inclusion_proof(
             &uri,
             &client,
@@ -162,9 +170,29 @@ async fn recover_identities() -> anyhow::Result<()> {
         .await;
     }
 
-    // TODO: fast forward clock
+    // Sleep for root expiry
+    tokio::time::sleep(Duration::from_secs(updated_root_history_expiry.as_u64())).await;
 
-    // TODO: check if insertions have happened
+    // Insert enough identities to trigger an batch to be sent to the blockchain.
+    for i in insertion_batch_size..insertion_batch_size * 2 {
+        test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, i).await;
+    }
+
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
+
+    // Check that the replacement identities have been inserted
+    for i in 0..deletion_batch_size {
+        test_inclusion_proof(
+            &uri,
+            &client,
+            i,
+            &ref_tree,
+            &Hash::from_str_radix(&test_identities[test_identities.len() - i - 1], 16)
+                .expect("Failed to parse Hash from test leaf"),
+            true,
+        )
+        .await;
+    }
 
     // Shutdown the app properly for the final time
     shutdown();

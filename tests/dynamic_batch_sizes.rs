@@ -125,7 +125,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     .await;
 
     // Add a new prover for batch sizes of two.
-    let second_prover = spawn_mock_insertion_prover(second_batch_size).await?;
+    let second_prover = spawn_mock_insertion_prover(second_batch_size, tree_depth).await?;
 
     test_add_batch_size(
         &uri,

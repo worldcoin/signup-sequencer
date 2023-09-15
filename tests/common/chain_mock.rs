@@ -138,10 +138,7 @@ pub async fn spawn_mock_chain(
         .await?;
 
     let delete_verifiers = verifier_lookup_table_factory
-        .deploy((
-            first_deletion_batch_size as u64,
-            unimplemented_verifier.address(),
-        ))?
+        .deploy((first_deletion_batch_size as u64, mock_verifier.address()))?
         .confirmations(0usize)
         .send()
         .await?;

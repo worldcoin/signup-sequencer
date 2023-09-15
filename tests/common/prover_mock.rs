@@ -316,29 +316,6 @@ impl Prover {
             input.post_root,
         );
 
-        dbg!(&input.packed_deletion_indices);
-        dbg!(&input.pre_root);
-        dbg!(&input.post_root);
-        dbg!(&input_hash);
-
-        dbg!(
-            input_hash
-                % U256::from_dec_str(
-                    "21888242871839275222246405745257275088548364400416034343698204186575808495617"
-                )
-                .expect("error")
-        );
-
-        dbg!(
-            input_hash
-                % U256::from_dec_str(
-                    "21888242871839275222246405745257275088548364400416034343698204186575808495617"
-                )
-                .expect("error")
-                == input_hash
-        );
-        todo!("stop");
-
         // If the hashes aren't the same something's wrong so we return an error.
         if input_hash != input.input_hash {
             return Ok(ProveResponse::failure("42", "Input hash mismatch."));

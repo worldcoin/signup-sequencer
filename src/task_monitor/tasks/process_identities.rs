@@ -545,7 +545,6 @@ pub async fn delete_identities(
         .zip(merkle_proofs)
         .map(|(id, prf)| {
             let commitment: U256 = id.into();
-            dbg!(&commitment);
             let proof: Vec<U256> = prf
                 .0
                 .iter()
@@ -559,11 +558,16 @@ pub async fn delete_identities(
 
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
+    let mut packed_deletion_indices = vec![];
+    for &index in &deletion_indices {
+        packed_deletion_indices.extend_from_slice(&index.to_be_bytes());
+    }
+
     // We prepare the proof before reserving a slot in the pending identities
     let proof = IdentityManager::prepare_deletion_proof(
         prover,
         pre_root,
-        &deletion_indices,
+        packed_deletion_indices.clone(),
         identity_commitments,
         post_root,
     )
@@ -582,7 +586,13 @@ pub async fn delete_identities(
     // With all the data prepared we can submit the identities to the on-chain
     // identity manager and wait for that transaction to be mined.
     let transaction_id = identity_manager
-        .delete_identities(proof, pre_root, deletion_indices, post_root)
+        .delete_identities(
+            proof,
+            packed_deletion_indices,
+            pre_root,
+            post_root,
+            batch_size as u32,
+        )
         .await
         .map_err(|e| {
             error!(?e, "Failed to insert identity to contract.");

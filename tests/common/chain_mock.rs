@@ -168,8 +168,6 @@ pub async fn spawn_mock_chain(
             .await?;
     }
 
-    // TODO: update with deletion batch sizes as well
-
     let identity_manager_impl_factory =
         load_and_build_contract("./sol/WorldIDIdentityManagerImplV2.json", client.clone())?;
 

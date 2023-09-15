@@ -20,6 +20,7 @@ abigen!(
         constructor(address _logic, bytes memory data) payable
         function initialize(uint8 treeDepth, uint256 initialRoot, address _batchInsertionVerifiers, address _batchUpdateVerifiers, address _semaphoreVerifier) public virtual
         function initializeV2(address _batchDeletionVerifiers) public virtual
+        function deleteIdentities(uint256[8] calldata deletionProof, uint256 preRoot, bytes calldata deletionIndices, uint256 postRoot) public virtual 
         function registerIdentities(uint256[8] calldata insertionProof, uint256 preRoot, uint32 startIndex, uint256[] calldata identityCommitments, uint256 postRoot) public virtual
         function updateIdentities(uint256[8] calldata updateProof, uint256 preRoot, uint32[] calldata leafIndices, uint256[] calldata oldIdentities, uint256[] calldata newIdentities, uint256 postRoot) public virtual
         function calculateIdentityRegistrationInputHash(uint32 startIndex, uint256 preRoot, uint256 postRoot, uint256[] identityCommitments) public view virtual returns (bytes32 hash)

@@ -250,9 +250,8 @@ impl Prover {
         &self,
         pre_root: U256,
         post_root: U256,
-        deletion_indices: &[u32],
-        identities: Vec<Identity>, /* TODO: FIXME: can cretae a proof of prev identities and
-                                    * merkle proofs */
+        packed_deletion_indices: Vec<u8>,
+        identities: Vec<Identity>,
     ) -> anyhow::Result<Proof> {
         if identities.len() != self.batch_size {
             return Err(anyhow::Error::msg(
@@ -267,15 +266,14 @@ impl Prover {
             .map(|id| (id.commitment, id.merkle_proof))
             .unzip();
 
-        // TODO: FIXME: need to send previous identity_commitments not the new ones
         let input_hash =
-            compute_deletion_proof_input_hash(pre_root, &identity_commitments, post_root);
+            compute_deletion_proof_input_hash(packed_deletion_indices.clone(), pre_root, post_root);
 
         let proof_input = DeletionProofInput {
             input_hash,
             pre_root,
             post_root,
-            deletion_indices: deletion_indices.to_vec(),
+            packed_deletion_indices,
             identity_commitments,
             merkle_proofs,
         };
@@ -356,26 +354,29 @@ pub fn compute_insertion_proof_input_hash(
 }
 
 // TODO: check this and update docs
+
 pub fn compute_deletion_proof_input_hash(
+    packed_deletion_indices: Vec<u8>,
     pre_root: U256,
-    identity_commitments: &[U256],
     post_root: U256,
 ) -> U256 {
-    let mut pre_root_bytes: [u8; size_of::<U256>()] = Default::default();
-    pre_root.to_big_endian(pre_root_bytes.as_mut_slice());
-    let mut post_root_bytes: [u8; size_of::<U256>()] = Default::default();
-    post_root.to_big_endian(post_root_bytes.as_mut_slice());
+    // Convert pre_root and post_root to bytes
+    let mut pre_root_bytes = vec![0u8; 32];
+    pre_root.to_big_endian(&mut pre_root_bytes);
 
-    let mut bytes: Vec<u8> = vec![];
-    bytes.extend(pre_root_bytes.iter());
-    bytes.extend(post_root_bytes.iter());
+    let mut post_root_bytes = vec![0u8; 32];
+    post_root.to_big_endian(&mut post_root_bytes);
 
-    for commitment in identity_commitments.iter() {
-        let mut commitment_bytes: [u8; size_of::<U256>()] = Default::default();
-        commitment.to_big_endian(commitment_bytes.as_mut_slice());
-        bytes.extend(commitment_bytes.iter());
-    }
+    let mut bytes = vec![];
 
+    // Append packed_deletion_indices
+    bytes.extend_from_slice(&packed_deletion_indices);
+
+    // Append pre_root and post_root bytes
+    bytes.extend_from_slice(&pre_root_bytes);
+    bytes.extend_from_slice(&post_root_bytes);
+
+    // Compute and return the Keccak-256 hash
     keccak256(bytes).into()
 }
 
@@ -410,12 +411,12 @@ struct InsertionProofInput {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DeletionProofInput {
-    input_hash:           U256,
-    pre_root:             U256,
-    post_root:            U256,
-    deletion_indices:     Vec<u32>,
-    identity_commitments: Vec<U256>,
-    merkle_proofs:        Vec<Vec<U256>>,
+    input_hash:              U256,
+    pre_root:                U256,
+    post_root:               U256,
+    packed_deletion_indices: Vec<u8>,
+    identity_commitments:    Vec<U256>,
+    merkle_proofs:           Vec<Vec<U256>>,
 }
 
 #[cfg(test)]

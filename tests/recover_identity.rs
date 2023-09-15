@@ -120,13 +120,15 @@ async fn recover_identities() -> anyhow::Result<()> {
 
     // Insert enough recoveries to trigger a batch
     for i in 0..deletion_batch_size {
+        // Delete the identity at i and replace it with an identity at the back of the
+        //  test identities array
         test_recover_identity(
             &uri,
             &client,
             &mut ref_tree,
             &identities_ref,
             i,
-            test_identities.len() - i,
+            test_identities.len() - i - 1,
             false,
         )
         .await;
@@ -142,6 +144,18 @@ async fn recover_identities() -> anyhow::Result<()> {
             i,
             &ref_tree,
             &Hash::from_str_radix(&test_identities[i], 16)
+                .expect("Failed to parse Hash from test leaf"),
+            true,
+        )
+        .await;
+
+        // Check that the new identity has not been inserted yet
+        test_inclusion_proof(
+            &uri,
+            &client,
+            i,
+            &ref_tree,
+            &Hash::from_str_radix(&test_identities[test_identities.len() - i - 1], 16)
                 .expect("Failed to parse Hash from test leaf"),
             true,
         )

@@ -101,9 +101,9 @@ pub struct DeletionRequest {
 #[serde(deny_unknown_fields)]
 pub struct RecoveryRequest {
     /// The leaf index of the identity commitment to delete.
-    prev_identity_commitment: Hash,
+    previous_identity_commitment: Hash,
     /// The new identity commitment to insert.
-    new_identity_commitment:  Hash,
+    new_identity_commitment:      Hash,
 }
 
 pub trait ToResponseCode {
@@ -179,8 +179,11 @@ async fn recover_identity(
     State(app): State<Arc<App>>,
     Json(req): Json<RecoveryRequest>,
 ) -> Result<(), Error> {
-    app.recover_identity(&req.prev_identity_commitment, &req.new_identity_commitment)
-        .await?;
+    app.recover_identity(
+        &req.previous_identity_commitment,
+        &req.new_identity_commitment,
+    )
+    .await?;
     Ok(())
 }
 

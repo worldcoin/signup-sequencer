@@ -413,8 +413,8 @@ fn construct_recover_identity_body(
 ) -> Body {
     Body::from(
         json!({
-            "prev_identity_commitment":prev_identity_commitment ,
-            "new_identity_commitment": new_identity_commitment,
+            "previousIdentityCommitment":prev_identity_commitment ,
+            "newIdentityCommitment": new_identity_commitment,
         })
         .to_string(),
     )

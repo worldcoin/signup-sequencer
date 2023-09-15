@@ -243,6 +243,51 @@ pub async fn test_delete_identity(
 }
 
 #[instrument(skip_all)]
+pub async fn test_recover_identity(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    ref_tree: &mut PoseidonTree,
+    test_leaves: &[Field],
+    previous_leaf_index: usize,
+    new_leaf_index: usize,
+    expect_failure: bool,
+) -> (merkle_tree::Proof<PoseidonHash>, Field) {
+    let body = construct_recover_identity_body(
+        &test_leaves[previous_leaf_index],
+        &test_leaves[new_leaf_index],
+    );
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri.to_owned() + "/recoverIdentity")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create insert identity hyper::Body");
+
+    let mut response = client
+        .request(req)
+        .await
+        .expect("Failed to execute request.");
+    let bytes = hyper::body::to_bytes(response.body_mut())
+        .await
+        .expect("Failed to convert response body to bytes");
+
+    if expect_failure {
+        assert!(!response.status().is_success());
+    } else {
+        assert!(response.status().is_success());
+        assert!(bytes.is_empty());
+    }
+
+    // TODO: should we insert the new leaf now?
+    ref_tree.set(previous_leaf_index, Hash::ZERO);
+    (
+        ref_tree.proof(previous_leaf_index).unwrap(),
+        ref_tree.root(),
+    )
+}
+
+#[instrument(skip_all)]
 pub async fn test_add_batch_size(
     uri: impl Into<String>,
     prover_url: impl Into<String>,
@@ -357,6 +402,19 @@ fn construct_delete_identity_body(identity_commitment: &Hash) -> Body {
     Body::from(
         json!({
             "identityCommitment": identity_commitment,
+        })
+        .to_string(),
+    )
+}
+
+fn construct_recover_identity_body(
+    prev_identity_commitment: &Hash,
+    new_identity_commitment: &Hash,
+) -> Body {
+    Body::from(
+        json!({
+            "prev_identity_commitment":prev_identity_commitment ,
+            "new_identity_commitment": new_identity_commitment,
         })
         .to_string(),
     )

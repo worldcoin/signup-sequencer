@@ -514,7 +514,7 @@ pub async fn delete_identities(
     // ensure that our batches match that size. We do this by padding deletion
     // indices with tree.depth() ^ 2. The deletion prover will skip the proof for
     // any deletion with an index greater than the max tree depth
-    let pad_index = latest_tree_from_updates.depth().pow(2) as u32;
+    let pad_index = 2_u32.pow(latest_tree_from_updates.depth() as u32);
 
     if commitment_count != batch_size {
         let padding = batch_size - commitment_count;

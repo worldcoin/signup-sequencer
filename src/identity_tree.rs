@@ -197,7 +197,9 @@ where
     /// Returns _up to_ `maximum_update_count` contiguous deletion or insertion
     /// updates that are to be applied to the tree.
     fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
-        let Some(next) = self.next.as_ref() else { return vec![]; };
+        let Some(next) = self.next.as_ref() else {
+            return vec![];
+        };
         let next = next.get_data();
 
         let first_is_zero = match next.metadata.diff.first() {
@@ -226,7 +228,9 @@ where
     }
 
     fn apply_updates_up_to(&mut self, root: Hash) -> usize {
-        let Some(next) = self.next.clone() else { return 0; };
+        let Some(next) = self.next.clone() else {
+            return 0;
+        };
 
         let num_updates;
         {
@@ -417,6 +421,8 @@ pub trait TreeVersionReadOps {
     fn get_root(&self) -> Hash;
     /// Returns the next free leaf.
     fn next_leaf(&self) -> usize;
+    /// Returns the given leaf value, the root of the tree and the proof
+    fn get_leaf_and_proof(&self, leaf: usize) -> (Hash, Hash, Proof);
     /// Returns the merkle proof and element at the given leaf.
     fn get_proof(&self, leaf: usize) -> (Hash, Proof);
     /// Gets the leaf value at a given index.
@@ -433,6 +439,15 @@ where
 
     fn next_leaf(&self) -> usize {
         self.get_data().next_leaf
+    }
+
+    fn get_leaf_and_proof(&self, leaf: usize) -> (Hash, Hash, Proof) {
+        let tree = self.get_data();
+
+        let (root, proof) = tree.get_proof(leaf);
+        let leaf = tree.get_leaf(leaf);
+
+        (leaf, root, proof)
     }
 
     fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
@@ -558,21 +573,23 @@ impl TreeState {
     }
 
     #[must_use]
-    pub fn get_proof_for(&self, item: &TreeItem) -> InclusionProof {
-        let (root, proof) = match item.status {
+    pub fn get_proof_for(&self, item: &TreeItem) -> (Field, InclusionProof) {
+        let (leaf, root, proof) = match item.status {
             Status::Pending | Status::New | Status::Failed => {
-                self.latest.get_proof(item.leaf_index)
+                self.latest.get_leaf_and_proof(item.leaf_index)
             }
-            Status::Processed => self.processed.get_proof(item.leaf_index),
-            Status::Mined => self.mined.get_proof(item.leaf_index),
+            Status::Processed => self.processed.get_leaf_and_proof(item.leaf_index),
+            Status::Mined => self.mined.get_leaf_and_proof(item.leaf_index),
         };
 
-        InclusionProof {
+        let proof = InclusionProof {
             status:  item.status,
             root:    Some(root),
             proof:   Some(proof),
             message: None,
-        }
+        };
+
+        (leaf, proof)
     }
 }
 

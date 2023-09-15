@@ -530,7 +530,11 @@ impl App {
             .await?
             .ok_or(ServerError::IdentityCommitmentNotFound)?;
 
-        let proof = self.tree_state.get_proof_for(&item);
+        let (leaf, proof) = self.tree_state.get_proof_for(&item);
+
+        if leaf != *commitment {
+            return Err(ServerError::InvalidCommitment);
+        }
 
         Ok(InclusionProofResponse(proof))
     }
@@ -544,7 +548,7 @@ impl App {
         request: &VerifySemaphoreProofRequest,
     ) -> Result<VerifySemaphoreProofResponse, ServerError> {
         let Some(root_state) = self.database.get_root_state(&request.root).await? else {
-            return Err(ServerError::InvalidRoot)
+            return Err(ServerError::InvalidRoot);
         };
 
         let checked = verify_proof(

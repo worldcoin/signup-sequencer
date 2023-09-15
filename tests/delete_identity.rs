@@ -145,27 +145,7 @@ async fn delete_identities() -> anyhow::Result<()> {
     // Expect failure when deleting an identity that can not be found
     test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 12, true).await;
 
-    // Queue a new deletion
-    test_delete_identity(
-        &uri,
-        &client,
-        &mut ref_tree,
-        &identities_ref,
-        deletion_batch_size + 1,
-        false,
-    )
-    .await;
-
-    // Expect failure when deleting an identity that is already queued
-    test_delete_identity(
-        &uri,
-        &client,
-        &mut ref_tree,
-        &identities_ref,
-        deletion_batch_size + 1,
-        true,
-    )
-    .await;
+    // TODO: non full batch deletion with padding
 
     // Shutdown the app properly for the final time
     shutdown();

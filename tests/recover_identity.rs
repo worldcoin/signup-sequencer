@@ -2,7 +2,7 @@ mod common;
 
 use common::prelude::*;
 
-use crate::common::test_delete_identity;
+use crate::common::{test_delete_identity, test_recover_identity};
 
 const SUPPORTED_DEPTH: usize = 18;
 const IDLE_TIME: u64 = 7;
@@ -12,7 +12,7 @@ const IDLE_TIME: u64 = 7;
 async fn recover_identities() -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
-    info!("Starting recovery integration test");
+    info!("Starting integration test");
 
     let insertion_batch_size: usize = 8;
     let deletion_batch_size: usize = 3;
@@ -81,7 +81,7 @@ async fn recover_identities() -> anyhow::Result<()> {
     options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
     options.app.ethereum.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint()).expect(
         "
-    Failed to parse Anvil url",
+     Failed to parse Anvil url",
     );
 
     let (app, local_addr) = spawn_app(options.clone())
@@ -117,7 +117,40 @@ async fn recover_identities() -> anyhow::Result<()> {
         )
         .await;
     }
-    // TODO: insert recoveries
+
+    // Insert enough recoveries to trigger a batch
+    for i in 0..deletion_batch_size {
+        test_recover_identity(
+            &uri,
+            &client,
+            &mut ref_tree,
+            &identities_ref,
+            i,
+            test_identities.len() - i,
+            false,
+        )
+        .await;
+    }
+
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
+
+    // Ensure that identities have been deleted
+    for i in 0..deletion_batch_size {
+        test_inclusion_proof(
+            &uri,
+            &client,
+            i,
+            &ref_tree,
+            &Hash::from_str_radix(&test_identities[i], 16)
+                .expect("Failed to parse Hash from test leaf"),
+            true,
+        )
+        .await;
+    }
+
+    // TODO: fast forward clock
+
+    // TODO: check if insertions have happened
 
     // Shutdown the app properly for the final time
     shutdown();

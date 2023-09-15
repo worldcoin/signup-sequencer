@@ -344,7 +344,11 @@ impl Prover {
         for (leaf_index, merkle_proof) in deletion_indices.iter().zip(input.merkle_proofs) {
             // 18 is the hardcoded value for the SUPPORTED_DEPTH constant in the delete_identity_padded.rs
             // and delete_identity_padded.rs tests
+<<<<<<< HEAD
             if *leaf_index == (2u32.pow(self.tree_depth.into())) {
+=======
+            if *leaf_index == (2 ^ self.tree_depth as u32) {
+>>>>>>> 8bf47bd15de0c0167d46ba08808b240e2d1b86fc
                 continue;
             }
 

@@ -167,7 +167,7 @@ async fn recover_identities() -> anyhow::Result<()> {
             i,
             &ref_tree,
             &identities_ref[test_identities.len() - i - 1],
-            true,
+            false,
         )
         .await;
 
@@ -176,7 +176,7 @@ async fn recover_identities() -> anyhow::Result<()> {
             &uri,
             &client,
             &identities_ref[test_identities.len() - i - 1],
-            Status::Pending,
+            Status::Mined,
         )
         .await;
     }

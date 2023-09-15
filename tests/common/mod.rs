@@ -280,7 +280,6 @@ pub async fn test_delete_identity(
     }
 
     ref_tree.set(leaf_index, Hash::ZERO);
-
     (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())
 }
 
@@ -323,10 +322,10 @@ pub async fn test_recover_identity(
 
     // TODO: should we insert the new leaf now?
     ref_tree.set(previous_leaf_index, Hash::ZERO);
-    (
-        ref_tree.proof(previous_leaf_index).unwrap(),
-        ref_tree.root(),
-    )
+    ref_tree.set(new_leaf_index, test_leaves[new_leaf_index]);
+
+    // TODO: should we return the root at new leaf index?
+    (ref_tree.proof(new_leaf_index).unwrap(), ref_tree.root())
 }
 
 #[instrument(skip_all)]

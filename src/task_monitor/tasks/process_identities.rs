@@ -588,10 +588,10 @@ pub async fn delete_identities(
     let transaction_id = identity_manager
         .delete_identities(
             proof,
+            batch_size as u32,
             packed_deletion_indices,
             pre_root,
             post_root,
-            batch_size as u32,
         )
         .await
         .map_err(|e| {

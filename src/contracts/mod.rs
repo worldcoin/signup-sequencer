@@ -9,6 +9,7 @@ use clap::Parser;
 use ethers::abi::ethabi::Bytes;
 use ethers::providers::Middleware;
 use ethers::types::{Address, U256};
+use ethers::utils::keccak256;
 use semaphore::Field;
 use tokio::sync::RwLockReadGuard;
 use tracing::{error, info, instrument, warn};
@@ -291,10 +292,10 @@ impl IdentityManager {
     pub async fn delete_identities(
         &self,
         deletion_proof: Proof,
+        batch_size: u32,
         packed_deletion_indices: Vec<u8>,
         pre_root: U256,
         post_root: U256,
-        batch_size: u32,
     ) -> anyhow::Result<TransactionId> {
         let proof_points_array: [U256; 8] = deletion_proof.into();
 

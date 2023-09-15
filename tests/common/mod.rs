@@ -56,11 +56,13 @@ pub mod prelude {
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
+use std::str::FromStr;
 use std::sync::Arc;
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use hyper::StatusCode;
+use signup_sequencer::identity_tree::Status;
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
@@ -201,6 +203,46 @@ pub async fn test_inclusion_proof(
         } else {
             panic!("Unexpected status: {}", status);
         }
+    }
+}
+
+#[instrument(skip_all)]
+pub async fn test_inclusion_status(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    leaf: &Hash,
+    expected_status: Status,
+) {
+    for i in 1..21 {
+        let body = construct_inclusion_proof_body(leaf);
+        info!(?uri, "Contacting");
+        let req = Request::builder()
+            .method("POST")
+            .uri(uri.to_owned() + "/inclusionProof")
+            .header("Content-Type", "application/json")
+            .body(body)
+            .expect("Failed to create inclusion proof hyper::Body");
+
+        let mut response = client
+            .request(req)
+            .await
+            .expect("Failed to execute request.");
+
+        let bytes = hyper::body::to_bytes(response.body_mut())
+            .await
+            .expect("Failed to convert response body to bytes");
+        let result = String::from_utf8(bytes.into_iter().collect())
+            .expect("Could not parse response bytes to utf-8");
+        let result_json = serde_json::from_str::<serde_json::Value>(&result)
+            .expect("Failed to parse response as json");
+        let status = result_json["status"]
+            .as_str()
+            .expect("Failed to get status");
+
+        assert_eq!(
+            expected_status,
+            Status::from_str(status).expect("Could not convert str to Status")
+        );
     }
 }
 

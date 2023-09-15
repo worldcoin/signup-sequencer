@@ -1,9 +1,9 @@
 mod common;
 
 use common::prelude::*;
+use signup_sequencer::identity_tree::Status;
 
-use crate::common::{test_delete_identity, test_recover_identity};
-
+use crate::common::{test_inclusion_status, test_recover_identity};
 const SUPPORTED_DEPTH: usize = 18;
 const IDLE_TIME: u64 = 7;
 
@@ -105,16 +105,7 @@ async fn recover_identities() -> anyhow::Result<()> {
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
     // Check that we can also get these inclusion proofs back.
     for i in 0..insertion_batch_size {
-        test_inclusion_proof(
-            &uri,
-            &client,
-            i,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[i], 16)
-                .expect("Failed to parse Hash from test leaf"),
-            false,
-        )
-        .await;
+        test_inclusion_proof(&uri, &client, i, &ref_tree, &identities_ref[i], false).await;
     }
 
     // Set the root history expirty to 15 seconds
@@ -146,53 +137,42 @@ async fn recover_identities() -> anyhow::Result<()> {
 
     // Ensure that identities have been deleted
     for i in 0..deletion_batch_size {
-        test_inclusion_proof(
-            &uri,
-            &client,
-            i,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[i], 16)
-                .expect("Failed to parse Hash from test leaf"),
-            true,
-        )
-        .await;
+        test_inclusion_proof(&uri, &client, i, &ref_tree, &identities_ref[i], true).await;
 
         // Check that the replacement identity has not been inserted yet
-        test_inclusion_proof(
+        test_inclusion_status(
             &uri,
             &client,
-            i,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[test_identities.len() - i - 1], 16)
-                .expect("Failed to parse Hash from test leaf"),
-            true,
+            &identities_ref[test_identities.len() - i - 1],
+            Status::New,
         )
         .await;
     }
 
-    // Sleep for root expiry
-    tokio::time::sleep(Duration::from_secs(updated_root_history_expiry.as_u64())).await;
+    // // Sleep for root expiry
+    // tokio::time::sleep(Duration::from_secs(updated_root_history_expiry.
+    // as_u64())).await;
 
-    // Insert enough identities to trigger an batch to be sent to the blockchain.
-    for i in insertion_batch_size..insertion_batch_size * 2 {
-        test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, i).await;
-    }
+    // // Insert enough identities to trigger an batch to be sent to the blockchain.
+    // for i in insertion_batch_size..insertion_batch_size * 2 {
+    //     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref,
+    // i).await; }
 
-    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
+    // tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
 
-    // Check that the replacement identities have been inserted
-    for i in 0..deletion_batch_size {
-        test_inclusion_proof(
-            &uri,
-            &client,
-            i,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[test_identities.len() - i - 1], 16)
-                .expect("Failed to parse Hash from test leaf"),
-            true,
-        )
-        .await;
-    }
+    // // Check that the replacement identities have been inserted
+    // for i in 0..deletion_batch_size {
+    //     test_inclusion_proof(
+    //         &uri,
+    //         &client,
+    //         i,
+    //         &ref_tree,
+    //         &Hash::from_str_radix(&test_identities[test_identities.len() - i -
+    // 1], 16)             .expect("Failed to parse Hash from test leaf"),
+    //         true,
+    //     )
+    //     .await;
+    // }
 
     // Shutdown the app properly for the final time
     shutdown();

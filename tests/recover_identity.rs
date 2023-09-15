@@ -161,12 +161,14 @@ async fn recover_identities() -> anyhow::Result<()> {
 
     // Check that the replacement identities have been inserted
     for i in 0..deletion_batch_size {
+        let recovery_leaf_index = test_identities.len() - i - 1;
+
         test_inclusion_proof(
             &uri,
             &client,
-            i,
+            recovery_leaf_index,
             &ref_tree,
-            &identities_ref[test_identities.len() - i - 1],
+            &identities_ref[recovery_leaf_index],
             false,
         )
         .await;
@@ -175,7 +177,7 @@ async fn recover_identities() -> anyhow::Result<()> {
         test_inclusion_status(
             &uri,
             &client,
-            &identities_ref[test_identities.len() - i - 1],
+            &identities_ref[recovery_leaf_index],
             Status::Mined,
         )
         .await;

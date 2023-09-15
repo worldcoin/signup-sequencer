@@ -4,12 +4,12 @@ use common::prelude::*;
 
 use crate::common::test_delete_identity;
 
-const SUPPORTED_DEPTH: usize = 18;
+const SUPPORTED_DEPTH: u8 = 18;
 const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
 #[serial_test::serial]
-async fn delete_identities() -> anyhow::Result<()> {
+async fn delete_identities_padding() -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -19,9 +19,9 @@ async fn delete_identities() -> anyhow::Result<()> {
     let batch_deletion_timeout_seconds: usize = 10;
 
     #[allow(clippy::cast_possible_truncation)]
-    let tree_depth: u8 = SUPPORTED_DEPTH as u8;
+    let tree_depth: u8 = SUPPORTED_DEPTH;
 
-    let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
+    let mut ref_tree = PoseidonTree::new((SUPPORTED_DEPTH + 1).into(), ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let (mock_chain, db_container, insertion_prover_map, deletion_prover_map, micro_oz) =
@@ -118,15 +118,13 @@ async fn delete_identities() -> anyhow::Result<()> {
         .await;
     }
 
-    // Delete enough identities to trigger a batch
-    for i in 0..deletion_batch_size {
-        test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, i, false).await;
-    }
+    // delete only the first identity
+    test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 0, false).await;
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
 
-    // Ensure that identities have been deleted
-    for i in 0..deletion_batch_size {
+    // make sure that identities 2 and 3 which weren't deleted are still there
+    for i in 1..insertion_batch_size {
         test_inclusion_proof(
             &uri,
             &client,
@@ -134,10 +132,22 @@ async fn delete_identities() -> anyhow::Result<()> {
             &ref_tree,
             &Hash::from_str_radix(&test_identities[i], 16)
                 .expect("Failed to parse Hash from test leaf"),
-            true,
+            false,
         )
         .await;
     }
+
+    // Ensure that the first identity was deleted
+    test_inclusion_proof(
+        &uri,
+        &client,
+        0,
+        &ref_tree,
+        &Hash::from_str_radix(&test_identities[0], 16)
+            .expect("Failed to parse Hash from test leaf"),
+        true,
+    )
+    .await;
 
     // Expect failure when deleting an identity that has already been deleted
     test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 0, true).await;

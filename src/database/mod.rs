@@ -190,9 +190,7 @@ impl Database {
         let root_leaf_index = Self::get_leaf_index_by_root(&mut tx, root).await?;
 
         let Some(root_leaf_index) = root_leaf_index else {
-            return Err(Error::MissingRoot {
-                root: *root
-            });
+            return Err(Error::MissingRoot { root: *root });
         };
 
         let root_leaf_index = root_leaf_index as i64;
@@ -240,9 +238,7 @@ impl Database {
         let root_leaf_index = Self::get_leaf_index_by_root(&mut tx, root).await?;
 
         let Some(root_leaf_index) = root_leaf_index else {
-            return Err(Error::MissingRoot {
-                root: *root
-            });
+            return Err(Error::MissingRoot { root: *root });
         };
 
         let root_leaf_index = root_leaf_index as i64;
@@ -291,6 +287,7 @@ impl Database {
             SELECT leaf_index, status
             FROM identities
             WHERE commitment = $1
+            ORDER BY id DESC
             LIMIT 1;
             "#,
         )
@@ -549,7 +546,7 @@ impl Database {
             r#"
             INSERT INTO latest_deletion_root (Lock, deletion_timestamp)
             VALUES ('X', $1)
-            ON CONFLICT (Lock) 
+            ON CONFLICT (Lock)
             DO UPDATE SET deletion_timestamp = EXCLUDED.deletion_timestamp;
             "#,
         )
@@ -878,6 +875,28 @@ mod test {
         assert_eq!(identity_count, 1);
 
         assert!(db.remove_unprocessed_identity(&commit_hash).await.is_ok());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn insert_and_delete_identity() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let zero: Hash = U256::zero().into();
+        let zero_root: Hash = U256::from_dec_str("6789")?.into();
+        let root: Hash = U256::from_dec_str("54321")?.into();
+        let commitment: Hash = U256::from_dec_str("12345")?.into();
+
+        db.insert_pending_identity(0, &commitment, &root).await?;
+        db.insert_pending_identity(0, &zero, &zero_root).await?;
+
+        let leaf_index = db
+            .get_identity_leaf_index(&commitment)
+            .await?
+            .context("Missing identity")?;
+
+        assert_eq!(leaf_index.leaf_index, 0);
 
         Ok(())
     }

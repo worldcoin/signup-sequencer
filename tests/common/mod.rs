@@ -234,9 +234,9 @@ pub async fn test_delete_identity(
         assert!(!response.status().is_success());
     } else {
         assert!(response.status().is_success());
+        assert!(bytes.is_empty());
     }
 
-    assert!(bytes.is_empty());
     ref_tree.set(leaf_index, Hash::ZERO);
 
     (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())

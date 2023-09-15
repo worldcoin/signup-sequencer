@@ -266,7 +266,9 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
         take_mut::take(&mut self.tree, |tree| {
             tree.update_with_mutation(leaf_index, &element)
         });
-        self.next_leaf = leaf_index + 1;
+        if element != Hash::ZERO {
+            self.next_leaf = leaf_index + 1;
+        }
         self.metadata.count_since_last_flatten += 1;
     }
 
@@ -318,7 +320,9 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Derived> {
 
         self.tree = updated_tree.clone();
 
-        self.next_leaf = leaf_index + 1;
+        if element != Hash::ZERO {
+            self.next_leaf = leaf_index + 1;
+        }
         self.metadata.diff.push(AppliedTreeUpdate {
             update: TreeUpdate {
                 leaf_index,
@@ -335,7 +339,10 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Derived> {
 
         if let Some(last) = last {
             self.tree = last.result.clone();
-            self.next_leaf = last.update.leaf_index + 1;
+
+            if last.update.element != Hash::ZERO {
+                self.next_leaf = last.update.leaf_index + 1;
+            }
         }
     }
 

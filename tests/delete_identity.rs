@@ -125,50 +125,58 @@ async fn delete_identities() -> anyhow::Result<()> {
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
 
-    // // Ensure that identities have been deleted
-    // for i in 0..deletion_batch_size {
-    //     test_inclusion_proof(
-    //         &uri,
-    //         &client,
-    //         i,
-    //         &ref_tree,
-    //         &Hash::from_str_radix(&test_identities[i], 16)
-    //             .expect("Failed to parse Hash from test leaf"),
-    //         true,
-    //     )
-    //     .await;
-    // }
+    // Ensure that identities have been deleted
+    for i in 0..deletion_batch_size {
+        test_inclusion_proof(
+            &uri,
+            &client,
+            i,
+            &ref_tree,
+            &Hash::from_str_radix(&test_identities[i], 16)
+                .expect("Failed to parse Hash from test leaf"),
+            true,
+        )
+        .await;
+    }
 
-    // // Expect failure when deleting an identity that has already been deleted
-    // test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 0,
-    // true).await;
+    // Expect failure when deleting an identity that has already been deleted
+    test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 0, true).await;
 
-    // // Expect failure when deleting an identity that can not be found
-    // test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 12,
-    // true).await;
+    // Expect failure when deleting an identity that can not be found
+    test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 12, true).await;
 
-    // // Queue a new deletion
-    // test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 8,
-    // false).await; // Expect failure when deleting an identity that is already
-    // queued test_delete_identity(&uri, &client, &mut ref_tree,
-    // &identities_ref, 8, true).await;
+    // Queue a new deletion
+    test_delete_identity(
+        &uri,
+        &client,
+        &mut ref_tree,
+        &identities_ref,
+        deletion_batch_size + 1,
+        false,
+    )
+    .await;
 
-    // // Add another deletion and wait for the batch time to elapse
-    // test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 9,
-    // true).await;
+    // Expect failure when deleting an identity that is already queued
+    test_delete_identity(
+        &uri,
+        &client,
+        &mut ref_tree,
+        &identities_ref,
+        deletion_batch_size + 1,
+        true,
+    )
+    .await;
 
-    // tokio::time::sleep(Duration::from_secs(IDLE_TIME * 2)).await;
-
-    // // Shutdown the app properly for the final time
-    // shutdown();
-    // app.await.unwrap();
-    // for (_, prover) in insertion_prover_map.into_iter() {
-    //     prover.stop();
-    // }
-    // for (_, prover) in deletion_prover_map.into_iter() {
-    //     prover.stop();
-    // }
-    // reset_shutdown();
+    // Shutdown the app properly for the final time
+    shutdown();
+    app.await.unwrap();
+    for (_, prover) in insertion_prover_map.into_iter() {
+        prover.stop();
+    }
+    for (_, prover) in deletion_prover_map.into_iter() {
+        prover.stop();
+    }
+    reset_shutdown();
 
     Ok(())
 }

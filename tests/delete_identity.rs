@@ -167,12 +167,6 @@ async fn delete_identities() -> anyhow::Result<()> {
     )
     .await;
 
-    // // Add another deletion and wait for the batch time to elapse
-    // test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 9,
-    // true).await;
-
-    // tokio::time::sleep(Duration::from_secs(IDLE_TIME * 2)).await;
-
     // Shutdown the app properly for the final time
     shutdown();
     app.await.unwrap();

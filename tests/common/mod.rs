@@ -478,7 +478,7 @@ pub async fn spawn_app(options: Options) -> anyhow::Result<(JoinHandle<()>, Sock
 
 #[derive(Deserialize, Serialize, Debug)]
 struct CompiledContract {
-    abi:      Abi,
+    abi: Abi,
     bytecode: Bytecode,
 }
 
@@ -505,12 +505,12 @@ pub async fn spawn_deps(
 
     let insertion_prover_futures = FuturesUnordered::new();
     for batch_size in insertion_batch_sizes {
-        insertion_prover_futures.push(spawn_mock_insertion_prover(*batch_size));
+        insertion_prover_futures.push(spawn_mock_insertion_prover(*batch_size, tree_depth));
     }
 
     let deletion_prover_futures = FuturesUnordered::new();
     for batch_size in deletion_batch_sizes {
-        deletion_prover_futures.push(spawn_mock_deletion_prover(*batch_size));
+        deletion_prover_futures.push(spawn_mock_deletion_prover(*batch_size, tree_depth));
     }
 
     let (chain, db_container, insertion_provers, deletion_provers) = tokio::join!(
@@ -558,16 +558,24 @@ async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {
     Ok(db_container)
 }
 
-pub async fn spawn_mock_insertion_prover(batch_size: usize) -> anyhow::Result<ProverService> {
+pub async fn spawn_mock_insertion_prover(
+    batch_size: usize,
+    tree_depth: u8,
+) -> anyhow::Result<ProverService> {
     let mock_prover_service =
-        prover_mock::ProverService::new(batch_size, prover_mock::ProverType::Insertion).await?;
+        prover_mock::ProverService::new(batch_size, tree_depth, prover_mock::ProverType::Insertion)
+            .await?;
 
     Ok(mock_prover_service)
 }
 
-pub async fn spawn_mock_deletion_prover(batch_size: usize) -> anyhow::Result<ProverService> {
+pub async fn spawn_mock_deletion_prover(
+    batch_size: usize,
+    tree_depth: u8,
+) -> anyhow::Result<ProverService> {
     let mock_prover_service =
-        prover_mock::ProverService::new(batch_size, prover_mock::ProverType::Deletion).await?;
+        prover_mock::ProverService::new(batch_size, tree_depth, prover_mock::ProverType::Deletion)
+            .await?;
 
     Ok(mock_prover_service)
 }

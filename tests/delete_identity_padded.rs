@@ -118,14 +118,11 @@ async fn delete_identities_padding() -> anyhow::Result<()> {
         .await;
     }
 
-<<<<<<< HEAD
     // delete only the first identity
     test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 0, false).await;
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
 
-=======
->>>>>>> 8bf47bd15de0c0167d46ba08808b240e2d1b86fc
     // make sure that identities 2 and 3 which weren't deleted are still there
     for i in 1..insertion_batch_size {
         test_inclusion_proof(
@@ -140,14 +137,6 @@ async fn delete_identities_padding() -> anyhow::Result<()> {
         .await;
     }
 
-<<<<<<< HEAD
-=======
-    // delete only the first identity
-    test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 0, false).await;
-
-    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
-
->>>>>>> 8bf47bd15de0c0167d46ba08808b240e2d1b86fc
     // Ensure that the first identity was deleted
     test_inclusion_proof(
         &uri,

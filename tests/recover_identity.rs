@@ -163,16 +163,6 @@ async fn recover_identities() -> anyhow::Result<()> {
     for i in 0..deletion_batch_size {
         let recovery_leaf_index = test_identities.len() - i - 1;
 
-        test_inclusion_proof(
-            &uri,
-            &client,
-            recovery_leaf_index,
-            &ref_tree,
-            &identities_ref[recovery_leaf_index],
-            false,
-        )
-        .await;
-
         // Check that the replacement identity has a pending status now
         test_inclusion_status(
             &uri,

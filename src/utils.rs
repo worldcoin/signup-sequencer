@@ -8,8 +8,6 @@ use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tracing::{error, info};
 
-pub mod async_queue;
-
 pub trait Any<A> {
     fn any(self) -> AnyhowResult<A>;
 }

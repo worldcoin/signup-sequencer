@@ -5,15 +5,15 @@ pub mod scanner;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use clap::Parser;
 use ethers::providers::Middleware;
-use ethers::types::{Address, U256};
+use ethers::types::{Address, H256, U256};
 use semaphore::Field;
 use tokio::sync::RwLockReadGuard;
 use tracing::{error, info, instrument, warn};
 
-use self::abi::{BridgedWorldId, WorldId};
+use self::abi::{BridgedWorldId, DeleteIdentitiesCall, WorldId};
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::{Ethereum, ReadProvider};
 use crate::prover::identity::Identity;
@@ -358,6 +358,35 @@ impl IdentityManager {
         let latest_root = self.abi.latest_root().call().await?;
 
         Ok(latest_root)
+    }
+
+    /// Fetches the identity commitments from a
+    /// `deleteIdentities` transaction by tx hash
+    #[instrument(level = "debug", skip_all)]
+    pub async fn fetch_deletion_indices_from_tx(
+        &self,
+        tx_hash: H256,
+    ) -> anyhow::Result<Vec<usize>> {
+        let provider = self.ethereum.provider();
+
+        let tx = provider
+            .get_transaction(tx_hash)
+            .await?
+            .context("Missing tx")?;
+
+        use ethers::abi::AbiDecode;
+        let delete_identities = DeleteIdentitiesCall::decode(&tx.input)?;
+
+        let packed_deletion_indices: &[u8] = delete_identities.packed_deletion_indices.as_ref();
+        let mut indices = vec![];
+
+        for packed_index in packed_deletion_indices.chunks(4) {
+            let index = u32::from_be_bytes(packed_index.try_into()?);
+
+            indices.push(index as usize);
+        }
+
+        Ok(indices)
     }
 
     #[instrument(level = "debug", skip_all)]

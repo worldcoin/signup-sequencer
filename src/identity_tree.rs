@@ -516,6 +516,23 @@ impl TreeVersion<Latest> {
     }
 }
 
+impl<T> TreeVersion<T>
+where
+    T: Version,
+{
+    pub fn commitments_by_indices(&self, indices: &[usize]) -> Vec<Hash> {
+        let tree = self.get_data();
+
+        let mut commitments = vec![];
+
+        for idx in indices {
+            commitments.push(tree.tree.get_leaf(*idx));
+        }
+
+        commitments
+    }
+}
+
 /// Public API for working with versions that have a successor. Such versions
 /// only allow peeking and applying updates from the successor.
 pub trait TreeWithNextVersion {

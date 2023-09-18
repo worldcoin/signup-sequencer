@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Result as AnyhowResult;
+use anyhow::{Context, Result as AnyhowResult};
+use chrono::{DateTime, Utc};
 use ethers::abi::RawLog;
 use ethers::contract::EthEvent;
 use ethers::providers::Middleware;
@@ -14,6 +15,7 @@ use crate::contracts::scanner::BlockScanner;
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
 use crate::identity_tree::{Canonical, Intermediate, TreeVersion, TreeWithNextVersion};
+use crate::task_monitor::TaskMonitor;
 
 pub struct FinalizeRoots {
     database:         Arc<Database>,
@@ -78,22 +80,21 @@ async fn finalize_roots_loop(
     loop {
         let mainnet_logs = fetch_mainnet_logs(&mut mainnet_scanner, mainnet_address).await?;
 
-        finalize_mainnet_roots(database, identity_manager, processed_tree, mainnet_logs).await?;
+        finalize_mainnet_roots(database, identity_manager, processed_tree, &mainnet_logs).await?;
 
-        let secondary_logs = fetch_secondary_logs(&mut secondary_scanners).await?;
+        let mut roots = extract_roots_from_mainnet_logs(mainnet_logs);
+        roots.extend(fetch_secondary_logs(&mut secondary_scanners).await?);
 
-        finalize_secondary_roots(database, identity_manager, finalized_tree, secondary_logs)
-            .await?;
+        finalize_secondary_roots(database, identity_manager, finalized_tree, roots).await?;
 
         tokio::time::sleep(time_between_scans).await;
     }
 }
 
-#[instrument(level = "info", skip_all)]
 async fn fetch_mainnet_logs<M>(
     mainnet_scanner: &mut BlockScanner<M>,
     mainnet_address: Address,
-) -> anyhow::Result<Vec<TreeChangedFilter>>
+) -> anyhow::Result<Vec<Log>>
 where
     M: Middleware,
     <M as Middleware>::Error: 'static,
@@ -111,10 +112,9 @@ where
         .next(mainnet_address, mainnet_topics.clone())
         .await?;
 
-    Ok(extract_root_from_mainnet_logs(&mainnet_logs))
+    Ok(mainnet_logs)
 }
 
-#[instrument(level = "info", skip_all)]
 async fn fetch_secondary_logs<M>(
     secondary_scanners: &mut HashMap<Address, BlockScanner<M>>,
 ) -> anyhow::Result<Vec<U256>>
@@ -149,13 +149,18 @@ async fn finalize_mainnet_roots(
     database: &Database,
     identity_manager: &IdentityManager,
     processed_tree: &TreeVersion<Intermediate>,
-    all_roots: Vec<TreeChangedFilter>,
+    logs: &[Log],
 ) -> Result<(), anyhow::Error> {
-    for event in all_roots {
+    for log in logs {
+        let Some(event) = raw_log_to_tree_changed(log) else {
+            continue;
+        };
+
         let pre_root = event.pre_root;
         let post_root = event.post_root;
+        let kind = TreeChangeKind::from(event.kind);
 
-        info!(?pre_root, ?post_root, "Mining batch");
+        info!(?pre_root, ?post_root, ?kind, "Mining batch");
 
         // Double check
         if !identity_manager.is_root_mined(post_root).await? {
@@ -164,11 +169,20 @@ async fn finalize_mainnet_roots(
 
         database.mark_root_as_processed(&post_root.into()).await?;
 
-        info!(?pre_root, ?post_root, "Batch mined");
+        info!(?pre_root, ?post_root, ?kind, "Batch mined");
+
+        if kind == TreeChangeKind::Deletion {
+            // NOTE: We must do this before updating the tree
+            //       because we fetch commitments from the processed tree
+            //       before they are deleted
+            update_eligible_recoveries(database, identity_manager, processed_tree, &log).await?;
+        }
 
         let updates_count = processed_tree.apply_updates_up_to(post_root.into());
 
         info!(updates_count, ?pre_root, ?post_root, "Mined tree updated");
+
+        TaskMonitor::log_identities_queues(database).await?;
     }
 
     Ok(())
@@ -220,17 +234,24 @@ where
     Ok(secondary_scanners)
 }
 
-fn extract_root_from_mainnet_logs(logs: &[Log]) -> Vec<TreeChangedFilter> {
+fn extract_roots_from_mainnet_logs(mainnet_logs: Vec<Log>) -> Vec<U256> {
     let mut roots = vec![];
+    for log in mainnet_logs {
+        let Some(event) = raw_log_to_tree_changed(&log) else {
+            continue;
+        };
 
-    for log in logs {
-        let raw_log = RawLog::from((log.topics.clone(), log.data.to_vec()));
-        if let Ok(event) = TreeChangedFilter::decode_log(&raw_log) {
-            roots.push(event);
-        }
+        let post_root = event.post_root;
+
+        roots.push(post_root);
     }
-
     roots
+}
+
+fn raw_log_to_tree_changed(log: &Log) -> Option<TreeChangedFilter> {
+    let raw_log = RawLog::from((log.topics.clone(), log.data.to_vec()));
+
+    TreeChangedFilter::decode_log(&raw_log).ok()
 }
 
 fn extract_roots_from_secondary_logs(logs: &[Log]) -> Vec<U256> {
@@ -244,4 +265,58 @@ fn extract_roots_from_secondary_logs(logs: &[Log]) -> Vec<U256> {
     }
 
     roots
+}
+
+use crate::identity_tree::Hash;
+
+async fn update_eligible_recoveries(
+    database: &Database,
+    identity_manager: &IdentityManager,
+    processed_tree: &TreeVersion<Intermediate>,
+    log: &Log,
+) -> anyhow::Result<()> {
+    let tx_hash = log.transaction_hash.context("Missing tx hash")?;
+    let commitments = identity_manager
+        .fetch_deletion_indices_from_tx(tx_hash)
+        .await
+        .context("Could not fetch deletion indices from tx")?;
+
+    let commitments = processed_tree.commitments_by_indices(&commitments);
+    let commitments: Vec<U256> = commitments.into_iter().map(|c| c.into()).collect();
+
+    // Check if any deleted commitments correspond with entries in the
+    // recoveries table and insert the new commitment into the unprocessed
+    // identities table with the proper eligibility timestamp
+    let recoveries = database
+        .get_recoveries()
+        .await?
+        .iter()
+        .map(|f| (f.existing_commitment, f.new_commitment))
+        .collect::<HashMap<Hash, Hash>>();
+
+    // Fetch the root history expiry time on chain
+    let root_history_expiry = identity_manager.root_history_expiry().await?;
+
+    // Use the root history expiry to calcuate the eligibility timestamp for the new
+    // insertion
+    let eligibility_timestamp = DateTime::from_utc(
+        chrono::NaiveDateTime::from_timestamp_opt(
+            Utc::now().timestamp() + root_history_expiry.as_u64() as i64,
+            0,
+        )
+        .context("Could not convert eligibility timestamp to NaiveDateTime")?,
+        Utc,
+    );
+
+    // For each deletion, if there is a corresponding recovery, insert a new
+    // identity with the specified eligibility timestamp
+    for prev_commitment in commitments {
+        if let Some(new_commitment) = recoveries.get(&prev_commitment.into()) {
+            database
+                .insert_new_identity(*new_commitment, eligibility_timestamp)
+                .await?;
+        }
+    }
+
+    Ok(())
 }

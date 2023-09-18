@@ -177,6 +177,25 @@ impl Database {
         Ok(Some(root_leaf_index as usize))
     }
 
+    pub async fn get_id_by_root(
+        tx: impl Executor<'_, Database = Postgres>,
+        root: &Hash,
+    ) -> Result<Option<usize>, Error> {
+        let root_index_query = sqlx::query(
+            r#"
+            SELECT id FROM identities WHERE root = $1
+            "#,
+        )
+        .bind(root);
+
+        let row = tx.fetch_optional(root_index_query).await?;
+
+        let Some(row) = row else { return Ok(None) };
+        let root_id = row.get::<i64, _>(0);
+
+        Ok(Some(root_id as usize))
+    }
+
     /// Marks the identities and roots from before a given root hash as mined
     /// Also marks following roots as pending
     #[instrument(skip(self), level = "debug")]
@@ -187,25 +206,24 @@ impl Database {
 
         let mut tx = self.pool.begin().await?;
 
-        let root_leaf_index = Self::get_leaf_index_by_root(&mut tx, root).await?;
+        let root_id = Self::get_id_by_root(&mut tx, root).await?;
 
-        let Some(root_leaf_index) = root_leaf_index else {
+        let Some(root_id) = root_id else {
             return Err(Error::MissingRoot { root: *root });
         };
 
-        let root_leaf_index = root_leaf_index as i64;
-
+        let root_id = root_id as i64;
         // TODO: Can I get rid of line `AND    status <> $2
         let update_previous_roots = sqlx::query(
             r#"
             UPDATE identities
             SET    status = $2, mined_at = CURRENT_TIMESTAMP
-            WHERE  leaf_index <= $1
+            WHERE  id <= $1
             AND    status <> $2
             AND    status <> $3
             "#,
         )
-        .bind(root_leaf_index)
+        .bind(root_id)
         .bind(<&str>::from(processed_status))
         .bind(<&str>::from(mined_status));
 
@@ -213,10 +231,10 @@ impl Database {
             r#"
             UPDATE identities
             SET    status = $2, mined_at = NULL
-            WHERE  leaf_index > $1
+            WHERE  id > $1
             "#,
         )
-        .bind(root_leaf_index)
+        .bind(root_id)
         .bind(<&str>::from(pending_status));
 
         tx.execute(update_previous_roots).await?;
@@ -235,23 +253,23 @@ impl Database {
 
         let mut tx = self.pool.begin().await?;
 
-        let root_leaf_index = Self::get_leaf_index_by_root(&mut tx, root).await?;
+        let root_id = Self::get_id_by_root(&mut tx, root).await?;
 
-        let Some(root_leaf_index) = root_leaf_index else {
+        let Some(root_id) = root_id else {
             return Err(Error::MissingRoot { root: *root });
         };
 
-        let root_leaf_index = root_leaf_index as i64;
+        let root_id = root_id as i64;
 
         let update_previous_roots = sqlx::query(
             r#"
             UPDATE identities
             SET    status = $2
-            WHERE  leaf_index <= $1
+            WHERE  id <= $1
             AND    status <> $2
             "#,
         )
-        .bind(root_leaf_index)
+        .bind(root_id)
         .bind(<&str>::from(mined_status));
 
         tx.execute(update_previous_roots).await?;
@@ -775,7 +793,6 @@ mod test {
     use postgres_docker_utils::DockerContainerGuard;
     use ruint::Uint;
     use semaphore::Field;
-    
     use sqlx::Row;
 
     use super::{Database, Options};

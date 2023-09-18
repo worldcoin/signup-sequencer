@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result as AnyhowResult};
 use chrono::{DateTime, Utc};
-
 use tracing::{info, instrument};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};

@@ -123,7 +123,7 @@ async fn delete_identities() -> anyhow::Result<()> {
         test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, i, false).await;
     }
 
-    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 8)).await;
 
     // Ensure that identities have been deleted
     for i in 0..deletion_batch_size {

@@ -2,11 +2,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
-use chrono::{DateTime, Utc};
+use chrono::{Utc};
 use tokio::sync::Notify;
 use tracing::info;
 
-use crate::contracts::SharedIdentityManager;
+
 use crate::database::types::DeletionEntry;
 use crate::database::Database;
 use crate::identity_tree::{Hash, Latest, TreeVersion};
@@ -63,11 +63,14 @@ async fn delete_identities(
         let deletions = database.get_deletions().await?;
         if deletions.is_empty() {
             // Sleep for one hour
-            tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
+            // TODO: should we make this dynamic? This causes an issue with tests so its set
+            // to 1 sec atm
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             continue;
         }
 
         let last_deletion_timestamp = database.get_latest_deletion().await?.timestamp;
+
         // If the minimum deletions batch size is reached or the deletion time interval
         // has elapsed, run a batch of deletions
         if deletions.len() >= min_deletion_batch_size
@@ -76,7 +79,6 @@ async fn delete_identities(
             // Dedup deletion entries
             let deletions = deletions
                 .into_iter()
-                .map(|f| f)
                 .collect::<HashSet<DeletionEntry>>();
 
             let (leaf_indices, previous_commitments): (Vec<usize>, Vec<Hash>) = deletions

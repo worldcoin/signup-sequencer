@@ -6,9 +6,10 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use clap::Parser;
-use ethers::abi::ethabi::Bytes;
+
 use ethers::providers::Middleware;
 use ethers::types::{Address, U256};
+
 use semaphore::Field;
 use tokio::sync::RwLockReadGuard;
 use tracing::{error, info, instrument, warn};
@@ -227,7 +228,7 @@ impl IdentityManager {
     pub async fn prepare_deletion_proof(
         prover: ReadOnlyProver<'_, Prover>,
         pre_root: U256,
-        deletion_indices: &[u32],
+        packed_deletion_indices: Vec<u8>,
         identity_commitments: Vec<Identity>,
         post_root: U256,
     ) -> anyhow::Result<Proof> {
@@ -238,7 +239,12 @@ impl IdentityManager {
         );
 
         let proof_data: Proof = prover
-            .generate_deletion_proof(pre_root, post_root, deletion_indices, identity_commitments)
+            .generate_deletion_proof(
+                pre_root,
+                post_root,
+                packed_deletion_indices,
+                identity_commitments,
+            )
             .await?;
 
         Ok(proof_data)
@@ -286,26 +292,20 @@ impl IdentityManager {
     pub async fn delete_identities(
         &self,
         deletion_proof: Proof,
+        batch_size: u32,
+        packed_deletion_indices: Vec<u8>,
         pre_root: U256,
-        deletion_indices: Vec<u32>,
         post_root: U256,
     ) -> anyhow::Result<TransactionId> {
         let proof_points_array: [U256; 8] = deletion_proof.into();
-
-        // We want to send the transaction through our ethereum provider rather than
-        // directly now. To that end, we create it, and then send it later, waiting for
-        // it to complete.
-        let deletion_indices = deletion_indices
-            .iter()
-            .flat_map(|&idx| idx.to_be_bytes().to_vec())
-            .collect::<Vec<u8>>();
 
         let register_identities_transaction = self
             .abi
             .delete_identities(
                 proof_points_array,
+                batch_size,
+                packed_deletion_indices.into(),
                 pre_root,
-                deletion_indices.into(),
                 post_root,
             )
             .tx;
@@ -319,6 +319,7 @@ impl IdentityManager {
     #[instrument(level = "debug", skip(self))]
     pub async fn mine_identities(&self, transaction_id: TransactionId) -> anyhow::Result<bool> {
         let result = self.ethereum.mine_transaction(transaction_id).await?;
+
         Ok(result)
     }
 

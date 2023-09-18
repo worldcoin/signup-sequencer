@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Result as AnyhowResult;
-use chrono::{DateTime, Utc};
+use chrono::{Utc};
 use clap::Parser;
 use hyper::StatusCode;
 use ruint::Uint;
@@ -326,7 +326,7 @@ impl App {
         }
 
         self.database
-            .insert_new_identity(commitment, DateTime::from(Utc::now()))
+            .insert_new_identity(commitment, Utc::now())
             .await?;
 
         Ok(())
@@ -349,10 +349,14 @@ impl App {
             return Err(ServerError::NoProversOnIdDeletion);
         }
 
+        if !self.database.identity_exists(*commitment).await? {
+            return Err(ServerError::IdentityCommitmentNotFound);
+        }
+
         // Get the leaf index for the id commitment
         let leaf_index = self
             .database
-            .get_identity_leaf_index(&commitment)
+            .get_identity_leaf_index(commitment)
             .await?
             .ok_or(ServerError::IdentityCommitmentNotFound)?
             .leaf_index;
@@ -380,7 +384,7 @@ impl App {
 
         // If the id has not been deleted, insert into the deletions table
         self.database
-            .insert_new_deletion(leaf_index, &commitment)
+            .insert_new_deletion(leaf_index, commitment)
             .await?;
 
         Ok(())
@@ -408,10 +412,10 @@ impl App {
         }
 
         // Delete the existing id and insert the commitments into the recovery table
-        self.delete_identity(&existing_commitment).await?;
+        self.delete_identity(existing_commitment).await?;
 
         self.database
-            .insert_new_recovery(&existing_commitment, &new_commitment)
+            .insert_new_recovery(existing_commitment, new_commitment)
             .await?;
 
         Ok(())
@@ -526,7 +530,11 @@ impl App {
             .await?
             .ok_or(ServerError::IdentityCommitmentNotFound)?;
 
-        let proof = self.tree_state.get_proof_for(&item);
+        let (leaf, proof) = self.tree_state.get_proof_for(&item);
+
+        if leaf != *commitment {
+            return Err(ServerError::InvalidCommitment);
+        }
 
         Ok(InclusionProofResponse(proof))
     }
@@ -540,7 +548,7 @@ impl App {
         request: &VerifySemaphoreProofRequest,
     ) -> Result<VerifySemaphoreProofResponse, ServerError> {
         let Some(root_state) = self.database.get_root_state(&request.root).await? else {
-            return Err(ServerError::InvalidRoot)
+            return Err(ServerError::InvalidRoot);
         };
 
         let checked = verify_proof(

@@ -19,10 +19,10 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let tree_depth: u8 = SUPPORTED_DEPTH as u8;
     let batch_size = 3;
 
-    let (mock_chain, db_container, prover_map, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], tree_depth).await?;
+    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
+        spawn_deps(initial_root, &[batch_size], &[], tree_depth).await?;
 
-    let prover_mock = &prover_map[&batch_size];
+    let prover_mock = &insertion_prover_map[&batch_size];
 
     let identity_manager = mock_chain.identity_manager.clone();
 
@@ -222,7 +222,7 @@ async fn validate_proofs() -> anyhow::Result<()> {
     // Shutdown the app properly for the final time
     shutdown();
     app.await.unwrap();
-    for (_, prover) in prover_map.into_iter() {
+    for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }
     reset_shutdown();

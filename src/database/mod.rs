@@ -793,7 +793,6 @@ mod test {
     use postgres_docker_utils::DockerContainerGuard;
     use ruint::Uint;
     use semaphore::Field;
-    use sqlx::Row;
 
     use super::{Database, Options};
     use crate::identity_tree::{Hash, Status};

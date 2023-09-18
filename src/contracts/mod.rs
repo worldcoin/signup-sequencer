@@ -361,6 +361,17 @@ impl IdentityManager {
     }
 
     #[instrument(level = "debug", skip_all)]
+    pub async fn is_root_mined(&self, root: U256) -> anyhow::Result<bool> {
+        let (root_on_mainnet, ..) = self.abi.query_root(root).call().await?;
+
+        if root_on_mainnet.is_zero() {
+            return Ok(false);
+        }
+
+        Ok(true)
+    }
+
+    #[instrument(level = "debug", skip_all)]
     pub async fn is_root_mined_multi_chain(&self, root: U256) -> anyhow::Result<bool> {
         let (root_on_mainnet, ..) = self.abi.query_root(root).call().await?;
 

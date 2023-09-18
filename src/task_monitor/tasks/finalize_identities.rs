@@ -9,7 +9,7 @@ use ethers::providers::Middleware;
 use ethers::types::{Address, Log, Topic, ValueOrArray, U256};
 use tracing::{info, instrument};
 
-use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangedFilter};
+use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangeKind, TreeChangedFilter};
 use crate::contracts::scanner::BlockScanner;
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
@@ -76,47 +76,30 @@ async fn finalize_roots_loop(
     let mainnet_address = mainnet_abi.address();
 
     loop {
-        let all_roots = fetch_logs(
-            &mut mainnet_scanner,
-            &mut secondary_scanners,
-            mainnet_address,
-        )
-        .await?;
+        let mainnet_logs = fetch_mainnet_logs(&mut mainnet_scanner, mainnet_address).await?;
 
-        finalize_roots(
-            database,
-            identity_manager,
-            processed_tree,
-            finalized_tree,
-            all_roots,
-        )
-        .await?;
+        finalize_mainnet_roots(database, identity_manager, processed_tree, mainnet_logs).await?;
+
+        let secondary_logs = fetch_secondary_logs(&mut secondary_scanners).await?;
+
+        finalize_secondary_roots(database, identity_manager, finalized_tree, secondary_logs)
+            .await?;
 
         tokio::time::sleep(time_between_scans).await;
     }
 }
 
 #[instrument(level = "info", skip_all)]
-async fn fetch_logs<A, B>(
-    mainnet_scanner: &mut BlockScanner<A>,
-    secondary_scanners: &mut HashMap<Address, BlockScanner<B>>,
+async fn fetch_mainnet_logs<M>(
+    mainnet_scanner: &mut BlockScanner<M>,
     mainnet_address: Address,
-) -> anyhow::Result<Vec<U256>>
+) -> anyhow::Result<Vec<TreeChangedFilter>>
 where
-    A: Middleware,
-    <A as Middleware>::Error: 'static,
-    B: Middleware,
-    <B as Middleware>::Error: 'static,
+    M: Middleware,
+    <M as Middleware>::Error: 'static,
 {
     let mainnet_topics = [
         Some(Topic::from(TreeChangedFilter::signature())),
-        None,
-        None,
-        None,
-    ];
-
-    let bridged_topics = [
-        Some(Topic::from(RootAddedFilter::signature())),
         None,
         None,
         None,
@@ -127,6 +110,25 @@ where
     let mainnet_logs = mainnet_scanner
         .next(mainnet_address, mainnet_topics.clone())
         .await?;
+
+    Ok(extract_root_from_mainnet_logs(&mainnet_logs))
+}
+
+#[instrument(level = "info", skip_all)]
+async fn fetch_secondary_logs<M>(
+    secondary_scanners: &mut HashMap<Address, BlockScanner<M>>,
+) -> anyhow::Result<Vec<U256>>
+where
+    M: Middleware,
+    <M as Middleware>::Error: 'static,
+{
+    let bridged_topics = [
+        Some(Topic::from(RootAddedFilter::signature())),
+        None,
+        None,
+        None,
+    ];
+
     let mut secondary_logs = vec![];
 
     for (address, scanner) in secondary_scanners {
@@ -137,42 +139,60 @@ where
         secondary_logs.extend(logs);
     }
 
-    let mut roots = extract_root_from_mainnet_logs(&mainnet_logs);
-    roots.extend(extract_roots_from_secondary_logs(&secondary_logs));
+    let roots = extract_roots_from_secondary_logs(&secondary_logs);
 
     Ok(roots)
 }
 
 #[instrument(level = "info", skip_all)]
-async fn finalize_roots(
+async fn finalize_mainnet_roots(
     database: &Database,
     identity_manager: &IdentityManager,
     processed_tree: &TreeVersion<Intermediate>,
-    finalized_tree: &TreeVersion<Canonical>,
-    all_roots: Vec<U256>,
+    all_roots: Vec<TreeChangedFilter>,
 ) -> Result<(), anyhow::Error> {
-    for root in all_roots {
+    for event in all_roots {
+        let pre_root = event.pre_root;
+        let post_root = event.post_root;
+
+        info!(?pre_root, ?post_root, "Mining batch");
+
+        // Double check
+        if !identity_manager.is_root_mined(post_root).await? {
+            continue;
+        }
+
+        database.mark_root_as_processed(&post_root.into()).await?;
+
+        info!(?pre_root, ?post_root, "Batch mined");
+
+        let updates_count = processed_tree.apply_updates_up_to(post_root.into());
+
+        info!(updates_count, ?pre_root, ?post_root, "Mined tree updated");
+    }
+
+    Ok(())
+}
+
+#[instrument(level = "info", skip_all)]
+async fn finalize_secondary_roots(
+    database: &Database,
+    identity_manager: &IdentityManager,
+    finalized_tree: &TreeVersion<Canonical>,
+    roots: Vec<U256>,
+) -> Result<(), anyhow::Error> {
+    for root in roots {
         info!(?root, "Finalizing root");
 
-        let is_root_finalized = identity_manager.is_root_mined_multi_chain(root).await?;
-
-        if is_root_finalized {
-            // What can sometimes happen is that this finalize roots function is faster
-            // than the mine_identities task. In which case we'll try to finalize a given
-            // root, but it's not yet present in the processed tree.
-            //
-            // In that case we can safely apply updates to the processed tree as well.
-            processed_tree.apply_updates_up_to(root.into());
-
-            // We also need to run this update to mark the root as processed
-            // and apply a mined_at timestamp
-            database.mark_root_as_processed(&root.into()).await?;
-
-            finalized_tree.apply_updates_up_to(root.into());
-            database.mark_root_as_mined(&root.into()).await?;
-
-            info!(?root, "Root finalized");
+        // Check if mined on all L2s
+        if !identity_manager.is_root_mined_multi_chain(root).await? {
+            continue;
         }
+
+        database.mark_root_as_mined(&root.into()).await?;
+        finalized_tree.apply_updates_up_to(root.into());
+
+        info!(?root, "Root finalized");
     }
 
     Ok(())
@@ -200,13 +220,13 @@ where
     Ok(secondary_scanners)
 }
 
-fn extract_root_from_mainnet_logs(logs: &[Log]) -> Vec<U256> {
+fn extract_root_from_mainnet_logs(logs: &[Log]) -> Vec<TreeChangedFilter> {
     let mut roots = vec![];
 
     for log in logs {
         let raw_log = RawLog::from((log.topics.clone(), log.data.to_vec()));
         if let Ok(event) = TreeChangedFilter::decode_log(&raw_log) {
-            roots.push(event.post_root);
+            roots.push(event);
         }
     }
 

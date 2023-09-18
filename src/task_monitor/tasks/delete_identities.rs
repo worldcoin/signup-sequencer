@@ -2,10 +2,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
-use chrono::{Utc};
+use chrono::Utc;
 use tokio::sync::Notify;
 use tracing::info;
-
 
 use crate::database::types::DeletionEntry;
 use crate::database::Database;
@@ -77,9 +76,7 @@ async fn delete_identities(
             || Utc::now() - last_deletion_timestamp > deletion_time_interval
         {
             // Dedup deletion entries
-            let deletions = deletions
-                .into_iter()
-                .collect::<HashSet<DeletionEntry>>();
+            let deletions = deletions.into_iter().collect::<HashSet<DeletionEntry>>();
 
             let (leaf_indices, previous_commitments): (Vec<usize>, Vec<Hash>) = deletions
                 .iter()

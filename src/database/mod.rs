@@ -408,7 +408,12 @@ impl Database {
                 let url = row.get::<String, _>(1);
                 let timeout_s = row.get::<i64, _>(2) as u64;
                 let prover_type = row.get::<ProverType, _>(3);
-                ProverConfiguration { url, timeout_s, batch_size, prover_type }
+                ProverConfiguration {
+                    url,
+                    timeout_s,
+                    batch_size,
+                    prover_type,
+                }
             })
             .collect::<Provers>())
     }
@@ -771,7 +776,7 @@ mod test {
     use ruint::Uint;
     use semaphore::Field;
     use sqlx::types::chrono::DateTime;
-    use sqlx::{Row};
+    use sqlx::Row;
 
     use super::{Database, Options};
     use crate::identity_tree::{Hash, Status};

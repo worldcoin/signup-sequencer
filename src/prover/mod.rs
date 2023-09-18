@@ -12,7 +12,6 @@ pub mod map;
 pub mod proof;
 
 use std::collections::HashSet;
-
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::mem::size_of;

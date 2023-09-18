@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-
 use tokio::sync::{RwLock, RwLockReadGuard};
 
 use crate::prover::{Prover, ProverConfiguration, ProverType, Provers};

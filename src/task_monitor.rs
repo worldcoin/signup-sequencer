@@ -18,7 +18,7 @@ use self::tasks::process_identities::ProcessIdentities;
 use crate::contracts::SharedIdentityManager;
 use crate::database::Database;
 use crate::ethereum::write::TransactionId;
-use crate::identity_tree::{Hash, TreeState};
+use crate::identity_tree::TreeState;
 use crate::utils::async_queue::AsyncQueue;
 
 pub mod tasks;
@@ -134,12 +134,13 @@ impl RunningInstance {
 pub struct Options {
     /// The maximum number of seconds the sequencer will wait before sending a
     /// batch of identities to the chain, even if the batch is not full.
+    // TODO: do we want to change this to batch_insertion_timeout_secs
     #[clap(long, env, default_value = "180")]
     pub batch_timeout_seconds: u64,
 
     /// TODO:
     #[clap(long, env, default_value = "3600")]
-    pub deletion_time_interval: i64,
+    pub batch_deletion_timeout_seconds: i64,
 
     /// TODO:
     #[clap(long, env, default_value = "100")]
@@ -184,12 +185,12 @@ pub struct TaskMonitor {
     pending_identities_capacity: usize,
 
     // Finalization params
-    scanning_window_size:    u64,
-    time_between_scans:      Duration,
+    scanning_window_size:           u64,
+    time_between_scans:             Duration,
     // TODO: docs
-    deletion_time_interval:  i64,
+    batch_deletion_timeout_seconds: i64,
     // TODO: docs
-    min_batch_deletion_size: usize,
+    min_batch_deletion_size:        usize,
 }
 
 impl TaskMonitor {
@@ -204,7 +205,7 @@ impl TaskMonitor {
             pending_identities_capacity,
             scanning_window_size,
             time_between_scans_seconds,
-            deletion_time_interval,
+            batch_deletion_timeout_seconds,
             min_batch_deletion_size,
             insert_identities_capacity,
         } = *options;
@@ -218,7 +219,7 @@ impl TaskMonitor {
             pending_identities_capacity,
             scanning_window_size,
             time_between_scans: Duration::from_secs(time_between_scans_seconds),
-            deletion_time_interval: options.deletion_time_interval,
+            batch_deletion_timeout_seconds: options.batch_deletion_timeout_seconds,
             min_batch_deletion_size: options.min_batch_deletion_size,
         }
     }
@@ -314,7 +315,7 @@ impl TaskMonitor {
         let delete_identities = DeleteIdentities::new(
             self.database.clone(),
             self.tree_state.get_latest_tree(),
-            self.deletion_time_interval,
+            self.batch_deletion_timeout_seconds,
             self.min_batch_deletion_size,
             wake_up_notify,
         );

@@ -48,18 +48,21 @@ pub mod prelude {
     pub use super::prover_mock::ProverService;
     pub use super::{
         abi as ContractAbi, generate_reference_proof_json, generate_test_identities,
-        init_tracing_subscriber, spawn_app, spawn_deps, spawn_mock_prover, test_inclusion_proof,
-        test_insert_identity, test_verify_proof, test_verify_proof_on_chain,
+        init_tracing_subscriber, spawn_app, spawn_deps, spawn_mock_deletion_prover,
+        spawn_mock_insertion_prover, test_inclusion_proof, test_insert_identity, test_verify_proof,
+        test_verify_proof_on_chain,
     };
 }
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
+use std::str::FromStr;
 use std::sync::Arc;
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use hyper::StatusCode;
+use signup_sequencer::identity_tree::Status;
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
@@ -272,6 +275,134 @@ pub async fn test_inclusion_proof(
 }
 
 #[instrument(skip_all)]
+pub async fn test_inclusion_status(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    leaf: &Hash,
+    expected_status: Status,
+) {
+    for _i in 1..21 {
+        let body = construct_inclusion_proof_body(leaf);
+        info!(?uri, "Contacting");
+        let req = Request::builder()
+            .method("POST")
+            .uri(uri.to_owned() + "/inclusionProof")
+            .header("Content-Type", "application/json")
+            .body(body)
+            .expect("Failed to create inclusion proof hyper::Body");
+
+        let mut response = client
+            .request(req)
+            .await
+            .expect("Failed to execute request.");
+
+        let bytes = hyper::body::to_bytes(response.body_mut())
+            .await
+            .expect("Failed to convert response body to bytes");
+        let result = String::from_utf8(bytes.into_iter().collect())
+            .expect("Could not parse response bytes to utf-8");
+        let result_json = serde_json::from_str::<serde_json::Value>(&result)
+            .expect("Failed to parse response as json");
+        let status = result_json["status"]
+            .as_str()
+            .expect("Failed to get status");
+
+        assert_eq!(
+            expected_status,
+            Status::from_str(status).expect("Could not convert str to Status")
+        );
+    }
+}
+
+#[instrument(skip_all)]
+pub async fn test_delete_identity(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    ref_tree: &mut PoseidonTree,
+    test_leaves: &[Field],
+    leaf_index: usize,
+    expect_failure: bool,
+) -> (merkle_tree::Proof<PoseidonHash>, Field) {
+    let body = construct_delete_identity_body(&test_leaves[leaf_index]);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri.to_owned() + "/deleteIdentity")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create insert identity hyper::Body");
+
+    let mut response = client
+        .request(req)
+        .await
+        .expect("Failed to execute request.");
+    let bytes = hyper::body::to_bytes(response.body_mut())
+        .await
+        .expect("Failed to convert response body to bytes");
+
+    if expect_failure {
+        assert!(!response.status().is_success());
+    } else {
+        assert!(response.status().is_success());
+        assert!(bytes.is_empty());
+    }
+
+    ref_tree.set(leaf_index, Hash::ZERO);
+    (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())
+}
+
+#[instrument(skip_all)]
+pub async fn test_recover_identity(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    ref_tree: &mut PoseidonTree,
+    test_leaves: &[Field],
+    previous_leaf_index: usize,
+    new_leaf: Field,
+    new_leaf_index: usize,
+    expect_failure: bool,
+) -> (merkle_tree::Proof<PoseidonHash>, Field) {
+    let previous_leaf = test_leaves[previous_leaf_index];
+
+    let body = construct_recover_identity_body(&previous_leaf, &new_leaf);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri.to_owned() + "/recoverIdentity")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create insert identity hyper::Body");
+
+    let mut response = client
+        .request(req)
+        .await
+        .expect("Failed to execute request.");
+
+    let bytes = hyper::body::to_bytes(response.body_mut())
+        .await
+        .expect("Failed to convert response body to bytes");
+
+    if expect_failure {
+        assert!(!response.status().is_success());
+    } else {
+        assert!(response.status().is_success());
+        assert!(bytes.is_empty());
+    }
+
+    // TODO: Note that recovery order is non-deterministic and therefore we cannot
+    // easily keep the ref_tree in sync with the sequencer's version of the
+    // tree. In the future, we could consider tracking updates to the tree in a
+    // different way like listening to event emission.
+    ref_tree.set(previous_leaf_index, Hash::ZERO);
+    // Continuing on the note above, while the replacement identity is be
+    // inserted as a new identity, it is not deterministic and if there are multiple
+    // recovery requests, it is possible that the sequencer tree is ordered in a
+    // different way than the ref_tree
+    ref_tree.set(new_leaf_index, new_leaf);
+    (ref_tree.proof(new_leaf_index).unwrap(), ref_tree.root())
+}
+
+#[instrument(skip_all)]
 pub async fn test_add_batch_size(
     uri: impl Into<String>,
     prover_url: impl Into<String>,
@@ -382,6 +513,28 @@ fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
     )
 }
 
+fn construct_delete_identity_body(identity_commitment: &Hash) -> Body {
+    Body::from(
+        json!({
+            "identityCommitment": identity_commitment,
+        })
+        .to_string(),
+    )
+}
+
+fn construct_recover_identity_body(
+    prev_identity_commitment: &Hash,
+    new_identity_commitment: &Hash,
+) -> Body {
+    Body::from(
+        json!({
+            "previousIdentityCommitment":prev_identity_commitment ,
+            "newIdentityCommitment": new_identity_commitment,
+        })
+        .to_string(),
+    )
+}
+
 fn construct_insert_identity_body(identity_commitment: &Field) -> Body {
     Body::from(
         json!({
@@ -446,38 +599,72 @@ struct CompiledContract {
 
 pub async fn spawn_deps(
     initial_root: U256,
-    batch_sizes: &[usize],
+    insertion_batch_sizes: &[usize],
+    deletion_batch_sizes: &[usize],
     tree_depth: u8,
 ) -> anyhow::Result<(
     MockChain,
     DockerContainerGuard,
     HashMap<usize, ProverService>,
+    HashMap<usize, ProverService>,
     micro_oz::ServerHandle,
 )> {
-    let chain = spawn_mock_chain(initial_root, batch_sizes, tree_depth);
+    let chain = spawn_mock_chain(
+        initial_root,
+        insertion_batch_sizes,
+        deletion_batch_sizes,
+        tree_depth,
+    );
+
     let db_container = spawn_db();
 
-    let prover_futures = FuturesUnordered::new();
-    for batch_size in batch_sizes {
-        prover_futures.push(spawn_mock_prover(*batch_size));
+    let insertion_prover_futures = FuturesUnordered::new();
+    for batch_size in insertion_batch_sizes {
+        insertion_prover_futures.push(spawn_mock_insertion_prover(*batch_size, tree_depth));
     }
 
-    let (chain, db_container, provers) =
-        tokio::join!(chain, db_container, prover_futures.collect::<Vec<_>>());
+    let deletion_prover_futures = FuturesUnordered::new();
+    for batch_size in deletion_batch_sizes {
+        deletion_prover_futures.push(spawn_mock_deletion_prover(*batch_size, tree_depth));
+    }
+
+    let (chain, db_container, insertion_provers, deletion_provers) = tokio::join!(
+        chain,
+        db_container,
+        insertion_prover_futures.collect::<Vec<_>>(),
+        deletion_prover_futures.collect::<Vec<_>>()
+    );
 
     let chain = chain?;
 
     let signing_key = SigningKey::from_bytes(chain.private_key.as_bytes())?;
     let micro_oz = micro_oz::spawn(chain.anvil.endpoint(), signing_key).await?;
 
-    let provers = provers.into_iter().collect::<Result<Vec<_>, _>>()?;
+    let insertion_provers = insertion_provers
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
 
-    let prover_map = provers
+    let insertion_prover_map = insertion_provers
         .into_iter()
         .map(|prover| (prover.batch_size(), prover))
-        .collect();
+        .collect::<HashMap<usize, ProverService>>();
 
-    Ok((chain, db_container?, prover_map, micro_oz))
+    let deletion_provers = deletion_provers
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let deletion_prover_map = deletion_provers
+        .into_iter()
+        .map(|prover| (prover.batch_size(), prover))
+        .collect::<HashMap<usize, ProverService>>();
+
+    Ok((
+        chain,
+        db_container?,
+        insertion_prover_map,
+        deletion_prover_map,
+        micro_oz,
+    ))
 }
 
 async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {
@@ -486,9 +673,24 @@ async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {
     Ok(db_container)
 }
 
-pub async fn spawn_mock_prover(batch_size: usize) -> anyhow::Result<ProverService> {
+pub async fn spawn_mock_insertion_prover(
+    batch_size: usize,
+    tree_depth: u8,
+) -> anyhow::Result<ProverService> {
     let mock_prover_service =
-        prover_mock::ProverService::new(batch_size, prover_mock::ProverType::Insertion).await?;
+        prover_mock::ProverService::new(batch_size, tree_depth, prover_mock::ProverType::Insertion)
+            .await?;
+
+    Ok(mock_prover_service)
+}
+
+pub async fn spawn_mock_deletion_prover(
+    batch_size: usize,
+    tree_depth: u8,
+) -> anyhow::Result<ProverService> {
+    let mock_prover_service =
+        prover_mock::ProverService::new(batch_size, tree_depth, prover_mock::ProverType::Deletion)
+            .await?;
 
     Ok(mock_prover_service)
 }

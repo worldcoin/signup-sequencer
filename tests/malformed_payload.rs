@@ -17,10 +17,10 @@ async fn malformed_payload() -> anyhow::Result<()> {
 
     let batch_size: usize = 3;
 
-    let (mock_chain, db_container, prover_map, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], tree_depth).await?;
+    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
+        spawn_deps(initial_root, &[batch_size], &[], tree_depth).await?;
 
-    let prover_mock = &prover_map[&batch_size];
+    let prover_mock = &insertion_prover_map[&batch_size];
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
@@ -97,7 +97,7 @@ async fn malformed_payload() -> anyhow::Result<()> {
 
     shutdown();
     app.await?;
-    for (_, prover) in prover_map.into_iter() {
+    for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }
     reset_shutdown();

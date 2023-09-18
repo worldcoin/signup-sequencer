@@ -36,13 +36,29 @@ impl Display for ProverError {
 /// The input to the prover.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProofInput {
+struct InsertionProofInput {
     input_hash:           U256,
     start_index:          u32,
     pre_root:             U256,
     post_root:            U256,
     identity_commitments: Vec<U256>,
     merkle_proofs:        Vec<Vec<U256>>,
+}
+
+// TODO: ideally we just import the InsertionProofInput and DeletionProofInput
+// from the signup sequencer so that we can know e2e breaks when any interface
+// changes occur
+
+/// The input to the prover.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeletionProofInput {
+    input_hash:              U256,
+    pre_root:                U256,
+    post_root:               U256,
+    packed_deletion_indices: Vec<u8>,
+    identity_commitments:    Vec<U256>,
+    merkle_proofs:           Vec<Vec<U256>>,
 }
 
 /// The proof response from the prover.
@@ -119,6 +135,7 @@ impl std::fmt::Display for ProverType {
 
 struct Prover {
     is_available: bool,
+    tree_depth:   u8,
 }
 
 impl ProverService {
@@ -128,17 +145,41 @@ impl ProverService {
     /// It provides only a single endpoint for now, `/prove` in order to match
     /// the full service (`semaphore-mtb`). This can be extended in the future
     /// if needed.
-    pub async fn new(batch_size: usize, prover_type: ProverType) -> anyhow::Result<Self> {
+    pub async fn new(
+        batch_size: usize,
+        tree_depth: u8,
+        prover_type: ProverType,
+    ) -> anyhow::Result<Self> {
         async fn prove(
-            State(state): State<Arc<Mutex<Prover>>>,
-            Json(input): Json<ProofInput>,
+            state: State<Arc<Mutex<Prover>>>,
+            Json(input): Json<serde_json::Value>,
         ) -> Result<Json<ProveResponse>, StatusCode> {
             let state = state.lock().await;
 
-            state.prove(input).map(Json)
+            // Attempt to deserialize into InsertionProofInput
+            if let Ok(deserialized_insertion_input) =
+                serde_json::from_value::<InsertionProofInput>(input.clone())
+            {
+                return state
+                    .prove_insertion(deserialized_insertion_input)
+                    .map(Json);
+            }
+
+            // If the above fails, attempt to deserialize into DeletionProofInput
+            if let Ok(deserialized_deletion_input) =
+                serde_json::from_value::<DeletionProofInput>(input)
+            {
+                return state.prove_deletion(deserialized_deletion_input).map(Json);
+            }
+
+            // If both fail, return an error
+            Err(StatusCode::BAD_REQUEST)
         }
 
-        let inner = Arc::new(Mutex::new(Prover { is_available: true }));
+        let inner = Arc::new(Mutex::new(Prover {
+            is_available: true,
+            tree_depth,
+        }));
         let state = inner.clone();
 
         let app = Router::new().route("/prove", post(prove)).with_state(state);
@@ -217,7 +258,7 @@ impl ProverService {
 }
 
 impl Prover {
-    fn prove(&self, input: ProofInput) -> Result<ProveResponse, StatusCode> {
+    fn prove_insertion(&self, input: InsertionProofInput) -> Result<ProveResponse, StatusCode> {
         if !self.is_available {
             return Err(StatusCode::SERVICE_UNAVAILABLE);
         }
@@ -271,6 +312,66 @@ impl Prover {
         ]))
     }
 
+    fn prove_deletion(&self, input: DeletionProofInput) -> Result<ProveResponse, StatusCode> {
+        if !self.is_available {
+            return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+
+        // Calculate the input hash based on the prover parameters.
+        let input_hash = Self::compute_deletion_proof_input_hash(
+            input.packed_deletion_indices.clone(),
+            input.pre_root,
+            input.post_root,
+        );
+
+        // If the hashes aren't the same something's wrong so we return an error.
+        if input_hash != input.input_hash {
+            return Ok(ProveResponse::failure("42", "Input hash mismatch."));
+        }
+
+        // Next we verify the merkle proofs.
+        let empty_leaf = U256::zero();
+        let mut last_root = input.pre_root;
+
+        let mut deletion_indices = vec![];
+
+        for bytes in input.packed_deletion_indices.chunks(4) {
+            let mut val: [u8; 4] = Default::default();
+            val.copy_from_slice(bytes);
+            deletion_indices.push(u32::from_be_bytes(val));
+        }
+
+        for (leaf_index, merkle_proof) in deletion_indices.iter().zip(input.merkle_proofs) {
+            if *leaf_index == 2u32.pow(self.tree_depth as u32) {
+                continue;
+            }
+
+            let proof =
+                Self::reconstruct_proof_with_directions(*leaf_index as usize, &merkle_proof);
+
+            last_root = proof.root(empty_leaf.into()).into();
+        }
+
+        // If the final root doesn't match the post root something's broken so we error.
+        if last_root != input.post_root {
+            return Ok(ProveResponse::failure(
+                "43",
+                "Merkle proof verification failure.",
+            ));
+        }
+
+        Ok(ProveResponse::success([
+            "0x2".into(),
+            input_hash,
+            "0x2413396a2af3add6fbe8137cfe7657917e31a5cdab0b7d1d645bd5eeb47ba601".into(),
+            "0x1ad029539528b32ba70964ce43dbf9bba2501cdb3aaa04e4d58982e2f6c34752".into(),
+            "0x5bb975296032b135458bd49f92d5e9d363367804440d4692708de92e887cf17".into(),
+            "0x14932600f53a1ceb11d79a7bdd9688a2f8d1919176f257f132587b2b3274c41e".into(),
+            "0x13d7b19c7b67bf5d3adf2ac2d3885fd5d49435b6069c0656939cd1fb7bef9dc9".into(),
+            "0x142e14f90c49c79b4edf5f6b7acbcdb0b0f376a4311fc036f1006679bd53ca9e".into(),
+        ]))
+    }
+
     /// Reconstructs the proof with directions as required by `semaphore-rs`.
     ///
     /// This allows us to utilise the proof verification procedure from that
@@ -308,7 +409,7 @@ impl Prover {
     /// StartIndex || PreRoot || PostRoot || IdComms[0] || IdComms[1] || ... || IdComms[batchSize-1]
     ///     32     ||   256   ||   256    ||    256     ||    256     || ... ||     256 bits
     /// ```
-    fn calculate_identity_registration_input_hash(input: &ProofInput) -> U256 {
+    fn calculate_identity_registration_input_hash(input: &InsertionProofInput) -> U256 {
         // Calculate the input hash as described by the prover.
         let mut hashable_bytes: Vec<u8> = vec![];
         let mut buffer: [u8; size_of::<U256>()] = Default::default();
@@ -324,5 +425,38 @@ impl Prover {
         });
 
         keccak256(hashable_bytes).into()
+    }
+
+    /// Calculates the input hash based on the `input` parameters to the prover.
+    ///
+    /// We keccak hash all input to save verification gas. Inputs are arranged
+    /// as follows:
+    /// ```
+    /// PackedDeletionIndices || PreRoot || PostRoot
+    ///   32 bits * batchSize ||   256   ||    256
+    /// ```
+    pub fn compute_deletion_proof_input_hash(
+        packed_deletion_indices: Vec<u8>,
+        pre_root: U256,
+        post_root: U256,
+    ) -> U256 {
+        // Convert pre_root and post_root to bytes
+        let mut pre_root_bytes = vec![0u8; 32];
+        pre_root.to_big_endian(&mut pre_root_bytes);
+
+        let mut post_root_bytes = vec![0u8; 32];
+        post_root.to_big_endian(&mut post_root_bytes);
+
+        let mut bytes = vec![];
+
+        // Append packed_deletion_indices
+        bytes.extend_from_slice(&packed_deletion_indices);
+
+        // Append pre_root and post_root bytes
+        bytes.extend_from_slice(&pre_root_bytes);
+        bytes.extend_from_slice(&post_root_bytes);
+
+        // Compute and return the Keccak-256 hash
+        keccak256(bytes).into()
     }
 }

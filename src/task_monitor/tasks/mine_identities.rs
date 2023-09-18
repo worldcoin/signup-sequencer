@@ -2,18 +2,18 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{Context, Result as AnyhowResult};
-use chrono::{DateTime, Days, Utc};
+use chrono::{DateTime, Utc};
 use ethers::types::U256;
 use tracing::{info, instrument};
 
-use crate::contracts::abi::WorldId;
+
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
 use crate::identity_tree::{Hash, Intermediate, TreeVersion, TreeWithNextVersion};
 use crate::task_monitor::{
     PendingBatchDeletion, PendingBatchInsertion, PendingBatchSubmission, TaskMonitor,
 };
-use crate::utils::async_queue::{AsyncPopGuard, AsyncQueue};
+use crate::utils::async_queue::{AsyncQueue};
 
 pub struct MineIdentities {
     database: Arc<Database>,

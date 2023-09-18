@@ -1,15 +1,13 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result as AnyhowResult};
-use chrono::{Days, Utc};
 use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{register_histogram, Histogram};
 use ruint::Uint;
 use semaphore::merkle_tree::Proof;
-use semaphore::poseidon_tree::{Branch, PoseidonHash};
+use semaphore::poseidon_tree::Branch;
 use tokio::sync::Notify;
 use tokio::{select, time};
 use tracing::{debug, error, info, instrument, warn};
@@ -20,7 +18,6 @@ use crate::identity_tree::{
     AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
 use crate::prover::identity::Identity;
-use crate::prover::map::ReadOnlyInsertionProver;
 use crate::prover::{Prover, ReadOnlyProver};
 use crate::task_monitor::{
     PendingBatchDeletion, PendingBatchInsertion, PendingBatchSubmission, TaskMonitor,
@@ -228,7 +225,7 @@ async fn commit_identities(
             identity_manager,
             batching_tree,
             pending_batch_submissions_queue,
-            &updates,
+            updates,
             prover,
         )
         .await?;
@@ -248,7 +245,7 @@ async fn commit_identities(
             identity_manager,
             batching_tree,
             pending_batch_submissions_queue,
-            &updates,
+            updates,
             prover,
         )
         .await?;
@@ -466,10 +463,19 @@ pub async fn delete_identities(
 
     // Grab the initial conditions before the updates are applied to the tree.
     let pre_root: U256 = batching_tree.get_root().into();
-    let mut commitments: Vec<U256> = updates
+
+    let mut deletion_indices = updates
         .iter()
-        .map(|update| update.update.element.into())
-        .collect();
+        .map(|f| f.update.leaf_index as u32)
+        .collect::<Vec<u32>>();
+
+    // TODO: note that using `batching_tree.get_leaf()` locks the tree every time
+    // to speed this up we could write a new function that takes an input array,
+    // locks it once and gets all the commitments
+    let mut commitments = deletion_indices
+        .iter()
+        .map(|i| batching_tree.get_leaf(*i as usize).into())
+        .collect::<Vec<U256>>();
 
     let latest_tree_from_updates = updates
         .last()
@@ -501,16 +507,11 @@ pub async fn delete_identities(
 
     let batch_size = prover.batch_size();
 
-    let mut deletion_indices = updates
-        .iter()
-        .map(|f| f.update.leaf_index as u32)
-        .collect::<Vec<u32>>();
-
     // The verifier and prover can only work with a given batch size, so we need to
     // ensure that our batches match that size. We do this by padding deletion
     // indices with tree.depth() ^ 2. The deletion prover will skip the proof for
     // any deletion with an index greater than the max tree depth
-    let pad_index = latest_tree_from_updates.depth().pow(2) as u32;
+    let pad_index = 2_u32.pow(latest_tree_from_updates.depth() as u32);
 
     if commitment_count != batch_size {
         let padding = batch_size - commitment_count;
@@ -534,6 +535,8 @@ pub async fn delete_identities(
     // With the updates applied we can grab the value of the tree's new root and
     // build our identities for sending to the identity manager.
     let post_root: U256 = latest_tree_from_updates.root().into();
+
+    // Get the previous identity
     let identity_commitments: Vec<Identity> = commitments
         .iter()
         .zip(merkle_proofs)
@@ -552,11 +555,16 @@ pub async fn delete_identities(
 
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
+    let mut packed_deletion_indices = vec![];
+    for &index in &deletion_indices {
+        packed_deletion_indices.extend_from_slice(&index.to_be_bytes());
+    }
+
     // We prepare the proof before reserving a slot in the pending identities
     let proof = IdentityManager::prepare_deletion_proof(
         prover,
         pre_root,
-        &deletion_indices,
+        packed_deletion_indices.clone(),
         identity_commitments,
         post_root,
     )
@@ -575,7 +583,13 @@ pub async fn delete_identities(
     // With all the data prepared we can submit the identities to the on-chain
     // identity manager and wait for that transaction to be mined.
     let transaction_id = identity_manager
-        .delete_identities(proof, pre_root, deletion_indices, post_root)
+        .delete_identities(
+            proof,
+            batch_size as u32,
+            packed_deletion_indices,
+            pre_root,
+            post_root,
+        )
         .await
         .map_err(|e| {
             error!(?e, "Failed to insert identity to contract.");

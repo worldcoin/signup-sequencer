@@ -18,7 +18,7 @@ use self::tasks::process_identities::ProcessIdentities;
 use crate::contracts::SharedIdentityManager;
 use crate::database::Database;
 use crate::ethereum::write::TransactionId;
-use crate::identity_tree::{Hash, TreeState};
+use crate::identity_tree::{TreeState};
 use crate::utils::async_queue::AsyncQueue;
 
 pub mod tasks;

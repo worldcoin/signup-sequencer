@@ -6,10 +6,10 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use clap::Parser;
-use ethers::abi::ethabi::Bytes;
+
 use ethers::providers::Middleware;
 use ethers::types::{Address, U256};
-use ethers::utils::keccak256;
+
 use semaphore::Field;
 use tokio::sync::RwLockReadGuard;
 use tracing::{error, info, instrument, warn};

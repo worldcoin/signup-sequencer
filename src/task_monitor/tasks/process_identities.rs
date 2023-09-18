@@ -1,15 +1,15 @@
-use std::collections::HashMap;
+
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result as AnyhowResult};
-use chrono::{Days, Utc};
+
 use ethers::types::U256;
 use once_cell::sync::Lazy;
 use prometheus::{register_histogram, Histogram};
 use ruint::Uint;
 use semaphore::merkle_tree::Proof;
-use semaphore::poseidon_tree::{Branch, PoseidonHash};
+use semaphore::poseidon_tree::{Branch};
 use tokio::sync::Notify;
 use tokio::{select, time};
 use tracing::{debug, error, info, instrument, warn};
@@ -20,7 +20,7 @@ use crate::identity_tree::{
     AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
 use crate::prover::identity::Identity;
-use crate::prover::map::ReadOnlyInsertionProver;
+
 use crate::prover::{Prover, ReadOnlyProver};
 use crate::task_monitor::{
     PendingBatchDeletion, PendingBatchInsertion, PendingBatchSubmission, TaskMonitor,
@@ -228,7 +228,7 @@ async fn commit_identities(
             identity_manager,
             batching_tree,
             pending_batch_submissions_queue,
-            &updates,
+            updates,
             prover,
         )
         .await?;
@@ -248,7 +248,7 @@ async fn commit_identities(
             identity_manager,
             batching_tree,
             pending_batch_submissions_queue,
-            &updates,
+            updates,
             prover,
         )
         .await?;

@@ -213,7 +213,7 @@ pub async fn test_inclusion_status(
     leaf: &Hash,
     expected_status: Status,
 ) {
-    for i in 1..21 {
+    for _i in 1..21 {
         let body = construct_inclusion_proof_body(leaf);
         info!(?uri, "Contacting");
         let req = Request::builder()

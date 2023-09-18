@@ -19,7 +19,7 @@ use self::types::{DeletionEntry, LatestDeletionEntry, RecoveryEntry};
 use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
 
 pub mod types;
-use crate::prover::{self, ProverConfiguration, ProverType, Provers};
+use crate::prover::{ProverConfiguration, ProverType, Provers};
 use crate::secret::SecretUrl;
 
 // Statically link in migration files
@@ -408,12 +408,7 @@ impl Database {
                 let url = row.get::<String, _>(1);
                 let timeout_s = row.get::<i64, _>(2) as u64;
                 let prover_type = row.get::<ProverType, _>(3);
-                ProverConfiguration {
-                    url,
-                    batch_size,
-                    timeout_s,
-                    prover_type,
-                }
+                ProverConfiguration { url, timeout_s, batch_size, prover_type }
             })
             .collect::<Provers>())
     }
@@ -533,7 +528,7 @@ impl Database {
             })
         } else {
             Ok(LatestDeletionEntry {
-                timestamp: DateTime::from(Utc::now()),
+                timestamp: Utc::now(),
             })
         }
     }
@@ -550,7 +545,7 @@ impl Database {
             DO UPDATE SET deletion_timestamp = EXCLUDED.deletion_timestamp;
             "#,
         )
-        .bind(&deletion_timestamp);
+        .bind(deletion_timestamp);
 
         self.pool.execute(query).await?;
         Ok(())
@@ -632,7 +627,7 @@ impl Database {
 
         let mut query = sqlx::query(&query);
 
-        for commitment in commitments.iter() {
+        for commitment in &commitments {
             query = query.bind(commitment);
         }
 
@@ -776,7 +771,7 @@ mod test {
     use ruint::Uint;
     use semaphore::Field;
     use sqlx::types::chrono::DateTime;
-    use sqlx::{PgPool, Row};
+    use sqlx::{Row};
 
     use super::{Database, Options};
     use crate::identity_tree::{Hash, Status};
@@ -853,7 +848,7 @@ mod test {
             .expect("cant convert to u256")
             .into();
 
-        let eligibility_timestamp = DateTime::from(Utc::now());
+        let eligibility_timestamp = Utc::now();
 
         let hash = db
             .insert_new_identity(commit_hash, eligibility_timestamp)
@@ -1028,13 +1023,13 @@ mod test {
     async fn test_get_eligible_unprocessed_commitments() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
         let commitment_0: Uint<256, 4> = Uint::from(1);
-        let eligibility_timestamp_0 = DateTime::from(Utc::now());
+        let eligibility_timestamp_0 = Utc::now();
 
         db.insert_new_identity(commitment_0, eligibility_timestamp_0)
             .await?;
 
         let commitment_1: Uint<256, 4> = Uint::from(2);
-        let eligibility_timestamp_1 = DateTime::from(Utc::now())
+        let eligibility_timestamp_1 = Utc::now()
             .checked_add_days(Days::new(7))
             .expect("Could not create eligibility timestamp");
 
@@ -1059,13 +1054,13 @@ mod test {
 
         // Insert new identity with a valid eligibility timestamp
         let commitment_0: Uint<256, 4> = Uint::from(1);
-        let eligibility_timestamp_0 = DateTime::from(Utc::now());
+        let eligibility_timestamp_0 = Utc::now();
         db.insert_new_identity(commitment_0, eligibility_timestamp_0)
             .await?;
 
         // Insert new identity with eligibility timestamp in the future
         let commitment_1: Uint<256, 4> = Uint::from(2);
-        let eligibility_timestamp_1 = DateTime::from(Utc::now())
+        let eligibility_timestamp_1 = Utc::now()
             .checked_add_days(Days::new(7))
             .expect("Could not create eligibility timestamp");
         db.insert_new_identity(commitment_1, eligibility_timestamp_1)
@@ -1108,7 +1103,7 @@ mod test {
             .into();
 
         // Set eligibility to Utc::now() day and check db entries
-        let eligibility_timestamp = DateTime::from(Utc::now());
+        let eligibility_timestamp = Utc::now();
         db.insert_new_identity(commit_hash, eligibility_timestamp)
             .await?;
 
@@ -1119,7 +1114,7 @@ mod test {
         assert_eq!(eligible_commitments.len(), 1);
 
         // Set eligibility to Utc::now() + 7 days and check db entries
-        let eligibility_timestamp = DateTime::from(Utc::now())
+        let eligibility_timestamp = Utc::now()
             .checked_add_days(Days::new(7))
             .expect("Could not create eligibility timestamp");
 
@@ -1534,7 +1529,7 @@ mod test {
         assert!(!db.identity_exists(identities[0]).await?);
 
         // When there's only unprocessed identity
-        let eligibility_timestamp = DateTime::from(Utc::now());
+        let eligibility_timestamp = Utc::now();
 
         db.insert_new_identity(identities[0], eligibility_timestamp)
             .await

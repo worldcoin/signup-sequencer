@@ -2,7 +2,7 @@ mod common;
 
 use common::prelude::*;
 
-use crate::common::test_delete_identity;
+
 
 const SUPPORTED_DEPTH: u8 = 18;
 const IDLE_TIME: u64 = 7;

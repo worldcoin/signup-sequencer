@@ -20,7 +20,7 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let batch_size = 3;
 
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &vec![], tree_depth).await?;
+        spawn_deps(initial_root, &[batch_size], &[], tree_depth).await?;
 
     let prover_mock = &insertion_prover_map[&batch_size];
 

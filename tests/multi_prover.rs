@@ -22,7 +22,7 @@ async fn multi_prover() -> anyhow::Result<()> {
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
         initial_root,
         &[batch_size_3, batch_size_10],
-        &vec![],
+        &[],
         tree_depth,
     )
     .await?;

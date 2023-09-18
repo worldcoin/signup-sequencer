@@ -2,11 +2,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
-use chrono::{DateTime, Utc};
+use chrono::{Utc};
 use tokio::sync::Notify;
 use tracing::info;
 
-use crate::contracts::SharedIdentityManager;
+
 use crate::database::types::DeletionEntry;
 use crate::database::Database;
 use crate::identity_tree::{Hash, Latest, TreeVersion};
@@ -79,7 +79,6 @@ async fn delete_identities(
             // Dedup deletion entries
             let deletions = deletions
                 .into_iter()
-                .map(|f| f)
                 .collect::<HashSet<DeletionEntry>>();
 
             let (leaf_indices, previous_commitments): (Vec<usize>, Vec<Hash>) = deletions

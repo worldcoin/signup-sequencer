@@ -498,7 +498,7 @@ impl TreeVersion<Latest> {
 
     /// Deletes many identities from the tree, returns a list with the root
     /// and proof of inclusion
-    pub fn delete_many(&self, leaf_indices: &[usize]) -> Vec<(Hash, Proof)> {
+    #[must_use] pub fn delete_many(&self, leaf_indices: &[usize]) -> Vec<(Hash, Proof)> {
         let mut data = self.get_data();
 
         let mut output = Vec::with_capacity(leaf_indices.len());
@@ -725,18 +725,17 @@ impl<P: Version> DerivedTreeBuilder<P> {
 
 #[cfg(test)]
 mod tests {
-    use semaphore::lazy_merkle_tree::{Canonical, LazyMerkleTree};
-    use semaphore::poseidon_tree::PoseidonHash;
+    
+    
 
     use super::{
-        AppliedTreeUpdate, CanonicalTreeBuilder, DerivedTreeBuilder, Hash, PoseidonTree,
-        TreeVersion, TreeWithNextVersion,
+        CanonicalTreeBuilder, Hash, TreeWithNextVersion,
     };
 
     #[test]
     fn test_peek_next_updates() {
         let (canonical_tree, processed_builder) =
-            CanonicalTreeBuilder::new(10, 10, 0, Hash::ZERO, &vec![]).seal();
+            CanonicalTreeBuilder::new(10, 10, 0, Hash::ZERO, &[]).seal();
         let processed_tree = processed_builder.seal();
         let insertion_updates = processed_tree.append_many(&vec![
             Hash::from(1),
@@ -748,7 +747,7 @@ mod tests {
             Hash::from(7),
         ]);
 
-        let _deletion_updates = processed_tree.delete_many(&vec![0, 1, 2]);
+        let _deletion_updates = processed_tree.delete_many(&[0, 1, 2]);
 
         let next_updates = canonical_tree.peek_next_updates(10);
         assert_eq!(next_updates.len(), 7);
@@ -760,12 +759,10 @@ mod tests {
                 .0,
         );
 
-        let _ = processed_tree.append_many(&vec![
-            Hash::from(5),
+        let _ = processed_tree.append_many(&[Hash::from(5),
             Hash::from(6),
             Hash::from(7),
-            Hash::from(8),
-        ]);
+            Hash::from(8)]);
 
         let next_updates = canonical_tree.peek_next_updates(10);
 

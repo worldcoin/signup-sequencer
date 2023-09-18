@@ -18,6 +18,7 @@ use crate::identity_tree::{
 use crate::prover::identity::Identity;
 use crate::prover::{Prover, ReadOnlyProver};
 use crate::task_monitor::TaskMonitor;
+use crate::utils::index_packing::pack_indices;
 
 /// The number of seconds either side of the timer tick to treat as enough to
 /// trigger a forced batch insertion.
@@ -501,10 +502,7 @@ pub async fn delete_identities(
 
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
-    let mut packed_deletion_indices = vec![];
-    for &index in &deletion_indices {
-        packed_deletion_indices.extend_from_slice(&index.to_be_bytes());
-    }
+    let packed_deletion_indices = pack_indices(&deletion_indices);
 
     // We prepare the proof before reserving a slot in the pending identities
     let proof = IdentityManager::prepare_deletion_proof(

@@ -21,6 +21,7 @@ use crate::prover::map::{DeletionProverMap, InsertionProverMap, ReadOnlyInsertio
 use crate::prover::{Proof, Prover, ProverConfiguration, ProverType, ReadOnlyProver};
 use crate::serde_utils::JsonStrWrapper;
 use crate::server::error::Error as ServerError;
+use crate::utils::index_packing::unpack_indices;
 
 /// Configuration options for the component responsible for interacting with the
 /// contract.
@@ -378,15 +379,17 @@ impl IdentityManager {
         let delete_identities = DeleteIdentitiesCall::decode(&tx.input)?;
 
         let packed_deletion_indices: &[u8] = delete_identities.packed_deletion_indices.as_ref();
-        let mut indices = vec![];
+        let indices = unpack_indices(packed_deletion_indices);
 
-        for packed_index in packed_deletion_indices.chunks(4) {
-            let index = u32::from_be_bytes(packed_index.try_into()?);
+        tracing::error!("unpacked = {indices:?}");
 
-            indices.push(index as usize);
-        }
+        let padding_index = 2u32.pow(self.tree_depth as u32);
 
-        Ok(indices)
+        Ok(indices
+            .into_iter()
+            .filter(|idx| *idx != padding_index)
+            .map(|x| x as usize)
+            .collect())
     }
 
     #[instrument(level = "debug", skip_all)]

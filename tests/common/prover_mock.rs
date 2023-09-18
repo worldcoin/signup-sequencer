@@ -135,11 +135,7 @@ impl std::fmt::Display for ProverType {
 
 struct Prover {
     is_available: bool,
-<<<<<<< HEAD
     tree_depth: u8,
-=======
-    tree_depth:   u8,
->>>>>>> a1e2141e8cfee3efe3a9d257c07b7ab0cd614124
 }
 
 impl ProverService {

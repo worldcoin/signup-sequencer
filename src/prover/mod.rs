@@ -237,7 +237,7 @@ impl Prover {
 
         let Ok(proof) = serde_json::from_str::<Proof>(&json) else {
             let error: ProverError = serde_json::from_str(&json)?;
-            return Err(anyhow::Error::msg(format!("{error}")))
+            return Err(anyhow::Error::msg(format!("{error}")));
         };
 
         total_proving_time_timer.observe_duration();
@@ -293,7 +293,7 @@ impl Prover {
 
         let Ok(proof) = serde_json::from_str::<Proof>(&json) else {
             let error: ProverError = serde_json::from_str(&json)?;
-            return Err(anyhow::Error::msg(format!("{error}")))
+            return Err(anyhow::Error::msg(format!("{error}")));
         };
 
         total_proving_time_timer.observe_duration();

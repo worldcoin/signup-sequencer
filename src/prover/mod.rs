@@ -343,7 +343,7 @@ pub fn compute_insertion_proof_input_hash(
     bytes.extend(pre_root_bytes.iter());
     bytes.extend(post_root_bytes.iter());
 
-    for commitment in identity_commitments.iter() {
+    for commitment in identity_commitments {
         let mut commitment_bytes: [u8; size_of::<U256>()] = Default::default();
         commitment.to_big_endian(commitment_bytes.as_mut_slice());
         bytes.extend(commitment_bytes.iter());

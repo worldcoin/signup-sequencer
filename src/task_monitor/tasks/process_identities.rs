@@ -136,7 +136,7 @@ async fn process_identities(
                 // Also wake up if woken up due to a tick
                 wake_up_notify.notify_one();
             }
-            _ = wake_up_notify.notified() => {
+            () = wake_up_notify.notified() => {
                 tracing::trace!("Identity batch insertion woken due to request.");
 
                 // Capture the time difference since the last batch, and compute
@@ -278,7 +278,7 @@ pub async fn insert_identities(
         .update
         .leaf_index;
 
-    for update in updates[1..].iter() {
+    for update in &updates[1..] {
         assert_eq!(
             last_index + 1,
             update.update.leaf_index,

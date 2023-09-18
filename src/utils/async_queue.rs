@@ -60,8 +60,8 @@ impl<T> AsyncQueue<T> {
 
             // Either could trigger the pop guard to be available
             tokio::select! {
-                _ = self.inner.push_notify.notified() => {}
-                _ = self.inner.pop_notify.notified() => {}
+                () = self.inner.push_notify.notified() => {}
+                () = self.inner.pop_notify.notified() => {}
             }
         }
     }
@@ -100,8 +100,8 @@ impl<T> AsyncQueue<T> {
 
             // Either could trigger the pop guard to be available
             tokio::select! {
-                _ = self.inner.push_notify.notified() => {}
-                _ = self.inner.pop_notify.notified() => {}
+                () = self.inner.push_notify.notified() => {}
+                () = self.inner.pop_notify.notified() => {}
             }
         }
     }

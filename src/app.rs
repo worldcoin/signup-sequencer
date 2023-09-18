@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Result as AnyhowResult;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use clap::Parser;
 use hyper::StatusCode;
 use ruint::Uint;

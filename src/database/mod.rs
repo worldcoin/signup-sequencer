@@ -775,7 +775,7 @@ mod test {
     use postgres_docker_utils::DockerContainerGuard;
     use ruint::Uint;
     use semaphore::Field;
-    use sqlx::types::chrono::DateTime;
+    
     use sqlx::Row;
 
     use super::{Database, Options};

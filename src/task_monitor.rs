@@ -205,9 +205,9 @@ impl TaskMonitor {
             pending_identities_capacity,
             scanning_window_size,
             time_between_scans_seconds,
-            batch_deletion_timeout_seconds,
-            min_batch_deletion_size,
-            insert_identities_capacity,
+            batch_deletion_timeout_seconds: _,
+            min_batch_deletion_size: _,
+            insert_identities_capacity: _,
         } = *options;
 
         Self {

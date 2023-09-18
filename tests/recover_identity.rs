@@ -106,9 +106,12 @@ async fn recover_identities() -> anyhow::Result<()> {
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
 
+    let mut next_leaf_index = 0;
     // Insert enough identities to trigger an batch to be sent to the blockchain.
     for i in 0..insertion_batch_size {
         test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, i).await;
+
+        next_leaf_index += 1;
     }
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
@@ -121,29 +124,37 @@ async fn recover_identities() -> anyhow::Result<()> {
     for i in 0..deletion_batch_size {
         // Delete the identity at i and replace it with an identity at the back of the
         //  test identities array
+        // TODO: we should update to a much cleaner approach
+        let recovery_leaf_index = test_identities.len() - i - 1;
+
         test_recover_identity(
             &uri,
             &client,
             &mut ref_tree,
             &identities_ref,
             i,
-            test_identities.len() - i - 1,
+            identities_ref[recovery_leaf_index],
+            next_leaf_index,
             false,
         )
         .await;
+
+        next_leaf_index += 1;
     }
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
 
     // Ensure that identities have been deleted
     for i in 0..deletion_batch_size {
+        let recovery_leaf_index = test_identities.len() - i - 1;
+
         test_inclusion_proof(&uri, &client, i, &ref_tree, &identities_ref[i], true).await;
 
         // Check that the replacement identity has not been inserted yet
         test_inclusion_status(
             &uri,
             &client,
-            &identities_ref[test_identities.len() - i - 1],
+            &identities_ref[recovery_leaf_index],
             Status::New,
         )
         .await;
@@ -155,6 +166,7 @@ async fn recover_identities() -> anyhow::Result<()> {
     // Insert enough identities to trigger an batch to be sent to the blockchain.
     for i in insertion_batch_size..insertion_batch_size * 2 {
         test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, i).await;
+        next_leaf_index += 1;
     }
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
@@ -163,7 +175,8 @@ async fn recover_identities() -> anyhow::Result<()> {
     for i in 0..deletion_batch_size {
         let recovery_leaf_index = test_identities.len() - i - 1;
 
-        // Check that the replacement identity has a pending status now
+        // Check that the replacement identity has a mined status after an insertion
+        // batch has completed
         test_inclusion_status(
             &uri,
             &client,

@@ -290,13 +290,13 @@ pub async fn test_recover_identity(
     ref_tree: &mut PoseidonTree,
     test_leaves: &[Field],
     previous_leaf_index: usize,
+    new_leaf: Field,
     new_leaf_index: usize,
     expect_failure: bool,
 ) -> (merkle_tree::Proof<PoseidonHash>, Field) {
-    let body = construct_recover_identity_body(
-        &test_leaves[previous_leaf_index],
-        &test_leaves[new_leaf_index],
-    );
+    let previous_leaf = test_leaves[previous_leaf_index];
+
+    let body = construct_recover_identity_body(&previous_leaf, &new_leaf);
 
     let req = Request::builder()
         .method("POST")
@@ -309,6 +309,7 @@ pub async fn test_recover_identity(
         .request(req)
         .await
         .expect("Failed to execute request.");
+
     let bytes = hyper::body::to_bytes(response.body_mut())
         .await
         .expect("Failed to convert response body to bytes");
@@ -320,11 +321,16 @@ pub async fn test_recover_identity(
         assert!(bytes.is_empty());
     }
 
-    // TODO: should we insert the new leaf now?
+    // TODO: Note that recovery order is non-deterministic and therefore we cannot
+    // easily keep the ref_tree in sync with the sequencer's version of the
+    // tree. In the future, we could consider tracking updates to the tree in a
+    // different way like listening to event emission.
     ref_tree.set(previous_leaf_index, Hash::ZERO);
-    ref_tree.set(new_leaf_index, test_leaves[new_leaf_index]);
-
-    // TODO: should we return the root at new leaf index?
+    // Continuing on the note above, while the replacement identity is be
+    // inserted as a new identity, it is not deterministic and if there are multiple
+    // recovery requests, it is possible that the sequencer tree is ordered in a
+    // different way than the ref_tree
+    ref_tree.set(new_leaf_index, new_leaf);
     (ref_tree.proof(new_leaf_index).unwrap(), ref_tree.root())
 }
 
@@ -519,7 +525,7 @@ pub async fn spawn_app(options: Options) -> anyhow::Result<(JoinHandle<()>, Sock
 
 #[derive(Deserialize, Serialize, Debug)]
 struct CompiledContract {
-    abi: Abi,
+    abi:      Abi,
     bytecode: Bytecode,
 }
 

@@ -22,7 +22,7 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
     let batch_size = 3;
 
     let (mock_chain, db_container, prover_map, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], tree_depth).await?;
+        spawn_deps(initial_root, &[batch_size], &vec![], tree_depth).await?;
 
     let prover_mock = &prover_map[&batch_size];
 

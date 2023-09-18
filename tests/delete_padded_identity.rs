@@ -118,32 +118,41 @@ async fn delete_padded_identity() -> anyhow::Result<()> {
         .await;
     }
 
-    // delete only the first identity
+    // delete only the first and second identities
     test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 0, false).await;
+    test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 1, false).await;
 
-    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
+    tokio::time::sleep(Duration::from_secs(batch_deletion_timeout_seconds as u64 * 3)).await;
 
-    // make sure that identities 2 and 3 which weren't deleted are still there
-    for i in 1..insertion_batch_size {
-        test_inclusion_proof(
-            &uri,
-            &client,
-            i,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[i], 16)
-                .expect("Failed to parse Hash from test leaf"),
-            false,
-        )
-        .await;
-    }
+    // make sure that identity 3 wasn't deleted
+    test_inclusion_proof(
+        &uri,
+        &client,
+        2,
+        &ref_tree,
+        &Hash::from_str_radix(&test_identities[2], 16)
+            .expect("Failed to parse Hash from test leaf"),
+        false,
+    )
+    .await;
 
-    // Ensure that the first identity was deleted
+    // Ensure that the first and second identities were deleted
     test_inclusion_proof(
         &uri,
         &client,
         0,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[0], 16)
+            .expect("Failed to parse Hash from test leaf"),
+        true,
+    )
+    .await;
+    test_inclusion_proof(
+        &uri,
+        &client,
+        1,
+        &ref_tree,
+        &Hash::from_str_radix(&test_identities[1], 16)
             .expect("Failed to parse Hash from test leaf"),
         true,
     )

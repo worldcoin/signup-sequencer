@@ -342,14 +342,13 @@ impl Prover {
         }
 
         for (leaf_index, merkle_proof) in deletion_indices.iter().zip(input.merkle_proofs) {
-            // 18 is the hardcoded value for the SUPPORTED_DEPTH constant in the
-            // delete_identity_padded.rs and delete_identity_padded.rs tests
-            if *leaf_index == (2u32.pow(self.tree_depth.into())) {
+            if *leaf_index == 2u32.pow(self.tree_depth as u32) {
                 continue;
             }
 
             let proof =
                 Self::reconstruct_proof_with_directions(*leaf_index as usize, &merkle_proof);
+
             last_root = proof.root(empty_leaf.into()).into();
         }
 

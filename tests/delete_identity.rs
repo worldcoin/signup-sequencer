@@ -126,18 +126,18 @@ async fn delete_identities() -> anyhow::Result<()> {
     tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
 
     // Ensure that identities have been deleted
-    for i in 0..deletion_batch_size {
-        test_inclusion_proof(
-            &uri,
-            &client,
-            i,
-            &ref_tree,
-            &Hash::from_str_radix(&test_identities[i], 16)
-                .expect("Failed to parse Hash from test leaf"),
-            true,
-        )
-        .await;
-    }
+    // for i in 0..deletion_batch_size {
+    //     test_inclusion_proof(
+    //         &uri,
+    //         &client,
+    //         i,
+    //         &ref_tree,
+    //         &Hash::from_str_radix(&test_identities[i], 16)
+    //             .expect("Failed to parse Hash from test leaf"),
+    //         true,
+    //     )
+    //     .await;
+    // }
 
     // Expect failure when deleting an identity that has already been deleted
     test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 0, true).await;

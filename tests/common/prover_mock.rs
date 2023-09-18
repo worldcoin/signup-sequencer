@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProverError {
-    pub code:    String,
+    pub code: String,
     pub message: String,
 }
 
@@ -37,12 +37,12 @@ impl Display for ProverError {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct InsertionProofInput {
-    input_hash:           U256,
-    start_index:          u32,
-    pre_root:             U256,
-    post_root:            U256,
+    input_hash: U256,
+    start_index: u32,
+    pre_root: U256,
+    post_root: U256,
     identity_commitments: Vec<U256>,
-    merkle_proofs:        Vec<Vec<U256>>,
+    merkle_proofs: Vec<Vec<U256>>,
 }
 
 // TODO: ideally we just import the InsertionProofInput and DeletionProofInput
@@ -53,27 +53,27 @@ struct InsertionProofInput {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DeletionProofInput {
-    input_hash:              U256,
-    pre_root:                U256,
-    post_root:               U256,
+    input_hash: U256,
+    pre_root: U256,
+    post_root: U256,
     packed_deletion_indices: Vec<u8>,
-    identity_commitments:    Vec<U256>,
-    merkle_proofs:           Vec<Vec<U256>>,
+    identity_commitments: Vec<U256>,
+    merkle_proofs: Vec<Vec<U256>>,
 }
 
 /// The proof response from the prover.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Proof {
-    pub ar:  [U256; 2],
-    pub bs:  [[U256; 2]; 2],
+    pub ar: [U256; 2],
+    pub bs: [[U256; 2]; 2],
     pub krs: [U256; 2],
 }
 
 impl From<[U256; 8]> for Proof {
     fn from(value: [U256; 8]) -> Self {
         Self {
-            ar:  [value[0], value[1]],
-            bs:  [[value[2], value[3]], [value[4], value[5]]],
+            ar: [value[0], value[1]],
+            bs: [[value[2], value[3]], [value[4], value[5]]],
             krs: [value[6], value[7]],
         }
     }
@@ -99,7 +99,7 @@ impl ProveResponse {
     /// Constructs a failure response from the provided `code` and `message`.
     pub fn failure(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self::ProofFailure(ProverError {
-            code:    code.into(),
+            code: code.into(),
             message: message.into(),
         })
     }
@@ -107,10 +107,10 @@ impl ProveResponse {
 
 /// The mock prover service.
 pub struct ProverService {
-    server:      Handle,
-    inner:       Arc<Mutex<Prover>>,
-    address:     SocketAddr,
-    batch_size:  usize,
+    server: Handle,
+    inner: Arc<Mutex<Prover>>,
+    address: SocketAddr,
+    batch_size: usize,
     prover_type: ProverType,
 }
 
@@ -135,7 +135,7 @@ impl std::fmt::Display for ProverType {
 
 struct Prover {
     is_available: bool,
-    tree_depth:   u8,
+    tree_depth: u8,
 }
 
 impl ProverService {
@@ -342,14 +342,13 @@ impl Prover {
         }
 
         for (leaf_index, merkle_proof) in deletion_indices.iter().zip(input.merkle_proofs) {
-            // 18 is the hardcoded value for the SUPPORTED_DEPTH constant in the
-            // delete_identity_padded.rs and delete_identity_padded.rs tests
-            if *leaf_index == (2u32.pow(self.tree_depth.into())) {
+            if *leaf_index == 2u32.pow(self.tree_depth as u32) {
                 continue;
             }
 
             let proof =
                 Self::reconstruct_proof_with_directions(*leaf_index as usize, &merkle_proof);
+
             last_root = proof.root(empty_leaf.into()).into();
         }
 

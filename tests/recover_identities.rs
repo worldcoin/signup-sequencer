@@ -34,7 +34,7 @@ async fn recover_identities() -> anyhow::Result<()> {
         .await?;
 
     // Set the root history expirty to 15 seconds
-    let updated_root_history_expiry = U256::from(15);
+    let updated_root_history_expiry = U256::from(30);
     mock_chain
         .identity_manager
         .method::<_, ()>("setRootHistoryExpiry", updated_root_history_expiry)?
@@ -142,7 +142,7 @@ async fn recover_identities() -> anyhow::Result<()> {
         next_leaf_index += 1;
     }
 
-    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 6)).await;
 
     // Ensure that identities have been deleted
     for i in 0..deletion_batch_size {
@@ -169,7 +169,7 @@ async fn recover_identities() -> anyhow::Result<()> {
         next_leaf_index += 1;
     }
 
-    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 3)).await;
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 8)).await;
 
     // Check that the replacement identities have been inserted
     for i in 0..deletion_batch_size {

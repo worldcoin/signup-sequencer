@@ -5,15 +5,15 @@ pub mod scanner;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use clap::Parser;
 use ethers::providers::Middleware;
-use ethers::types::{Address, U256};
+use ethers::types::{Address, H256, U256};
 use semaphore::Field;
 use tokio::sync::RwLockReadGuard;
 use tracing::{error, info, instrument, warn};
 
-use self::abi::{BridgedWorldId, WorldId};
+use self::abi::{BridgedWorldId, DeleteIdentitiesCall, WorldId};
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::{Ethereum, ReadProvider};
 use crate::prover::identity::Identity;
@@ -21,6 +21,7 @@ use crate::prover::map::{DeletionProverMap, InsertionProverMap, ReadOnlyInsertio
 use crate::prover::{Proof, Prover, ProverConfiguration, ProverType, ReadOnlyProver};
 use crate::serde_utils::JsonStrWrapper;
 use crate::server::error::Error as ServerError;
+use crate::utils::index_packing::unpack_indices;
 
 /// Configuration options for the component responsible for interacting with the
 /// contract.
@@ -358,6 +359,48 @@ impl IdentityManager {
         let latest_root = self.abi.latest_root().call().await?;
 
         Ok(latest_root)
+    }
+
+    /// Fetches the identity commitments from a
+    /// `deleteIdentities` transaction by tx hash
+    #[instrument(level = "debug", skip_all)]
+    pub async fn fetch_deletion_indices_from_tx(
+        &self,
+        tx_hash: H256,
+    ) -> anyhow::Result<Vec<usize>> {
+        let provider = self.ethereum.provider();
+
+        let tx = provider
+            .get_transaction(tx_hash)
+            .await?
+            .context("Missing tx")?;
+
+        use ethers::abi::AbiDecode;
+        let delete_identities = DeleteIdentitiesCall::decode(&tx.input)?;
+
+        let packed_deletion_indices: &[u8] = delete_identities.packed_deletion_indices.as_ref();
+        let indices = unpack_indices(packed_deletion_indices);
+
+        tracing::error!("unpacked = {indices:?}");
+
+        let padding_index = 2u32.pow(self.tree_depth as u32);
+
+        Ok(indices
+            .into_iter()
+            .filter(|idx| *idx != padding_index)
+            .map(|x| x as usize)
+            .collect())
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    pub async fn is_root_mined(&self, root: U256) -> anyhow::Result<bool> {
+        let (root_on_mainnet, ..) = self.abi.query_root(root).call().await?;
+
+        if root_on_mainnet.is_zero() {
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 
     #[instrument(level = "debug", skip_all)]

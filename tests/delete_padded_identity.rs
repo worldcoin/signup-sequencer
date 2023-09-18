@@ -122,7 +122,10 @@ async fn delete_padded_identity() -> anyhow::Result<()> {
     test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 0, false).await;
     test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 1, false).await;
 
-    tokio::time::sleep(Duration::from_secs(batch_deletion_timeout_seconds as u64 * 3)).await;
+    tokio::time::sleep(Duration::from_secs(
+        batch_deletion_timeout_seconds as u64 * 3,
+    ))
+    .await;
 
     // make sure that identity 3 wasn't deleted
     test_inclusion_proof(

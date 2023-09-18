@@ -6,14 +6,13 @@ use chrono::{DateTime, Utc};
 use ethers::types::U256;
 use tracing::{info, instrument};
 
-
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
 use crate::identity_tree::{Hash, Intermediate, TreeVersion, TreeWithNextVersion};
 use crate::task_monitor::{
     PendingBatchDeletion, PendingBatchInsertion, PendingBatchSubmission, TaskMonitor,
 };
-use crate::utils::async_queue::{AsyncQueue};
+use crate::utils::async_queue::AsyncQueue;
 
 pub struct MineIdentities {
     database: Arc<Database>,

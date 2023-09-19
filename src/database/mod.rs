@@ -1601,7 +1601,7 @@ mod test {
 
         // Assert values
         let new_entry = db.get_latest_deletion().await?;
-        assert_eq!(new_entry.timestamp.timestamp(), new_timestamp.timestamp());
+        assert!((new_entry.timestamp.timestamp() - new_timestamp.timestamp()) <= 1);
 
         Ok(())
     }

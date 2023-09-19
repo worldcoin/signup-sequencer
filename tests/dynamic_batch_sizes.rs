@@ -25,10 +25,10 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, prover_map, micro_oz) =
-        spawn_deps(initial_root, &[batch_size, second_batch_size], tree_depth).await?;
+    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
+        spawn_deps(initial_root, &[batch_size], &[], tree_depth).await?;
 
-    let prover_mock = &prover_map[&batch_size];
+    let prover_mock = &insertion_prover_map[&batch_size];
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
@@ -127,10 +127,17 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     .await;
 
     // Add a new prover for batch sizes of two.
-    let second_prover = spawn_mock_prover(second_batch_size).await?;
-    test_add_batch_size(&uri, second_prover.url(), second_batch_size as u64, &client)
-        .await
-        .expect("Failed to add batch size.");
+    let second_prover = spawn_mock_insertion_prover(second_batch_size, tree_depth).await?;
+
+    test_add_batch_size(
+        &uri,
+        second_prover.url(),
+        second_batch_size as u64,
+        second_prover.prover_type(),
+        &client,
+    )
+    .await
+    .expect("Failed to add batch size.");
 
     // Query for the available provers.
     let batch_sizes_uri: Uri =
@@ -153,11 +160,14 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
                 "url": second_prover.url() + "/",
                 "timeout_s": 3,
                 "batch_size": second_batch_size,
+                "prover_type": "insertion",
             },
             {
                 "url": prover_mock.url() + "/",
                 "timeout_s": 30,
                 "batch_size": batch_size,
+                "prover_type": "insertion",
+
             }
         ])
     );
@@ -195,7 +205,14 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     .await;
 
     // Now if we remove the original prover, things should still work.
-    test_remove_batch_size(&uri, batch_size as u64, &client, false).await?;
+    test_remove_batch_size(
+        &uri,
+        batch_size as u64,
+        &client,
+        prover_mock.prover_type(),
+        false,
+    )
+    .await?;
 
     // We should be able to insert less than a full batch successfully.
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 5).await;
@@ -216,7 +233,14 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     .await;
 
     // We should be unable to remove _all_ of the provers, however.
-    test_remove_batch_size(&uri, second_batch_size as u64, &client, true).await?;
+    test_remove_batch_size(
+        &uri,
+        second_batch_size as u64,
+        &client,
+        second_prover.prover_type(),
+        true,
+    )
+    .await?;
 
     // So we should still be able to run a batch.
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 6).await;
@@ -239,7 +263,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     // Shutdown the app properly for the final time
     shutdown();
     app.await.unwrap();
-    for (_, prover) in prover_map.into_iter() {
+    for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }
     reset_shutdown();

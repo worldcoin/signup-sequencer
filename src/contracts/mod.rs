@@ -5,22 +5,23 @@ pub mod scanner;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use clap::Parser;
 use ethers::providers::Middleware;
-use ethers::types::{Address, U256};
+use ethers::types::{Address, H256, U256};
 use semaphore::Field;
 use tokio::sync::RwLockReadGuard;
 use tracing::{error, info, instrument, warn};
 
-use self::abi::{BridgedWorldId, WorldId};
+use self::abi::{BridgedWorldId, DeleteIdentitiesCall, WorldId};
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::{Ethereum, ReadProvider};
-use crate::prover::batch_insertion::ProverConfiguration;
-use crate::prover::map::{InsertionProverMap, ReadOnlyInsertionProver};
-use crate::prover::{batch_insertion, Proof, ReadOnlyProver};
+use crate::prover::identity::Identity;
+use crate::prover::map::{DeletionProverMap, InsertionProverMap, ReadOnlyInsertionProver};
+use crate::prover::{Proof, Prover, ProverConfiguration, ProverType, ReadOnlyProver};
 use crate::serde_utils::JsonStrWrapper;
 use crate::server::error::Error as ServerError;
+use crate::utils::index_packing::unpack_indices;
 
 /// Configuration options for the component responsible for interacting with the
 /// contract.
@@ -58,6 +59,7 @@ pub struct Options {
 pub struct IdentityManager {
     ethereum:             Ethereum,
     insertion_prover_map: InsertionProverMap,
+    deletion_prover_map:  DeletionProverMap,
     abi:                  WorldId<ReadProvider>,
     secondary_abis:       Vec<BridgedWorldId<ReadProvider>>,
     initial_leaf_value:   Field,
@@ -79,6 +81,7 @@ impl IdentityManager {
         options: Options,
         ethereum: Ethereum,
         insertion_prover_map: InsertionProverMap,
+        deletion_prover_map: DeletionProverMap,
     ) -> anyhow::Result<Self>
     where
         Self: Sized,
@@ -128,6 +131,7 @@ impl IdentityManager {
         let identity_manager = Self {
             ethereum,
             insertion_prover_map,
+            deletion_prover_map,
             abi,
             secondary_abis,
             initial_leaf_value,
@@ -153,10 +157,7 @@ impl IdentityManager {
 
     /// Validates that merkle proofs are of the correct length against tree
     /// depth
-    pub fn validate_merkle_proofs(
-        &self,
-        identity_commitments: &[batch_insertion::Identity],
-    ) -> anyhow::Result<()> {
+    pub fn validate_merkle_proofs(&self, identity_commitments: &[Identity]) -> anyhow::Result<()> {
         for id in identity_commitments {
             if id.merkle_proof.len() != self.tree_depth {
                 return Err(anyhow!(format!(
@@ -170,10 +171,10 @@ impl IdentityManager {
         Ok(())
     }
 
-    pub async fn get_suitable_prover(
+    pub async fn get_suitable_insertion_prover(
         &self,
         num_identities: usize,
-    ) -> anyhow::Result<ReadOnlyProver<batch_insertion::Prover>> {
+    ) -> anyhow::Result<ReadOnlyProver<Prover>> {
         let prover_map = self.insertion_prover_map.read().await;
 
         match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
@@ -184,13 +185,31 @@ impl IdentityManager {
         }
     }
 
+    pub async fn get_suitable_deletion_prover(
+        &self,
+        num_identities: usize,
+    ) -> anyhow::Result<ReadOnlyProver<Prover>> {
+        let prover_map = self.deletion_prover_map.read().await;
+
+        match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
+            Ok(p) => anyhow::Ok(p),
+            Err(_) => Err(anyhow!(
+                "No available prover for batch size: {num_identities}"
+            )),
+        }
+    }
+
+    pub async fn root_history_expiry(&self) -> anyhow::Result<U256> {
+        Ok(self.abi.get_root_history_expiry().call().await?)
+    }
+
     #[instrument(level = "debug", skip(prover, identity_commitments))]
-    pub async fn prepare_proof(
+    pub async fn prepare_insertion_proof(
         prover: ReadOnlyInsertionProver<'_>,
         start_index: usize,
         pre_root: U256,
+        identity_commitments: &[Identity],
         post_root: U256,
-        identity_commitments: &[batch_insertion::Identity],
     ) -> anyhow::Result<Proof> {
         let batch_size = identity_commitments.len();
 
@@ -203,10 +222,36 @@ impl IdentityManager {
         );
 
         let proof_data: Proof = prover
-            .generate_proof(
+            .generate_insertion_proof(
                 actual_start_index,
                 pre_root,
                 post_root,
+                identity_commitments,
+            )
+            .await?;
+
+        Ok(proof_data)
+    }
+
+    #[instrument(level = "debug", skip(prover, identity_commitments))]
+    pub async fn prepare_deletion_proof(
+        prover: ReadOnlyProver<'_, Prover>,
+        pre_root: U256,
+        packed_deletion_indices: Vec<u8>,
+        identity_commitments: Vec<Identity>,
+        post_root: U256,
+    ) -> anyhow::Result<Proof> {
+        info!(
+            "Sending {} identities to prover of batch size {}",
+            identity_commitments.len(),
+            prover.batch_size()
+        );
+
+        let proof_data: Proof = prover
+            .generate_deletion_proof(
+                pre_root,
+                post_root,
+                packed_deletion_indices,
                 identity_commitments,
             )
             .await?;
@@ -220,7 +265,7 @@ impl IdentityManager {
         start_index: usize,
         pre_root: U256,
         post_root: U256,
-        identity_commitments: Vec<batch_insertion::Identity>,
+        identity_commitments: Vec<Identity>,
         proof_data: Proof,
     ) -> anyhow::Result<TransactionId> {
         let actual_start_index: u32 = start_index.try_into()?;
@@ -251,9 +296,39 @@ impl IdentityManager {
             .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
     }
 
+    // TODO: docs
+    #[instrument(level = "debug")]
+    pub async fn delete_identities(
+        &self,
+        deletion_proof: Proof,
+        batch_size: u32,
+        packed_deletion_indices: Vec<u8>,
+        pre_root: U256,
+        post_root: U256,
+    ) -> anyhow::Result<TransactionId> {
+        let proof_points_array: [U256; 8] = deletion_proof.into();
+
+        let register_identities_transaction = self
+            .abi
+            .delete_identities(
+                proof_points_array,
+                batch_size,
+                packed_deletion_indices.into(),
+                pre_root,
+                post_root,
+            )
+            .tx;
+
+        self.ethereum
+            .send_transaction(register_identities_transaction, true)
+            .await
+            .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
+    }
+
     #[instrument(level = "debug", skip(self))]
     pub async fn mine_identities(&self, transaction_id: TransactionId) -> anyhow::Result<bool> {
         let result = self.ethereum.mine_transaction(transaction_id).await?;
+
         Ok(result)
     }
 
@@ -284,6 +359,48 @@ impl IdentityManager {
         let latest_root = self.abi.latest_root().call().await?;
 
         Ok(latest_root)
+    }
+
+    /// Fetches the identity commitments from a
+    /// `deleteIdentities` transaction by tx hash
+    #[instrument(level = "debug", skip_all)]
+    pub async fn fetch_deletion_indices_from_tx(
+        &self,
+        tx_hash: H256,
+    ) -> anyhow::Result<Vec<usize>> {
+        let provider = self.ethereum.provider();
+
+        let tx = provider
+            .get_transaction(tx_hash)
+            .await?
+            .context("Missing tx")?;
+
+        use ethers::abi::AbiDecode;
+        let delete_identities = DeleteIdentitiesCall::decode(&tx.input)?;
+
+        let packed_deletion_indices: &[u8] = delete_identities.packed_deletion_indices.as_ref();
+        let indices = unpack_indices(packed_deletion_indices);
+
+        tracing::error!("unpacked = {indices:?}");
+
+        let padding_index = 2u32.pow(self.tree_depth as u32);
+
+        Ok(indices
+            .into_iter()
+            .filter(|idx| *idx != padding_index)
+            .map(|x| x as usize)
+            .collect())
+    }
+
+    #[instrument(level = "debug", skip_all)]
+    pub async fn is_root_mined(&self, root: U256) -> anyhow::Result<bool> {
+        let (root_on_mainnet, ..) = self.abi.query_root(root).call().await?;
+
+        if root_on_mainnet.is_zero() {
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 
     #[instrument(level = "debug", skip_all)]
@@ -319,16 +436,21 @@ impl IdentityManager {
         url: &impl ToString,
         batch_size: usize,
         timeout_seconds: u64,
+        prover_type: ProverType,
     ) -> Result<(), ServerError> {
-        let mut map = self.insertion_prover_map.write().await;
+        let mut map = match prover_type {
+            ProverType::Insertion => self.insertion_prover_map.write().await,
+            ProverType::Deletion => self.deletion_prover_map.write().await,
+        };
 
         if map.batch_size_exists(batch_size) {
             return Err(ServerError::BatchSizeAlreadyExists);
         }
 
-        let prover = batch_insertion::Prover::new(&ProverConfiguration {
+        let prover = Prover::new(&ProverConfiguration {
             url: url.to_string(),
             batch_size,
+            prover_type,
             timeout_s: timeout_seconds,
         })?;
 
@@ -341,8 +463,15 @@ impl IdentityManager {
     ///
     /// Will return `Err` if the batch size requested for removal doesn't exist
     /// in the prover map.
-    pub async fn remove_batch_size(&self, batch_size: usize) -> Result<(), ServerError> {
-        let mut map = self.insertion_prover_map.write().await;
+    pub async fn remove_batch_size(
+        &self,
+        batch_size: usize,
+        prover_type: ProverType,
+    ) -> Result<(), ServerError> {
+        let mut map = match prover_type {
+            ProverType::Insertion => self.insertion_prover_map.write().await,
+            ProverType::Deletion => self.deletion_prover_map.write().await,
+        };
 
         if map.len() == 1 {
             warn!("Attempting to remove the last batch size.");
@@ -363,8 +492,12 @@ impl IdentityManager {
             .as_configuration_vec())
     }
 
-    pub async fn has_provers(&self) -> bool {
+    pub async fn has_insertion_provers(&self) -> bool {
         self.insertion_prover_map.read().await.len() > 0
+    }
+
+    pub async fn has_deletion_provers(&self) -> bool {
+        self.deletion_prover_map.read().await.len() > 0
     }
 }
 

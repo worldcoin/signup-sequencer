@@ -183,23 +183,46 @@ where
         self.tree.root()
     }
 
+    /// Gets the leaf value at a given index.
+    fn get_leaf(&self, leaf: usize) -> Hash {
+        self.tree.get_leaf(leaf)
+    }
+
     /// Gets the proof of the given leaf index element
     fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
         let proof = self.tree.proof(leaf);
         (self.tree.root(), proof)
     }
 
-    /// Returns _up to_ `maximum_update_count` updates that are to be applied to
-    /// the tree.
+    /// Returns _up to_ `maximum_update_count` contiguous deletion or insertion
+    /// updates that are to be applied to the tree.
     fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
         let Some(next) = self.next.as_ref() else {
             return Vec::new();
         };
 
         let next = next.get_data();
+
+        let first_is_zero = match next.metadata.diff.first() {
+            Some(first) => first.update.element == Hash::ZERO,
+            None => return vec![],
+        };
+
+        // Gets the next contiguous of insertion or deletion updates from the diff
+        let should_take = |elem: &&AppliedTreeUpdate| {
+            if first_is_zero {
+                // If first is zero, we should take only consecutive zeros
+                elem.update.element == Hash::ZERO
+            } else {
+                // If first is not zero, we should take only non-zeros
+                elem.update.element != Hash::ZERO
+            }
+        };
+
         next.metadata
             .diff
             .iter()
+            .take_while(should_take)
             .take(maximum_update_count)
             .cloned()
             .collect()
@@ -244,7 +267,9 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
         take_mut::take(&mut self.tree, |tree| {
             tree.update_with_mutation(leaf_index, &element)
         });
-        self.next_leaf = leaf_index + 1;
+        if element != Hash::ZERO {
+            self.next_leaf = leaf_index + 1;
+        }
         self.metadata.count_since_last_flatten += 1;
     }
 
@@ -296,7 +321,9 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Derived> {
 
         self.tree = updated_tree.clone();
 
-        self.next_leaf = leaf_index + 1;
+        if element != Hash::ZERO {
+            self.next_leaf = leaf_index + 1;
+        }
         self.metadata.diff.push(AppliedTreeUpdate {
             update: TreeUpdate {
                 leaf_index,
@@ -313,7 +340,10 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Derived> {
 
         if let Some(last) = last {
             self.tree = last.result.clone();
-            self.next_leaf = last.update.leaf_index + 1;
+
+            if last.update.element != Hash::ZERO {
+                self.next_leaf = last.update.leaf_index + 1;
+            }
         }
     }
 
@@ -399,8 +429,12 @@ pub trait TreeVersionReadOps {
     fn get_root(&self) -> Hash;
     /// Returns the next free leaf.
     fn next_leaf(&self) -> usize;
+    /// Returns the given leaf value, the root of the tree and the proof
+    fn get_leaf_and_proof(&self, leaf: usize) -> (Hash, Hash, Proof);
     /// Returns the merkle proof and element at the given leaf.
     fn get_proof(&self, leaf: usize) -> (Hash, Proof);
+    /// Gets the leaf value at a given index.
+    fn get_leaf(&self, leaf: usize) -> Hash;
 }
 
 impl<V: Version> TreeVersionReadOps for TreeVersion<V>
@@ -415,9 +449,23 @@ where
         self.get_data().next_leaf
     }
 
+    fn get_leaf_and_proof(&self, leaf: usize) -> (Hash, Hash, Proof) {
+        let tree = self.get_data();
+
+        let (root, proof) = tree.get_proof(leaf);
+        let leaf = tree.get_leaf(leaf);
+
+        (leaf, root, proof)
+    }
+
     fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
         let tree = self.get_data();
         tree.get_proof(leaf)
+    }
+
+    fn get_leaf(&self, leaf: usize) -> Hash {
+        let tree = self.get_data();
+        tree.get_leaf(leaf)
     }
 }
 
@@ -447,6 +495,41 @@ impl TreeVersion<Latest> {
         }
 
         output
+    }
+
+    /// Deletes many identities from the tree, returns a list with the root
+    /// and proof of inclusion
+    #[must_use]
+    pub fn delete_many(&self, leaf_indices: &[usize]) -> Vec<(Hash, Proof)> {
+        let mut data = self.get_data();
+
+        let mut output = Vec::with_capacity(leaf_indices.len());
+
+        for leaf_index in leaf_indices {
+            data.update(*leaf_index, Hash::ZERO);
+            let (root, proof) = data.get_proof(*leaf_index);
+
+            output.push((root, proof));
+        }
+
+        output
+    }
+}
+
+impl<T> TreeVersion<T>
+where
+    T: Version,
+{
+    pub fn commitments_by_indices(&self, indices: impl IntoIterator<Item = usize>) -> Vec<Hash> {
+        let tree = self.get_data();
+
+        let mut commitments = vec![];
+
+        for idx in indices {
+            commitments.push(tree.tree.get_leaf(idx));
+        }
+
+        commitments
     }
 }
 
@@ -516,21 +599,23 @@ impl TreeState {
     }
 
     #[must_use]
-    pub fn get_proof_for(&self, item: &TreeItem) -> InclusionProof {
-        let (root, proof) = match item.status {
+    pub fn get_proof_for(&self, item: &TreeItem) -> (Field, InclusionProof) {
+        let (leaf, root, proof) = match item.status {
             Status::Pending | Status::New | Status::Failed => {
-                self.latest.get_proof(item.leaf_index)
+                self.latest.get_leaf_and_proof(item.leaf_index)
             }
-            Status::Processed => self.processed.get_proof(item.leaf_index),
-            Status::Mined => self.mined.get_proof(item.leaf_index),
+            Status::Processed => self.processed.get_leaf_and_proof(item.leaf_index),
+            Status::Mined => self.mined.get_leaf_and_proof(item.leaf_index),
         };
 
-        InclusionProof {
+        let proof = InclusionProof {
             status:  item.status,
             root:    Some(root),
             proof:   Some(proof),
             message: None,
-        }
+        };
+
+        (leaf, proof)
     }
 }
 
@@ -654,5 +739,50 @@ impl<P: Version> DerivedTreeBuilder<P> {
         let sealed = TreeVersion(Arc::new(Mutex::new(self.current)));
         self.prev.get_data().next = Some(sealed.as_derived());
         sealed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::{CanonicalTreeBuilder, Hash, TreeWithNextVersion};
+
+    #[test]
+    fn test_peek_next_updates() {
+        let (canonical_tree, processed_builder) =
+            CanonicalTreeBuilder::new(10, 10, 0, Hash::ZERO, &[]).seal();
+        let processed_tree = processed_builder.seal();
+        let insertion_updates = processed_tree.append_many(&vec![
+            Hash::from(1),
+            Hash::from(2),
+            Hash::from(3),
+            Hash::from(4),
+            Hash::from(5),
+            Hash::from(6),
+            Hash::from(7),
+        ]);
+
+        let _deletion_updates = processed_tree.delete_many(&[0, 1, 2]);
+
+        let next_updates = canonical_tree.peek_next_updates(10);
+        assert_eq!(next_updates.len(), 7);
+
+        canonical_tree.apply_updates_up_to(
+            insertion_updates
+                .last()
+                .expect("Could not get insertion updates")
+                .0,
+        );
+
+        let _ = processed_tree.append_many(&[
+            Hash::from(5),
+            Hash::from(6),
+            Hash::from(7),
+            Hash::from(8),
+        ]);
+
+        let next_updates = canonical_tree.peek_next_updates(10);
+
+        assert_eq!(next_updates.len(), 3);
     }
 }

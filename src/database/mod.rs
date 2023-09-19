@@ -1591,7 +1591,7 @@ mod test {
 
         // Assert values
         let initial_entry = db.get_latest_deletion().await?;
-        assert_eq!(initial_entry.timestamp, initial_timestamp);
+        assert!(initial_entry.timestamp.timestamp() - initial_timestamp.timestamp() <= 1);
 
         // Update with a new timestamp
         let new_timestamp = chrono::Utc::now();

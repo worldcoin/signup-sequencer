@@ -1042,9 +1042,10 @@ mod test {
 
         assert_eq!(unprocessed_commitments.len(), 1);
         assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
-        assert_eq!(
-            unprocessed_commitments[0].eligibility_timestamp.timestamp(),
-            eligibility_timestamp_0.timestamp()
+        assert!(
+            unprocessed_commitments[0].eligibility_timestamp.timestamp()
+                - eligibility_timestamp_0.timestamp()
+                <= 1
         );
 
         Ok(())

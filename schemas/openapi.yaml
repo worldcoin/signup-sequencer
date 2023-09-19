@@ -41,7 +41,7 @@ paths:
           content:
             application/json:
               schema:
-                description: 'A human-readable explanation of the error condition'
+                description: 'Could not queue identity for insertion'
                 type: 'string'
   /deleteIdentity:
       post:
@@ -109,7 +109,7 @@ paths:
           content:
             application/json:
               schema:
-                description: 'A human-readable explanation of the error condition'
+                description: 'Could not get merkle inclusion proof for identity'
                 type: 'string'
   /verifySemaphoreProof:
     post:

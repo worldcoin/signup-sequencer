@@ -242,11 +242,23 @@ pub async fn insert_identities(
         .leaf_index;
 
     for update in &updates[1..] {
-        assert_eq!(
-            last_index + 1,
-            update.update.leaf_index,
-            "Identities are not consecutive leaves in the tree."
-        );
+        if last_index + 1 != update.update.leaf_index {
+            let leaf_indexes = updates
+                .iter()
+                .map(|update| update.update.leaf_index)
+                .collect::<Vec<_>>();
+            let commitments = updates
+                .iter()
+                .map(|update| update.update.element)
+                .collect::<Vec<_>>();
+
+            panic!(
+                "Identities are not consecutive leaves in the tree (leaf_indexes = {:?}, \
+                 commitments = {:?})",
+                leaf_indexes, commitments
+            );
+        }
+
         last_index = update.update.leaf_index;
     }
 

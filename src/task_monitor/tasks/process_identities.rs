@@ -416,13 +416,9 @@ pub async fn delete_identities(
         .map(|f| f.update.leaf_index as u32)
         .collect::<Vec<u32>>();
 
-    // TODO: note that using `batching_tree.get_leaf()` locks the tree every time
-    // to speed this up we could write a new function that takes an input array,
-    // locks it once and gets all the commitments
-    let mut commitments = deletion_indices
-        .iter()
-        .map(|i| batching_tree.get_leaf(*i as usize).into())
-        .collect::<Vec<U256>>();
+    let commitments =
+        batching_tree.commitments_by_indices(deletion_indices.iter().map(|x| *x as usize));
+    let mut commitments: Vec<U256> = commitments.into_iter().map(U256::from).collect();
 
     let latest_tree_from_updates = updates
         .last()

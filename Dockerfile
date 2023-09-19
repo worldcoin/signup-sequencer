@@ -1,4 +1,4 @@
-FROM debian:11 as build-env
+FROM debian:12 as build-env
 
 WORKDIR /src
 
@@ -30,7 +30,7 @@ RUN cargo build --release --features mimalloc
 RUN /src/target/release/signup-sequencer --version
 
 # cc variant because we need libgcc and others
-FROM gcr.io/distroless/cc-debian11:nonroot
+FROM gcr.io/distroless/cc-debian12:nonroot
 
 # Expose Prometheus
 ENV PROMETHEUS="http://0.0.0.0:9998/metrics"

@@ -158,25 +158,6 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_leaf_index_by_root(
-        tx: impl Executor<'_, Database = Postgres>,
-        root: &Hash,
-    ) -> Result<Option<usize>, Error> {
-        let root_leaf_index_query = sqlx::query(
-            r#"
-            SELECT leaf_index FROM identities WHERE root = $1
-            "#,
-        )
-        .bind(root);
-
-        let row = tx.fetch_optional(root_leaf_index_query).await?;
-
-        let Some(row) = row else { return Ok(None) };
-        let root_leaf_index = row.get::<i64, _>(0);
-
-        Ok(Some(root_leaf_index as usize))
-    }
-
     pub async fn get_id_by_root(
         tx: impl Executor<'_, Database = Postgres>,
         root: &Hash,

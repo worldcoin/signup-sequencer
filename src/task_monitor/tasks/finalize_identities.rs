@@ -281,7 +281,7 @@ async fn update_eligible_recoveries(
         .await
         .context("Could not fetch deletion indices from tx")?;
 
-    let commitments = processed_tree.commitments_by_indices(&commitments);
+    let commitments = processed_tree.commitments_by_indices(commitments.iter().copied());
     let commitments: Vec<U256> = commitments.into_iter().map(|c| c.into()).collect();
 
     // Check if any deleted commitments correspond with entries in the

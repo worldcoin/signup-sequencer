@@ -520,13 +520,13 @@ impl<T> TreeVersion<T>
 where
     T: Version,
 {
-    pub fn commitments_by_indices(&self, indices: &[usize]) -> Vec<Hash> {
+    pub fn commitments_by_indices(&self, indices: impl IntoIterator<Item = usize>) -> Vec<Hash> {
         let tree = self.get_data();
 
         let mut commitments = vec![];
 
         for idx in indices {
-            commitments.push(tree.tree.get_leaf(*idx));
+            commitments.push(tree.tree.get_leaf(idx));
         }
 
         commitments

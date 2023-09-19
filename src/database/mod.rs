@@ -1043,8 +1043,8 @@ mod test {
         assert_eq!(unprocessed_commitments.len(), 1);
         assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
         assert_eq!(
-            unprocessed_commitments[0].eligibility_timestamp,
-            eligibility_timestamp_0
+            unprocessed_commitments[0].eligibility_timestamp.timestamp(),
+            eligibility_timestamp_0.timestamp()
         );
 
         Ok(())
@@ -1074,8 +1074,8 @@ mod test {
         assert_eq!(unprocessed_commitments.len(), 1);
         assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
         assert_eq!(
-            unprocessed_commitments[0].eligibility_timestamp,
-            eligibility_timestamp_0
+            unprocessed_commitments[0].eligibility_timestamp.timestamp(),
+            eligibility_timestamp_0.timestamp()
         );
 
         Ok(())
@@ -1601,7 +1601,7 @@ mod test {
 
         // Assert values
         let new_entry = db.get_latest_deletion().await?;
-        assert_eq!(new_entry.timestamp, new_timestamp);
+        assert_eq!(new_entry.timestamp.timestamp(), new_timestamp.timestamp());
 
         Ok(())
     }

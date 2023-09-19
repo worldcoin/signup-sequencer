@@ -7,7 +7,7 @@
 
 # Worldcoin Sign-up Sequencer
 
-Sign-up Sequencer does sequencing of data (identities) that are commited in a batch to an Ethereum Smart Contract.
+Sign-up Sequencer does sequencing of data (identities) that are committed in a batch to an Ethereum Smart Contract.
 
 ## Table of Contents
 1. [Introduction](#introduction)

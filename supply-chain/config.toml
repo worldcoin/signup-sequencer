@@ -19,6 +19,9 @@ url = "https://raw.githubusercontent.com/divviup/libprio-rs/main/supply-chain/au
 [imports.mozilla]
 url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
 
+[imports.zcash]
+url = "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/audits.toml"
+
 [policy.ark-groth16]
 audit-as-crates-io = true
 
@@ -199,7 +202,7 @@ version = "0.46.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.aws-sigv4]]
-version = "0.46.0"
+version = "0.46.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.aws-smithy-async]]
@@ -376,10 +379,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.cipher]]
 version = "0.3.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.cipher]]
-version = "0.4.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.clap]]
@@ -762,10 +761,6 @@ criteria = "safe-to-deploy"
 version = "0.12.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.ff]]
-version = "0.13.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.fixed-hash]]
 version = "0.8.0"
 criteria = "safe-to-deploy"
@@ -834,12 +829,8 @@ criteria = "safe-to-deploy"
 version = "0.12.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.group]]
-version = "0.13.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.h2]]
-version = "0.3.20"
+version = "0.3.21"
 criteria = "safe-to-deploy"
 
 [[exemptions.hashbrown]]
@@ -958,10 +949,6 @@ criteria = "safe-to-deploy"
 version = "0.16.2"
 criteria = "safe-to-deploy"
 
-[[exemptions.inout]]
-version = "0.1.3"
-criteria = "safe-to-deploy"
-
 [[exemptions.instant]]
 version = "0.1.12"
 criteria = "safe-to-deploy"
@@ -1036,6 +1023,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.linux-raw-sys]]
 version = "0.3.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.linux-raw-sys]]
+version = "0.4.7"
 criteria = "safe-to-deploy"
 
 [[exemptions.lock_api]]
@@ -1216,10 +1207,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.parking_lot]]
 version = "0.11.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.parking_lot]]
-version = "0.12.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.parking_lot_core]]
@@ -1462,16 +1449,16 @@ criteria = "safe-to-deploy"
 version = "0.3.3"
 criteria = "safe-to-deploy"
 
-[[exemptions.rustc_version]]
-version = "0.4.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.rustix]]
 version = "0.35.13"
 criteria = "safe-to-deploy"
 
 [[exemptions.rustix]]
 version = "0.37.3"
+criteria = "safe-to-deploy"
+
+[[exemptions.rustix]]
+version = "0.38.13"
 criteria = "safe-to-deploy"
 
 [[exemptions.rustls]]
@@ -1727,7 +1714,7 @@ version = "0.12.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.tempfile]]
-version = "3.5.0"
+version = "3.8.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.term]]
@@ -1887,11 +1874,11 @@ version = "0.3.17"
 criteria = "safe-to-deploy"
 
 [[exemptions.tracing-test]]
-version = "0.2.3"
+version = "0.2.4"
 criteria = "safe-to-run"
 
 [[exemptions.tracing-test-macro]]
-version = "0.2.3"
+version = "0.2.4"
 criteria = "safe-to-run"
 
 [[exemptions.try-lock]]

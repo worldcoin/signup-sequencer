@@ -22,7 +22,7 @@ ALTER TABLE identities ADD PRIMARY KEY (id);
 -- Create a new sequence manually
 CREATE SEQUENCE identities_id_seq;
 
--- Initialize the SERIAL counter based on the max 'leaf_index' value
+-- Initialize a counter based on the max 'leaf_index' value
 SELECT setval('identities_id_seq', coalesce((SELECT MAX(leaf_index) FROM identities), 1));
 
 -- Set default value of id to use the sequence

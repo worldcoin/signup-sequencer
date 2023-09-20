@@ -312,10 +312,10 @@ impl Database {
     ) -> Result<Vec<TreeUpdate>, Error> {
         let query = sqlx::query(
             r#"
-            SELECT leaf_index, commitment
+            SELECT DISTINCT ON (leaf_index) leaf_index, commitment
             FROM identities
             WHERE status = $1
-            ORDER BY leaf_index ASC;
+            ORDER BY leaf_index ASC, id DESC;
             "#,
         )
         .bind(<&str>::from(status));

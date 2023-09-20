@@ -1417,7 +1417,8 @@ mod test {
         let (db, _db_container) = setup_db().await?;
 
         let identities = mock_identities(5);
-        let roots = mock_roots(5);
+
+        let roots = mock_roots(7);
 
         for i in 0..5 {
             db.insert_pending_identity(i, &identities[i], &roots[i])
@@ -1440,6 +1441,28 @@ mod test {
         for i in 0..2 {
             assert_eq!(pending_tree_updates[i].element, identities[i + 3]);
             assert_eq!(pending_tree_updates[i].leaf_index, i + 3);
+        }
+
+        // Delete the first two identities and mark the root as processed
+        db.insert_pending_identity(0, &Hash::ZERO, &roots[5])
+            .await?;
+        db.insert_pending_identity(1, &Hash::ZERO, &roots[6])
+            .await?;
+        db.mark_root_as_processed(&roots[6]).await?;
+
+        let mined_tree_updates = db.get_commitments_by_status(Status::Processed).await?;
+        assert_eq!(mined_tree_updates.len(), 5);
+
+        // Assert that the first two ids have been deleted
+        for i in 0..=1 {
+            assert_eq!(mined_tree_updates[i].element, Hash::ZERO);
+            assert_eq!(mined_tree_updates[i].leaf_index, i);
+        }
+
+        // Assert that the remaining identities are processed
+        for i in 1..5 {
+            assert_eq!(mined_tree_updates[i].element, identities[i]);
+            assert_eq!(mined_tree_updates[i].leaf_index, i);
         }
 
         Ok(())

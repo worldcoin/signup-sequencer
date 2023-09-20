@@ -8,7 +8,6 @@ const SUPPORTED_DEPTH: usize = 18;
 const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
-#[serial_test::serial]
 async fn delete_identities() -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();

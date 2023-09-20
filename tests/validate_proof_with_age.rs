@@ -1,5 +1,7 @@
 mod common;
 
+use std::time::Instant;
+
 use common::prelude::*;
 
 use crate::common::test_verify_proof_with_age;
@@ -82,6 +84,8 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
     let signal_hash = hash_to_field(b"signal_hash");
     let external_nullifier_hash = hash_to_field(b"external_hash");
 
+    let time_of_identity_insertion = Instant::now();
+
     // Insert only the 1st identity
     let (merkle_proof, root) =
         test_insert_identity(&uri, &client, &mut ref_tree, &test_leaves, 0).await;
@@ -138,6 +142,12 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
     )
     .await;
 
+    let max_age_of_proof = (Instant::now() - time_of_identity_insertion).as_secs();
+    assert!(
+        max_age_of_proof > sleep_duration_seconds * 2,
+        "Proof age should be at least 2 batch times"
+    );
+
     // Test proof which is new enough
     test_verify_proof_with_age(
         &uri,
@@ -147,7 +157,7 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
         nullifier_hash,
         external_nullifier_hash,
         proof,
-        (2 * sleep_duration_seconds) as i64 + 5, // 5 seconds margin
+        max_age_of_proof as i64,
         None,
     )
     .await;

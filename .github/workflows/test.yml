@@ -63,12 +63,12 @@ jobs:
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --locked --features "bench, mimalloc" --all-targets
+          args: --locked --features "mimalloc" --all-targets
       - name: Check docs
         uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --locked --features "bench, mimalloc" --no-deps --document-private-items
+          args: --locked --features "mimalloc" --no-deps --document-private-items
 
   test:
     name: Test

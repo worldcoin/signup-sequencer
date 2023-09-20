@@ -62,7 +62,7 @@ paths:
                 schema:
                   description: 'Identity could not be queued for deletion'
                   type: 'string'
-    /recoverIdentity:
+  /recoverIdentity:
       post:
         summary: 'Queues a recovery request, deleting the previous identity specified and inserting the new one.
                   New insertions must wait a specified time delay before being included in the merkle tree'
@@ -152,7 +152,7 @@ paths:
 
 components:
   schemas:
-  RecoveryRequest:
+    RecoveryRequest:
       type: object
       properties:
         previousIdentityCommitment: { $ref: '#/components/schemas/IdentityCommitment' }

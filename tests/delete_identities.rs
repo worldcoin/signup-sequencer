@@ -172,6 +172,21 @@ async fn delete_identities() -> anyhow::Result<()> {
         .await;
     }
 
+    // Ensure that valid proofs can still be received after restart for identities
+    // that have not been deleted
+    for i in deletion_batch_size + 1..insertion_batch_size {
+        test_inclusion_proof(
+            &uri,
+            &client,
+            i,
+            &ref_tree,
+            &Hash::from_str_radix(&test_identities[i], 16)
+                .expect("Failed to parse Hash from test leaf"),
+            false,
+        )
+        .await;
+    }
+
     // Shutdown the app properly for the final time
     shutdown();
     app.await.unwrap();

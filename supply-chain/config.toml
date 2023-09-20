@@ -1007,11 +1007,11 @@ version = "0.13.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.lalrpop]]
-version = "0.19.8"
+version = "0.19.12"
 criteria = "safe-to-deploy"
 
 [[exemptions.lalrpop-util]]
-version = "0.19.8"
+version = "0.19.12"
 criteria = "safe-to-deploy"
 
 [[exemptions.libc]]
@@ -1272,10 +1272,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.phf_shared]]
 version = "0.10.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.pico-args]]
-version = "0.4.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.pin-project]]

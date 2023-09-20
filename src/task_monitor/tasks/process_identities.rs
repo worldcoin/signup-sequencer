@@ -140,6 +140,9 @@ async fn process_identities(
 
                 // We have _at most_ one complete batch here.
                 let updates = batching_tree.peek_next_updates(batch_size);
+                if updates.is_empty() {
+                    continue;
+                }
 
                 // If there are not enough identities to insert at this
                 // stage we can wait. The timer will ensure that the API

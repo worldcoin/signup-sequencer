@@ -8,7 +8,6 @@ const SUPPORTED_DEPTH: u8 = 18;
 const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
-#[serial_test::serial]
 async fn delete_padded_identity() -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();

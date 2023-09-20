@@ -6,7 +6,6 @@ const SUPPORTED_DEPTH: usize = 20;
 const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
-#[serial_test::serial]
 async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();

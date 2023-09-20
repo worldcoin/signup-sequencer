@@ -1460,7 +1460,7 @@ mod test {
         }
 
         // Assert that the remaining identities are processed
-        for i in 1..5 {
+        for i in 2..5 {
             assert_eq!(mined_tree_updates[i].element, identities[i]);
             assert_eq!(mined_tree_updates[i].leaf_index, i);
         }

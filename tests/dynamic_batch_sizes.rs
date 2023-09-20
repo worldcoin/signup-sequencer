@@ -1,3 +1,5 @@
+#![cfg(not(tarpaulin))]
+
 mod common;
 
 use std::str::FromStr;

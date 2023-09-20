@@ -99,18 +99,18 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
-      # Cargo doc test is not included in `--all-targets`
-      # See <https://github.com/rust-lang/cargo/issues/6669>
-      # Cargo doc test also doesn't support `--no-run`, so we run it but
-      # have it just print `--help`.
+      - name: Install latest nextest release
+        uses: taiki-e/install-action@nextest
       - name: Build tests
-        run: |
-          cargo test --locked --features "bench, mimalloc" --all-targets --no-run
-          cargo test --locked --features "bench, mimalloc" --doc -- --help
+        uses: actions-rs/cargo@v1
+        with:
+          command: nextest
+          args: run --workspace --features "mimalloc" --no-run
       - name: Run tests
-        run: |
-          cargo test --locked --features "bench, mimalloc" --all-targets -- --nocapture
-          cargo test --locked --features "bench, mimalloc" --doc -- --nocapture
+        uses: actions-rs/cargo@v1
+        with:
+          command: nextest
+          args: run --workspace --features "mimalloc"
 
   cargo-vet:
     name: Vet Dependencies

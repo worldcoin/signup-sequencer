@@ -23,6 +23,7 @@ use crate::prover::{self, ProverConfiguration, ProverType, Provers};
 use crate::server::error::Error as ServerError;
 use crate::server::{ToResponseCode, VerifySemaphoreProofQuery, VerifySemaphoreProofRequest};
 use crate::task_monitor::TaskMonitor;
+use crate::utils::tree_updates::dedup_tree_updates;
 use crate::{contracts, task_monitor};
 
 #[derive(Serialize)]
@@ -241,13 +242,14 @@ impl App {
         gc_threshold: usize,
         initial_leaf_value: Hash,
     ) -> AnyhowResult<TreeState> {
-        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
+        let mined_items = database.get_commitments_by_status(Status::Mined).await?;
+
+        // Flatten the updates for initial leaves
+        let mined_items = dedup_tree_updates(mined_items);
 
         let initial_leaves = if mined_items.is_empty() {
             vec![]
         } else {
-            mined_items.sort_by_key(|item| item.leaf_index);
-
             let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
             let mut leaves = vec![initial_leaf_value; max_leaf + 1];
 
@@ -268,10 +270,9 @@ impl App {
 
         let (mined, mut processed_builder) = mined_builder.seal();
 
-        let mut processed_items = database
+        let processed_items = database
             .get_commitments_by_status(Status::Processed)
             .await?;
-        processed_items.sort_by_key(|item| item.leaf_index);
 
         for processed_item in processed_items {
             processed_builder.update(&processed_item);

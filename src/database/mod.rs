@@ -312,10 +312,10 @@ impl Database {
     ) -> Result<Vec<TreeUpdate>, Error> {
         let query = sqlx::query(
             r#"
-            SELECT DISTINCT ON (leaf_index) leaf_index, commitment
+            SELECT leaf_index, commitment
             FROM identities
             WHERE status = $1
-            ORDER BY leaf_index ASC, id DESC;
+            ORDER BY leaf_index ASC, id ASC;
             "#,
         )
         .bind(<&str>::from(status));
@@ -819,6 +819,15 @@ mod test {
 
     fn mock_roots(n: usize) -> Vec<Field> {
         (1..=n).map(Field::from).collect()
+    }
+
+    fn mock_zero_roots(n: usize) -> Vec<Field> {
+        const ZERO_ROOT_OFFSET: usize = 10_000_000;
+
+        (1..=n)
+            .map(|n| ZERO_ROOT_OFFSET - n)
+            .map(Field::from)
+            .collect()
     }
 
     fn mock_identities(n: usize) -> Vec<Field> {
@@ -1443,26 +1452,77 @@ mod test {
             assert_eq!(pending_tree_updates[i].leaf_index, i + 3);
         }
 
-        // Delete the first two identities and mark the root as processed
-        db.insert_pending_identity(0, &Hash::ZERO, &roots[5])
-            .await?;
-        db.insert_pending_identity(1, &Hash::ZERO, &roots[6])
-            .await?;
-        db.mark_root_as_processed(&roots[6]).await?;
+        Ok(())
+    }
 
-        let mined_tree_updates = db.get_commitments_by_status(Status::Processed).await?;
-        assert_eq!(mined_tree_updates.len(), 5);
+    #[tokio::test]
+    async fn get_commitments_by_status_results_are_not_deduplicated() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
 
-        // Assert that the first two ids have been deleted
-        for i in 0..=1 {
-            assert_eq!(mined_tree_updates[i].element, Hash::ZERO);
-            assert_eq!(mined_tree_updates[i].leaf_index, i);
+        let identities = mock_identities(5);
+
+        let roots = mock_roots(5);
+        let zero_roots = mock_zero_roots(5);
+
+        for i in 0..5 {
+            db.insert_pending_identity(i, &identities[i], &roots[i])
+                .await
+                .context("Inserting identity")?;
         }
 
-        // Assert that the remaining identities are processed
-        for i in 2..5 {
-            assert_eq!(mined_tree_updates[i].element, identities[i]);
-            assert_eq!(mined_tree_updates[i].leaf_index, i);
+        db.insert_pending_identity(0, &Hash::ZERO, &zero_roots[0])
+            .await?;
+        db.insert_pending_identity(3, &Hash::ZERO, &zero_roots[3])
+            .await?;
+
+        let pending_tree_updates = db.get_commitments_by_status(Status::Pending).await?;
+        assert_eq!(pending_tree_updates.len(), 7);
+
+        // 1st identity
+        assert_eq!(
+            pending_tree_updates[0].element, identities[0],
+            "First element is the original value"
+        );
+        assert_eq!(
+            pending_tree_updates[1].element,
+            Hash::ZERO,
+            "Second element is the updated (deleted) value"
+        );
+
+        // 3rd identity
+        assert_eq!(
+            pending_tree_updates[4].element, identities[3],
+            "First element is the original value"
+        );
+        assert_eq!(
+            pending_tree_updates[5].element,
+            Hash::ZERO,
+            "Second element is the updated (deleted) value"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_commitments_by_status_results_are_sorted() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(5);
+
+        let roots = mock_roots(5);
+
+        let unordered_indexes = vec![3, 1, 4, 2, 0];
+        for i in unordered_indexes {
+            db.insert_pending_identity(i, &identities[i], &roots[i])
+                .await
+                .context("Inserting identity")?;
+        }
+
+        let pending_tree_updates = db.get_commitments_by_status(Status::Pending).await?;
+        assert_eq!(pending_tree_updates.len(), 5);
+        for i in 0..5 {
+            assert_eq!(pending_tree_updates[i].element, identities[i]);
+            assert_eq!(pending_tree_updates[i].leaf_index, i);
         }
 
         Ok(())

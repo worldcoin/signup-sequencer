@@ -91,6 +91,12 @@ impl ServerHandle {
         format!("http://{}", self.addr)
     }
 
+    pub async fn wait(self) {
+        if let Err(e) = self.server_join_handle.await {
+            tracing::error!("Server error: {:?}", e);
+        }
+    }
+
     pub async fn shutdown(self) {
         self.shutdown_notify.notify_waiters();
 
@@ -100,7 +106,11 @@ impl ServerHandle {
     }
 }
 
-pub async fn spawn(rpc_url: String, secret_key: SigningKey) -> anyhow::Result<ServerHandle> {
+pub async fn spawn(
+    addr: SocketAddr,
+    rpc_url: String,
+    secret_key: SigningKey,
+) -> anyhow::Result<ServerHandle> {
     let pinhead = Pinhead::new(rpc_url, secret_key).await?;
 
     let router = Router::new()
@@ -108,7 +118,6 @@ pub async fn spawn(rpc_url: String, secret_key: SigningKey) -> anyhow::Result<Se
         .route("/txs/:tx_id", get(query_transaction))
         .with_state(pinhead.clone());
 
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0);
     let listener = TcpListener::bind(addr).context("Failed to bind random port")?;
     let local_addr = listener.local_addr()?;
 
@@ -131,4 +140,13 @@ pub async fn spawn(rpc_url: String, secret_key: SigningKey) -> anyhow::Result<Se
         shutdown_notify,
         server_join_handle,
     })
+}
+
+pub async fn spawn_on_random_port(
+    rpc_url: String,
+    secret_key: SigningKey,
+) -> anyhow::Result<ServerHandle> {
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0);
+
+    spawn(addr, rpc_url, secret_key).await
 }

@@ -11,7 +11,9 @@ async-trait = "0.1.71"
 axum = "0.6.19"
 chrono = "0.4.26"
 clap = { version = "4.3.14", features = ["env", "derive"] }
+dotenv = "0.15.0"
 ethers = { version = "1.0.0", features = ["openssl"] }
+hex = "0.4.3"
 hyper = "0.14.27"
 oz-api = { path = "../oz-api" }
 serde = "1.0.171"

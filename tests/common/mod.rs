@@ -638,7 +638,7 @@ pub async fn spawn_deps(
     let chain = chain?;
 
     let signing_key = SigningKey::from_bytes(chain.private_key.as_bytes())?;
-    let micro_oz = micro_oz::spawn(chain.anvil.endpoint(), signing_key).await?;
+    let micro_oz = micro_oz::spawn_on_random_port(chain.anvil.endpoint(), signing_key).await?;
 
     let insertion_provers = insertion_provers
         .into_iter()

@@ -59,6 +59,22 @@ Fetch the [postgres](https://hub.docker.com/_/postgres) docker image before runn
 docker pull postgres
 ```
 
+## Micro OZ
+Sequencer depends on Openzeppelin Defender. In order to run it locally we provide a mock version of this service under the `micro-oz` crate.
+
+To run it, execute the following command:
+```shell
+cargo run -p micro-oz
+```
+
+By default it'll run on port `9876` and start with default values compatible with anvil.
+Check out
+```shell
+cargo run -p micro-oz -- --help
+```
+
+for more configuration options.
+
 ### Worldcoin id contracts
 Worldcoin id contracts are ethereum smart contracts that are used by the sequencer
 

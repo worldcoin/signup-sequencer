@@ -593,9 +593,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sigv4"
-version = "0.46.0"
+version = "0.46.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd866926c2c4978210bcb01d7d1b431c794f0c23ca9ee1e420204b018836b5fb"
+checksum = "d6a70364c0d649ef1c37188a4d0e4f5a918e1a9df318e5b1b2bb7117e271f6e1"
 dependencies = [
  "aws-smithy-http",
  "form_urlencoded",
@@ -632,7 +632,7 @@ dependencies = [
  "aws-smithy-http-tower",
  "aws-smithy-types",
  "bytes",
- "fastrand",
+ "fastrand 1.8.0",
  "http",
  "http-body",
  "hyper",
@@ -744,7 +744,7 @@ checksum = "a6a1de45611fdb535bfde7b7de4fd54f4fd2b17b1737c0a59b69bf9b92074b8c"
 dependencies = [
  "async-trait",
  "axum-core",
- "bitflags",
+ "bitflags 1.3.2",
  "bytes",
  "futures-util",
  "http",
@@ -902,6 +902,12 @@ name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
+
+[[package]]
+name = "bitflags"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4682ae6287fcf752ecaabbfcc7b6f9b72aa33933dc23a554d853aea8eea8635"
 
 [[package]]
 name = "bitvec"
@@ -1183,7 +1189,7 @@ checksum = "a0610544180c38b88101fecf2dd634b174a62eef6946f84dfc6a7127512b381c"
 dependencies = [
  "ansi_term",
  "atty",
- "bitflags",
+ "bitflags 1.3.2",
  "strsim 0.8.0",
  "textwrap 0.11.0",
  "unicode-width",
@@ -1197,7 +1203,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71655c45cb9845d3270c9d6df84ebe72b4dad3c2ba3f7023ad47c144e4e473a5"
 dependencies = [
  "atty",
- "bitflags",
+ "bitflags 1.3.2",
  "clap_derive 3.2.18",
  "clap_lex 0.2.4",
  "indexmap",
@@ -2633,6 +2639,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastrand"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
+
+[[package]]
 name = "ff"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2925,9 +2937,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.20"
+version = "0.3.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97ec8491ebaf99c8eaa73058b045fe58073cd6be7f596ac993ced0b0a0c01049"
+checksum = "91fc23aa11be92976ef4729127f1a74adf36d8436f7816b185d18df956790833"
 dependencies = [
  "bytes",
  "fnv",
@@ -2991,7 +3003,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3e372db8e5c0d213e0cd0b9be18be2aca3d44cf2fe30a9d46a65581cd454584"
 dependencies = [
  "base64 0.13.1",
- "bitflags",
+ "bitflags 1.3.2",
  "bytes",
  "headers-core",
  "http",
@@ -3464,19 +3476,18 @@ dependencies = [
 
 [[package]]
 name = "lalrpop"
-version = "0.19.8"
+version = "0.19.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b30455341b0e18f276fa64540aff54deafb54c589de6aca68659c63dd2d5d823"
+checksum = "0a1cbf952127589f2851ab2046af368fd20645491bb4b376f04b7f94d7a9837b"
 dependencies = [
  "ascii-canvas",
- "atty",
  "bit-set",
  "diff",
  "ena",
+ "is-terminal",
  "itertools",
  "lalrpop-util",
  "petgraph",
- "pico-args",
  "regex",
  "regex-syntax 0.6.28",
  "string_cache",
@@ -3487,9 +3498,9 @@ dependencies = [
 
 [[package]]
 name = "lalrpop-util"
-version = "0.19.8"
+version = "0.19.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcf796c978e9b4d983414f4caedc9273aa33ee214c5b887bd55fde84c85d2dc4"
+checksum = "d3c48237b9604c5a4702de6b824e02006c3214327564636aef27c1028a8fa0ed"
 dependencies = [
  "regex",
 ]
@@ -3552,6 +3563,12 @@ name = "linux-raw-sys"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d59d8c75012853d2e872fb56bc8a2e53718e2cafe1a4c823143141c6d90c322f"
+
+[[package]]
+name = "linux-raw-sys"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a9bad9f94746442c783ca431b22403b519cd7fbeed0533fdd6328b2f2212128"
 
 [[package]]
 name = "lock_api"
@@ -3983,7 +4000,7 @@ version = "0.10.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "345df152bc43501c5eb9e4654ff05f794effb78d4efe3d53abc158baddc0703d"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "cfg-if",
  "foreign-types",
  "libc",
@@ -4375,12 +4392,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pico-args"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db8bcd96cb740d03149cbad5518db9fd87126a10ab519c011893b1754134c468"
-
-[[package]]
 name = "pin-project"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4557,7 +4568,7 @@ version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dfb6451c91904606a1abe93e83a8ec851f45827fa84273f256ade45dc095818"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "byteorder",
  "hex",
  "lazy_static",
@@ -4709,7 +4720,7 @@ version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb5a58c1855b4b6819d59012155603f0b22ad30cad752600aadfcb695265519a"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
 ]
 
 [[package]]
@@ -4718,7 +4729,7 @@ version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "567664f262709473930a4bf9e51bf2ebf3348f2e748ccc50dea20646858f8f29"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
 ]
 
 [[package]]
@@ -4793,7 +4804,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76e189c2369884dce920945e2ddf79b3dff49e071a167dd1817fa9c4c00d512e"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "libc",
  "mach",
  "winapi",
@@ -5018,7 +5029,7 @@ version = "0.35.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "727a1a6d65f786ec22df8a81ca3121107f235970dc1705ed681d3e6e8b9cd5f9"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "errno 0.2.8",
  "io-lifetimes 0.7.5",
  "libc",
@@ -5032,12 +5043,25 @@ version = "0.37.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62b24138615de35e32031d041a09032ef3487a616d901ca4db224e7d557efae2"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "errno 0.3.1",
  "io-lifetimes 1.0.2",
  "libc",
  "linux-raw-sys 0.3.1",
  "windows-sys 0.45.0",
+]
+
+[[package]]
+name = "rustix"
+version = "0.38.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7db8590df6dfcd144d22afd1b83b36c21a18d7cbc1dc4bb5295a8712e9eb662"
+dependencies = [
+ "bitflags 2.4.0",
+ "errno 0.3.1",
+ "libc",
+ "linux-raw-sys 0.4.7",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -5244,7 +5268,7 @@ version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bc1bb97804af6631813c55739f771071e0f2ed33ee20b68c86ec505d906356c"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "core-foundation",
  "core-foundation-sys",
  "libc",
@@ -5676,7 +5700,7 @@ dependencies = [
  "ahash",
  "atoi",
  "base64 0.13.1",
- "bitflags",
+ "bitflags 1.3.2",
  "byteorder",
  "bytes",
  "chrono",
@@ -5939,15 +5963,15 @@ checksum = "9410d0f6853b1d94f0e519fb95df60f29d2c1eff2d921ffdf01a4c8a3b54f12d"
 
 [[package]]
 name = "tempfile"
-version = "3.5.0"
+version = "3.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9fbec84f381d5795b08656e4912bec604d162bff9291d6189a78f4c8ab87998"
+checksum = "cb94d2f3cc536af71caac6b6fcebf65860b347e7ce0cc9ebe8f70d3e521054ef"
 dependencies = [
  "cfg-if",
- "fastrand",
+ "fastrand 2.0.0",
  "redox_syscall 0.3.5",
- "rustix 0.37.3",
- "windows-sys 0.45.0",
+ "rustix 0.38.13",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -6473,9 +6497,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-test"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e3d272c44878d2bbc9f4a20ad463724f03e19dbc667c6e84ac433ab7ffcc70b"
+checksum = "3a2c0ff408fe918a94c428a3f2ad04e4afd5c95bbc08fcf868eff750c15728a4"
 dependencies = [
  "lazy_static",
  "tracing-core",
@@ -6485,9 +6509,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-test-macro"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "744324b12d69a9fc1edea4b38b7b1311295b662d161ad5deac17bb1358224a08"
+checksum = "258bc1c4f8e2e73a977812ab339d503e6feeb92700f6d07a6de4d321522d5c08"
 dependencies = [
  "lazy_static",
  "quote",

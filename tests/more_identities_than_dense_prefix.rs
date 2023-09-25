@@ -78,6 +78,7 @@ async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
     options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
+    options.app.ethereum.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint())?;
 
     let (app, local_addr) = spawn_app(options.clone())
         .await

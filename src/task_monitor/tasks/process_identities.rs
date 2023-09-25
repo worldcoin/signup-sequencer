@@ -104,7 +104,6 @@ async fn process_identities(
                 // identities we have, even if it's not many. This ensures
                 // a minimum quality of service for API users.
 
-                batching_tree.
 
                 let updates = batching_tree.peek_next_updates(batch_size);
                 if updates.is_empty() {

@@ -485,11 +485,15 @@ impl IdentityManager {
     }
 
     pub async fn list_batch_sizes(&self) -> Result<Vec<ProverConfiguration>, ServerError> {
-        Ok(self
+        let mut provers = self
             .insertion_prover_map
             .read()
             .await
-            .as_configuration_vec())
+            .as_configuration_vec();
+
+        provers.extend(self.deletion_prover_map.read().await.as_configuration_vec());
+
+        Ok(provers)
     }
 
     pub async fn has_insertion_provers(&self) -> bool {

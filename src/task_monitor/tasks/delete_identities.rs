@@ -9,6 +9,7 @@ use tracing::info;
 use crate::database::types::DeletionEntry;
 use crate::database::Database;
 use crate::identity_tree::{Hash, Latest, TreeVersion};
+use crate::prover::{ProverConfiguration, ProverType};
 
 pub struct DeleteIdentities {
     database:                Arc<Database>,
@@ -61,9 +62,6 @@ async fn delete_identities(
     loop {
         let deletions = database.get_deletions().await?;
         if deletions.is_empty() {
-            // Sleep for one hour
-            // TODO: should we make this dynamic? This causes an issue with tests so its set
-            // to 1 sec atm
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             continue;
         }
@@ -77,6 +75,22 @@ async fn delete_identities(
         {
             // Dedup deletion entries
             let deletions = deletions.into_iter().collect::<HashSet<DeletionEntry>>();
+
+            // Get the max batch size for deletion provers
+            let max_batch_size = database
+                .get_provers()
+                .await?
+                .iter()
+                .filter(|p| p.prover_type == ProverType::Deletion)
+                .max_by_key(|p| p.batch_size)
+                .map(|p| p.batch_size)
+                .expect("Could not get match batch size");
+
+            // Trim deletions the max deletion batch size available
+            let deletions = deletions
+                .into_iter()
+                .take(max_batch_size)
+                .collect::<HashSet<DeletionEntry>>();
 
             let (leaf_indices, previous_commitments): (Vec<usize>, Vec<Hash>) = deletions
                 .iter()

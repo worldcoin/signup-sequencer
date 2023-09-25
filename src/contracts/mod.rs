@@ -146,8 +146,12 @@ impl IdentityManager {
         self.tree_depth
     }
 
-    pub async fn max_batch_size(&self) -> usize {
+    pub async fn max_insertion_batch_size(&self) -> usize {
         self.insertion_prover_map.read().await.max_batch_size()
+    }
+
+    pub async fn max_deletion_batch_size(&self) -> usize {
+        self.deletion_prover_map.read().await.max_batch_size()
     }
 
     #[must_use]

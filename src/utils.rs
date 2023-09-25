@@ -9,6 +9,7 @@ use tokio::task::JoinHandle;
 use tracing::{error, info};
 
 pub mod index_packing;
+pub mod tree_updates;
 
 pub trait Any<A> {
     fn any(self) -> AnyhowResult<A>;

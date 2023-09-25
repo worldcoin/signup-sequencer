@@ -144,6 +144,48 @@ async fn delete_identities() -> anyhow::Result<()> {
     // Expect failure when deleting an identity that can not be found
     test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 12, true).await;
 
+    // Shutdown the app and reset the mock shutdown, allowing us to test the
+    // behaviour with saved data.
+    info!("Stopping the app for testing purposes");
+    shutdown();
+    app.await.unwrap();
+    reset_shutdown();
+
+    // Test loading the state from a file when the on-chain contract has the state.
+    let (app, local_addr) = spawn_app(options.clone())
+        .await
+        .expect("Failed to spawn app.");
+    let uri = "http://".to_owned() + &local_addr.to_string();
+
+    // Ensure that identities have been deleted
+    for i in 0..deletion_batch_size {
+        test_inclusion_proof(
+            &uri,
+            &client,
+            i,
+            &ref_tree,
+            &Hash::from_str_radix(&test_identities[i], 16)
+                .expect("Failed to parse Hash from test leaf"),
+            true,
+        )
+        .await;
+    }
+
+    // Ensure that valid proofs can still be received after restart for identities
+    // that have not been deleted
+    for i in deletion_batch_size + 1..insertion_batch_size {
+        test_inclusion_proof(
+            &uri,
+            &client,
+            i,
+            &ref_tree,
+            &Hash::from_str_radix(&test_identities[i], 16)
+                .expect("Failed to parse Hash from test leaf"),
+            false,
+        )
+        .await;
+    }
+
     // Shutdown the app properly for the final time
     shutdown();
     app.await.unwrap();

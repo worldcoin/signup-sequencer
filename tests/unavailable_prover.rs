@@ -1,7 +1,6 @@
 mod common;
 
 use common::prelude::*;
-use ethers::solc::info;
 
 /// Tests that the app can keep running even if the prover returns 500s
 /// and that it will eventually succeed if the prover becomes available again.

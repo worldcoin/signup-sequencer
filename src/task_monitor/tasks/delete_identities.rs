@@ -61,9 +61,6 @@ async fn delete_identities(
     loop {
         let deletions = database.get_deletions().await?;
         if deletions.is_empty() {
-            // Sleep for one hour
-            // TODO: should we make this dynamic? This causes an issue with tests so its set
-            // to 1 sec atm
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             continue;
         }

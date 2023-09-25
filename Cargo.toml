@@ -90,7 +90,7 @@ hex-literal = "0.3"
 maplit = "1.0.2"
 micro-oz = { path = "crates/micro-oz" }
 postgres-docker-utils = { path = "crates/postgres-docker-utils" }
-regex = { version = "1.7.1", features = ["std"] }
+regex = { version = "1.9.5", features = ["std"] }
 semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main", features = [
     "depth_20",
 ] }

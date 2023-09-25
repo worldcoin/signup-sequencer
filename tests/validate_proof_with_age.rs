@@ -31,6 +31,12 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
     let db_socket_addr = db_container.address();
     let db_url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
 
+    let temp_dir = tempfile::tempdir()?;
+    info!(
+        "temp dir created at: {:?}",
+        temp_dir.path().join("testfile")
+    );
+
     let mut options = Options::try_parse_from([
         "signup-sequencer",
         "--identity-manager-address",
@@ -59,6 +65,8 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
         &format!("{:?}", micro_oz.address()),
         "--time-between-scans-seconds",
         "1",
+        "--dense-tree-mmap-file",
+        temp_dir.path().join("testfile").to_str().unwrap(),
     ])
     .expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
@@ -74,9 +82,12 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
 
+    let mut s1 = *b"test_f0f0";
+    let mut s2 = *b"test_f1f1";
+
     let identities: Vec<Identity> = vec![
-        Identity::from_secret(b"test_b1i1", None),
-        Identity::from_secret(b"test_b1i2", None),
+        Identity::from_secret(&mut s1, None),
+        Identity::from_secret(&mut s2, None),
     ];
 
     let test_leaves: Vec<Field> = identities.iter().map(|id| id.commitment()).collect();

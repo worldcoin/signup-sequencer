@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use common::prelude::*;
 use hyper::Uri;
+use tempfile;
 
 use crate::common::{test_add_batch_size, test_remove_batch_size};
 
@@ -39,6 +40,12 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let db_socket_addr = db_container.address();
     let db_url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
 
+    let temp_dir = tempfile::tempdir()?;
+    info!(
+        "temp dir created at: {:?}",
+        temp_dir.path().join("testfile")
+    );
+
     // We initially spawn the service with a single prover for batch size 3.
 
     let mut options = Options::try_parse_from([
@@ -69,6 +76,8 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         &format!("{:?}", micro_oz.address()),
         "--time-between-scans-seconds",
         "1",
+        "--dense-tree-mmap-file",
+        temp_dir.path().join("testfile").to_str().unwrap(),
     ])
     .context("Failed to create options")?;
 

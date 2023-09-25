@@ -16,7 +16,8 @@ use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::{self, Database};
 use crate::ethereum::{self, Ethereum};
 use crate::identity_tree::{
-    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState, TreeVersionReadOps,
+    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState, TreeUpdate,
+    TreeVersionReadOps,
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::{self, ProverConfiguration, ProverType, Provers};
@@ -131,6 +132,10 @@ pub struct Options {
     /// The number of updates to trigger garbage collection.
     #[clap(long, env, default_value = "10000")]
     pub tree_gc_threshold: usize,
+
+    /// Path and file name to use for mmap file when building dense tree.
+    #[clap(long, env, default_value = "./dense_tree_mmap")]
+    pub dense_tree_mmap_file: String,
 }
 
 pub struct App {
@@ -194,13 +199,14 @@ impl App {
         }
 
         let timer = Instant::now();
-        let tree_state = Self::initialize_tree(
+        let tree_state = Self::restore_or_initialize_tree(
             &database,
             // Poseidon tree depth is one more than the contract's tree depth
             identity_manager.tree_depth(),
             options.dense_tree_prefix_depth,
             options.tree_gc_threshold,
             identity_manager.initial_leaf_value(),
+            options.dense_tree_mmap_file,
         )
         .await?;
         info!("Tree state initialization took: {:?}", timer.elapsed());
@@ -235,15 +241,133 @@ impl App {
         Ok(app)
     }
 
+    async fn restore_or_initialize_tree(
+        database: &Database,
+        tree_depth: usize,
+        dense_prefix_depth: usize,
+        gc_threshold: usize,
+        initial_leaf_value: Hash,
+        mmap_file_path: String,
+    ) -> AnyhowResult<TreeState> {
+        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
+        mined_items.sort_by_key(|item| item.leaf_index);
+
+        if let Some(tree_state) = Self::get_cached_tree_state(
+            database,
+            tree_depth,
+            dense_prefix_depth,
+            gc_threshold,
+            &initial_leaf_value,
+            &mined_items,
+            &mmap_file_path,
+        )
+        .await?
+        {
+            info!("tree restored from cache");
+            return Ok(tree_state);
+        }
+        let tree_state = Self::initialize_tree(
+            database,
+            tree_depth,
+            dense_prefix_depth,
+            gc_threshold,
+            initial_leaf_value,
+            mined_items,
+            mmap_file_path,
+        )
+        .await?;
+        info!("tree initialization successful");
+        Ok(tree_state)
+    }
+
+    pub fn get_leftover_leaves_and_update_index(
+        index: &mut usize,
+        dense_prefix_depth: usize,
+        mined_items: &Vec<TreeUpdate>,
+    ) -> Vec<ruint::Uint<256, 4>> {
+        let leftover_items = if mined_items.is_empty() {
+            vec![]
+        } else {
+            let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
+            // if the last index is greater then dense_prefix_depth, 1 << dense_prefix_depth
+            // should be the last index in restored tree
+            *index = std::cmp::min(max_leaf, (1 << dense_prefix_depth) - 1);
+
+            if max_leaf - *index == 0 {
+                return vec![];
+            }
+
+            let mut leaves = Vec::with_capacity(max_leaf - *index);
+
+            let leftover = &mined_items[(*index + 1)..];
+
+            for item in leftover {
+                leaves.push(item.element);
+            }
+
+            leaves
+        };
+
+        leftover_items
+    }
+
+    async fn get_cached_tree_state(
+        database: &Database,
+        tree_depth: usize,
+        dense_prefix_depth: usize,
+        gc_threshold: usize,
+        initial_leaf_value: &Hash,
+        mined_items: &Vec<TreeUpdate>,
+        mmap_file_path: &str,
+    ) -> anyhow::Result<Option<TreeState>> {
+        let mut last_mined_index_in_dense: usize = 0;
+        let leftover_items = Self::get_leftover_leaves_and_update_index(
+            &mut last_mined_index_in_dense,
+            dense_prefix_depth,
+            mined_items,
+        );
+
+        let Some(mined_builder) = CanonicalTreeBuilder::restore(
+            tree_depth,
+            dense_prefix_depth,
+            initial_leaf_value,
+            last_mined_index_in_dense,
+            &leftover_items,
+            gc_threshold,
+            mmap_file_path,
+        ) else {
+            return Ok(None);
+        };
+
+        let (mined, mut processed_builder) = mined_builder.seal();
+
+        let processed_items = database
+            .get_commitments_by_status(Status::Processed)
+            .await?;
+
+        for processed_item in processed_items {
+            processed_builder.update(&processed_item);
+        }
+
+        let (processed, batching_builder) = processed_builder.seal_and_continue();
+        let (batching, mut latest_builder) = batching_builder.seal_and_continue();
+        let pending_items = database.get_commitments_by_status(Status::Pending).await?;
+        for update in pending_items {
+            latest_builder.update(&update);
+        }
+        let latest = latest_builder.seal();
+        Ok(Some(TreeState::new(mined, processed, batching, latest)))
+    }
+
     async fn initialize_tree(
         database: &Database,
         tree_depth: usize,
         dense_prefix_depth: usize,
         gc_threshold: usize,
         initial_leaf_value: Hash,
+        mined_items: Vec<TreeUpdate>,
+        mmap_file_path: String,
     ) -> AnyhowResult<TreeState> {
-        let mined_items = database.get_commitments_by_status(Status::Mined).await?;
-
         // Flatten the updates for initial leaves
         let mined_items = dedup_tree_updates(mined_items);
 
@@ -266,6 +390,7 @@ impl App {
             gc_threshold,
             initial_leaf_value,
             &initial_leaves,
+            &mmap_file_path,
         );
 
         let (mined, mut processed_builder) = mined_builder.seal();
@@ -632,5 +757,81 @@ impl App {
     pub async fn shutdown(&self) -> AnyhowResult<()> {
         info!("Shutting down identity committer.");
         self.identity_committer.shutdown().await
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use ethers::prelude::rand;
+    use ethers::types::U256;
+    use ruint::Uint;
+
+    use super::App;
+    use crate::identity_tree::TreeUpdate;
+
+    pub fn generate_test_identities_with_index(identity_count: usize) -> Vec<TreeUpdate> {
+        let mut identities = vec![];
+
+        for i in 1..=identity_count {
+            let bytes: [u8; 32] = U256::from(rand::random::<u64>()).into();
+            let identity = Uint::<256, 4>::from_le_bytes(bytes);
+
+            identities.push(TreeUpdate {
+                leaf_index: i,
+                element:    identity,
+            });
+        }
+
+        identities
+    }
+
+    #[tokio::test]
+    async fn test_index_logic_for_cached_tree() -> anyhow::Result<()> {
+        // supports 8 identities (2^3)
+        let dense_prefix_depth: usize = 3;
+
+        let less_identities_count = 2usize.pow(dense_prefix_depth.try_into().unwrap()) - 2;
+        let more_identities_count = 2usize.pow(dense_prefix_depth.try_into().unwrap()) + 2;
+
+        // first test with less then dense prefix
+        let identities = generate_test_identities_with_index(less_identities_count);
+
+        let mut last_mined_index_in_dense: usize = 0;
+
+        let leaves = App::get_leftover_leaves_and_update_index(
+            &mut last_mined_index_in_dense,
+            dense_prefix_depth,
+            &identities,
+        );
+
+        // check if the index is correct
+        assert_eq!(last_mined_index_in_dense, identities.iter().count());
+        // since there are less identities then dense prefix, the leavs should be empty
+        // vector
+        assert!(leaves.is_empty());
+
+        // lets try now with more identities then dense prefix supports
+
+        // this should generate 2^dense_prefix + 2
+        let identities = generate_test_identities_with_index(more_identities_count);
+
+        last_mined_index_in_dense = 0;
+        let leaves = App::get_leftover_leaves_and_update_index(
+            &mut last_mined_index_in_dense,
+            dense_prefix_depth,
+            &identities,
+        );
+
+        // check if the index is correct
+        assert_eq!(last_mined_index_in_dense, (1 << dense_prefix_depth) - 1);
+
+        // since there are more identities then dense prefix, the leavs should be 2
+        assert_eq!(leaves.iter().count(), 2);
+
+        // additional check for correctness
+        assert_eq!(leaves[0], identities[8].element);
+        assert_eq!(leaves[1], identities[9].element);
+
+        Ok(())
     }
 }

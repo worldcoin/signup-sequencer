@@ -41,8 +41,47 @@ paths:
           content:
             application/json:
               schema:
-                description: 'A human-readable explanation of the error condition'
+                description: 'Could not queue identity for insertion'
                 type: 'string'
+  /deleteIdentity:
+      post:
+        summary: 'Queues a specific identity to be deleted from the merkle tree'
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityCommitment'
+        responses:
+          '202':
+            description: 'Identity has been successfully queued for deletion'
+          '400':
+            description: 'Invalid request'
+            content:
+              application/json:
+                schema:
+                  description: 'Identity could not be queued for deletion'
+                  type: 'string'
+  /recoverIdentity:
+      post:
+        summary: 'Queues a recovery request, deleting the previous identity specified and inserting the new one.
+                  New insertions must wait a specified time delay before being included in the merkle tree'
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryRequest'
+        responses:
+          '202':
+            description: 'Identity has been successfully queued for recovery'
+          '400':
+            description: 'Invalid request'
+            content:
+              application/json:
+                schema:
+                  description: 'Identity could not be queued for recovery'
+                  type: 'string'
   /inclusionProof:
     post:
       summary: 'Get Merkle inclusion proof'
@@ -70,7 +109,7 @@ paths:
           content:
             application/json:
               schema:
-                description: 'A human-readable explanation of the error condition'
+                description: 'Could not get merkle inclusion proof for identity'
                 type: 'string'
   /verifySemaphoreProof:
     post:
@@ -113,6 +152,11 @@ paths:
 
 components:
   schemas:
+    RecoveryRequest:
+      type: object
+      properties:
+        previousIdentityCommitment: { $ref: '#/components/schemas/IdentityCommitment' }
+        newIdentityCommitment: { $ref: '#/components/schemas/IdentityCommitment' }
     IdentityCommitment:
       type: object
       properties:

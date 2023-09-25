@@ -107,8 +107,6 @@ async fn process_identities(
                 };
 
                 let updates = batching_tree.peek_next_updates(batch_size);
-
-
                 if updates.is_empty() {
                     continue;
                 }
@@ -144,7 +142,6 @@ async fn process_identities(
                 };
                 let should_process_anyway =
                     timeout_secs.abs_diff(diff_secs) <= DEBOUNCE_THRESHOLD_SECS;
-
 
                 let batch_size = if batching_tree.peek_next_updates(1)[0].update.element == Hash::ZERO{
                     identity_manager.max_deletion_batch_size().await

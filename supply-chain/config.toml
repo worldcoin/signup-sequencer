@@ -30,7 +30,7 @@ audit-as-crates-io = true
 
 [policy."ethers-core:1.0.1"]
 
-[policy."ethers-core:2.0.3@git:80eac3819c33599c3074eef6bd173024cf747863"]
+[policy."ethers-core:2.0.10@git:08bcb67c36d9a2869950e51ecf76124c9febe035"]
 audit-as-crates-io = true
 
 [[exemptions.Inflector]]
@@ -449,12 +449,20 @@ criteria = "safe-to-deploy"
 version = "0.2.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.combine]]
+version = "4.6.6"
+criteria = "safe-to-deploy"
+
 [[exemptions.console]]
 version = "0.14.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.console]]
 version = "0.15.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.const-hex]]
+version = "1.9.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.const-oid]]
@@ -638,7 +646,7 @@ version = "0.12.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.elliptic-curve]]
-version = "0.13.4"
+version = "0.13.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.ena]]
@@ -647,6 +655,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.encode_unicode]]
 version = "0.3.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.enum-as-inner]]
+version = "0.5.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.enum-iterator]]
@@ -714,7 +726,7 @@ version = "1.0.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.ethers-core]]
-version = "2.0.3@git:80eac3819c33599c3074eef6bd173024cf747863"
+version = "2.0.10@git:08bcb67c36d9a2869950e51ecf76124c9febe035"
 criteria = "safe-to-deploy"
 
 [[exemptions.ethers-etherscan]]
@@ -1093,8 +1105,16 @@ criteria = "safe-to-deploy"
 version = "0.8.8"
 criteria = "safe-to-deploy"
 
+[[exemptions.mmap-rs]]
+version = "0.5.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.more-asserts]]
 version = "0.2.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.nix]]
+version = "0.26.4"
 criteria = "safe-to-deploy"
 
 [[exemptions.nom]]
@@ -1689,6 +1709,14 @@ criteria = "safe-to-deploy"
 version = "0.4.18"
 criteria = "safe-to-deploy"
 
+[[exemptions.strum]]
+version = "0.25.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.strum_macros]]
+version = "0.25.2"
+criteria = "safe-to-deploy"
+
 [[exemptions.subtle]]
 version = "2.4.1"
 criteria = "safe-to-deploy"
@@ -1707,6 +1735,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.sync_wrapper]]
 version = "0.1.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.sysctl]]
+version = "0.5.4"
 criteria = "safe-to-deploy"
 
 [[exemptions.target-lexicon]]
@@ -2037,6 +2069,10 @@ criteria = "safe-to-deploy"
 version = "1.2.3"
 criteria = "safe-to-deploy"
 
+[[exemptions.widestring]]
+version = "1.0.2"
+criteria = "safe-to-deploy"
+
 [[exemptions.winapi]]
 version = "0.3.9"
 criteria = "safe-to-deploy"
@@ -2051,6 +2087,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.winapi-x86_64-pc-windows-gnu]]
 version = "0.4.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.windows]]
+version = "0.44.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.winreg]]
@@ -2074,7 +2114,7 @@ version = "0.5.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.zeroize]]
-version = "1.5.7"
+version = "1.6.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.zeroize_derive]]

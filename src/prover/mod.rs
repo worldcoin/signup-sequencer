@@ -29,6 +29,7 @@ use url::Url;
 
 use crate::prover::identity::Identity;
 use crate::serde_utils::JsonStrWrapper;
+use crate::utils::index_packing::pack_indices;
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";
@@ -249,7 +250,7 @@ impl Prover {
         &self,
         pre_root: U256,
         post_root: U256,
-        packed_deletion_indices: Vec<u8>,
+        deletion_indices: Vec<u32>,
         identities: Vec<Identity>,
     ) -> anyhow::Result<Proof> {
         if identities.len() != self.batch_size {
@@ -266,13 +267,13 @@ impl Prover {
             .unzip();
 
         let input_hash =
-            compute_deletion_proof_input_hash(packed_deletion_indices.clone(), pre_root, post_root);
+            compute_deletion_proof_input_hash(deletion_indices.clone(), pre_root, post_root);
 
         let proof_input = DeletionProofInput {
             input_hash,
             pre_root,
             post_root,
-            packed_deletion_indices,
+            deletion_indices,
             identity_commitments,
             merkle_proofs,
         };
@@ -355,7 +356,7 @@ pub fn compute_insertion_proof_input_hash(
 // TODO: check this and update docs
 
 pub fn compute_deletion_proof_input_hash(
-    packed_deletion_indices: Vec<u8>,
+    deletion_indices: Vec<u32>,
     pre_root: U256,
     post_root: U256,
 ) -> U256 {
@@ -369,7 +370,8 @@ pub fn compute_deletion_proof_input_hash(
     let mut bytes = vec![];
 
     // Append packed_deletion_indices
-    bytes.extend_from_slice(&packed_deletion_indices);
+    let packed_indices = pack_indices(&deletion_indices);
+    bytes.extend_from_slice(&packed_indices);
 
     // Append pre_root and post_root bytes
     bytes.extend_from_slice(&pre_root_bytes);
@@ -410,12 +412,12 @@ struct InsertionProofInput {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DeletionProofInput {
-    input_hash:              U256,
-    pre_root:                U256,
-    post_root:               U256,
-    packed_deletion_indices: Vec<u8>,
-    identity_commitments:    Vec<U256>,
-    merkle_proofs:           Vec<Vec<U256>>,
+    input_hash:           U256,
+    pre_root:             U256,
+    post_root:            U256,
+    deletion_indices:     Vec<u32>,
+    identity_commitments: Vec<U256>,
+    merkle_proofs:        Vec<Vec<U256>>,
 }
 
 #[cfg(test)]

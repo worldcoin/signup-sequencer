@@ -524,17 +524,17 @@ pub async fn delete_identities(
 
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
-    let packed_deletion_indices = pack_indices(&deletion_indices);
-
     // We prepare the proof before reserving a slot in the pending identities
     let proof = IdentityManager::prepare_deletion_proof(
         prover,
         pre_root,
-        packed_deletion_indices.clone(),
+        deletion_indices.clone(),
         identity_commitments,
         post_root,
     )
     .await?;
+
+    let packed_deletion_indices = pack_indices(&deletion_indices);
 
     info!(?pre_root, ?post_root, "Submitting deletion batch");
 

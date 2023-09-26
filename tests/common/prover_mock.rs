@@ -13,6 +13,7 @@ use ethers::utils::keccak256;
 use hyper::StatusCode;
 use semaphore::poseidon_tree::{Branch, Proof as TreeProof};
 use serde::{Deserialize, Serialize};
+use signup_sequencer::utils::index_packing::pack_indices;
 use tokio::sync::Mutex;
 
 /// A representation of an error from the prover.
@@ -53,12 +54,12 @@ struct InsertionProofInput {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DeletionProofInput {
-    input_hash:              U256,
-    pre_root:                U256,
-    post_root:               U256,
-    packed_deletion_indices: Vec<u8>,
-    identity_commitments:    Vec<U256>,
-    merkle_proofs:           Vec<Vec<U256>>,
+    input_hash:           U256,
+    pre_root:             U256,
+    post_root:            U256,
+    deletion_indices:     Vec<u32>,
+    identity_commitments: Vec<U256>,
+    merkle_proofs:        Vec<Vec<U256>>,
 }
 
 /// The proof response from the prover.
@@ -319,7 +320,7 @@ impl Prover {
 
         // Calculate the input hash based on the prover parameters.
         let input_hash = Self::compute_deletion_proof_input_hash(
-            input.packed_deletion_indices.clone(),
+            &input.deletion_indices,
             input.pre_root,
             input.post_root,
         );
@@ -333,15 +334,7 @@ impl Prover {
         let empty_leaf = U256::zero();
         let mut last_root = input.pre_root;
 
-        let mut deletion_indices = vec![];
-
-        for bytes in input.packed_deletion_indices.chunks(4) {
-            let mut val: [u8; 4] = Default::default();
-            val.copy_from_slice(bytes);
-            deletion_indices.push(u32::from_be_bytes(val));
-        }
-
-        for (leaf_index, merkle_proof) in deletion_indices.iter().zip(input.merkle_proofs) {
+        for (leaf_index, merkle_proof) in input.deletion_indices.iter().zip(input.merkle_proofs) {
             if *leaf_index == 2u32.pow(self.tree_depth as u32) {
                 continue;
             }
@@ -436,10 +429,12 @@ impl Prover {
     ///   32 bits * batchSize ||   256   ||    256
     /// ```
     pub fn compute_deletion_proof_input_hash(
-        packed_deletion_indices: Vec<u8>,
+        deletion_indices: &[u32],
         pre_root: U256,
         post_root: U256,
     ) -> U256 {
+        let packed_deletion_indices = pack_indices(deletion_indices);
+
         // Convert pre_root and post_root to bytes
         let mut pre_root_bytes = vec![0u8; 32];
         pre_root.to_big_endian(&mut pre_root_bytes);

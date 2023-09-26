@@ -12,7 +12,7 @@ pub mod secret;
 mod serde_utils;
 pub mod server;
 mod task_monitor;
-mod utils;
+pub mod utils;
 
 use std::sync::Arc;
 

@@ -100,16 +100,18 @@ async fn process_identities(
                 // If the timer has fired we want to insert whatever
                 // identities we have, even if it's not many. This ensures
                 // a minimum quality of service for API users.
-                let batch_size = if batching_tree.peek_next_updates(1)[0].update.element == Hash::ZERO{
+                let next_update = batching_tree.peek_next_updates(1);
+                if next_update.is_empty() {
+                    continue;
+                }
+
+                let batch_size = if next_update[0].update.element == Hash::ZERO {
                     identity_manager.max_deletion_batch_size().await
                 }else{
                     identity_manager.max_insertion_batch_size().await
                 };
 
                 let updates = batching_tree.peek_next_updates(batch_size);
-                if updates.is_empty() {
-                    continue;
-                }
 
                 commit_identities(
                     database,
@@ -143,7 +145,12 @@ async fn process_identities(
                 let should_process_anyway =
                     timeout_secs.abs_diff(diff_secs) <= DEBOUNCE_THRESHOLD_SECS;
 
-                let batch_size = if batching_tree.peek_next_updates(1)[0].update.element == Hash::ZERO{
+                let next_update = batching_tree.peek_next_updates(1);
+                if next_update.is_empty() {
+                    continue;
+                }
+
+                let batch_size = if next_update[0].update.element == Hash::ZERO {
                     identity_manager.max_deletion_batch_size().await
                 }else{
                     identity_manager.max_insertion_batch_size().await
@@ -151,9 +158,6 @@ async fn process_identities(
 
                 // We have _at most_ one complete batch here.
                 let updates = batching_tree.peek_next_updates(batch_size);
-                if updates.is_empty() {
-                    continue;
-                }
 
                 // If there are not enough identities to insert at this
                 // stage we can wait. The timer will ensure that the API
@@ -524,17 +528,17 @@ pub async fn delete_identities(
 
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
-    let packed_deletion_indices = pack_indices(&deletion_indices);
-
     // We prepare the proof before reserving a slot in the pending identities
     let proof = IdentityManager::prepare_deletion_proof(
         prover,
         pre_root,
-        packed_deletion_indices.clone(),
+        deletion_indices.clone(),
         identity_commitments,
         post_root,
     )
     .await?;
+
+    let packed_deletion_indices = pack_indices(&deletion_indices);
 
     info!(?pre_root, ?post_root, "Submitting deletion batch");
 

@@ -241,7 +241,7 @@ impl IdentityManager {
     pub async fn prepare_deletion_proof(
         prover: ReadOnlyProver<'_, Prover>,
         pre_root: U256,
-        packed_deletion_indices: Vec<u8>,
+        deletion_indices: Vec<u32>,
         identity_commitments: Vec<Identity>,
         post_root: U256,
     ) -> anyhow::Result<Proof> {
@@ -252,12 +252,7 @@ impl IdentityManager {
         );
 
         let proof_data: Proof = prover
-            .generate_deletion_proof(
-                pre_root,
-                post_root,
-                packed_deletion_indices,
-                identity_commitments,
-            )
+            .generate_deletion_proof(pre_root, post_root, deletion_indices, identity_commitments)
             .await?;
 
         Ok(proof_data)

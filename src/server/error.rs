@@ -102,7 +102,9 @@ impl Error {
             | Self::IdentityCommitmentNotFound
             | Self::InvalidCommitment
             | Self::InvalidSerialization(_) => StatusCode::BAD_REQUEST,
-            Self::DuplicateCommitment => StatusCode::CONFLICT,
+            Self::IdentityAlreadyDeleted
+            | Self::IdentityQueuedForDeletion
+            | Self::DuplicateCommitment => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

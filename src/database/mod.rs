@@ -366,6 +366,18 @@ impl Database {
         }))
     }
 
+    pub async fn get_latest_insertion_timestamp(&self) -> Result<Option<DateTime<Utc>>, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT insertion_timestamp FROM latest_insertion_timestamp
+            "#,
+        );
+
+        let row = self.pool.fetch_optional(query).await?;
+
+        Ok(row.map(|r| r.get::<DateTime<Utc>, _>(0)))
+    }
+
     pub async fn count_unprocessed_identities(&self) -> Result<i32, Error> {
         let query = sqlx::query(
             r#"
@@ -535,6 +547,22 @@ impl Database {
                 timestamp: Utc::now(),
             })
         }
+    }
+
+    pub async fn update_latest_insertion_timestamp(
+        &self,
+        insertion_timestamp: DateTime<Utc>,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO latest_insertion_timestamp (insertion_timestamp)
+            VALUES ($1)
+            "#,
+        )
+        .bind(insertion_timestamp);
+
+        self.pool.execute(query).await?;
+        Ok(())
     }
 
     pub async fn update_latest_deletion(
@@ -1137,6 +1165,22 @@ mod test {
 
         let eligible_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
         assert_eq!(eligible_commitments.len(), 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_update_insertion_timestamp() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let insertion_timestamp = Utc::now();
+
+        db.update_latest_insertion_timestamp(insertion_timestamp)
+            .await?;
+
+        let latest_insertion_timestamp = db.get_latest_insertion_timestamp().await?.unwrap();
+
+        assert_eq!(latest_insertion_timestamp, insertion_timestamp);
 
         Ok(())
     }

@@ -2,7 +2,10 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result as AnyhowResult};
+use chrono::{DateTime, Utc};
 use ethers::types::U256;
+use futures_util::TryFutureExt;
+use oz_api::data;
 use ruint::Uint;
 use semaphore::merkle_tree::Proof;
 use semaphore::poseidon_tree::Branch;
@@ -86,7 +89,10 @@ async fn process_identities(
     // inserted. If we have an incomplete batch but are within a small delta of the
     // tick happening anyway in the wake branch, we insert the current
     // (possibly-incomplete) batch anyway.
-    let mut last_batch_time: SystemTime = SystemTime::now();
+    let mut last_batch_time: DateTime<Utc> = database
+        .get_latest_insertion_timestamp()
+        .await?
+        .unwrap_or(Utc::now());
 
     loop {
         // We ping-pong between two cases for being woken. This ensures that there is a
@@ -120,7 +126,8 @@ async fn process_identities(
                     &updates,
                 ).await?;
 
-                last_batch_time = SystemTime::now();
+                last_batch_time = Utc::now();
+                database.update_latest_insertion_timestamp(last_batch_time).await?;
 
                 // Also wake up if woken up due to a tick
                 wake_up_notify.notify_one();
@@ -135,15 +142,12 @@ async fn process_identities(
                 // We unconditionally convert `u64 -> i64` as numbers should
                 // always be small. If the numbers are not always small then
                 // we _want_ to panic as something is horribly broken.
-                let current_time = SystemTime::now();
-                let diff_secs = if let Ok(diff) = current_time.duration_since(last_batch_time) {
-                    diff.as_secs()
-                } else {
-                    warn!("Identity committer thinks that the last batch is in the future.");
-                    continue
-                };
+                let current_time = Utc::now();
+                let diff_secs = current_time - last_batch_time;
+                #[allow(clippy::cast_sign_loss)]
+                let diff_secs_u64 = diff_secs.num_seconds() as u64;
                 let should_process_anyway =
-                    timeout_secs.abs_diff(diff_secs) <= DEBOUNCE_THRESHOLD_SECS;
+                    timeout_secs.abs_diff(diff_secs_u64) <= DEBOUNCE_THRESHOLD_SECS;
 
                 let next_update = batching_tree.peek_next_updates(1);
                 if next_update.is_empty() {
@@ -185,7 +189,8 @@ async fn process_identities(
                 // we don't trigger again until either we get a full batch
                 // or the timer ticks.
                 timer.reset();
-                last_batch_time = SystemTime::now();
+                last_batch_time = Utc::now();
+                database.update_latest_insertion_timestamp(last_batch_time).await?;
 
                 // We want to check if there's a full batch available immediately
                 wake_up_notify.notify_one();

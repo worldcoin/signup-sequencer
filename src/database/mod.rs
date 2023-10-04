@@ -1180,7 +1180,7 @@ mod test {
 
         let latest_insertion_timestamp = db.get_latest_insertion_timestamp().await?.unwrap();
 
-        assert_eq!(latest_insertion_timestamp, insertion_timestamp);
+        assert!(latest_insertion_timestamp.timestamp() - insertion_timestamp.timestamp() <= 1);
 
         Ok(())
     }

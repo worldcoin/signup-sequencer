@@ -369,8 +369,9 @@ impl Database {
     pub async fn get_latest_insertion_timestamp(&self) -> Result<Option<DateTime<Utc>>, Error> {
         let query = sqlx::query(
             r#"
-            SELECT insertion_timestamp FROM latest_insertion_timestamp
-            "#,
+            SELECT insertion_timestamp 
+            FROM latest_insertion_timestamp 
+            WHERE Lock = 'X';"#,
         );
 
         let row = self.pool.fetch_optional(query).await?;
@@ -555,8 +556,10 @@ impl Database {
     ) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
-            INSERT INTO latest_insertion_timestamp (insertion_timestamp)
-            VALUES ($1)
+            INSERT INTO latest_insertion_timestamp (Lock, insertion_timestamp)
+            VALUES ('X', $1)
+            ON CONFLICT (Lock)
+            DO UPDATE SET insertion_timestamp = EXCLUDED.insertion_timestamp;
             "#,
         )
         .bind(insertion_timestamp);

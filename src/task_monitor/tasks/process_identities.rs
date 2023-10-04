@@ -1,11 +1,9 @@
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use anyhow::{Context, Result as AnyhowResult};
 use chrono::{DateTime, Utc};
 use ethers::types::U256;
-use futures_util::TryFutureExt;
-use oz_api::data;
 use ruint::Uint;
 use semaphore::merkle_tree::Proof;
 use semaphore::poseidon_tree::Branch;

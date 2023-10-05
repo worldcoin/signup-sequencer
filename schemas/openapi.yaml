@@ -155,8 +155,12 @@ components:
     RecoveryRequest:
       type: object
       properties:
-        previousIdentityCommitment: { $ref: '#/components/schemas/IdentityCommitment' }
-        newIdentityCommitment: { $ref: '#/components/schemas/IdentityCommitment' }
+        previousIdentityCommitment:
+          type: string
+          pattern: '^[A-F0-9]{64}$'
+        newIdentityCommitment:
+          type: string
+          pattern: '^[A-F0-9]{64}$'
     IdentityCommitment:
       type: object
       properties:

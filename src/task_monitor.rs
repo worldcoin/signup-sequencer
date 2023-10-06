@@ -87,6 +87,17 @@ pub struct Options {
     #[clap(long, env, default_value = "100")]
     pub min_batch_deletion_size: usize,
 
+    /// The parameter to control the delay between mining a deletion batch and
+    /// inserting the recovery identities
+    ///
+    /// The sequencer will insert the recovery identities after
+    /// max_epoch_duration_seconds + root_history_expiry) seconds have passed
+    ///
+    /// By default the value is set to 0 so the sequencer will only use
+    /// root_history_expiry
+    #[clap(long, env, default_value = "0")]
+    pub max_epoch_duration_seconds: u64,
+
     /// How many identities can be held in the API insertion queue at any given
     /// time Past this limit the API request will block until the queue has
     /// space for the insertion.
@@ -122,6 +133,7 @@ pub struct TaskMonitor {
     // Finalization params
     scanning_window_size:           u64,
     time_between_scans:             Duration,
+    max_epoch_duration:             Duration,
     // TODO: docs
     batch_deletion_timeout_seconds: i64,
     // TODO: docs
@@ -142,6 +154,7 @@ impl TaskMonitor {
             batch_deletion_timeout_seconds: _,
             min_batch_deletion_size: _,
             insert_identities_capacity: _,
+            max_epoch_duration_seconds,
         } = *options;
 
         Self {
@@ -154,6 +167,7 @@ impl TaskMonitor {
             time_between_scans: Duration::from_secs(time_between_scans_seconds),
             batch_deletion_timeout_seconds: options.batch_deletion_timeout_seconds,
             min_batch_deletion_size: options.min_batch_deletion_size,
+            max_epoch_duration: Duration::from_secs(max_epoch_duration_seconds),
         }
     }
 
@@ -183,6 +197,7 @@ impl TaskMonitor {
             self.tree_state.get_mined_tree(),
             self.scanning_window_size,
             self.time_between_scans,
+            self.max_epoch_duration,
         );
 
         let finalize_identities_handle = crate::utils::spawn_monitored_with_backoff(

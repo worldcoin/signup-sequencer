@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result as AnyhowResult};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use ethers::abi::RawLog;
 use ethers::contract::EthEvent;
 use ethers::providers::Middleware;
@@ -25,6 +25,7 @@ pub struct FinalizeRoots {
 
     scanning_window_size: u64,
     time_between_scans:   Duration,
+    max_epoch_duration:   Duration,
 }
 
 impl FinalizeRoots {
@@ -35,6 +36,7 @@ impl FinalizeRoots {
         finalized_tree: TreeVersion<Canonical>,
         scanning_window_size: u64,
         time_between_scans: Duration,
+        max_epoch_duration: Duration,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
@@ -43,6 +45,7 @@ impl FinalizeRoots {
             finalized_tree,
             scanning_window_size,
             time_between_scans,
+            max_epoch_duration,
         })
     }
 
@@ -54,6 +57,7 @@ impl FinalizeRoots {
             &self.finalized_tree,
             self.scanning_window_size,
             self.time_between_scans,
+            self.max_epoch_duration,
         )
         .await
     }
@@ -66,6 +70,7 @@ async fn finalize_roots_loop(
     finalized_tree: &TreeVersion<Canonical>,
     scanning_window_size: u64,
     time_between_scans: Duration,
+    max_epoch_duration: Duration,
 ) -> AnyhowResult<()> {
     let mainnet_abi = identity_manager.abi();
     let secondary_abis = identity_manager.secondary_abis();
@@ -80,7 +85,14 @@ async fn finalize_roots_loop(
     loop {
         let mainnet_logs = fetch_mainnet_logs(&mut mainnet_scanner, mainnet_address).await?;
 
-        finalize_mainnet_roots(database, identity_manager, processed_tree, &mainnet_logs).await?;
+        finalize_mainnet_roots(
+            database,
+            identity_manager,
+            processed_tree,
+            &mainnet_logs,
+            max_epoch_duration,
+        )
+        .await?;
 
         let mut roots = extract_roots_from_mainnet_logs(mainnet_logs);
         roots.extend(fetch_secondary_logs(&mut secondary_scanners).await?);
@@ -150,6 +162,7 @@ async fn finalize_mainnet_roots(
     identity_manager: &IdentityManager,
     processed_tree: &TreeVersion<Intermediate>,
     logs: &[Log],
+    max_epoch_duration: Duration,
 ) -> Result<(), anyhow::Error> {
     for log in logs {
         let Some(event) = raw_log_to_tree_changed(log) else {
@@ -175,7 +188,14 @@ async fn finalize_mainnet_roots(
             // NOTE: We must do this before updating the tree
             //       because we fetch commitments from the processed tree
             //       before they are deleted
-            update_eligible_recoveries(database, identity_manager, processed_tree, &log).await?;
+            update_eligible_recoveries(
+                database,
+                identity_manager,
+                processed_tree,
+                &log,
+                max_epoch_duration,
+            )
+            .await?;
         }
 
         let updates_count = processed_tree.apply_updates_up_to(post_root.into());
@@ -274,6 +294,7 @@ async fn update_eligible_recoveries(
     identity_manager: &IdentityManager,
     processed_tree: &TreeVersion<Intermediate>,
     log: &Log,
+    max_epoch_duration: Duration,
 ) -> anyhow::Result<()> {
     let tx_hash = log.transaction_hash.context("Missing tx hash")?;
     let commitments = identity_manager
@@ -299,14 +320,13 @@ async fn update_eligible_recoveries(
 
     // Use the root history expiry to calcuate the eligibility timestamp for the new
     // insertion
-    let eligibility_timestamp = DateTime::from_utc(
-        chrono::NaiveDateTime::from_timestamp_opt(
-            Utc::now().timestamp() + root_history_expiry.as_u64() as i64,
-            0,
-        )
-        .context("Could not convert eligibility timestamp to NaiveDateTime")?,
-        Utc,
-    );
+    let root_history_expiry_duration =
+        chrono::Duration::seconds(root_history_expiry.as_u64() as i64);
+    let max_epoch_duration = chrono::Duration::from_std(max_epoch_duration)?;
+
+    let delay = root_history_expiry_duration + max_epoch_duration;
+
+    let eligibility_timestamp = Utc::now() + delay;
 
     // For each deletion, if there is a corresponding recovery, insert a new
     // identity with the specified eligibility timestamp

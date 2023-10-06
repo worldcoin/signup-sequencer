@@ -522,7 +522,7 @@ fn construct_delete_identity_body(identity_commitment: &Hash) -> Body {
     )
 }
 
-fn construct_recover_identity_body(
+pub fn construct_recover_identity_body(
     prev_identity_commitment: &Hash,
     new_identity_commitment: &Hash,
 ) -> Body {
@@ -535,7 +535,7 @@ fn construct_recover_identity_body(
     )
 }
 
-fn construct_insert_identity_body(identity_commitment: &Field) -> Body {
+pub fn construct_insert_identity_body(identity_commitment: &Field) -> Body {
     Body::from(
         json!({
             "identityCommitment": identity_commitment,

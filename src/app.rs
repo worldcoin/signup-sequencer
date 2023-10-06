@@ -412,6 +412,14 @@ impl App {
             return Err(ServerError::NoProversOnIdInsert);
         }
 
+        if !self.identity_is_reduced(*new_commitment) {
+            warn!(
+                ?new_commitment,
+                "The new identity commitment is not reduced."
+            );
+            return Err(ServerError::UnreducedCommitment);
+        }
+
         // Delete the existing id and insert the commitments into the recovery table
         self.delete_identity(existing_commitment).await?;
 

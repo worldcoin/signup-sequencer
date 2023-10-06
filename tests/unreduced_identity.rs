@@ -1,10 +1,8 @@
 mod common;
-
 use common::prelude::*;
-use ruint::Uint;
 
 #[tokio::test]
-async fn test_insert_unreduced_identity() -> anyhow::Result<()> {
+async fn test_unreduced_identity() -> anyhow::Result<()> {
     info!("Starting unavailable prover test");
 
     let tree_depth: u8 = 20;
@@ -63,7 +61,7 @@ async fn test_insert_unreduced_identity() -> anyhow::Result<()> {
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
 
-    // Test insert unreduced identity
+    // Test insert unreduced identity for insertion
     let body = common::construct_insert_identity_body(&ruint::Uint::<256, 4>::MAX);
     let req = Request::builder()
         .method("POST")
@@ -87,77 +85,7 @@ async fn test_insert_unreduced_identity() -> anyhow::Result<()> {
         body_str
     );
 
-    shutdown();
-    app.await?;
-    for (_, prover) in insertion_prover_map.into_iter() {
-        prover.stop();
-    }
-    reset_shutdown();
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_recover_unreduced_identity() -> anyhow::Result<()> {
-    info!("Starting unavailable prover test");
-
-    let tree_depth: u8 = 20;
-
-    let ref_tree = PoseidonTree::new(tree_depth as usize + 1, ruint::Uint::ZERO);
-    let initial_root: U256 = ref_tree.root().into();
-    let batch_size: usize = 3;
-
-    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], tree_depth).await?;
-    let prover_mock = &insertion_prover_map[&batch_size];
-    prover_mock.set_availability(false).await;
-
-    let port = db_container.port();
-    let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
-    let mut options = Options::try_parse_from([
-        "signup-sequencer",
-        "--identity-manager-address",
-        "0x0000000000000000000000000000000000000000", // placeholder, updated below
-        "--database",
-        &db_url,
-        "--database-max-connections",
-        "1",
-        "--tree-depth",
-        &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_mock.arg_string(),
-        "--batch-timeout-seconds",
-        "10",
-        "--dense-tree-prefix-depth",
-        "10",
-        "--tree-gc-threshold",
-        "1",
-        "--oz-api-key",
-        "",
-        "--oz-api-secret",
-        "",
-        "--oz-api-url",
-        &micro_oz.endpoint(),
-        "--oz-address",
-        &format!("{:?}", micro_oz.address()),
-        "--time-between-scans-seconds",
-        "1",
-    ])
-    .context("Failed to create options")?;
-
-    options.server.server = Url::parse("http://127.0.0.1:0/")?;
-
-    options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
-    options.app.ethereum.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint())?;
-
-    let (app, local_addr) = spawn_app(options.clone())
-        .await
-        .expect("Failed to spawn app.");
-
-    let uri = "http://".to_owned() + &local_addr.to_string();
-    let client = Client::new();
-
-    // Test insert unreduced identity
+    // Test insert unreduced identity for recovery
     let body = common::construct_recover_identity_body(&Hash::ZERO, &ruint::Uint::<256, 4>::MAX);
     let req = Request::builder()
         .method("POST")

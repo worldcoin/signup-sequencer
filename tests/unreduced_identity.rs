@@ -61,7 +61,7 @@ async fn test_unreduced_identity() -> anyhow::Result<()> {
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
 
-    // Test insert unreduced identity for insertion
+    // Test unreduced identity for insertion
     let body = common::construct_insert_identity_body(&ruint::Uint::<256, 4>::MAX);
     let req = Request::builder()
         .method("POST")
@@ -85,7 +85,7 @@ async fn test_unreduced_identity() -> anyhow::Result<()> {
         body_str
     );
 
-    // Test insert unreduced identity for recovery
+    // Test unreduced identity for recovery
     let body = common::construct_recover_identity_body(&Hash::ZERO, &ruint::Uint::<256, 4>::MAX);
     let req = Request::builder()
         .method("POST")

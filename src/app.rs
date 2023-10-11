@@ -354,7 +354,6 @@ impl App {
                 }
             }
             None => {
-                // compare to initial root?
                 if !mined.get_root().eq(&initial_root_hash) {
                     return Ok(None);
                 }

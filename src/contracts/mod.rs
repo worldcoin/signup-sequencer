@@ -311,7 +311,6 @@ impl IdentityManager {
             .abi
             .delete_identities(
                 proof_points_array,
-                batch_size,
                 packed_deletion_indices.into(),
                 pre_root,
                 post_root,

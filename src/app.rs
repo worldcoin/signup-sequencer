@@ -206,6 +206,7 @@ impl App {
             options.dense_tree_prefix_depth,
             options.tree_gc_threshold,
             identity_manager.initial_leaf_value(),
+            initial_root_hash,
             options.dense_tree_mmap_file,
         )
         .await?;
@@ -247,6 +248,7 @@ impl App {
         dense_prefix_depth: usize,
         gc_threshold: usize,
         initial_leaf_value: Hash,
+        initial_root_hash: Hash,
         mmap_file_path: String,
     ) -> AnyhowResult<TreeState> {
         let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
@@ -258,7 +260,8 @@ impl App {
             dense_prefix_depth,
             gc_threshold,
             &initial_leaf_value,
-            &mined_items,
+            initial_root_hash,
+            mined_items.clone(),
             &mmap_file_path,
         )
         .await?
@@ -317,14 +320,17 @@ impl App {
         dense_prefix_depth: usize,
         gc_threshold: usize,
         initial_leaf_value: &Hash,
-        mined_items: &Vec<TreeUpdate>,
+        initial_root_hash: Hash,
+        mined_items: Vec<TreeUpdate>,
         mmap_file_path: &str,
     ) -> anyhow::Result<Option<TreeState>> {
+        let mined_items = dedup_tree_updates(mined_items);
+
         let mut last_mined_index_in_dense: usize = 0;
         let leftover_items = Self::get_leftover_leaves_and_update_index(
             &mut last_mined_index_in_dense,
             dense_prefix_depth,
-            mined_items,
+            &mined_items,
         );
 
         let Some(mined_builder) = CanonicalTreeBuilder::restore(
@@ -340,6 +346,20 @@ impl App {
         };
 
         let (mined, mut processed_builder) = mined_builder.seal();
+
+        match database.get_latest_root_by_status(Status::Mined).await? {
+            Some(root) => {
+                if !mined.get_root().eq(&root) {
+                    return Ok(None);
+                }
+            }
+            None => {
+                // compare to initial root?
+                if !mined.get_root().eq(&initial_root_hash) {
+                    return Ok(None);
+                }
+            }
+        }
 
         let processed_items = database
             .get_commitments_by_status(Status::Processed)

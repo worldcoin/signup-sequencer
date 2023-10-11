@@ -301,6 +301,11 @@ pub async fn test_inclusion_status(
             .expect("Failed to convert response body to bytes");
         let result = String::from_utf8(bytes.into_iter().collect())
             .expect("Could not parse response bytes to utf-8");
+        println!(
+            "########################################################## \n
+        result: {:?}",
+            result
+        );
         let result_json = serde_json::from_str::<serde_json::Value>(&result)
             .expect("Failed to parse response as json");
         let status = result_json["status"]

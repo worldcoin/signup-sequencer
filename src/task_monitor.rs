@@ -5,13 +5,14 @@ use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use once_cell::sync::Lazy;
 use prometheus::{linear_buckets, register_gauge, register_histogram, Gauge, Histogram};
-use tokio::sync::{broadcast, Notify, RwLock};
+use tokio::sync::{broadcast, mpsc, Notify, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{info, instrument, warn};
 
 use self::tasks::delete_identities::DeleteIdentities;
 use self::tasks::finalize_identities::FinalizeRoots;
 use self::tasks::insert_identities::InsertIdentities;
+use self::tasks::monitor_txs::MonitorTxs;
 use self::tasks::process_identities::ProcessIdentities;
 use crate::contracts::SharedIdentityManager;
 use crate::database::Database;
@@ -98,12 +99,6 @@ pub struct Options {
     #[clap(long, env, default_value = "0")]
     pub max_epoch_duration_seconds: u64,
 
-    /// How many identities can be held in the API insertion queue at any given
-    /// time Past this limit the API request will block until the queue has
-    /// space for the insertion.
-    #[clap(long, env, default_value = "100")]
-    pub insert_identities_capacity: usize,
-
     /// The maximum number of windows to scan for finalization logs
     #[clap(long, env, default_value = "100")]
     pub scanning_window_size: u64,
@@ -111,6 +106,10 @@ pub struct Options {
     /// The number of seconds to wait between fetching logs
     #[clap(long, env, default_value = "30")]
     pub time_between_scans_seconds: u64,
+
+    /// The number of txs in the channel that we'll be monitoring
+    #[clap(long, env, default_value = "100")]
+    pub monitored_txs_capacity: usize,
 }
 
 /// A worker that commits identities to the blockchain.
@@ -138,6 +137,7 @@ pub struct TaskMonitor {
     batch_deletion_timeout_seconds: i64,
     // TODO: docs
     min_batch_deletion_size:        usize,
+    monitored_txs_capacity:         usize,
 }
 
 impl TaskMonitor {
@@ -151,10 +151,10 @@ impl TaskMonitor {
             batch_timeout_seconds,
             scanning_window_size,
             time_between_scans_seconds,
-            batch_deletion_timeout_seconds: _,
-            min_batch_deletion_size: _,
-            insert_identities_capacity: _,
             max_epoch_duration_seconds,
+            monitored_txs_capacity,
+            batch_deletion_timeout_seconds,
+            min_batch_deletion_size,
         } = *options;
 
         Self {
@@ -165,9 +165,10 @@ impl TaskMonitor {
             batch_insert_timeout_secs: batch_timeout_seconds,
             scanning_window_size,
             time_between_scans: Duration::from_secs(time_between_scans_seconds),
-            batch_deletion_timeout_seconds: options.batch_deletion_timeout_seconds,
-            min_batch_deletion_size: options.min_batch_deletion_size,
+            batch_deletion_timeout_seconds,
+            min_batch_deletion_size,
             max_epoch_duration: Duration::from_secs(max_epoch_duration_seconds),
+            monitored_txs_capacity,
         }
     }
 
@@ -181,6 +182,9 @@ impl TaskMonitor {
         // We could use the second element of the tuple as `mut shutdown_receiver`,
         // but for symmetry's sake we create it for every task with `.subscribe()`
         let (shutdown_sender, _) = broadcast::channel(1);
+
+        let (monitored_txs_sender, monitored_txs_receiver) =
+            mpsc::channel(self.monitored_txs_capacity);
 
         let wake_up_notify = Arc::new(Notify::new());
         // Immediately notify so we can start processing if we have pending identities
@@ -214,6 +218,7 @@ impl TaskMonitor {
             self.identity_manager.clone(),
             self.tree_state.get_batching_tree(),
             self.batch_insert_timeout_secs,
+            monitored_txs_sender,
             wake_up_notify.clone(),
         );
 
@@ -224,6 +229,16 @@ impl TaskMonitor {
         );
 
         handles.push(process_identities_handle);
+
+        let monitor_txs = MonitorTxs::new(self.identity_manager.clone(), monitored_txs_receiver);
+
+        let monitor_txs_handle = crate::utils::spawn_monitored_with_backoff(
+            move || monitor_txs.clone().run(),
+            shutdown_sender.clone(),
+            PROCESS_IDENTITIES_BACKOFF,
+        );
+
+        handles.push(monitor_txs_handle);
 
         // Insert identities task
         let insert_identities = InsertIdentities::new(

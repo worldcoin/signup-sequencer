@@ -8,7 +8,7 @@ use hyper::Uri;
 use crate::common::{test_add_batch_size, test_remove_batch_size};
 
 const SUPPORTED_DEPTH: usize = 20;
-const IDLE_TIME: u64 = 7;
+const IDLE_TIME: u64 = 10;
 
 #[tokio::test]
 async fn dynamic_batch_sizes() -> anyhow::Result<()> {
@@ -16,18 +16,25 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     init_tracing_subscriber();
     info!("Starting integration test");
 
-    let batch_size: usize = 3;
+    let first_batch_size: usize = 3;
     let second_batch_size: usize = 2;
+
     #[allow(clippy::cast_possible_truncation)]
     let tree_depth: u8 = SUPPORTED_DEPTH as u8;
 
     let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], tree_depth).await?;
+    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
+        initial_root,
+        &[first_batch_size, second_batch_size],
+        &[],
+        tree_depth,
+    )
+    .await?;
 
-    let prover_mock = &insertion_prover_map[&batch_size];
+    let first_prover = &insertion_prover_map[&first_batch_size];
+    let second_prover = &insertion_prover_map[&second_batch_size];
 
     let port = db_container.port();
     let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
@@ -45,7 +52,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         "--tree-depth",
         &format!("{tree_depth}"),
         "--prover-urls",
-        &prover_mock.arg_string(),
+        &first_prover.arg_string(),
         "--batch-timeout-seconds",
         "3",
         "--dense-tree-prefix-depth",
@@ -75,7 +82,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         .await
         .expect("Failed to spawn app.");
 
-    let test_identities = generate_test_identities(batch_size * 5);
+    let test_identities = generate_test_identities(first_batch_size * 5);
     let identities_ref: Vec<Field> = test_identities
         .iter()
         .map(|i| Hash::from_str_radix(i, 16).unwrap())
@@ -125,9 +132,6 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     )
     .await;
 
-    // Add a new prover for batch sizes of two.
-    let second_prover = spawn_mock_insertion_prover(second_batch_size, tree_depth).await?;
-
     test_add_batch_size(
         &uri,
         second_prover.url(),
@@ -162,9 +166,9 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
                 "prover_type": "insertion",
             },
             {
-                "url": prover_mock.url() + "/",
+                "url": first_prover.url() + "/",
                 "timeout_s": 30,
-                "batch_size": batch_size,
+                "batch_size": first_batch_size,
                 "prover_type": "insertion",
 
             }
@@ -172,7 +176,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     );
 
     // Insert enough identities to trigger the lower batch size.
-    prover_mock.set_availability(false).await;
+    first_prover.set_availability(false).await;
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 3).await;
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 4).await;
 
@@ -181,6 +185,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     tokio::time::resume();
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
+
     // Check that we can also get these inclusion proofs back.
     test_inclusion_proof(
         &uri,
@@ -206,9 +211,9 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     // Now if we remove the original prover, things should still work.
     test_remove_batch_size(
         &uri,
-        batch_size as u64,
+        first_batch_size as u64,
         &client,
-        prover_mock.prover_type(),
+        first_prover.prover_type(),
         false,
     )
     .await?;

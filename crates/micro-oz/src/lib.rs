@@ -9,7 +9,7 @@ use ethers::prelude::SignerMiddleware;
 use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::{LocalWallet, Signer};
 use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::Eip1559TransactionRequest;
+use ethers::types::{Eip1559TransactionRequest, U64};
 use oz_api::data::transactions::{RelayerTransactionBase, SendBaseTransactionRequestOwned, Status};
 use tokio::sync::{mpsc, Mutex};
 
@@ -101,9 +101,15 @@ async fn runner_inner(inner: &Arc<PinheadInner>, tx_id: String) -> Result<(), an
 
     let mut tx_guard = tx.lock().await;
 
-    if let Some(_receipt) = receipt {
+    if let Some(receipt) = receipt {
+        if let Some(U64([0])) = receipt.status {
+            tracing::error!("Receipt: {:?}", receipt);
+        } else {
+            tracing::info!("Receipt: {:?}", receipt);
+        }
         tx_guard.status = Status::Mined;
     } else {
+        tracing::error!("Receipt not found");
         tx_guard.status = Status::Failed;
     }
 

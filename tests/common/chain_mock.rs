@@ -58,7 +58,7 @@ pub async fn spawn_mock_chain(
         .send()
         .await?;
 
-    let verifier_path = "./sol/SemaphoreVerifier.json";
+    let verifier_path = "./sol/SemaphoreVerifier20.json";
     let verifier_file =
         File::open(verifier_path).unwrap_or_else(|_| panic!("Failed to open `{verifier_path}`"));
 

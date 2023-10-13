@@ -548,13 +548,7 @@ pub async fn delete_identities(
     // With all the data prepared we can submit the identities to the on-chain
     // identity manager and wait for that transaction to be mined.
     let transaction_id = identity_manager
-        .delete_identities(
-            proof,
-            batch_size as u32,
-            packed_deletion_indices,
-            pre_root,
-            post_root,
-        )
+        .delete_identities(proof, packed_deletion_indices, pre_root, post_root)
         .await
         .map_err(|e| {
             error!(?e, "Failed to insert identity to contract.");

@@ -92,17 +92,24 @@ async fn validate_proofs() -> anyhow::Result<()> {
     let (merkle_proof, root) =
         test_insert_identity(&uri, &client, &mut ref_tree, &TEST_LEAVES, 0).await;
 
-    tokio::time::sleep(Duration::from_secs(5 + batch_timeout_seconds)).await;
     // simulate client generating a proof
     let nullifier_hash = generate_nullifier_hash(&IDENTITIES[0], external_nullifier_hash);
 
-    let proof = generate_proof(
-        &IDENTITIES[0],
-        &merkle_proof,
-        external_nullifier_hash,
-        signal_hash,
-    )
-    .unwrap();
+    // Generates proof in the background
+    let merkle_proof_for_task = merkle_proof.clone();
+    let proof_task = tokio::task::spawn_blocking(move || {
+        generate_proof(
+            &IDENTITIES[0],
+            &merkle_proof_for_task,
+            external_nullifier_hash,
+            signal_hash,
+        )
+        .unwrap()
+    });
+
+    tokio::time::sleep(Duration::from_secs(15 + batch_timeout_seconds)).await;
+
+    let proof = proof_task.await.unwrap();
 
     test_verify_proof(
         &uri,

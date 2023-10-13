@@ -68,6 +68,8 @@ use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
 use self::prover_mock::ProverType;
 
+const NUM_ATTEMPTS_FOR_INCLUSION_PROOF: usize = 20;
+
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 pub async fn test_verify_proof(
@@ -223,7 +225,7 @@ pub async fn test_inclusion_proof(
     leaf: &Hash,
     expect_failure: bool,
 ) {
-    for i in 1..21 {
+    for i in 0..NUM_ATTEMPTS_FOR_INCLUSION_PROOF {
         let body = construct_inclusion_proof_body(leaf);
         info!(?uri, "Contacting");
         let req = Request::builder()
@@ -262,16 +264,23 @@ pub async fn test_inclusion_proof(
                 generate_reference_proof_json(ref_tree, leaf_index, "pending")
             );
             assert_eq!(response.status(), StatusCode::ACCEPTED);
-            info!("Got pending, waiting 1 second, iteration {}", i);
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            info!("Got pending, waiting 5 seconds, iteration {}", i);
+            tokio::time::sleep(Duration::from_secs(5)).await;
         } else if status == "mined" {
             // We don't differentiate between these 2 states in tests
             let proof_json = generate_reference_proof_json(ref_tree, leaf_index, status);
             assert_eq!(result_json, proof_json);
+
+            return;
         } else {
             panic!("Unexpected status: {}", status);
         }
     }
+
+    panic!(
+        "Failed to get an inclusion proof after {} attempts!",
+        NUM_ATTEMPTS_FOR_INCLUSION_PROOF
+    );
 }
 
 #[instrument(skip_all)]
@@ -281,37 +290,40 @@ pub async fn test_inclusion_status(
     leaf: &Hash,
     expected_status: Status,
 ) {
-    for _i in 1..21 {
-        let body = construct_inclusion_proof_body(leaf);
-        info!(?uri, "Contacting");
-        let req = Request::builder()
-            .method("POST")
-            .uri(uri.to_owned() + "/inclusionProof")
-            .header("Content-Type", "application/json")
-            .body(body)
-            .expect("Failed to create inclusion proof hyper::Body");
+    let body = construct_inclusion_proof_body(leaf);
+    info!(?uri, "Contacting");
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri.to_owned() + "/inclusionProof")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create inclusion proof hyper::Body");
 
-        let mut response = client
-            .request(req)
-            .await
-            .expect("Failed to execute request.");
+    let mut response = client
+        .request(req)
+        .await
+        .expect("Failed to execute request.");
 
-        let bytes = hyper::body::to_bytes(response.body_mut())
-            .await
-            .expect("Failed to convert response body to bytes");
-        let result = String::from_utf8(bytes.into_iter().collect())
-            .expect("Could not parse response bytes to utf-8");
-        let result_json = serde_json::from_str::<serde_json::Value>(&result)
-            .expect("Failed to parse response as json");
-        let status = result_json["status"]
-            .as_str()
-            .expect("Failed to get status");
+    let bytes = hyper::body::to_bytes(response.body_mut())
+        .await
+        .expect("Failed to convert response body to bytes");
+    let result = String::from_utf8(bytes.into_iter().collect())
+        .expect("Could not parse response bytes to utf-8");
+    println!(
+        "########################################################## \n
+        result: {:?}",
+        result
+    );
+    let result_json = serde_json::from_str::<serde_json::Value>(&result)
+        .expect("Failed to parse response as json");
+    let status = result_json["status"]
+        .as_str()
+        .expect("Failed to get status");
 
-        assert_eq!(
-            expected_status,
-            Status::from_str(status).expect("Could not convert str to Status")
-        );
-    }
+    assert_eq!(
+        expected_status,
+        Status::from_str(status).expect("Could not convert str to Status")
+    );
 }
 
 #[instrument(skip_all)]

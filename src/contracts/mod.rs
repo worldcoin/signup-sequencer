@@ -300,7 +300,6 @@ impl IdentityManager {
     pub async fn delete_identities(
         &self,
         deletion_proof: Proof,
-        batch_size: u32,
         packed_deletion_indices: Vec<u8>,
         pre_root: U256,
         post_root: U256,
@@ -311,7 +310,6 @@ impl IdentityManager {
             .abi
             .delete_identities(
                 proof_points_array,
-                batch_size,
                 packed_deletion_indices.into(),
                 pre_root,
                 post_root,

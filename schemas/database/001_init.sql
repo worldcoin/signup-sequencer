@@ -1,5 +1,5 @@
 CREATE TABLE identities (
-    leaf_index    BIGINT      NOT NULL PRIMARY KEY,
+    leaf_index    BYTEA       NOT NULL PRIMARY KEY,
     commitment    BYTEA       NOT NULL UNIQUE,
     root          BYTEA       NOT NULL UNIQUE,
     status        VARCHAR(50) NOT NULL,

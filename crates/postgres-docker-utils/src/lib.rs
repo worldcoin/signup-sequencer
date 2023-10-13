@@ -1,16 +1,21 @@
+use std::net::SocketAddr;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use anyhow::Context;
 
 pub struct DockerContainerGuard {
-    container_id:   String,
-    container_port: u16,
+    container_id: String,
+    socket_addr:  SocketAddr,
 }
 
 impl DockerContainerGuard {
-    pub fn port(&self) -> u16 {
-        self.container_port
+    pub fn socket_addr(&self) -> SocketAddr {
+        self.socket_addr
+    }
+
+    pub fn address(&self) -> String {
+        self.socket_addr.to_string()
     }
 }
 
@@ -40,13 +45,13 @@ pub async fn setup() -> anyhow::Result<DockerContainerGuard> {
 
     let exposed_port = run_cmd_to_output(&format!("docker container port {container_id} 5432"))
         .context("Fetching container exposed port")?;
-    let container_port = parse_exposed_port(&exposed_port)?;
+    let socket_addr = parse_exposed_port(&exposed_port)?;
 
     std::thread::sleep(Duration::from_secs_f32(2.0));
 
     Ok(DockerContainerGuard {
         container_id,
-        container_port,
+        socket_addr,
     })
 }
 
@@ -76,38 +81,18 @@ fn run_cmd(cmd_str: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn parse_exposed_port(s: &str) -> anyhow::Result<u16> {
+fn parse_exposed_port(s: &str) -> anyhow::Result<SocketAddr> {
     let parts: Vec<_> = s
         .split_whitespace()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .collect();
 
-    let ports: Vec<_> = parts.into_iter().filter_map(extract_port).collect();
-
-    let mut parsed_port = None;
-
-    for port in ports {
-        let port: u16 = port.parse().with_context(|| format!("Parsing `{port}`"))?;
-
-        if let Some(current) = parsed_port {
-            if current != port {
-                anyhow::bail!(
-                    "Multiple different ports exposed: `{}` and `{}`",
-                    current,
-                    port
-                );
-            }
-        } else {
-            parsed_port = Some(port);
-        }
-    }
-
-    parsed_port.context("No ports parsed")
-}
-
-fn extract_port(s: &str) -> Option<&str> {
-    s.split(':').last()
+    Ok(parts
+        .iter()
+        .map(|p| p.parse::<SocketAddr>())
+        .next()
+        .context("Missing exposed port")??)
 }
 
 #[cfg(test)]
@@ -120,14 +105,8 @@ mod tests {
     #[test_case("   0.0.0.0:55837    " => 55837 ; "ignore whitespace")]
     #[test_case("[::]:12345" => 12345 ; "works with ipv6")]
     #[test_case("0.0.0.0:12345 \n [::]:12345" => 12345 ; "works with multiple ips")]
+    #[test_case("0.0.0.0:12345 \n [::]:54321" => 12345 ; "yields first of multiple ips")]
     fn test_parse_exposed_port(s: &str) -> u16 {
-        parse_exposed_port(s).unwrap()
-    }
-
-    #[test]
-    fn different_ports_result_in_failure() {
-        const S: &str = "0.0.0.0:12345 [::]:54321";
-
-        let _err = parse_exposed_port(S).unwrap_err();
+        parse_exposed_port(s).unwrap().port()
     }
 }

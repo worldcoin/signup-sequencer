@@ -16,8 +16,8 @@ async fn test_unreduced_identity() -> anyhow::Result<()> {
     let prover_mock = &insertion_prover_map[&batch_size];
     prover_mock.set_availability(false).await;
 
-    let port = db_container.port();
-    let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
+    let db_socket_addr = db_container.address();
+    let db_url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
     let mut options = Options::try_parse_from([
         "signup-sequencer",
         "--identity-manager-address",

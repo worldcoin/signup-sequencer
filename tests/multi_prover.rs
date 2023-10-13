@@ -38,8 +38,8 @@ async fn multi_prover() -> anyhow::Result<()> {
 
     info!("Running with {prover_arg_string}");
 
-    let port = db_container.port();
-    let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
+    let db_socket_addr = db_container.address();
+    let db_url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
     let mut options = Options::try_parse_from([
         "signup-sequencer",
         "--identity-manager-address",

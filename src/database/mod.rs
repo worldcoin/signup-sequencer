@@ -369,8 +369,8 @@ impl Database {
     pub async fn get_latest_insertion_timestamp(&self) -> Result<Option<DateTime<Utc>>, Error> {
         let query = sqlx::query(
             r#"
-            SELECT insertion_timestamp 
-            FROM latest_insertion_timestamp 
+            SELECT insertion_timestamp
+            FROM latest_insertion_timestamp
             WHERE Lock = 'X';"#,
         );
 
@@ -835,8 +835,8 @@ mod test {
     // TODO: either use anyhow or eyre
     async fn setup_db() -> anyhow::Result<(Database, DockerContainerGuard)> {
         let db_container = postgres_docker_utils::setup().await?;
-        let port = db_container.port();
-        let url = format!("postgres://postgres:postgres@localhost:{port}/database");
+        let db_socket_addr = db_container.address();
+        let url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
 
         let db = Database::new(Options {
             database:                 SecretUrl::from_str(&url)?,

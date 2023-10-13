@@ -23,8 +23,8 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
 
     let prover_mock = &insertion_prover_map[&batch_size];
 
-    let port = db_container.port();
-    let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
+    let db_socket_addr = db_container.address();
+    let db_url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
 
     let mut options = Options::try_parse_from([
         "signup-sequencer",

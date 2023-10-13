@@ -36,8 +36,8 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let first_prover = &insertion_prover_map[&first_batch_size];
     let second_prover = &insertion_prover_map[&second_batch_size];
 
-    let port = db_container.port();
-    let db_url = format!("postgres://postgres:postgres@localhost:{port}/database");
+    let db_socket_addr = db_container.address();
+    let db_url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
 
     // We initially spawn the service with a single prover for batch size 3.
 

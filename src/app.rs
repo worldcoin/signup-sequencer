@@ -235,6 +235,11 @@ impl App {
         Ok(app)
     }
 
+    // Utility function to convert BYTEA to U256
+    fn bytea_to_u256(value: Vec<u8>) -> U256 {
+        U256::from_big_endian(&value)
+    }
+
     async fn initialize_tree(
         database: &Database,
         tree_depth: usize,
@@ -250,11 +255,20 @@ impl App {
         let initial_leaves = if mined_items.is_empty() {
             vec![]
         } else {
-            let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
-            let mut leaves = vec![initial_leaf_value; max_leaf + 1];
+            let max_leaf = mined_items.last().map(|item| bytea_to_u256(item.leaf_index)).unwrap();
+            
+            let index = match max_leaf.to_usize() {
+                Some(val) => val,
+                None => {
+                    // leaf_index value too large to be used as index
+                    // return Err(ServerError::InvalidLeafIndex);
+                }
+            };
+            let mut leaves = vec![initial_leaf_value; index + 1];
 
             for item in mined_items {
-                leaves[item.leaf_index] = item.element;
+                let index = bytea_to_u256(item.leaf_index).to_usize().unwrap();
+                leaves[index] = item.element;
             }
 
             leaves
@@ -355,7 +369,7 @@ impl App {
         }
 
         // Get the leaf index for the id commitment
-        let leaf_index = self
+        let leaf_index: U256 = self
             .database
             .get_identity_leaf_index(commitment)
             .await?
@@ -363,7 +377,7 @@ impl App {
             .leaf_index;
 
         // Check if the id has already been deleted
-        if self.tree_state.get_latest_tree().get_leaf(leaf_index) == Uint::ZERO {
+        if self.tree_state.get_latest_tree().get_leaf(leaf_index)? == Uint::ZERO {
             return Err(ServerError::IdentityAlreadyDeleted);
         }
 

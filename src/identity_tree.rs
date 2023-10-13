@@ -10,6 +10,7 @@ use semaphore::{lazy_merkle_tree, Field};
 use serde::Serialize;
 use thiserror::Error;
 use tracing::{info, warn};
+use ruint::U256;
 
 pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
 pub type Hash = <PoseidonHash as Hasher>::Hash;
@@ -22,7 +23,7 @@ pub struct TreeUpdate {
 
 impl TreeUpdate {
     #[must_use]
-    pub const fn new(leaf_index: usize, element: Hash) -> Self {
+    pub const fn new(leaf_index: U256, element: Hash) -> Self {
         Self {
             leaf_index,
             element,
@@ -155,7 +156,7 @@ impl AllowedTreeVersionMarker for lazy_merkle_tree::Derived {
 /// exists) and the metadata specified by the version marker.
 struct TreeVersionData<V: AllowedTreeVersionMarker> {
     tree:      PoseidonTree<V>,
-    next_leaf: usize,
+    next_leaf: U256,
     next:      Option<TreeVersion<AnyDerived>>,
     metadata:  V::Metadata,
 }
@@ -163,7 +164,7 @@ struct TreeVersionData<V: AllowedTreeVersionMarker> {
 /// Basic operations that should be available for all tree versions.
 trait BasicTreeOps {
     /// Updates the tree with the given element at the given leaf index.
-    fn update(&mut self, leaf_index: usize, element: Hash);
+    fn update(&mut self, leaf_index: U256, element: Hash);
 
     fn apply_diffs(&mut self, diffs: Vec<AppliedTreeUpdate>);
 
@@ -184,12 +185,14 @@ where
     }
 
     /// Gets the leaf value at a given index.
-    fn get_leaf(&self, leaf: usize) -> Hash {
-        self.tree.get_leaf(leaf)
+    fn get_leaf(&self, leaf: U256) -> Result<Hash, Error> {
+        // Convert U256 to usize, handling potential overflow
+        let leaf_index = leaf.to_usize().ok_or(Error::LeafIndexTooLarge)?;
+        Ok(self.tree.get_leaf(leaf_index))
     }
 
     /// Gets the proof of the given leaf index element
-    fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
+    fn get_proof(&self, leaf: U256) -> (Hash, Proof) {
         let proof = self.tree.proof(leaf);
         (self.tree.root(), proof)
     }
@@ -263,7 +266,7 @@ where
 }
 
 impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
-    fn update(&mut self, leaf_index: usize, element: Hash) {
+    fn update(&mut self, leaf_index: U256, element: Hash) {
         take_mut::take(&mut self.tree, |tree| {
             tree.update_with_mutation(leaf_index, &element)
         });
@@ -316,7 +319,7 @@ impl TreeVersionData<lazy_merkle_tree::Derived> {
 }
 
 impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Derived> {
-    fn update(&mut self, leaf_index: usize, element: Hash) {
+    fn update(&mut self, leaf_index: U256, element: Hash) {
         let updated_tree = self.tree.update(leaf_index, &element);
 
         self.tree = updated_tree.clone();
@@ -428,13 +431,13 @@ pub trait TreeVersionReadOps {
     /// Returns the current tree root.
     fn get_root(&self) -> Hash;
     /// Returns the next free leaf.
-    fn next_leaf(&self) -> usize;
+    fn next_leaf(&self) -> U256;
     /// Returns the given leaf value, the root of the tree and the proof
-    fn get_leaf_and_proof(&self, leaf: usize) -> (Hash, Hash, Proof);
+    fn get_leaf_and_proof(&self, leaf: U256) -> (Hash, Hash, Proof);
     /// Returns the merkle proof and element at the given leaf.
-    fn get_proof(&self, leaf: usize) -> (Hash, Proof);
+    fn get_proof(&self, leaf: U256) -> (Hash, Proof);
     /// Gets the leaf value at a given index.
-    fn get_leaf(&self, leaf: usize) -> Hash;
+    fn get_leaf(&self, leaf: U256) -> Hash;
 }
 
 impl<V: Version> TreeVersionReadOps for TreeVersion<V>
@@ -445,11 +448,11 @@ where
         self.get_data().get_root()
     }
 
-    fn next_leaf(&self) -> usize {
+    fn next_leaf(&self) -> U256 {
         self.get_data().next_leaf
     }
 
-    fn get_leaf_and_proof(&self, leaf: usize) -> (Hash, Hash, Proof) {
+    fn get_leaf_and_proof(&self, leaf: U256) -> (Hash, Hash, Proof) {
         let tree = self.get_data();
 
         let (root, proof) = tree.get_proof(leaf);
@@ -458,12 +461,12 @@ where
         (leaf, root, proof)
     }
 
-    fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
+    fn get_proof(&self, leaf: U256) -> (Hash, Proof) {
         let tree = self.get_data();
         tree.get_proof(leaf)
     }
 
-    fn get_leaf(&self, leaf: usize) -> Hash {
+    fn get_leaf(&self, leaf: U256) -> Hash {
         let tree = self.get_data();
         tree.get_leaf(leaf)
     }

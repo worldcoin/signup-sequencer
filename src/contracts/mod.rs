@@ -323,7 +323,7 @@ impl IdentityManager {
     }
 
     #[instrument(level = "debug", skip(self))]
-    pub async fn mine_identities(&self, transaction_id: TransactionId) -> anyhow::Result<bool> {
+    pub async fn mine_transaction(&self, transaction_id: TransactionId) -> anyhow::Result<bool> {
         let result = self.ethereum.mine_transaction(transaction_id).await?;
 
         Ok(result)
@@ -345,7 +345,7 @@ impl IdentityManager {
         for pending_identity_tx in pending_identities {
             // Ignores the result of each transaction - we only care about a clean slate in
             // terms of pending transactions
-            drop(self.mine_identities(pending_identity_tx).await);
+            drop(self.mine_transaction(pending_identity_tx).await);
         }
 
         Ok(())

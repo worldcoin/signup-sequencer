@@ -7,12 +7,13 @@ use ethers::types::U256;
 use ruint::Uint;
 use semaphore::merkle_tree::Proof;
 use semaphore::poseidon_tree::Branch;
-use tokio::sync::Notify;
+use tokio::sync::{mpsc, Notify};
 use tokio::{select, time};
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
+use crate::ethereum::write::TransactionId;
 use crate::identity_tree::{
     AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
@@ -30,6 +31,7 @@ pub struct ProcessIdentities {
     identity_manager:          SharedIdentityManager,
     batching_tree:             TreeVersion<Intermediate>,
     batch_insert_timeout_secs: u64,
+    monitored_txs_sender:      mpsc::Sender<TransactionId>,
     wake_up_notify:            Arc<Notify>,
 }
 
@@ -39,6 +41,7 @@ impl ProcessIdentities {
         identity_manager: SharedIdentityManager,
         batching_tree: TreeVersion<Intermediate>,
         batch_insert_timeout_secs: u64,
+        monitored_txs_sender: mpsc::Sender<TransactionId>,
         wake_up_notify: Arc<Notify>,
     ) -> Arc<Self> {
         Arc::new(Self {
@@ -46,6 +49,7 @@ impl ProcessIdentities {
             identity_manager,
             batching_tree,
             batch_insert_timeout_secs,
+            monitored_txs_sender,
             wake_up_notify,
         })
     }
@@ -55,6 +59,7 @@ impl ProcessIdentities {
             &self.database,
             &self.identity_manager,
             &self.batching_tree,
+            &self.monitored_txs_sender,
             &self.wake_up_notify,
             self.batch_insert_timeout_secs,
         )
@@ -66,6 +71,7 @@ async fn process_identities(
     database: &Database,
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
+    monitored_txs_sender: &mpsc::Sender<TransactionId>,
     wake_up_notify: &Notify,
     timeout_secs: u64,
 ) -> AnyhowResult<()> {
@@ -121,6 +127,7 @@ async fn process_identities(
                     database,
                     identity_manager,
                     batching_tree,
+                    monitored_txs_sender,
                     &updates,
                 ).await?;
 
@@ -180,6 +187,7 @@ async fn process_identities(
                     database,
                     identity_manager,
                     batching_tree,
+                    monitored_txs_sender,
                     &updates,
                 ).await?;
 
@@ -201,10 +209,11 @@ async fn commit_identities(
     database: &Database,
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
+    monitored_txs_sender: &mpsc::Sender<TransactionId>,
     updates: &[AppliedTreeUpdate],
 ) -> AnyhowResult<()> {
     // If the update is an insertion
-    if updates
+    let tx_id = if updates
         .first()
         .context("Updates should be > 1")?
         .update
@@ -221,7 +230,7 @@ async fn commit_identities(
             prover.batch_size()
         );
 
-        insert_identities(database, identity_manager, batching_tree, updates, prover).await?;
+        insert_identities(database, identity_manager, batching_tree, updates, prover).await?
     } else {
         let prover = identity_manager
             .get_suitable_deletion_prover(updates.len())
@@ -233,7 +242,11 @@ async fn commit_identities(
             prover.batch_size()
         );
 
-        delete_identities(database, identity_manager, batching_tree, updates, prover).await?;
+        delete_identities(database, identity_manager, batching_tree, updates, prover).await?
+    };
+
+    if let Some(tx_id) = tx_id {
+        monitored_txs_sender.send(tx_id).await?;
     }
 
     Ok(())
@@ -246,12 +259,12 @@ pub async fn insert_identities(
     batching_tree: &TreeVersion<Intermediate>,
     updates: &[AppliedTreeUpdate],
     prover: ReadOnlyProver<'_, Prover>,
-) -> AnyhowResult<()> {
+) -> AnyhowResult<Option<TransactionId>> {
     TaskMonitor::log_identities_queues(database).await?;
 
     if updates.is_empty() {
         warn!("Identity commit requested with zero identities. Continuing.");
-        return Ok(());
+        return Ok(None);
     }
 
     debug!("Starting identity commit for {} identities.", updates.len());
@@ -422,7 +435,7 @@ pub async fn insert_identities(
 
     TaskMonitor::log_batch_size(updates.len());
 
-    Ok(())
+    Ok(Some(transaction_id))
 }
 
 pub async fn delete_identities(
@@ -431,12 +444,12 @@ pub async fn delete_identities(
     batching_tree: &TreeVersion<Intermediate>,
     updates: &[AppliedTreeUpdate],
     prover: ReadOnlyProver<'_, Prover>,
-) -> AnyhowResult<()> {
+) -> AnyhowResult<Option<TransactionId>> {
     TaskMonitor::log_identities_queues(database).await?;
 
     if updates.is_empty() {
         warn!("Identity commit requested with zero identities. Continuing.");
-        return Ok(());
+        return Ok(None);
     }
 
     debug!("Starting identity commit for {} identities.", updates.len());
@@ -569,5 +582,5 @@ pub async fn delete_identities(
 
     TaskMonitor::log_batch_size(updates.len());
 
-    Ok(())
+    Ok(Some(transaction_id))
 }

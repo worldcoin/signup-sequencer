@@ -35,7 +35,7 @@ async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
     let prover_mock = &prover_map[&batch_size];
 
     let db_socket_addr = db_container.address();
-    let db_url = format!("postgres://postgres:postgres@localhost:{db_socket_addr}/database");
+    let db_url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
 
     // temp dir will be deleted on drop call
     let temp_dir = tempfile::tempdir()?;

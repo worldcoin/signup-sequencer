@@ -9,8 +9,6 @@ use std::collections::HashSet;
 use anyhow::{anyhow, Context, Error as ErrReport};
 use chrono::{DateTime, Utc};
 use clap::Parser;
-use ruint::aliases::U256;
-use semaphore::Field;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
 use sqlx::{Executor, Pool, Postgres, Row};
@@ -336,7 +334,7 @@ impl Database {
     pub async fn get_latest_root_by_status(&self, status: Status) -> Result<Option<Hash>, Error> {
         let query = sqlx::query(
             r#"
-              SELECT root from identities where status = $1 ORDER BY leaf_index DESC LIMIT 1  
+              SELECT root FROM identities WHERE status = $1 ORDER BY id DESC LIMIT 1  
             "#,
         )
         .bind(<&str>::from(status));

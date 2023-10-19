@@ -331,6 +331,19 @@ impl Database {
             .collect::<Vec<_>>())
     }
 
+    pub async fn get_latest_root_by_status(&self, status: Status) -> Result<Option<Hash>, Error> {
+        let query = sqlx::query(
+            r#"
+              SELECT root FROM identities WHERE status = $1 ORDER BY id DESC LIMIT 1  
+            "#,
+        )
+        .bind(<&str>::from(status));
+
+        let row = self.pool.fetch_optional(query).await?;
+
+        Ok(row.map(|r| r.get::<Hash, _>(0)))
+    }
+
     pub async fn get_root_state(&self, root: &Hash) -> Result<Option<RootItem>, Error> {
         // This tries really hard to do everything in one query to prevent race
         // conditions.

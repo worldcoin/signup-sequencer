@@ -47,6 +47,12 @@ async fn recover_identities() -> anyhow::Result<()> {
     let db_socket_addr = db_container.address();
     let db_url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
 
+    let temp_dir = tempfile::tempdir()?;
+    info!(
+        "temp dir created at: {:?}",
+        temp_dir.path().join("testfile")
+    );
+
     let mut options = Options::try_parse_from([
         "signup-sequencer",
         "--identity-manager-address",
@@ -81,6 +87,8 @@ async fn recover_identities() -> anyhow::Result<()> {
         &micro_oz.endpoint(),
         "--oz-address",
         &format!("{:?}", micro_oz.address()),
+        "--dense-tree-mmap-file",
+        temp_dir.path().join("testfile").to_str().unwrap(),
     ])
     .context("Failed to create options")?;
 

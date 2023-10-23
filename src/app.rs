@@ -535,12 +535,14 @@ impl App {
         Ok(())
     }
 
-    /// Queues a deletion from the merkle tree.
+    /// Queues a recovery of an identity.
+    ///
+    /// i.e. deletion and reinsertion after a set period of time.
     ///
     /// # Errors
     ///
-    /// Will return `Err` if identity is already queued, not in the tree, or the
-    /// queue malfunctions.
+    /// Will return `Err` if identity is already queued for deletion, not in the
+    /// tree, or the queue malfunctions.
     #[instrument(level = "debug", skip(self))]
     pub async fn recover_identity(
         &self,

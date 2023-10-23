@@ -14,7 +14,7 @@ mod status;
 pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
-pub use self::status::{ApiStatus, PendingStatus, Status, UnknownStatus};
+pub use self::status::{ApiStatus, Status, UnknownStatus, UnprocessedStatus};
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TreeUpdate {

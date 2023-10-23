@@ -16,8 +16,8 @@ use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::{self, Database};
 use crate::ethereum::{self, Ethereum};
 use crate::identity_tree::{
-    ApiStatus, CanonicalTreeBuilder, Hash, InclusionProof, PendingStatus, RootItem, Status,
-    TreeState, TreeUpdate, TreeVersionReadOps,
+    ApiStatus, CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState, TreeUpdate,
+    TreeVersionReadOps, UnprocessedStatus,
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::{self, ProverConfiguration, ProverType, Provers};
@@ -53,10 +53,9 @@ impl From<InclusionProof> for InclusionProofResponse {
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
         match self.0.status {
-            ApiStatus::Unprocessed(PendingStatus::Failed) => StatusCode::BAD_REQUEST,
-            ApiStatus::Unprocessed(PendingStatus::New) | ApiStatus::Processed(Status::Pending) => {
-                StatusCode::ACCEPTED
-            }
+            ApiStatus::Unprocessed(UnprocessedStatus::Failed) => StatusCode::BAD_REQUEST,
+            ApiStatus::Unprocessed(UnprocessedStatus::New)
+            | ApiStatus::Processed(Status::Pending) => StatusCode::ACCEPTED,
             ApiStatus::Processed(Status::Mined) | ApiStatus::Processed(Status::Processed) => {
                 StatusCode::OK
             }

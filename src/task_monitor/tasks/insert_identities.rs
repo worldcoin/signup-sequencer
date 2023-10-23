@@ -9,7 +9,7 @@ use tracing::instrument;
 
 use crate::database::types::UnprocessedCommitment;
 use crate::database::Database;
-use crate::identity_tree::{Hash, Latest, PendingStatus, TreeVersion, TreeVersionReadOps};
+use crate::identity_tree::{Hash, Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
 
 pub struct InsertIdentities {
     database:       Arc<Database>,
@@ -43,7 +43,7 @@ async fn insert_identities_loop(
     loop {
         // get commits from database
         let unprocessed = database
-            .get_eligible_unprocessed_commitments(PendingStatus::New)
+            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
             .await?;
         if unprocessed.is_empty() {
             sleep(Duration::from_secs(5)).await;

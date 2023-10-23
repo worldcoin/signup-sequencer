@@ -27,7 +27,7 @@ pub enum Status {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
-pub enum PendingStatus {
+pub enum UnprocessedStatus {
     /// Unprocessed identity failed to be inserted into the tree for some reason
     ///
     /// Usually accompanied by an appropriate error message
@@ -43,7 +43,7 @@ pub enum PendingStatus {
 #[serde(rename_all = "camelCase")]
 #[serde(untagged)]
 pub enum ApiStatus {
-    Unprocessed(PendingStatus),
+    Unprocessed(UnprocessedStatus),
     Processed(Status),
 }
 
@@ -78,7 +78,7 @@ impl FromStr for ApiStatus {
     type Err = UnknownStatus;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Ok(s) = PendingStatus::from_str(s) {
+        if let Ok(s) = UnprocessedStatus::from_str(s) {
             Ok(Self::Unprocessed(s))
         } else if let Ok(s) = Status::from_str(s) {
             Ok(Self::Processed(s))
@@ -88,7 +88,7 @@ impl FromStr for ApiStatus {
     }
 }
 
-impl FromStr for PendingStatus {
+impl FromStr for UnprocessedStatus {
     type Err = UnknownStatus;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -100,17 +100,17 @@ impl FromStr for PendingStatus {
     }
 }
 
-impl From<PendingStatus> for &str {
-    fn from(scope: PendingStatus) -> Self {
+impl From<UnprocessedStatus> for &str {
+    fn from(scope: UnprocessedStatus) -> Self {
         match scope {
-            PendingStatus::New => "new",
-            PendingStatus::Failed => "failed",
+            UnprocessedStatus::New => "new",
+            UnprocessedStatus::Failed => "failed",
         }
     }
 }
 
-impl From<PendingStatus> for ApiStatus {
-    fn from(status: PendingStatus) -> Self {
+impl From<UnprocessedStatus> for ApiStatus {
+    fn from(status: UnprocessedStatus) -> Self {
         Self::Unprocessed(status)
     }
 }
@@ -129,8 +129,8 @@ mod tests {
 
     #[test_case(ApiStatus::Processed(Status::Pending) => "pending")]
     #[test_case(ApiStatus::Processed(Status::Mined) => "mined")]
-    #[test_case(ApiStatus::Unprocessed(PendingStatus::New) => "new")]
-    #[test_case(ApiStatus::Unprocessed(PendingStatus::Failed) => "failed")]
+    #[test_case(ApiStatus::Unprocessed(UnprocessedStatus::New) => "new")]
+    #[test_case(ApiStatus::Unprocessed(UnprocessedStatus::Failed) => "failed")]
     fn serialize_status(api_status: ApiStatus) -> &'static str {
         let s = serde_json::to_string(&api_status).unwrap();
 
@@ -142,8 +142,8 @@ mod tests {
 
     #[test_case("pending" => ApiStatus::Processed(Status::Pending))]
     #[test_case("mined" => ApiStatus::Processed(Status::Mined))]
-    #[test_case("new" => ApiStatus::Unprocessed(PendingStatus::New))]
-    #[test_case("failed" => ApiStatus::Unprocessed(PendingStatus::Failed))]
+    #[test_case("new" => ApiStatus::Unprocessed(UnprocessedStatus::New))]
+    #[test_case("failed" => ApiStatus::Unprocessed(UnprocessedStatus::Failed))]
     fn deserialize_status(s: &str) -> ApiStatus {
         // Wrapped because JSON expected `"something"` and not `something`
         let wrapped = format!("\"{s}\"");

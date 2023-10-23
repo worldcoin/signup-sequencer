@@ -1,7 +1,7 @@
 mod common;
 
 use common::prelude::*;
-use signup_sequencer::identity_tree::{PendingStatus, Status};
+use signup_sequencer::identity_tree::{Status, UnprocessedStatus};
 
 use crate::common::{test_inclusion_status, test_recover_identity};
 const SUPPORTED_DEPTH: usize = 18;
@@ -162,7 +162,7 @@ async fn recover_identities() -> anyhow::Result<()> {
             &uri,
             &client,
             &identities_ref[recovery_leaf_index],
-            PendingStatus::New,
+            UnprocessedStatus::New,
         )
         .await;
     }

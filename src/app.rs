@@ -16,8 +16,8 @@ use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::{self, Database};
 use crate::ethereum::{self, Ethereum};
 use crate::identity_tree::{
-    CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState, TreeUpdate,
-    TreeVersionReadOps,
+    ApiStatus, CanonicalTreeBuilder, Hash, InclusionProof, PendingStatus, RootItem, Status,
+    TreeState, TreeUpdate, TreeVersionReadOps,
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::{self, ProverConfiguration, ProverType, Provers};
@@ -34,8 +34,8 @@ pub struct InclusionProofResponse(InclusionProof);
 impl InclusionProofResponse {
     #[must_use]
     pub fn hide_processed_status(mut self) -> Self {
-        self.0.status = if self.0.status == Status::Processed {
-            Status::Pending
+        self.0.status = if self.0.status == ApiStatus::Processed(Status::Processed) {
+            ApiStatus::Processed(Status::Pending)
         } else {
             self.0.status
         };
@@ -53,9 +53,13 @@ impl From<InclusionProof> for InclusionProofResponse {
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
         match self.0.status {
-            Status::Failed => StatusCode::BAD_REQUEST,
-            Status::New | Status::Pending => StatusCode::ACCEPTED,
-            Status::Mined | Status::Processed => StatusCode::OK,
+            ApiStatus::Unprocessed(PendingStatus::Failed) => StatusCode::BAD_REQUEST,
+            ApiStatus::Unprocessed(PendingStatus::New) | ApiStatus::Processed(Status::Pending) => {
+                StatusCode::ACCEPTED
+            }
+            ApiStatus::Processed(Status::Mined) | ApiStatus::Processed(Status::Processed) => {
+                StatusCode::OK
+            }
         }
     }
 }
@@ -672,9 +676,9 @@ impl App {
             .await?
         {
             return Ok(InclusionProofResponse(InclusionProof {
-                status,
-                root: None,
-                proof: None,
+                status:  status.into(),
+                root:    None,
+                proof:   None,
                 message: Some(error_message),
             }));
         }

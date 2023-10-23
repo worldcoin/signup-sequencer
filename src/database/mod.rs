@@ -16,7 +16,7 @@ use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
 use self::types::{DeletionEntry, LatestDeletionEntry, RecoveryEntry};
-use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate};
+use crate::identity_tree::{Hash, PendingStatus, RootItem, Status, TreeItem, TreeUpdate};
 
 pub mod types;
 use crate::prover::{ProverConfiguration, ProverType, Provers};
@@ -334,7 +334,7 @@ impl Database {
     pub async fn get_latest_root_by_status(&self, status: Status) -> Result<Option<Hash>, Error> {
         let query = sqlx::query(
             r#"
-              SELECT root FROM identities WHERE status = $1 ORDER BY id DESC LIMIT 1  
+              SELECT root FROM identities WHERE status = $1 ORDER BY id DESC LIMIT 1
             "#,
         )
         .bind(<&str>::from(status));
@@ -522,7 +522,7 @@ impl Database {
             "#,
         )
         .bind(identity)
-        .bind(<&str>::from(Status::New))
+        .bind(<&str>::from(PendingStatus::New))
         .bind(eligibility_timestamp);
 
         self.pool.execute(query).await?;
@@ -686,7 +686,7 @@ impl Database {
 
     pub async fn get_eligible_unprocessed_commitments(
         &self,
-        status: Status,
+        status: PendingStatus,
     ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
         let query = sqlx::query(
             r#"
@@ -716,7 +716,7 @@ impl Database {
     pub async fn get_unprocessed_commit_status(
         &self,
         commitment: &Hash,
-    ) -> Result<Option<(Status, String)>, Error> {
+    ) -> Result<Option<(PendingStatus, String)>, Error> {
         let query = sqlx::query(
             r#"
                 SELECT status, error_message FROM unprocessed_identities WHERE commitment = $1
@@ -760,7 +760,7 @@ impl Database {
             "#,
         )
         .bind(message)
-        .bind(<&str>::from(Status::Failed))
+        .bind(<&str>::from(PendingStatus::Failed))
         .bind(commitment);
 
         self.pool.execute(query).await?;
@@ -820,7 +820,7 @@ mod test {
     use semaphore::Field;
 
     use super::{Database, Options};
-    use crate::identity_tree::{Hash, Status};
+    use crate::identity_tree::{Hash, PendingStatus, Status};
     use crate::prover::{ProverConfiguration, ProverType};
     use crate::secret::SecretUrl;
 
@@ -915,10 +915,10 @@ mod test {
             .get_unprocessed_commit_status(&commit_hash)
             .await?
             .expect("expected commitment status");
-        assert_eq!(commit.0, Status::New);
+        assert_eq!(commit.0, PendingStatus::New);
 
         let identity_count = db
-            .get_eligible_unprocessed_commitments(Status::New)
+            .get_eligible_unprocessed_commitments(PendingStatus::New)
             .await?
             .len();
 
@@ -1091,7 +1091,9 @@ mod test {
         db.insert_new_identity(commitment_1, eligibility_timestamp_1)
             .await?;
 
-        let unprocessed_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
+        let unprocessed_commitments = db
+            .get_eligible_unprocessed_commitments(PendingStatus::New)
+            .await?;
 
         assert_eq!(unprocessed_commitments.len(), 1);
         assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
@@ -1122,7 +1124,9 @@ mod test {
         db.insert_new_identity(commitment_1, eligibility_timestamp_1)
             .await?;
 
-        let unprocessed_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
+        let unprocessed_commitments = db
+            .get_eligible_unprocessed_commitments(PendingStatus::New)
+            .await?;
 
         // Assert unprocessed commitments against expected values
         assert_eq!(unprocessed_commitments.len(), 1);
@@ -1163,10 +1167,14 @@ mod test {
         db.insert_new_identity(commit_hash, eligibility_timestamp)
             .await?;
 
-        let commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
+        let commitments = db
+            .get_eligible_unprocessed_commitments(PendingStatus::New)
+            .await?;
         assert_eq!(commitments.len(), 1);
 
-        let eligible_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
+        let eligible_commitments = db
+            .get_eligible_unprocessed_commitments(PendingStatus::New)
+            .await?;
         assert_eq!(eligible_commitments.len(), 1);
 
         // Set eligibility to Utc::now() + 7 days and check db entries
@@ -1179,7 +1187,9 @@ mod test {
         db.insert_new_identity(commit_hash, eligibility_timestamp)
             .await?;
 
-        let eligible_commitments = db.get_eligible_unprocessed_commitments(Status::New).await?;
+        let eligible_commitments = db
+            .get_eligible_unprocessed_commitments(PendingStatus::New)
+            .await?;
         assert_eq!(eligible_commitments.len(), 1);
 
         Ok(())

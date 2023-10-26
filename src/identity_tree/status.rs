@@ -9,11 +9,11 @@ use thiserror::Error;
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
-    /// The root is included in sequencer's in-memory tree, but is not yet
+    /// Root is included in sequencer's in-memory tree, but is not yet
     /// mined.
     Pending,
 
-    /// The root is mined on mainnet but is still waiting for confirmation on
+    /// Root is mined on mainnet but is still waiting for confirmation on
     /// relayed chains
     ///
     /// i.e. the root is included in a mined block on mainnet,

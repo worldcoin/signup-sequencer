@@ -288,7 +288,7 @@ pub async fn test_inclusion_status(
     uri: &str,
     client: &Client<HttpConnector>,
     leaf: &Hash,
-    expected_status: Status,
+    expected_status: impl Into<Status>,
 ) {
     let body = construct_inclusion_proof_body(leaf);
     info!(?uri, "Contacting");
@@ -319,6 +319,8 @@ pub async fn test_inclusion_status(
     let status = result_json["status"]
         .as_str()
         .expect("Failed to get status");
+
+    let expected_status = expected_status.into();
 
     assert_eq!(
         expected_status,

@@ -1,5 +1,4 @@
 use std::cmp::min;
-use std::str::FromStr;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use chrono::Utc;
@@ -8,11 +7,14 @@ use semaphore::merkle_tree::Hasher;
 use semaphore::poseidon_tree::{PoseidonHash, Proof};
 use semaphore::{lazy_merkle_tree, Field};
 use serde::Serialize;
-use thiserror::Error;
 use tracing::{info, warn};
+
+mod status;
 
 pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
 pub type Hash = <PoseidonHash as Hasher>::Hash;
+
+pub use self::status::{ProcessedStatus, Status, UnknownStatus, UnprocessedStatus};
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TreeUpdate {
@@ -32,76 +34,15 @@ impl TreeUpdate {
 
 #[derive(Debug)]
 pub struct TreeItem {
-    pub status:     Status,
+    pub status:     ProcessedStatus,
     pub leaf_index: usize,
-}
-
-// TODO: Failed and New seem to only be used for "unprocessed" identities
-//       we should create a separate enum with just those 2 variants
-
-/// The status pertains to the status of the root.
-/// But it can also be used interchangeably with the status of an identity
-/// as all identity commitments has an associated root.
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "camelCase")]
-pub enum Status {
-    /// An unprocessed identity that failed to be included`
-    Failed,
-    /// Root is unprocessed - i.e. not included in sequencer's
-    /// in-memory tree.
-    New,
-    /// Root is included in sequencer's in-memory tree but not yet mined.
-    /// The
-    Pending,
-    /// Root is mined on mainnet but is still waiting for confirmation on
-    /// relayed chains
-    ///
-    /// i.e. the root is included in a mined block on mainnet,
-    /// but the state has not yet been bridged to Optimism and Polygon
-    ///
-    /// NOTE: If the sequencer is not configured with any secondary chains this
-    /// status       should immediately become Finalized
-    Processed,
-    /// Root is mined and relayed to secondary chains
-    Mined,
-}
-
-#[derive(Debug, Error)]
-#[error("unknown status")]
-pub struct UnknownStatus;
-
-impl FromStr for Status {
-    type Err = UnknownStatus;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "new" => Ok(Self::New),
-            "failed" => Ok(Self::Failed),
-            "pending" => Ok(Self::Pending),
-            "mined" => Ok(Self::Mined),
-            "processed" => Ok(Self::Processed),
-            _ => Err(UnknownStatus),
-        }
-    }
-}
-
-impl From<Status> for &str {
-    fn from(scope: Status) -> Self {
-        match scope {
-            Status::New => "new",
-            Status::Failed => "failed",
-            Status::Pending => "pending",
-            Status::Mined => "mined",
-            Status::Processed => "processed",
-        }
-    }
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RootItem {
     pub root:                Field,
-    pub status:              Status,
+    pub status:              ProcessedStatus,
     pub pending_valid_as_of: chrono::DateTime<Utc>,
     pub mined_valid_as_of:   Option<chrono::DateTime<Utc>>,
 }
@@ -601,15 +542,13 @@ impl TreeState {
     #[must_use]
     pub fn get_proof_for(&self, item: &TreeItem) -> (Field, InclusionProof) {
         let (leaf, root, proof) = match item.status {
-            Status::Pending | Status::New | Status::Failed => {
-                self.latest.get_leaf_and_proof(item.leaf_index)
-            }
-            Status::Processed => self.processed.get_leaf_and_proof(item.leaf_index),
-            Status::Mined => self.mined.get_leaf_and_proof(item.leaf_index),
+            ProcessedStatus::Pending => self.latest.get_leaf_and_proof(item.leaf_index),
+            ProcessedStatus::Processed => self.processed.get_leaf_and_proof(item.leaf_index),
+            ProcessedStatus::Mined => self.mined.get_leaf_and_proof(item.leaf_index),
         };
 
         let proof = InclusionProof {
-            status:  item.status,
+            status:  item.status.into(),
             root:    Some(root),
             proof:   Some(proof),
             message: None,

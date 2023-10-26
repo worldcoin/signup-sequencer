@@ -5,22 +5,24 @@ use thiserror::Error;
 
 /// The status pertains to the status of the root.
 /// But it can also be used interchangeably with the status of an identity
-/// as all identity commitments has an associated root.
+/// as all identity commitments have an associated root.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
-    /// Root is included in sequencer's in-memory tree but not yet mined.
-    /// The
+    /// The root is included in sequencer's in-memory tree, but is not yet
+    /// mined.
     Pending,
-    /// Root is mined on mainnet but is still waiting for confirmation on
+
+    /// The root is mined on mainnet but is still waiting for confirmation on
     /// relayed chains
     ///
     /// i.e. the root is included in a mined block on mainnet,
     /// but the state has not yet been bridged to Optimism and Polygon
     ///
     /// NOTE: If the sequencer is not configured with any secondary chains this
-    /// status       should immediately become Finalized
+    /// status should immediately become Finalized
     Processed,
+
     /// Root is mined and relayed to secondary chains
     Mined,
 }
@@ -32,6 +34,7 @@ pub enum UnprocessedStatus {
     ///
     /// Usually accompanied by an appropriate error message
     Failed,
+
     /// Root is unprocessed - i.e. not included in sequencer's
     /// in-memory tree.
     New,

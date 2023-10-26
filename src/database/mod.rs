@@ -16,7 +16,9 @@ use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
 use self::types::{DeletionEntry, LatestDeletionEntry, RecoveryEntry};
-use crate::identity_tree::{Hash, RootItem, Status, TreeItem, TreeUpdate, UnprocessedStatus};
+use crate::identity_tree::{
+    Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate, UnprocessedStatus,
+};
 
 pub mod types;
 use crate::prover::{ProverConfiguration, ProverType, Provers};
@@ -149,7 +151,7 @@ impl Database {
         .bind(leaf_index as i64)
         .bind(identity)
         .bind(root)
-        .bind(<&str>::from(Status::Pending));
+        .bind(<&str>::from(ProcessedStatus::Pending));
 
         tx.execute(insert_pending_identity_query).await?;
 
@@ -181,9 +183,9 @@ impl Database {
     /// Also marks following roots as pending
     #[instrument(skip(self), level = "debug")]
     pub async fn mark_root_as_processed(&self, root: &Hash) -> Result<(), Error> {
-        let mined_status = Status::Mined;
-        let processed_status = Status::Processed;
-        let pending_status = Status::Pending;
+        let mined_status = ProcessedStatus::Mined;
+        let processed_status = ProcessedStatus::Processed;
+        let pending_status = ProcessedStatus::Pending;
 
         let mut tx = self.pool.begin().await?;
 
@@ -230,7 +232,7 @@ impl Database {
     /// finalized
     #[instrument(skip(self), level = "debug")]
     pub async fn mark_root_as_mined(&self, root: &Hash) -> Result<(), Error> {
-        let mined_status = Status::Mined;
+        let mined_status = ProcessedStatus::Mined;
 
         let mut tx = self.pool.begin().await?;
 
@@ -308,7 +310,7 @@ impl Database {
 
     pub async fn get_commitments_by_status(
         &self,
-        status: Status,
+        status: ProcessedStatus,
     ) -> Result<Vec<TreeUpdate>, Error> {
         let query = sqlx::query(
             r#"
@@ -331,7 +333,10 @@ impl Database {
             .collect::<Vec<_>>())
     }
 
-    pub async fn get_latest_root_by_status(&self, status: Status) -> Result<Option<Hash>, Error> {
+    pub async fn get_latest_root_by_status(
+        &self,
+        status: ProcessedStatus,
+    ) -> Result<Option<Hash>, Error> {
         let query = sqlx::query(
             r#"
               SELECT root FROM identities WHERE status = $1 ORDER BY id DESC LIMIT 1
@@ -411,7 +416,7 @@ impl Database {
             WHERE status = $1
             "#,
         )
-        .bind(<&str>::from(Status::Pending));
+        .bind(<&str>::from(ProcessedStatus::Pending));
         let result = self.pool.fetch_one(query).await?;
         Ok(result.get::<i64, _>(0) as i32)
     }
@@ -820,7 +825,7 @@ mod test {
     use semaphore::Field;
 
     use super::{Database, Options};
-    use crate::identity_tree::{Hash, Status, UnprocessedStatus};
+    use crate::identity_tree::{Hash, ProcessedStatus, UnprocessedStatus};
     use crate::prover::{ProverConfiguration, ProverType};
     use crate::secret::SecretUrl;
 
@@ -881,7 +886,7 @@ mod test {
     async fn assert_roots_are(
         db: &Database,
         roots: impl IntoIterator<Item = &Field>,
-        expected_state: Status,
+        expected_state: ProcessedStatus,
     ) -> anyhow::Result<()> {
         for root in roots {
             let root = db
@@ -1285,7 +1290,7 @@ mod test {
                 .await?
                 .context("Fetching root state")?;
 
-            assert_eq!(root.status, Status::Processed);
+            assert_eq!(root.status, ProcessedStatus::Processed);
         }
 
         for root in roots.iter().skip(3).take(2) {
@@ -1294,7 +1299,7 @@ mod test {
                 .await?
                 .context("Fetching root state")?;
 
-            assert_eq!(root.status, Status::Pending);
+            assert_eq!(root.status, ProcessedStatus::Pending);
         }
 
         let pending_identities = db.count_pending_identities().await?;
@@ -1327,7 +1332,7 @@ mod test {
                 .await?
                 .context("Fetching root state")?;
 
-            assert_eq!(root.status, Status::Mined);
+            assert_eq!(root.status, ProcessedStatus::Mined);
         }
 
         for root in roots.iter().skip(3).take(2) {
@@ -1336,7 +1341,7 @@ mod test {
                 .await?
                 .context("Fetching root state")?;
 
-            assert_eq!(root.status, Status::Pending);
+            assert_eq!(root.status, ProcessedStatus::Pending);
         }
 
         let pending_identities = db.count_pending_identities().await?;
@@ -1366,27 +1371,27 @@ mod test {
         println!("Marking roots up to 2nd as processed");
         db.mark_root_as_processed(&roots[2]).await?;
 
-        assert_roots_are(&db, &roots[..3], Status::Processed).await?;
-        assert_roots_are(&db, &roots[3..], Status::Pending).await?;
+        assert_roots_are(&db, &roots[..3], ProcessedStatus::Processed).await?;
+        assert_roots_are(&db, &roots[3..], ProcessedStatus::Pending).await?;
 
         println!("Marking roots up to 1st as mined");
         db.mark_root_as_mined(&roots[1]).await?;
 
-        assert_roots_are(&db, &roots[..2], Status::Mined).await?;
-        assert_roots_are(&db, &[roots[2]], Status::Processed).await?;
-        assert_roots_are(&db, &roots[3..], Status::Pending).await?;
+        assert_roots_are(&db, &roots[..2], ProcessedStatus::Mined).await?;
+        assert_roots_are(&db, &[roots[2]], ProcessedStatus::Processed).await?;
+        assert_roots_are(&db, &roots[3..], ProcessedStatus::Pending).await?;
 
         println!("Marking roots up to 4th as processed");
         db.mark_root_as_processed(&roots[4]).await?;
 
-        assert_roots_are(&db, &roots[..2], Status::Mined).await?;
-        assert_roots_are(&db, &roots[2..5], Status::Processed).await?;
-        assert_roots_are(&db, &roots[5..], Status::Pending).await?;
+        assert_roots_are(&db, &roots[..2], ProcessedStatus::Mined).await?;
+        assert_roots_are(&db, &roots[2..5], ProcessedStatus::Processed).await?;
+        assert_roots_are(&db, &roots[5..], ProcessedStatus::Pending).await?;
 
         println!("Marking all roots as mined");
         db.mark_root_as_mined(&roots[num_identities - 1]).await?;
 
-        assert_roots_are(&db, &roots, Status::Mined).await?;
+        assert_roots_are(&db, &roots, ProcessedStatus::Mined).await?;
 
         Ok(())
     }
@@ -1416,7 +1421,7 @@ mod test {
                 .await?
                 .context("Fetching root state")?;
 
-            assert_eq!(root.status, Status::Processed);
+            assert_eq!(root.status, ProcessedStatus::Processed);
         }
 
         for root in roots.iter().skip(2).take(3) {
@@ -1425,7 +1430,7 @@ mod test {
                 .await?
                 .context("Fetching root state")?;
 
-            assert_eq!(root.status, Status::Pending);
+            assert_eq!(root.status, ProcessedStatus::Pending);
         }
 
         let pending_identities = db.count_pending_identities().await?;
@@ -1507,8 +1512,12 @@ mod test {
 
         db.mark_root_as_processed(&roots[2]).await?;
 
-        let mined_tree_updates = db.get_commitments_by_status(Status::Processed).await?;
-        let pending_tree_updates = db.get_commitments_by_status(Status::Pending).await?;
+        let mined_tree_updates = db
+            .get_commitments_by_status(ProcessedStatus::Processed)
+            .await?;
+        let pending_tree_updates = db
+            .get_commitments_by_status(ProcessedStatus::Pending)
+            .await?;
 
         assert_eq!(mined_tree_updates.len(), 3);
         for i in 0..3 {
@@ -1545,7 +1554,9 @@ mod test {
         db.insert_pending_identity(3, &Hash::ZERO, &zero_roots[3])
             .await?;
 
-        let pending_tree_updates = db.get_commitments_by_status(Status::Pending).await?;
+        let pending_tree_updates = db
+            .get_commitments_by_status(ProcessedStatus::Pending)
+            .await?;
         assert_eq!(pending_tree_updates.len(), 7);
 
         // 1st identity
@@ -1588,7 +1599,9 @@ mod test {
                 .context("Inserting identity")?;
         }
 
-        let pending_tree_updates = db.get_commitments_by_status(Status::Pending).await?;
+        let pending_tree_updates = db
+            .get_commitments_by_status(ProcessedStatus::Pending)
+            .await?;
         assert_eq!(pending_tree_updates.len(), 5);
         for i in 0..5 {
             assert_eq!(pending_tree_updates[i].element, identities[i]);
@@ -1617,7 +1630,7 @@ mod test {
         // Basic scenario, latest pending root
         let root_item = db.get_root_state(&roots[0]).await?.unwrap();
         assert_eq!(roots[0], root_item.root);
-        assert!(matches!(root_item.status, Status::Pending));
+        assert!(matches!(root_item.status, ProcessedStatus::Pending));
         assert!(root_item.mined_valid_as_of.is_none());
 
         // Inserting a new pending root sets invalidation time for the
@@ -1656,17 +1669,17 @@ mod test {
         tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
 
         let root_item_2 = db.get_root_state(&roots[2]).await?.unwrap();
-        assert!(matches!(root_item_2.status, Status::Pending));
+        assert!(matches!(root_item_2.status, ProcessedStatus::Pending));
         assert!(root_item_2.mined_valid_as_of.is_none());
 
         let root_item_1 = db.get_root_state(&roots[1]).await?.unwrap();
-        assert_eq!(root_item_1.status, Status::Pending);
+        assert_eq!(root_item_1.status, ProcessedStatus::Pending);
         assert!(root_item_1.mined_valid_as_of.is_none());
         assert!(root_item_1.pending_valid_as_of < root_2_mined_at);
 
         let root_item_0 = db.get_root_state(&roots[0]).await?.unwrap();
         assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
-        assert_eq!(root_item_0.status, Status::Processed);
+        assert_eq!(root_item_0.status, ProcessedStatus::Processed);
         assert!(root_item_0.mined_valid_as_of.unwrap() < root_2_mined_at);
         assert!(root_item_0.mined_valid_as_of.unwrap() > root_1_inserted_at);
         assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);

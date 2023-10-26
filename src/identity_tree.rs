@@ -14,7 +14,7 @@ mod status;
 pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
-pub use self::status::{ApiStatus, Status, UnknownStatus, UnprocessedStatus};
+pub use self::status::{ProcessedStatus, Status, UnknownStatus, UnprocessedStatus};
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TreeUpdate {
@@ -34,7 +34,7 @@ impl TreeUpdate {
 
 #[derive(Debug)]
 pub struct TreeItem {
-    pub status:     Status,
+    pub status:     ProcessedStatus,
     pub leaf_index: usize,
 }
 
@@ -42,7 +42,7 @@ pub struct TreeItem {
 #[serde(rename_all = "camelCase")]
 pub struct RootItem {
     pub root:                Field,
-    pub status:              Status,
+    pub status:              ProcessedStatus,
     pub pending_valid_as_of: chrono::DateTime<Utc>,
     pub mined_valid_as_of:   Option<chrono::DateTime<Utc>>,
 }
@@ -50,7 +50,7 @@ pub struct RootItem {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProof {
-    pub status:  ApiStatus,
+    pub status:  Status,
     pub root:    Option<Field>,
     pub proof:   Option<Proof>,
     pub message: Option<String>,
@@ -542,9 +542,9 @@ impl TreeState {
     #[must_use]
     pub fn get_proof_for(&self, item: &TreeItem) -> (Field, InclusionProof) {
         let (leaf, root, proof) = match item.status {
-            Status::Pending => self.latest.get_leaf_and_proof(item.leaf_index),
-            Status::Processed => self.processed.get_leaf_and_proof(item.leaf_index),
-            Status::Mined => self.mined.get_leaf_and_proof(item.leaf_index),
+            ProcessedStatus::Pending => self.latest.get_leaf_and_proof(item.leaf_index),
+            ProcessedStatus::Processed => self.processed.get_leaf_and_proof(item.leaf_index),
+            ProcessedStatus::Mined => self.mined.get_leaf_and_proof(item.leaf_index),
         };
 
         let proof = InclusionProof {

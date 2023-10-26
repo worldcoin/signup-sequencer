@@ -62,7 +62,7 @@ use std::sync::Arc;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use hyper::StatusCode;
-use signup_sequencer::identity_tree::ApiStatus;
+use signup_sequencer::identity_tree::Status;
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
@@ -288,7 +288,7 @@ pub async fn test_inclusion_status(
     uri: &str,
     client: &Client<HttpConnector>,
     leaf: &Hash,
-    expected_status: impl Into<ApiStatus>,
+    expected_status: impl Into<Status>,
 ) {
     let body = construct_inclusion_proof_body(leaf);
     info!(?uri, "Contacting");
@@ -324,7 +324,7 @@ pub async fn test_inclusion_status(
 
     assert_eq!(
         expected_status,
-        ApiStatus::from_str(status).expect("Could not convert str to Status")
+        Status::from_str(status).expect("Could not convert str to Status")
     );
 }
 

@@ -8,7 +8,7 @@ use thiserror::Error;
 /// as all identity commitments have an associated root.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
-pub enum Status {
+pub enum ProcessedStatus {
     /// Root is included in sequencer's in-memory tree, but is not yet
     /// mined.
     Pending,
@@ -27,6 +27,7 @@ pub enum Status {
     Mined,
 }
 
+/// Status of identity commitments which have not yet been included in the tree
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum UnprocessedStatus {
@@ -45,16 +46,16 @@ pub enum UnprocessedStatus {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 #[serde(untagged)]
-pub enum ApiStatus {
+pub enum Status {
     Unprocessed(UnprocessedStatus),
-    Processed(Status),
+    Processed(ProcessedStatus),
 }
 
 #[derive(Debug, Error)]
 #[error("unknown status")]
 pub struct UnknownStatus;
 
-impl FromStr for Status {
+impl FromStr for ProcessedStatus {
     type Err = UnknownStatus;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -67,23 +68,23 @@ impl FromStr for Status {
     }
 }
 
-impl From<Status> for &str {
-    fn from(scope: Status) -> Self {
+impl From<ProcessedStatus> for &str {
+    fn from(scope: ProcessedStatus) -> Self {
         match scope {
-            Status::Pending => "pending",
-            Status::Mined => "mined",
-            Status::Processed => "processed",
+            ProcessedStatus::Pending => "pending",
+            ProcessedStatus::Mined => "mined",
+            ProcessedStatus::Processed => "processed",
         }
     }
 }
 
-impl FromStr for ApiStatus {
+impl FromStr for Status {
     type Err = UnknownStatus;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Ok(s) = UnprocessedStatus::from_str(s) {
             Ok(Self::Unprocessed(s))
-        } else if let Ok(s) = Status::from_str(s) {
+        } else if let Ok(s) = ProcessedStatus::from_str(s) {
             Ok(Self::Processed(s))
         } else {
             Err(UnknownStatus)
@@ -112,14 +113,14 @@ impl From<UnprocessedStatus> for &str {
     }
 }
 
-impl From<UnprocessedStatus> for ApiStatus {
+impl From<UnprocessedStatus> for Status {
     fn from(status: UnprocessedStatus) -> Self {
         Self::Unprocessed(status)
     }
 }
 
-impl From<Status> for ApiStatus {
-    fn from(status: Status) -> Self {
+impl From<ProcessedStatus> for Status {
+    fn from(status: ProcessedStatus) -> Self {
         Self::Processed(status)
     }
 }
@@ -130,11 +131,11 @@ mod tests {
 
     use super::*;
 
-    #[test_case(ApiStatus::Processed(Status::Pending) => "pending")]
-    #[test_case(ApiStatus::Processed(Status::Mined) => "mined")]
-    #[test_case(ApiStatus::Unprocessed(UnprocessedStatus::New) => "new")]
-    #[test_case(ApiStatus::Unprocessed(UnprocessedStatus::Failed) => "failed")]
-    fn serialize_status(api_status: ApiStatus) -> &'static str {
+    #[test_case(Status::Processed(ProcessedStatus::Pending) => "pending")]
+    #[test_case(Status::Processed(ProcessedStatus::Mined) => "mined")]
+    #[test_case(Status::Unprocessed(UnprocessedStatus::New) => "new")]
+    #[test_case(Status::Unprocessed(UnprocessedStatus::Failed) => "failed")]
+    fn serialize_status(api_status: Status) -> &'static str {
         let s = serde_json::to_string(&api_status).unwrap();
 
         let s = s.leak() as &'static str;
@@ -143,11 +144,11 @@ mod tests {
         s.trim_start_matches("\"").trim_end_matches("\"")
     }
 
-    #[test_case("pending" => ApiStatus::Processed(Status::Pending))]
-    #[test_case("mined" => ApiStatus::Processed(Status::Mined))]
-    #[test_case("new" => ApiStatus::Unprocessed(UnprocessedStatus::New))]
-    #[test_case("failed" => ApiStatus::Unprocessed(UnprocessedStatus::Failed))]
-    fn deserialize_status(s: &str) -> ApiStatus {
+    #[test_case("pending" => Status::Processed(ProcessedStatus::Pending))]
+    #[test_case("mined" => Status::Processed(ProcessedStatus::Mined))]
+    #[test_case("new" => Status::Unprocessed(UnprocessedStatus::New))]
+    #[test_case("failed" => Status::Unprocessed(UnprocessedStatus::Failed))]
+    fn deserialize_status(s: &str) -> Status {
         // Wrapped because JSON expected `"something"` and not `something`
         let wrapped = format!("\"{s}\"");
 

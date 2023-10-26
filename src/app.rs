@@ -16,8 +16,8 @@ use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::{self, Database};
 use crate::ethereum::{self, Ethereum};
 use crate::identity_tree::{
-    ApiStatus, CanonicalTreeBuilder, Hash, InclusionProof, RootItem, Status, TreeState, TreeUpdate,
-    TreeVersionReadOps, UnprocessedStatus,
+    CanonicalTreeBuilder, Hash, InclusionProof, ProcessedStatus, RootItem, Status, TreeState,
+    TreeUpdate, TreeVersionReadOps, UnprocessedStatus,
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::{self, ProverConfiguration, ProverType, Provers};
@@ -34,8 +34,8 @@ pub struct InclusionProofResponse(InclusionProof);
 impl InclusionProofResponse {
     #[must_use]
     pub fn hide_processed_status(mut self) -> Self {
-        self.0.status = if self.0.status == ApiStatus::Processed(Status::Processed) {
-            ApiStatus::Processed(Status::Pending)
+        self.0.status = if self.0.status == Status::Processed(ProcessedStatus::Processed) {
+            Status::Processed(ProcessedStatus::Pending)
         } else {
             self.0.status
         };
@@ -53,10 +53,10 @@ impl From<InclusionProof> for InclusionProofResponse {
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
         match self.0.status {
-            ApiStatus::Unprocessed(UnprocessedStatus::Failed) => StatusCode::BAD_REQUEST,
-            ApiStatus::Unprocessed(UnprocessedStatus::New)
-            | ApiStatus::Processed(Status::Pending) => StatusCode::ACCEPTED,
-            ApiStatus::Processed(Status::Mined) | ApiStatus::Processed(Status::Processed) => {
+            Status::Unprocessed(UnprocessedStatus::Failed) => StatusCode::BAD_REQUEST,
+            Status::Unprocessed(UnprocessedStatus::New)
+            | Status::Processed(ProcessedStatus::Pending) => StatusCode::ACCEPTED,
+            Status::Processed(ProcessedStatus::Mined | ProcessedStatus::Processed) => {
                 StatusCode::OK
             }
         }
@@ -86,8 +86,8 @@ pub struct VerifySemaphoreProofResponse(RootItem);
 impl VerifySemaphoreProofResponse {
     #[must_use]
     pub fn hide_processed_status(mut self) -> Self {
-        self.0.status = if self.0.status == Status::Processed {
-            Status::Pending
+        self.0.status = if self.0.status == ProcessedStatus::Processed {
+            ProcessedStatus::Pending
         } else {
             self.0.status
         };
@@ -254,7 +254,9 @@ impl App {
         initial_root_hash: Hash,
         mmap_file_path: String,
     ) -> AnyhowResult<TreeState> {
-        let mut mined_items = database.get_commitments_by_status(Status::Mined).await?;
+        let mut mined_items = database
+            .get_commitments_by_status(ProcessedStatus::Mined)
+            .await?;
         mined_items.sort_by_key(|item| item.leaf_index);
 
         if let Some(tree_state) = Self::get_cached_tree_state(
@@ -350,7 +352,10 @@ impl App {
 
         let (mined, mut processed_builder) = mined_builder.seal();
 
-        match database.get_latest_root_by_status(Status::Mined).await? {
+        match database
+            .get_latest_root_by_status(ProcessedStatus::Mined)
+            .await?
+        {
             Some(root) => {
                 if !mined.get_root().eq(&root) {
                     return Ok(None);
@@ -364,7 +369,7 @@ impl App {
         }
 
         let processed_items = database
-            .get_commitments_by_status(Status::Processed)
+            .get_commitments_by_status(ProcessedStatus::Processed)
             .await?;
 
         for processed_item in processed_items {
@@ -373,7 +378,9 @@ impl App {
 
         let (processed, batching_builder) = processed_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
-        let pending_items = database.get_commitments_by_status(Status::Pending).await?;
+        let pending_items = database
+            .get_commitments_by_status(ProcessedStatus::Pending)
+            .await?;
         for update in pending_items {
             latest_builder.update(&update);
         }
@@ -418,7 +425,7 @@ impl App {
         let (mined, mut processed_builder) = mined_builder.seal();
 
         let processed_items = database
-            .get_commitments_by_status(Status::Processed)
+            .get_commitments_by_status(ProcessedStatus::Processed)
             .await?;
 
         for processed_item in processed_items {
@@ -428,7 +435,9 @@ impl App {
         let (processed, batching_builder) = processed_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
 
-        let pending_items = database.get_commitments_by_status(Status::Pending).await?;
+        let pending_items = database
+            .get_commitments_by_status(ProcessedStatus::Pending)
+            .await?;
         for update in pending_items {
             latest_builder.update(&update);
         }
@@ -748,17 +757,22 @@ impl App {
 
         match root_state.status {
             // Pending status implies the batching or latest tree
-            Status::Pending if latest_root == root || batching_root == root => return Ok(()),
+            ProcessedStatus::Pending if latest_root == root || batching_root == root => {
+                return Ok(())
+            }
             // Processed status is hidden - this should never happen
-            Status::Processed if processed_root == root => return Ok(()),
+            ProcessedStatus::Processed if processed_root == root => return Ok(()),
             // Processed status is hidden so it could be either processed or mined
-            Status::Mined if processed_root == root || mined_root == root => return Ok(()),
+            ProcessedStatus::Mined if processed_root == root || mined_root == root => return Ok(()),
             _ => (),
         }
 
         let now = chrono::Utc::now();
 
-        let root_age = if matches!(root_state.status, Status::Pending | Status::Processed) {
+        let root_age = if matches!(
+            root_state.status,
+            ProcessedStatus::Pending | ProcessedStatus::Processed
+        ) {
             now - root_state.pending_valid_as_of
         } else {
             let mined_at = root_state

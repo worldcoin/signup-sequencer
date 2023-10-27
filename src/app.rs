@@ -477,8 +477,7 @@ impl App {
             return Err(ServerError::UnreducedCommitment);
         }
 
-        let identity_exists = self.database.identity_exists(commitment).await?;
-        if identity_exists {
+        if self.database.identity_exists(commitment).await? {
             return Err(ServerError::DuplicateCommitment);
         }
 
@@ -561,7 +560,14 @@ impl App {
         existing_commitment: &Hash,
         new_commitment: &Hash,
     ) -> Result<(), ServerError> {
-        // Ensure that insertion provers exist
+        if *new_commitment == self.identity_manager.initial_leaf_value() {
+            warn!(
+                ?new_commitment,
+                "Attempt to insert initial leaf in recovery."
+            );
+            return Err(ServerError::InvalidCommitment);
+        }
+
         if !self.identity_manager.has_insertion_provers().await {
             warn!(
                 ?new_commitment,
@@ -576,6 +582,10 @@ impl App {
                 "The new identity commitment is not reduced."
             );
             return Err(ServerError::UnreducedCommitment);
+        }
+
+        if self.database.identity_exists(*new_commitment).await? {
+            return Err(ServerError::DuplicateCommitment);
         }
 
         // Delete the existing id and insert the commitments into the recovery table

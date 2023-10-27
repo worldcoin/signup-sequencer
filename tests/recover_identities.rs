@@ -127,6 +127,22 @@ async fn recover_identities() -> anyhow::Result<()> {
         test_inclusion_proof(&uri, &client, i, &ref_tree, &identities_ref[i], false).await;
     }
 
+    // Test that we cannot recover with an identity that has previously been
+    // inserted
+    test_recover_identity(
+        &uri,
+        &client,
+        &mut ref_tree,
+        &identities_ref,
+        // Last inserted identity
+        insertion_batch_size - 1,
+        // Second to last inserted identity as recovery
+        identities_ref[insertion_batch_size - 2],
+        next_leaf_index,
+        true,
+    )
+    .await;
+
     // Insert enough recoveries to trigger a batch
     for i in 0..deletion_batch_size {
         // Delete the identity at i and replace it with an identity at the back of the

@@ -30,7 +30,7 @@ axum = "0.6.4"
 axum-server = "0.4.4"
 bytes = "1.4.0"
 chrono = { version = "0.4.19", features = ["serde"] }
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.4", features = ["derive"] }
 cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "fc1186d1aba6a25120570fe04ad3362b08c8adfd", features = [
     "signals",
     "prometheus",

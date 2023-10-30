@@ -23,9 +23,10 @@ pub struct FinalizeRoots {
     processed_tree:   TreeVersion<Intermediate>,
     finalized_tree:   TreeVersion<Canonical>,
 
-    scanning_window_size: u64,
-    time_between_scans:   Duration,
-    max_epoch_duration:   Duration,
+    scanning_window_size:       u64,
+    scanning_chain_head_offset: u64,
+    time_between_scans:         Duration,
+    max_epoch_duration:         Duration,
 }
 
 impl FinalizeRoots {
@@ -35,6 +36,7 @@ impl FinalizeRoots {
         processed_tree: TreeVersion<Intermediate>,
         finalized_tree: TreeVersion<Canonical>,
         scanning_window_size: u64,
+        scanning_chain_head_offset: u64,
         time_between_scans: Duration,
         max_epoch_duration: Duration,
     ) -> Arc<Self> {
@@ -44,6 +46,7 @@ impl FinalizeRoots {
             processed_tree,
             finalized_tree,
             scanning_window_size,
+            scanning_chain_head_offset,
             time_between_scans,
             max_epoch_duration,
         })
@@ -56,6 +59,7 @@ impl FinalizeRoots {
             &self.processed_tree,
             &self.finalized_tree,
             self.scanning_window_size,
+            self.scanning_chain_head_offset,
             self.time_between_scans,
             self.max_epoch_duration,
         )
@@ -69,6 +73,7 @@ async fn finalize_roots_loop(
     processed_tree: &TreeVersion<Intermediate>,
     finalized_tree: &TreeVersion<Canonical>,
     scanning_window_size: u64,
+    scanning_chain_head_offset: u64,
     time_between_scans: Duration,
     max_epoch_duration: Duration,
 ) -> AnyhowResult<()> {
@@ -76,7 +81,10 @@ async fn finalize_roots_loop(
     let secondary_abis = identity_manager.secondary_abis();
 
     let mut mainnet_scanner =
-        BlockScanner::new_latest(mainnet_abi.client().clone(), scanning_window_size).await?;
+        BlockScanner::new_latest(mainnet_abi.client().clone(), scanning_window_size)
+            .await?
+            .with_offset(scanning_chain_head_offset);
+
     let mut secondary_scanners =
         init_secondary_scanners(secondary_abis, scanning_window_size).await?;
 

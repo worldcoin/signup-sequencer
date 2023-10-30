@@ -103,6 +103,10 @@ pub struct Options {
     #[clap(long, env, default_value = "100")]
     pub scanning_window_size: u64,
 
+    /// The offset from the latest block to scan
+    #[clap(long, env, default_value = "0")]
+    pub scanning_chain_head_offset: u64,
+
     /// The number of seconds to wait between fetching logs
     #[clap(long, env, default_value = "30")]
     pub time_between_scans_seconds: u64,
@@ -131,6 +135,7 @@ pub struct TaskMonitor {
 
     // Finalization params
     scanning_window_size:           u64,
+    scanning_chain_head_offset:     u64,
     time_between_scans:             Duration,
     max_epoch_duration:             Duration,
     // TODO: docs
@@ -150,6 +155,7 @@ impl TaskMonitor {
         let Options {
             batch_timeout_seconds,
             scanning_window_size,
+            scanning_chain_head_offset,
             time_between_scans_seconds,
             max_epoch_duration_seconds,
             monitored_txs_capacity,
@@ -164,6 +170,7 @@ impl TaskMonitor {
             tree_state,
             batch_insert_timeout_secs: batch_timeout_seconds,
             scanning_window_size,
+            scanning_chain_head_offset,
             time_between_scans: Duration::from_secs(time_between_scans_seconds),
             batch_deletion_timeout_seconds,
             min_batch_deletion_size,
@@ -200,6 +207,7 @@ impl TaskMonitor {
             self.tree_state.get_processed_tree(),
             self.tree_state.get_mined_tree(),
             self.scanning_window_size,
+            self.scanning_chain_head_offset,
             self.time_between_scans,
             self.max_epoch_duration,
         );

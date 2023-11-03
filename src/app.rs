@@ -139,6 +139,10 @@ pub struct Options {
     /// Path and file name to use for mmap file when building dense tree.
     #[clap(long, env, default_value = "./dense_tree_mmap")]
     pub dense_tree_mmap_file: String,
+
+    /// If set will not use cached tree state.
+    #[clap(long, env)]
+    pub force_cache_purge: bool,
 }
 
 pub struct App {
@@ -211,6 +215,7 @@ impl App {
             identity_manager.initial_leaf_value(),
             initial_root_hash,
             options.dense_tree_mmap_file,
+            options.force_cache_purge,
         )
         .await?;
         info!("Tree state initialization took: {:?}", timer.elapsed());
@@ -253,27 +258,33 @@ impl App {
         initial_leaf_value: Hash,
         initial_root_hash: Hash,
         mmap_file_path: String,
+        force_cache_purge: bool,
     ) -> AnyhowResult<TreeState> {
         let mut mined_items = database
             .get_commitments_by_status(ProcessedStatus::Mined)
             .await?;
         mined_items.sort_by_key(|item| item.leaf_index);
 
-        if let Some(tree_state) = Self::get_cached_tree_state(
-            database,
-            tree_depth,
-            dense_prefix_depth,
-            gc_threshold,
-            &initial_leaf_value,
-            initial_root_hash,
-            mined_items.clone(),
-            &mmap_file_path,
-        )
-        .await?
-        {
-            info!("tree restored from cache");
-            return Ok(tree_state);
+        if !force_cache_purge {
+            info!("Attempting to restore tree from cache");
+            if let Some(tree_state) = Self::get_cached_tree_state(
+                database,
+                tree_depth,
+                dense_prefix_depth,
+                gc_threshold,
+                &initial_leaf_value,
+                initial_root_hash,
+                mined_items.clone(),
+                &mmap_file_path,
+            )
+            .await?
+            {
+                info!("tree restored from cache");
+                return Ok(tree_state);
+            }
         }
+
+        info!("Initializing tree from the database");
         let tree_state = Self::initialize_tree(
             database,
             tree_depth,
@@ -284,7 +295,9 @@ impl App {
             mmap_file_path,
         )
         .await?;
+
         info!("tree initialization successful");
+
         Ok(tree_state)
     }
 

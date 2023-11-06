@@ -102,14 +102,15 @@ impl IdentityManager {
             ethereum.provider().clone(),
         );
 
-        let owner = abi.owner().call().await?;
-        if owner != ethereum.address() {
-            error!(?owner, signer = ?ethereum.address(), "Signer is not the owner of the identity manager contract.");
+        let operator = abi.identity_operator().call().await?;
+        if operator != ethereum.address() {
+            error!(?operator, signer = ?ethereum.address(), "Signer is not the identity operator of the identity manager contract.");
             panic!("Cannot currently continue in read-only mode.")
         }
+
         info!(
             ?address,
-            ?owner,
+            ?operator,
             "Connected to the WorldID Identity Manager"
         );
 

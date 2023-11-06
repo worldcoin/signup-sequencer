@@ -39,6 +39,7 @@ abigen!(
         function deleteIdentities(uint256[8] calldata deletionProof, bytes calldata packedDeletionIndices, uint256 preRoot, uint256 postRoot) public virtual
         function latestRoot() public view virtual returns (uint256 root)
         function owner() public view virtual returns (address)
+        function identityOperator() public view virtual returns (address)
         function queryRoot(uint256 root) public view virtual returns (RootInfo memory)
         function getRootHistoryExpiry() external view returns (uint256)
     ]"#,

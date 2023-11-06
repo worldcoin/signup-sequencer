@@ -224,7 +224,7 @@ impl App {
         .await?;
         info!("Tree state initialization took: {:?}", timer.elapsed());
 
-        let tree_root = tree_state.get_mined_tree().get_root();
+        let tree_root = tree_state.get_processed_tree().get_root();
 
         if tree_root != root_hash {
             warn!(

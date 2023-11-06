@@ -203,10 +203,14 @@ impl App {
             // Note that we don't have a way of queuing a root here for finalization.
             // so it's going to stay as "processed" until the next root is mined.
             database.mark_root_as_processed(&root_hash).await?;
+        } else {
+            // Db is either empty or we're restarting with a new contract/chain
+            // so we should mark everything as pending
+            database.mark_all_as_pending().await?;
         }
 
         let timer = Instant::now();
-        let tree_state = Self::restore_or_initialize_tree(
+        let mut tree_state = Self::restore_or_initialize_tree(
             &database,
             // Poseidon tree depth is one more than the contract's tree depth
             identity_manager.tree_depth(),
@@ -214,11 +218,33 @@ impl App {
             options.tree_gc_threshold,
             identity_manager.initial_leaf_value(),
             initial_root_hash,
-            options.dense_tree_mmap_file,
+            &options.dense_tree_mmap_file,
             options.force_cache_purge,
         )
         .await?;
         info!("Tree state initialization took: {:?}", timer.elapsed());
+
+        let tree_root = tree_state.get_mined_tree().get_root();
+
+        if tree_root != root_hash {
+            warn!(
+                "Cached tree root is different from the contract root. Purging cache and \
+                 reinitializing."
+            );
+
+            tree_state = Self::restore_or_initialize_tree(
+                &database,
+                // Poseidon tree depth is one more than the contract's tree depth
+                identity_manager.tree_depth(),
+                options.dense_tree_prefix_depth,
+                options.tree_gc_threshold,
+                identity_manager.initial_leaf_value(),
+                initial_root_hash,
+                &options.dense_tree_mmap_file,
+                true,
+            )
+            .await?;
+        }
 
         let identity_committer = Arc::new(TaskMonitor::new(
             database.clone(),
@@ -257,7 +283,7 @@ impl App {
         gc_threshold: usize,
         initial_leaf_value: Hash,
         initial_root_hash: Hash,
-        mmap_file_path: String,
+        mmap_file_path: &str,
         force_cache_purge: bool,
     ) -> AnyhowResult<TreeState> {
         let mut mined_items = database
@@ -408,7 +434,7 @@ impl App {
         gc_threshold: usize,
         initial_leaf_value: Hash,
         mined_items: Vec<TreeUpdate>,
-        mmap_file_path: String,
+        mmap_file_path: &str,
     ) -> AnyhowResult<TreeState> {
         // Flatten the updates for initial leaves
         let mined_items = dedup_tree_updates(mined_items);
@@ -432,7 +458,7 @@ impl App {
             gc_threshold,
             initial_leaf_value,
             &initial_leaves,
-            &mmap_file_path,
+            mmap_file_path,
         );
 
         let (mined, mut processed_builder) = mined_builder.seal();

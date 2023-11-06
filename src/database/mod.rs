@@ -228,6 +228,25 @@ impl Database {
         Ok(())
     }
 
+    /// Marks all the identities in the db as
+    #[instrument(skip(self), level = "debug")]
+    pub async fn mark_all_as_pending(&self) -> Result<(), Error> {
+        let pending_status = ProcessedStatus::Pending;
+
+        let update_all_identities = sqlx::query(
+            r#"
+            UPDATE identities
+            SET    status = $1, mined_at = NULL
+            WHERE  status <> $1
+            "#,
+        )
+        .bind(<&str>::from(pending_status));
+
+        self.pool.execute(update_all_identities).await?;
+
+        Ok(())
+    }
+
     /// Marks the identities and roots from before a given root hash as
     /// finalized
     #[instrument(skip(self), level = "debug")]
@@ -1265,6 +1284,35 @@ mod test {
 
         let next_leaf_index = db.get_next_leaf_index().await?;
         assert_eq!(next_leaf_index, 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn mark_all_as_pending_marks_all() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(5);
+        let roots = mock_roots(5);
+
+        for i in 0..5 {
+            db.insert_pending_identity(i, &identities[i], &roots[i])
+                .await
+                .context("Inserting identity")?;
+        }
+
+        db.mark_root_as_processed(&roots[2]).await?;
+
+        db.mark_all_as_pending().await?;
+
+        for root in roots.iter() {
+            let root = db
+                .get_root_state(root)
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, ProcessedStatus::Pending);
+        }
 
         Ok(())
     }

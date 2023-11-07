@@ -17,7 +17,7 @@ pub mod server;
 
 const DEFAULT_GAS_LIMIT: u32 = 1_000_000;
 
-pub use self::server::{spawn, ServerHandle};
+pub use self::server::{spawn, spawn_on_random_port, ServerHandle};
 
 type PinheadSigner = SignerMiddleware<Provider<Http>, LocalWallet>;
 

@@ -47,7 +47,7 @@ where
     async fn request<T, R>(&self, method: &str, params: T) -> Result<R, Self::Error>
     where
         T: Debug + Serialize + Send + Sync,
-        R: DeserializeOwned,
+        R: DeserializeOwned + Send,
     {
         REQUESTS.with_label_values(&[method]).inc();
         let timer = LATENCY.start_timer();

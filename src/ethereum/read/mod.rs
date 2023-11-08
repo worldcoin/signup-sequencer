@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result as AnyhowResult};
 use chrono::{Duration as ChronoDuration, Utc};
 use ethers::abi::Error as AbiError;
-use ethers::providers::{Middleware, Provider};
+use ethers::providers::{Http, Middleware, Provider};
 use ethers::types::{BlockId, BlockNumber, Chain, U256};
 use futures::{try_join, FutureExt};
 use thiserror::Error;
@@ -9,12 +9,10 @@ use tracing::{error, info};
 use url::Url;
 
 use self::rpc_logger::RpcLogger;
-use self::transport::Transport;
 
 pub mod rpc_logger;
-pub mod transport;
 
-type InnerProvider = Provider<RpcLogger<Transport>>;
+type InnerProvider = Provider<RpcLogger<Http>>;
 
 #[derive(Clone, Debug)]
 pub struct ReadProvider {
@@ -37,7 +35,7 @@ impl ReadProvider {
                 provider = %url,
                 "Connecting to provider"
             );
-            let transport = Transport::new(url).await?;
+            let transport = Http::new(url);
             let logger = RpcLogger::new(transport);
             let provider = Provider::new(logger);
 

@@ -39,7 +39,7 @@ cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "fc1186d
     "datadog",
 ] }
 cognitoauth = { git = "https://github.com/lucdew/cognito-srp-auth.git" }
-ethers = { version = "1.0.0", features = ["ws", "ipc", "openssl", "abigen"] }
+ethers = { version = "2.0.10", features = ["ws", "ipc", "openssl", "abigen"] }
 eyre = "0.6"
 futures = "0.3"
 futures-util = { version = "^0.3" }

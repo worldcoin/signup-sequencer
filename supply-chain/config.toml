@@ -28,8 +28,6 @@ audit-as-crates-io = true
 [policy.cli-batteries]
 audit-as-crates-io = true
 
-[policy."ethers-core:1.0.1"]
-
 [policy."ethers-core:2.0.10@git:08bcb67c36d9a2869950e51ecf76124c9febe035"]
 audit-as-crates-io = true
 
@@ -701,52 +699,8 @@ criteria = "safe-to-deploy"
 version = "0.14.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.ethers]]
-version = "1.0.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.ethers-addressbook]]
-version = "1.0.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.ethers-contract]]
-version = "1.0.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.ethers-contract-abigen]]
-version = "1.0.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.ethers-contract-derive]]
-version = "1.0.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.ethers-core]]
-version = "1.0.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.ethers-core]]
 version = "2.0.10@git:08bcb67c36d9a2869950e51ecf76124c9febe035"
-criteria = "safe-to-deploy"
-
-[[exemptions.ethers-etherscan]]
-version = "1.0.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.ethers-middleware]]
-version = "1.0.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.ethers-providers]]
-version = "1.0.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.ethers-signers]]
-version = "1.0.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.ethers-solc]]
-version = "1.0.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.event-listener]]

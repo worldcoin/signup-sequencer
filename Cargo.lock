@@ -5381,6 +5381,7 @@ dependencies = [
  "cli-batteries",
  "cognitoauth",
  "ethers",
+ "ethers-solc",
  "eyre",
  "futures",
  "futures-util",

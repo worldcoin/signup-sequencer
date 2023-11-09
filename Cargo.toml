@@ -40,6 +40,7 @@ cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "fc1186d
 ] }
 cognitoauth = { git = "https://github.com/lucdew/cognito-srp-auth.git" }
 ethers = { version = "2.0.10", features = ["ws", "ipc", "openssl", "abigen"] }
+ethers-solc = "2.0.10"
 eyre = "0.6"
 futures = "0.3"
 futures-util = { version = "^0.3" }

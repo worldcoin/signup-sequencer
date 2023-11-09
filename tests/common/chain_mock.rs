@@ -6,14 +6,14 @@ use std::time::Duration;
 use ethers::abi::AbiEncode;
 use ethers::contract::Contract;
 use ethers::core::k256::ecdsa::SigningKey;
-use ethers::prelude::artifacts::BytecodeObject;
 use ethers::prelude::{
     ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer, SignerMiddleware,
     Wallet,
 };
 use ethers::providers::Middleware;
-use ethers::types::{Bytes, H256, U256};
+use ethers::types::{Bytes, U256};
 use ethers::utils::{Anvil, AnvilInstance};
+use ethers_solc::artifacts::BytecodeObject;
 use tracing::{info, instrument};
 
 use super::{abi as ContractAbi, CompiledContract};
@@ -22,7 +22,7 @@ pub type SpecialisedContract = Contract<SpecialisedClient>;
 
 pub struct MockChain {
     pub anvil:            AnvilInstance,
-    pub private_key:      H256,
+    pub private_key:      SigningKey,
     pub identity_manager: SpecialisedContract,
 }
 
@@ -34,7 +34,7 @@ pub async fn spawn_mock_chain(
     tree_depth: u8,
 ) -> anyhow::Result<MockChain> {
     let chain = Anvil::new().block_time(2u64).spawn();
-    let private_key = H256::from_slice(&chain.keys()[0].to_be_bytes());
+    let private_key = chain.keys()[0].clone().into();
 
     let provider = Provider::<Http>::try_from(chain.endpoint())
         .expect("Failed to initialize chain endpoint")

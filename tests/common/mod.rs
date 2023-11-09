@@ -16,7 +16,6 @@ pub mod prelude {
     pub use ethers::core::abi::Abi;
     pub use ethers::core::k256::ecdsa::SigningKey;
     pub use ethers::core::rand;
-    pub use ethers::prelude::artifacts::{Bytecode, BytecodeObject};
     pub use ethers::prelude::{
         ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
         SignerMiddleware, Wallet,
@@ -24,6 +23,7 @@ pub mod prelude {
     pub use ethers::providers::Middleware;
     pub use ethers::types::{Bytes, H256, U256};
     pub use ethers::utils::{Anvil, AnvilInstance};
+    pub use ethers_solc::artifacts::{Bytecode, BytecodeObject};
     pub use hyper::client::HttpConnector;
     pub use hyper::{Body, Client, Request};
     pub use once_cell::sync::Lazy;
@@ -651,8 +651,7 @@ pub async fn spawn_deps(
 
     let chain = chain?;
 
-    let signing_key = SigningKey::from_bytes(chain.private_key.as_bytes())?;
-    let micro_oz = micro_oz::spawn(chain.anvil.endpoint(), signing_key).await?;
+    let micro_oz = micro_oz::spawn(chain.anvil.endpoint(), chain.private_key.clone()).await?;
 
     let insertion_provers = insertion_provers
         .into_iter()

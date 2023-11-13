@@ -2278,7 +2278,7 @@ dependencies = [
 [[package]]
 name = "ethers-core"
 version = "2.0.10"
-source = "git+https://github.com/gakonst/ethers-rs#08bcb67c36d9a2869950e51ecf76124c9febe035"
+source = "git+https://github.com/gakonst/ethers-rs#0543e1ccbaab70996ab21b5ceeff2fe599728b74"
 dependencies = [
  "arrayvec",
  "bytes",
@@ -5138,7 +5138,7 @@ dependencies = [
 [[package]]
 name = "semaphore"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a45738039e0b0a8adbac5ee193958f1e238d7de4"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a484bf0dd7d41d665ffabc56f31a852d0c4f27fd"
 dependencies = [
  "ark-bn254",
  "ark-circom",
@@ -5173,12 +5173,12 @@ dependencies = [
 [[package]]
 name = "semaphore-depth-config"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a45738039e0b0a8adbac5ee193958f1e238d7de4"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a484bf0dd7d41d665ffabc56f31a852d0c4f27fd"
 
 [[package]]
 name = "semaphore-depth-macros"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a45738039e0b0a8adbac5ee193958f1e238d7de4"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a484bf0dd7d41d665ffabc56f31a852d0c4f27fd"
 dependencies = [
  "itertools 0.10.5",
  "proc-macro2",

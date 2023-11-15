@@ -12,20 +12,20 @@ use clap::Parser;
 use cli_batteries::await_shutdown;
 use error::Error;
 use hyper::StatusCode;
-use semaphore::protocol::Proof;
-use semaphore::Field;
-use serde::{Deserialize, Serialize};
 use tracing::info;
 use url::{Host, Url};
 
-use crate::app::{
-    App, IdentityHistoryEntry, InclusionProofResponse, ListBatchSizesResponse,
-    VerifySemaphoreProofResponse,
-};
-use crate::identity_tree::Hash;
-use crate::prover::ProverType;
+use crate::app::App;
 
 mod custom_middleware;
+pub mod data;
+
+use self::data::{
+    AddBatchSizeRequest, DeletionRequest, IdentityHistoryRequest, IdentityHistoryResponse,
+    InclusionProofRequest, InclusionProofResponse, InsertCommitmentRequest, ListBatchSizesResponse,
+    RecoveryRequest, RemoveBatchSizeRequest, ToResponseCode, VerifySemaphoreProofQuery,
+    VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 #[group(skip)]
@@ -38,106 +38,6 @@ pub struct Options {
     /// Request handling timeout (seconds)
     #[clap(long, env, default_value = "300")]
     pub serve_timeout: u64,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct InsertCommitmentRequest {
-    identity_commitment: Hash,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct AddBatchSizeRequest {
-    /// The URL of the prover for the provided batch size.
-    url:             String,
-    /// The batch size to add.
-    batch_size:      usize,
-    /// The timeout for communications with the prover service.
-    timeout_seconds: u64,
-    // TODO: add docs
-    prover_type:     ProverType,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct RemoveBatchSizeRequest {
-    /// The batch size to remove from the prover map.
-    batch_size:  usize,
-    // TODO: add docs
-    prover_type: ProverType,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct InclusionProofRequest {
-    pub identity_commitment: Hash,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct IdentityHistoryRequest {
-    pub identity_commitment: Hash,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct IdentityHistoryResponse {
-    #[serde(default)]
-    pub history: Vec<IdentityHistoryEntry>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct VerifySemaphoreProofRequest {
-    pub root:                    Field,
-    pub signal_hash:             Field,
-    pub nullifier_hash:          Field,
-    pub external_nullifier_hash: Field,
-    pub proof:                   Proof,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct VerifySemaphoreProofQuery {
-    #[serde(default)]
-    pub max_root_age_seconds: Option<i64>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct DeletionRequest {
-    /// The identity commitment to delete.
-    identity_commitment: Hash,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct RecoveryRequest {
-    /// The leaf index of the identity commitment to delete.
-    previous_identity_commitment: Hash,
-    /// The new identity commitment to insert.
-    new_identity_commitment:      Hash,
-}
-
-pub trait ToResponseCode {
-    fn to_response_code(&self) -> StatusCode;
-}
-
-impl ToResponseCode for () {
-    fn to_response_code(&self) -> StatusCode {
-        StatusCode::OK
-    }
 }
 
 async fn inclusion_proof(

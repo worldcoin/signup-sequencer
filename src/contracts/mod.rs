@@ -379,8 +379,6 @@ impl IdentityManager {
         let packed_deletion_indices: &[u8] = delete_identities.packed_deletion_indices.as_ref();
         let indices = unpack_indices(packed_deletion_indices);
 
-        tracing::error!("unpacked = {indices:?}");
-
         let padding_index = 2u32.pow(self.tree_depth as u32);
 
         Ok(indices

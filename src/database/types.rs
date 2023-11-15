@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 
-use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
+use crate::identity_tree::{Hash, Status, UnprocessedStatus};
 
 pub struct UnprocessedCommitment {
     pub commitment:            Hash,

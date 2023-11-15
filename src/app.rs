@@ -5,11 +5,9 @@ use std::time::Instant;
 use anyhow::Result as AnyhowResult;
 use chrono::{Duration, Utc};
 use clap::Parser;
-use hyper::StatusCode;
 use ruint::Uint;
 use semaphore::poseidon_tree::LazyPoseidonTree;
 use semaphore::protocol::verify_proof;
-use serde::{Deserialize, Serialize};
 use tracing::{info, instrument, warn};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};
@@ -21,127 +19,15 @@ use crate::identity_tree::{
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::{self, ProverConfiguration, ProverType, Provers};
+use crate::server::data::{
+    IdentityHistoryEntry, IdentityHistoryEntryKind, IdentityHistoryEntryStatus,
+    InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofQuery,
+    VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
+};
 use crate::server::error::Error as ServerError;
-use crate::server::{ToResponseCode, VerifySemaphoreProofQuery, VerifySemaphoreProofRequest};
 use crate::task_monitor::TaskMonitor;
 use crate::utils::tree_updates::dedup_tree_updates;
 use crate::{contracts, task_monitor};
-
-#[derive(Serialize)]
-#[serde(transparent)]
-pub struct InclusionProofResponse(InclusionProof);
-
-impl InclusionProofResponse {
-    #[must_use]
-    pub fn hide_processed_status(mut self) -> Self {
-        self.0.status = if self.0.status == Status::Processed(ProcessedStatus::Processed) {
-            Status::Processed(ProcessedStatus::Pending)
-        } else {
-            self.0.status
-        };
-
-        self
-    }
-}
-
-impl From<InclusionProof> for InclusionProofResponse {
-    fn from(value: InclusionProof) -> Self {
-        Self(value)
-    }
-}
-
-impl ToResponseCode for InclusionProofResponse {
-    fn to_response_code(&self) -> StatusCode {
-        match self.0.status {
-            Status::Unprocessed(UnprocessedStatus::Failed) => StatusCode::BAD_REQUEST,
-            Status::Unprocessed(UnprocessedStatus::New)
-            | Status::Processed(ProcessedStatus::Pending) => StatusCode::ACCEPTED,
-            Status::Processed(ProcessedStatus::Mined | ProcessedStatus::Processed) => {
-                StatusCode::OK
-            }
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(transparent)]
-pub struct ListBatchSizesResponse(Vec<ProverConfiguration>);
-
-impl From<Vec<ProverConfiguration>> for ListBatchSizesResponse {
-    fn from(value: Vec<ProverConfiguration>) -> Self {
-        Self(value)
-    }
-}
-
-impl ToResponseCode for ListBatchSizesResponse {
-    fn to_response_code(&self) -> StatusCode {
-        StatusCode::OK
-    }
-}
-
-#[derive(Serialize)]
-#[serde(transparent)]
-pub struct VerifySemaphoreProofResponse(RootItem);
-
-impl VerifySemaphoreProofResponse {
-    #[must_use]
-    pub fn hide_processed_status(mut self) -> Self {
-        self.0.status = if self.0.status == ProcessedStatus::Processed {
-            ProcessedStatus::Pending
-        } else {
-            self.0.status
-        };
-
-        self
-    }
-}
-
-impl ToResponseCode for VerifySemaphoreProofResponse {
-    fn to_response_code(&self) -> StatusCode {
-        StatusCode::OK
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct IdentityHistoryResponse {
-    pub history: Vec<IdentityHistoryEntry>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct IdentityHistoryEntry {
-    pub kind:   IdentityHistoryEntryKind,
-    pub status: IdentityHistoryEntryStatus,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub enum IdentityHistoryEntryKind {
-    Insertion,
-    Deletion,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub enum IdentityHistoryEntryStatus {
-    // Present in the unprocessed identities or deletions table
-    Buffered,
-    // Present in the unprocessed identities table but not eligible for processing
-    Queued,
-    // Present in the pending tree (not mined on chain yet)
-    Pending,
-    // Present in the batching tree (transaction sent but not confirmed yet)
-    Batched,
-    // Present in the processed tree (mined on chain)
-    Mined,
-    // Present in the batching tree (mined on chain)
-    Bridged,
-}
 
 #[derive(Clone, Debug, PartialEq, Parser)]
 #[group(skip)]
@@ -682,7 +568,10 @@ impl App {
         &self,
         commitment: &Hash,
     ) -> Result<Vec<IdentityHistoryEntry>, ServerError> {
-        let entries = self.database.get_identity_history_entries(commitment).await?;
+        let entries = self
+            .database
+            .get_identity_history_entries(commitment)
+            .await?;
 
         let mut history = vec![];
 

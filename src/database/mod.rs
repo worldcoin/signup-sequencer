@@ -15,7 +15,7 @@ use sqlx::{Executor, Pool, Postgres, Row};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
-use self::types::{DeletionEntry, LatestDeletionEntry, RecoveryEntry};
+use self::types::{CommitmentHistoryEntry, DeletionEntry, LatestDeletionEntry, RecoveryEntry};
 use crate::identity_tree::{
     Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate, UnprocessedStatus,
 };
@@ -350,6 +350,93 @@ impl Database {
                 element:    row.get::<Hash, _>(1),
             })
             .collect::<Vec<_>>())
+    }
+
+    pub async fn get_identity_history_entries(
+        &self,
+        commitment: &Hash,
+    ) -> Result<Vec<CommitmentHistoryEntry>, Error> {
+        let unprocessed = sqlx::query(
+            r#"
+            SELECT commitment, status, eligibility
+            FROM unprocessed_identities
+            WHERE commitment = $1
+        "#,
+        )
+        .bind(commitment);
+
+        let rows = self.pool.fetch_all(unprocessed).await?;
+        let unprocessed_updates = rows
+            .into_iter()
+            .map(|row| {
+                let eligibility_timestamp: DateTime<Utc> = row.get(2);
+                let held_back = Utc::now() < eligibility_timestamp;
+
+                CommitmentHistoryEntry {
+                    leaf_index: None,
+                    commitment: row.get::<Hash, _>(0),
+                    held_back,
+                    status: row
+                        .get::<&str, _>(1)
+                        .parse()
+                        .expect("Failed to parse unprocessed status"),
+                }
+            })
+            .collect::<Vec<CommitmentHistoryEntry>>();
+
+        let leaf_index = self.get_identity_leaf_index(commitment).await?;
+        let Some(leaf_index) = leaf_index else {
+            return Ok(unprocessed_updates);
+        };
+
+        let identity_deletions = sqlx::query(
+            r#"
+            SELECT commitment
+            FROM deletions
+            WHERE leaf_index = $1
+            "#,
+        )
+        .bind(leaf_index.leaf_index as i64);
+
+        let rows = self.pool.fetch_all(identity_deletions).await?;
+        let deletions = rows
+            .into_iter()
+            .map(|_row| CommitmentHistoryEntry {
+                leaf_index: Some(leaf_index.leaf_index),
+                commitment: Hash::ZERO,
+                held_back:  false,
+                status:     UnprocessedStatus::New.into(),
+            })
+            .collect::<Vec<CommitmentHistoryEntry>>();
+
+        let processed_updates = sqlx::query(
+            r#"
+            SELECT commitment, status
+            FROM identities
+            WHERE leaf_index = $1
+            ORDER BY id ASC
+            "#,
+        )
+        .bind(leaf_index.leaf_index as i64);
+
+        let rows = self.pool.fetch_all(processed_updates).await?;
+        let processed_updates: Vec<CommitmentHistoryEntry> = rows
+            .into_iter()
+            .map(|row| CommitmentHistoryEntry {
+                leaf_index: Some(leaf_index.leaf_index),
+                commitment: row.get::<Hash, _>(0),
+                held_back:  false,
+                status:     row
+                    .get::<&str, _>(1)
+                    .parse()
+                    .expect("Status is unreadable, database is corrupt"),
+            })
+            .collect();
+
+        Ok([processed_updates, unprocessed_updates, deletions]
+            .concat()
+            .into_iter()
+            .collect())
     }
 
     pub async fn get_latest_root_by_status(
@@ -844,7 +931,7 @@ mod test {
     use semaphore::Field;
 
     use super::{Database, Options};
-    use crate::identity_tree::{Hash, ProcessedStatus, UnprocessedStatus};
+    use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
     use crate::prover::{ProverConfiguration, ProverType};
     use crate::secret::SecretUrl;
 
@@ -1817,6 +1904,141 @@ mod test {
         // Assert values
         let new_entry = db.get_latest_deletion().await?;
         assert!((new_entry.timestamp.timestamp() - new_timestamp.timestamp()) <= 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_history_unprocessed_identities() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let identities = mock_identities(2);
+
+        let now = Utc::now();
+
+        let insertion_timestamp = now - chrono::Duration::seconds(5);
+        db.insert_new_identity(identities[0], insertion_timestamp)
+            .await?;
+
+        let insertion_timestamp = now + chrono::Duration::seconds(5);
+        db.insert_new_identity(identities[1], insertion_timestamp)
+            .await?;
+
+        let history = db.get_identity_history_entries(&identities[0]).await?;
+
+        assert_eq!(history.len(), 1);
+        assert_eq!(
+            history[0].status,
+            Status::Unprocessed(UnprocessedStatus::New)
+        );
+        assert!(!history[0].held_back, "Identity should not be held back");
+        assert_eq!(history[0].leaf_index, None);
+
+        let history = db.get_identity_history_entries(&identities[1]).await?;
+
+        assert_eq!(history.len(), 1);
+        assert_eq!(
+            history[0].status,
+            Status::Unprocessed(UnprocessedStatus::New)
+        );
+        assert!(history[0].held_back, "Identity should be held back");
+        assert_eq!(history[0].leaf_index, None);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_history_unprocessed_deletion_identities() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let identities = mock_identities(2);
+        let roots = mock_roots(2);
+
+        db.insert_pending_identity(0, &identities[0], &roots[0])
+            .await?;
+        db.mark_root_as_mined(&roots[0]).await?;
+
+        db.insert_new_deletion(0, &identities[0]).await?;
+
+        let history = db.get_identity_history_entries(&identities[0]).await?;
+
+        assert_eq!(history.len(), 2);
+
+        assert_eq!(history[0].status, Status::Processed(ProcessedStatus::Mined));
+        assert_eq!(history[0].commitment, identities[0]);
+        assert_eq!(history[0].leaf_index, Some(0));
+        assert!(!history[0].held_back, "Identity should not be held back");
+
+        assert_eq!(
+            history[1].status,
+            Status::Unprocessed(UnprocessedStatus::New)
+        );
+        assert_eq!(history[1].commitment, Hash::ZERO);
+        assert_eq!(history[1].leaf_index, Some(0));
+        assert!(!history[1].held_back, "Identity should not be held back");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_history_processed_deletion_identities() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let identities = mock_identities(2);
+        let roots = mock_roots(2);
+
+        db.insert_pending_identity(0, &identities[0], &roots[0])
+            .await?;
+        db.insert_pending_identity(0, &Hash::ZERO, &roots[1])
+            .await?;
+
+        db.mark_root_as_mined(&roots[1]).await?;
+
+        let history = db.get_identity_history_entries(&identities[0]).await?;
+
+        assert_eq!(history.len(), 2);
+
+        assert_eq!(history[0].status, Status::Processed(ProcessedStatus::Mined));
+        assert_eq!(history[0].commitment, identities[0]);
+        assert_eq!(history[0].leaf_index, Some(0));
+        assert!(!history[0].held_back, "Identity should not be held back");
+
+        assert_eq!(history[1].status, Status::Processed(ProcessedStatus::Mined));
+        assert_eq!(history[1].commitment, Hash::ZERO);
+        assert_eq!(history[1].leaf_index, Some(0));
+        assert!(!history[1].held_back, "Identity should not be held back");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_history_processed_identity() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let identities = mock_identities(2);
+        let roots = mock_roots(2);
+
+        db.insert_pending_identity(0, &identities[0], &roots[0])
+            .await?;
+
+        let history = db.get_identity_history_entries(&identities[0]).await?;
+
+        assert_eq!(history.len(), 1);
+
+        assert_eq!(
+            history[0].status,
+            Status::Processed(ProcessedStatus::Pending)
+        );
+        assert_eq!(history[0].commitment, identities[0]);
+        assert_eq!(history[0].leaf_index, Some(0));
+        assert!(!history[0].held_back, "Identity should not be held back");
+
+        db.mark_root_as_mined(&roots[0]).await?;
+
+        let history = db.get_identity_history_entries(&identities[0]).await?;
+
+        assert_eq!(history.len(), 1);
+
+        assert_eq!(history[0].status, Status::Processed(ProcessedStatus::Mined));
+        assert_eq!(history[0].commitment, identities[0]);
+        assert_eq!(history[0].leaf_index, Some(0));
+        assert!(!history[0].held_back, "Identity should not be held back");
 
         Ok(())
     }

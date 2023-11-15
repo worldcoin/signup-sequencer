@@ -9,7 +9,7 @@ use hyper::StatusCode;
 use ruint::Uint;
 use semaphore::poseidon_tree::LazyPoseidonTree;
 use semaphore::protocol::verify_proof;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tracing::{info, instrument, warn};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};
@@ -100,6 +100,47 @@ impl ToResponseCode for VerifySemaphoreProofResponse {
     fn to_response_code(&self) -> StatusCode {
         StatusCode::OK
     }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct IdentityHistoryResponse {
+    pub history: Vec<IdentityHistoryEntry>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct IdentityHistoryEntry {
+    pub kind:   IdentityHistoryEntryKind,
+    pub status: IdentityHistoryEntryStatus,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub enum IdentityHistoryEntryKind {
+    Insertion,
+    Deletion,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub enum IdentityHistoryEntryStatus {
+    // Present in the unprocessed identities or deletions table
+    Buffered,
+    // Present in the unprocessed identities table but not eligible for processing
+    Queued,
+    // Present in the pending tree (not mined on chain yet)
+    Pending,
+    // Present in the batching tree (transaction sent but not confirmed yet)
+    Batched,
+    // Present in the processed tree (mined on chain)
+    Mined,
+    // Present in the batching tree (mined on chain)
+    Bridged,
 }
 
 #[derive(Clone, Debug, PartialEq, Parser)]
@@ -635,6 +676,56 @@ impl App {
             .await?;
 
         Ok(())
+    }
+
+    pub async fn identity_history(
+        &self,
+        commitment: &Hash,
+    ) -> Result<Vec<IdentityHistoryEntry>, ServerError> {
+        let entries = self.database.get_identity_history_entries(commitment).await?;
+
+        let mut history = vec![];
+
+        for entry in entries {
+            let mut status = match entry.status {
+                Status::Processed(ProcessedStatus::Pending) => IdentityHistoryEntryStatus::Pending,
+                Status::Processed(ProcessedStatus::Processed) => IdentityHistoryEntryStatus::Mined,
+                Status::Processed(ProcessedStatus::Mined) => IdentityHistoryEntryStatus::Bridged,
+                Status::Unprocessed(UnprocessedStatus::New) => IdentityHistoryEntryStatus::Buffered,
+                // This status virtually never happens so we'll mark it as buffered
+                Status::Unprocessed(UnprocessedStatus::Failed) => {
+                    IdentityHistoryEntryStatus::Buffered
+                }
+            };
+
+            match status {
+                // A pending identity can be present in the batching tree and therefore status
+                // should be set to Batched
+                IdentityHistoryEntryStatus::Pending => {
+                    if let Some(leaf_index) = entry.leaf_index {
+                        if self.tree_state.get_batching_tree().get_leaf(leaf_index)
+                            == entry.commitment
+                        {
+                            status = IdentityHistoryEntryStatus::Batched;
+                        }
+                    }
+                }
+                IdentityHistoryEntryStatus::Buffered if entry.held_back => {
+                    status = IdentityHistoryEntryStatus::Queued;
+                }
+                _ => (),
+            }
+
+            let kind = if entry.commitment == Uint::ZERO {
+                IdentityHistoryEntryKind::Deletion
+            } else {
+                IdentityHistoryEntryKind::Insertion
+            };
+
+            history.push(IdentityHistoryEntry { kind, status });
+        }
+
+        Ok(history)
     }
 
     fn merge_env_provers(options: prover::Options, existing_provers: &mut Provers) -> Provers {

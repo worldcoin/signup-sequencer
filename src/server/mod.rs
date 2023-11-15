@@ -19,7 +19,8 @@ use tracing::info;
 use url::{Host, Url};
 
 use crate::app::{
-    App, InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofResponse,
+    App, IdentityHistoryEntry, InclusionProofResponse, ListBatchSizesResponse,
+    VerifySemaphoreProofResponse,
 };
 use crate::identity_tree::Hash;
 use crate::prover::ProverType;
@@ -75,6 +76,21 @@ pub struct RemoveBatchSizeRequest {
 #[serde(deny_unknown_fields)]
 pub struct InclusionProofRequest {
     pub identity_commitment: Hash,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct IdentityHistoryRequest {
+    pub identity_commitment: Hash,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct IdentityHistoryResponse {
+    #[serde(default)]
+    pub history: Vec<IdentityHistoryEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,7 +212,17 @@ async fn recover_identity(
         &req.new_identity_commitment,
     )
     .await?;
+
     Ok(())
+}
+
+async fn identity_history(
+    State(app): State<Arc<App>>,
+    Json(req): Json<IdentityHistoryRequest>,
+) -> Result<Json<IdentityHistoryResponse>, Error> {
+    let history = app.identity_history(&req.identity_commitment).await?;
+
+    Ok(Json(IdentityHistoryResponse { history }))
 }
 
 async fn remove_batch_size(
@@ -208,6 +234,7 @@ async fn remove_batch_size(
 
     Ok(())
 }
+
 async fn list_batch_sizes(
     State(app): State<Arc<App>>,
 ) -> Result<(StatusCode, Json<ListBatchSizesResponse>), Error> {
@@ -215,6 +242,7 @@ async fn list_batch_sizes(
 
     Ok((result.to_response_code(), Json(result)))
 }
+
 /// # Errors
 ///
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
@@ -263,9 +291,11 @@ pub async fn bind_from_listener(
         .route("/verifySemaphoreProof", post(verify_semaphore_proof))
         .route("/inclusionProof", post(inclusion_proof))
         .route("/insertIdentity", post(insert_identity))
-        .route("/addBatchSize", post(add_batch_size))
         .route("/deleteIdentity", post(delete_identity))
         .route("/recoverIdentity", post(recover_identity))
+        .route("/identityHistory", post(identity_history))
+        // Operate on batch sizes
+        .route("/addBatchSize", post(add_batch_size))
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
         .layer(middleware::from_fn(

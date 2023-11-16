@@ -12,19 +12,20 @@ use clap::Parser;
 use cli_batteries::await_shutdown;
 use error::Error;
 use hyper::StatusCode;
-use semaphore::protocol::Proof;
-use semaphore::Field;
-use serde::{Deserialize, Serialize};
 use tracing::info;
 use url::{Host, Url};
 
-use crate::app::{
-    App, InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofResponse,
-};
-use crate::identity_tree::Hash;
-use crate::prover::ProverType;
+use crate::app::App;
 
 mod custom_middleware;
+pub mod data;
+
+use self::data::{
+    AddBatchSizeRequest, DeletionRequest, IdentityHistoryRequest, IdentityHistoryResponse,
+    InclusionProofRequest, InclusionProofResponse, InsertCommitmentRequest, ListBatchSizesResponse,
+    RecoveryRequest, RemoveBatchSizeRequest, ToResponseCode, VerifySemaphoreProofQuery,
+    VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Parser)]
 #[group(skip)]
@@ -37,91 +38,6 @@ pub struct Options {
     /// Request handling timeout (seconds)
     #[clap(long, env, default_value = "300")]
     pub serve_timeout: u64,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct InsertCommitmentRequest {
-    identity_commitment: Hash,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct AddBatchSizeRequest {
-    /// The URL of the prover for the provided batch size.
-    url:             String,
-    /// The batch size to add.
-    batch_size:      usize,
-    /// The timeout for communications with the prover service.
-    timeout_seconds: u64,
-    // TODO: add docs
-    prover_type:     ProverType,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct RemoveBatchSizeRequest {
-    /// The batch size to remove from the prover map.
-    batch_size:  usize,
-    // TODO: add docs
-    prover_type: ProverType,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct InclusionProofRequest {
-    pub identity_commitment: Hash,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct VerifySemaphoreProofRequest {
-    pub root:                    Field,
-    pub signal_hash:             Field,
-    pub nullifier_hash:          Field,
-    pub external_nullifier_hash: Field,
-    pub proof:                   Proof,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct VerifySemaphoreProofQuery {
-    #[serde(default)]
-    pub max_root_age_seconds: Option<i64>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct DeletionRequest {
-    /// The identity commitment to delete.
-    identity_commitment: Hash,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct RecoveryRequest {
-    /// The leaf index of the identity commitment to delete.
-    previous_identity_commitment: Hash,
-    /// The new identity commitment to insert.
-    new_identity_commitment:      Hash,
-}
-
-pub trait ToResponseCode {
-    fn to_response_code(&self) -> StatusCode;
-}
-
-impl ToResponseCode for () {
-    fn to_response_code(&self) -> StatusCode {
-        StatusCode::OK
-    }
 }
 
 async fn inclusion_proof(
@@ -196,7 +112,17 @@ async fn recover_identity(
         &req.new_identity_commitment,
     )
     .await?;
+
     Ok(())
+}
+
+async fn identity_history(
+    State(app): State<Arc<App>>,
+    Json(req): Json<IdentityHistoryRequest>,
+) -> Result<Json<IdentityHistoryResponse>, Error> {
+    let history = app.identity_history(&req.identity_commitment).await?;
+
+    Ok(Json(IdentityHistoryResponse { history }))
 }
 
 async fn remove_batch_size(
@@ -208,6 +134,7 @@ async fn remove_batch_size(
 
     Ok(())
 }
+
 async fn list_batch_sizes(
     State(app): State<Arc<App>>,
 ) -> Result<(StatusCode, Json<ListBatchSizesResponse>), Error> {
@@ -215,6 +142,7 @@ async fn list_batch_sizes(
 
     Ok((result.to_response_code(), Json(result)))
 }
+
 /// # Errors
 ///
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
@@ -263,9 +191,11 @@ pub async fn bind_from_listener(
         .route("/verifySemaphoreProof", post(verify_semaphore_proof))
         .route("/inclusionProof", post(inclusion_proof))
         .route("/insertIdentity", post(insert_identity))
-        .route("/addBatchSize", post(add_batch_size))
         .route("/deleteIdentity", post(delete_identity))
         .route("/recoverIdentity", post(recover_identity))
+        .route("/identityHistory", post(identity_history))
+        // Operate on batch sizes
+        .route("/addBatchSize", post(add_batch_size))
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
         .layer(middleware::from_fn(

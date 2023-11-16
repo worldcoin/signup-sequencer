@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 
-use crate::identity_tree::{Hash, UnprocessedStatus};
+use crate::identity_tree::{Hash, Status, UnprocessedStatus};
 
 pub struct UnprocessedCommitment {
     pub commitment:            Hash,
@@ -24,4 +24,14 @@ pub struct LatestDeletionEntry {
 pub struct DeletionEntry {
     pub leaf_index: usize,
     pub commitment: Hash,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct CommitmentHistoryEntry {
+    pub commitment: Hash,
+    pub leaf_index: Option<usize>,
+    // Only applies to buffered entries
+    // set to true if the eligibility timestamp is in the future
+    pub held_back:  bool,
+    pub status:     Status,
 }

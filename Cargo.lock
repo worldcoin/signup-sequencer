@@ -177,7 +177,7 @@ dependencies = [
  "cfg-if",
  "color-eyre 0.5.11",
  "criterion",
- "ethers-core 2.0.10 (git+https://github.com/gakonst/ethers-rs)",
+ "ethers-core 2.0.11",
  "fnv",
  "hex",
  "num",
@@ -2166,7 +2166,7 @@ checksum = "1ad13497f6e0a24292fc7b408e30d22fe9dc262da1f40d7b542c3a44e7fc0476"
 dependencies = [
  "ethers-addressbook",
  "ethers-contract",
- "ethers-core 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ethers-core 2.0.10",
  "ethers-etherscan",
  "ethers-middleware",
  "ethers-providers",
@@ -2180,7 +2180,7 @@ version = "2.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6e9e8acd0ed348403cc73a670c24daba3226c40b98dc1a41903766b3ab6240a"
 dependencies = [
- "ethers-core 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ethers-core 2.0.10",
  "once_cell",
  "serde",
  "serde_json",
@@ -2195,7 +2195,7 @@ dependencies = [
  "const-hex",
  "ethers-contract-abigen",
  "ethers-contract-derive",
- "ethers-core 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ethers-core 2.0.10",
  "ethers-providers",
  "futures-util",
  "once_cell",
@@ -2214,7 +2214,7 @@ dependencies = [
  "Inflector",
  "const-hex",
  "dunce",
- "ethers-core 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ethers-core 2.0.10",
  "ethers-etherscan",
  "eyre",
  "prettyplease",
@@ -2238,7 +2238,7 @@ dependencies = [
  "Inflector",
  "const-hex",
  "ethers-contract-abigen",
- "ethers-core 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ethers-core 2.0.10",
  "proc-macro2",
  "quote",
  "serde_json",
@@ -2277,8 +2277,8 @@ dependencies = [
 
 [[package]]
 name = "ethers-core"
-version = "2.0.10"
-source = "git+https://github.com/gakonst/ethers-rs#08bcb67c36d9a2869950e51ecf76124c9febe035"
+version = "2.0.11"
+source = "git+https://github.com/gakonst/ethers-rs#34030b3e942be619ae180d0f9f0ae9b3121081a3"
 dependencies = [
  "arrayvec",
  "bytes",
@@ -2307,7 +2307,7 @@ version = "2.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e53451ea4a8128fbce33966da71132cf9e1040dcfd2a2084fd7733ada7b2045"
 dependencies = [
- "ethers-core 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ethers-core 2.0.10",
  "reqwest",
  "semver 1.0.14",
  "serde",
@@ -2325,7 +2325,7 @@ dependencies = [
  "async-trait",
  "auto_impl",
  "ethers-contract",
- "ethers-core 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ethers-core 2.0.10",
  "ethers-etherscan",
  "ethers-providers",
  "ethers-signers",
@@ -2355,7 +2355,7 @@ dependencies = [
  "bytes",
  "const-hex",
  "enr",
- "ethers-core 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ethers-core 2.0.10",
  "futures-channel",
  "futures-core",
  "futures-timer",
@@ -2394,7 +2394,7 @@ dependencies = [
  "const-hex",
  "elliptic-curve",
  "eth-keystore",
- "ethers-core 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ethers-core 2.0.10",
  "rand",
  "sha2",
  "thiserror",
@@ -2411,7 +2411,7 @@ dependencies = [
  "const-hex",
  "dirs 5.0.1",
  "dunce",
- "ethers-core 2.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ethers-core 2.0.10",
  "glob",
  "home",
  "md-5",
@@ -5138,7 +5138,7 @@ dependencies = [
 [[package]]
 name = "semaphore"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a45738039e0b0a8adbac5ee193958f1e238d7de4"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#239d182f414efc6e612ec5bcd6e10353e90ffd1c"
 dependencies = [
  "ark-bn254",
  "ark-circom",
@@ -5150,7 +5150,7 @@ dependencies = [
  "bincode",
  "color-eyre 0.6.2",
  "enumset",
- "ethers-core 2.0.10 (git+https://github.com/gakonst/ethers-rs)",
+ "ethers-core 2.0.11",
  "hex",
  "hex-literal 0.3.4",
  "mmap-rs",
@@ -5173,12 +5173,12 @@ dependencies = [
 [[package]]
 name = "semaphore-depth-config"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a45738039e0b0a8adbac5ee193958f1e238d7de4"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#239d182f414efc6e612ec5bcd6e10353e90ffd1c"
 
 [[package]]
 name = "semaphore-depth-macros"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#a45738039e0b0a8adbac5ee193958f1e238d7de4"
+source = "git+https://github.com/worldcoin/semaphore-rs?branch=main#239d182f414efc6e612ec5bcd6e10353e90ffd1c"
 dependencies = [
  "itertools 0.10.5",
  "proc-macro2",

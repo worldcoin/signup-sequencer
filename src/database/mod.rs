@@ -184,38 +184,6 @@ impl Database {
         Ok(())
     }
 
-    // INSERT INTO block_txs (block_id, tx_hash)
-    // SELECT $1, unnested.tx_hash
-    // FROM UNNEST($2::BYTEA[]) AS unnested(tx_hash)
-    // WHERE EXISTS (
-    //     SELECT 1
-    //     FROM tx_hashes
-    //     WHERE tx_hashes.tx_hash = unnested.tx_hash
-    // );
-
-    pub async fn insert_pending_identity(
-        &self,
-        leaf_index: usize,
-        identity: &Hash,
-        root: &Hash,
-    ) -> Result<(), Error> {
-        sqlx::query(
-            r#"
-            INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of)
-            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-            ON CONFLICT (root) DO NOTHING;
-            "#,
-        )
-        .bind(leaf_index as i64)
-        .bind(identity)
-        .bind(root)
-        .bind(<&str>::from(Status::Pending))
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
     pub async fn get_leaf_index_by_root(
         tx: impl Executor<'_, Database = Postgres>,
         root: &Hash,
@@ -597,19 +565,6 @@ impl Database {
         Ok(None)
     }
 
-    pub async fn remove_unprocessed_identity(&self, commitment: &Hash) -> Result<(), Error> {
-        let query = sqlx::query(
-            r#"
-                DELETE FROM unprocessed_identities WHERE commitment = $1
-            "#,
-        )
-        .bind(commitment);
-
-        self.pool.execute(query).await?;
-
-        Ok(())
-    }
-
     pub async fn update_err_unprocessed_commitment(
         &self,
         commitment: Hash,
@@ -670,9 +625,48 @@ mod test {
     use postgres_docker_utils::DockerContainerGuard;
     use semaphore::Field;
 
-    use super::{Database, Options};
+    use super::{Database, Error, Options};
     use crate::identity_tree::{Hash, Status};
     use crate::secret::SecretUrl;
+
+    // Test only methods
+    impl Database {
+        pub async fn insert_pending_identity(
+            &self,
+            leaf_index: usize,
+            identity: &Hash,
+            root: &Hash,
+        ) -> Result<(), Error> {
+            sqlx::query(
+                r#"
+                INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of)
+                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                ON CONFLICT (root) DO NOTHING;
+                "#,
+            )
+            .bind(leaf_index as i64)
+            .bind(identity)
+            .bind(root)
+            .bind(<&str>::from(Status::Pending))
+            .execute(&self.pool)
+            .await?;
+
+            Ok(())
+        }
+
+        pub async fn remove_unprocessed_identity(&self, commitment: &Hash) -> Result<(), Error> {
+            sqlx::query(
+                r#"
+                    DELETE FROM unprocessed_identities WHERE commitment = $1
+                "#,
+            )
+            .bind(commitment)
+            .execute(&self.pool)
+            .await?;
+
+            Ok(())
+        }
+    }
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {

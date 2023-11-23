@@ -119,18 +119,19 @@ async fn insert_identities(
         "Length mismatch when appending identities to tree"
     );
 
-    let items = data
-        .into_iter()
-        .zip(identities.into_iter())
-        .map(|((root, proof, leaf_index), identity)| (root, proof, leaf_index, identity));
+    let bulk_insert_items = data
+        .iter()
+        .zip(identities.iter())
+        .map(|((root, _proof, leaf_index), identity)| (*leaf_index, *identity, *root))
+        .collect::<Vec<_>>();
 
-    for (root, _proof, leaf_index, identity) in items {
-        database
-            .insert_pending_identity(leaf_index, &identity, &root)
-            .await?;
+    database
+        .bulk_insert_pending_identity(&bulk_insert_items)
+        .await?;
 
-        database.remove_unprocessed_identity(&identity).await?;
-    }
+    database
+        .bulk_remove_unprocessed_identity(&identities)
+        .await?;
 
     Ok(())
 }

@@ -240,6 +240,7 @@ impl Database {
             UPDATE identities
             SET    status = $2, mined_at = NULL
             WHERE  leaf_index > $1
+            AND    status <> $2
             "#,
         )
         .bind(root_leaf_index)

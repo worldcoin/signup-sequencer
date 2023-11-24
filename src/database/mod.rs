@@ -130,29 +130,56 @@ impl Database {
         Ok(Self { pool })
     }
 
-    pub async fn insert_pending_identity(
+    pub async fn bulk_insert_pending_identity(
         &self,
-        leaf_index: usize,
-        identity: &Hash,
-        root: &Hash,
+        items: &[(usize, Hash, Hash)],
     ) -> Result<(), Error> {
-        let mut tx = self.pool.begin().await?;
+        let mut indices = Vec::with_capacity(items.len());
+        let mut commitments = Vec::with_capacity(items.len());
+        let mut roots = Vec::with_capacity(items.len());
 
-        let insert_pending_identity_query = sqlx::query(
+        for (index, commitment, root) in items {
+            indices.push(*index as i64);
+
+            let commitment_bytes: [u8; 32] = commitment.to_be_bytes();
+            commitments.push(commitment_bytes);
+
+            let root_bytes: [u8; 32] = root.to_be_bytes();
+            roots.push(root_bytes);
+        }
+
+        sqlx::query(
             r#"
             INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of)
-            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-            ON CONFLICT (root) DO NOTHING;
+            SELECT unnested.leaf_index, unnested.commitment, unnested.root, $4, CURRENT_TIMESTAMP
+            FROM UNNEST($1::BIGINT[], $2::BYTEA[], $3::BYTEA[]) AS unnested(leaf_index, commitment, root)
+            ON CONFLICT (root) DO NOTHING
+            "#
+        )
+        .bind(&indices)
+        .bind(&commitments)
+        .bind(&roots)
+        .bind(<&str>::from(Status::Pending))
+        .execute(&self.pool).await?;
+
+        Ok(())
+    }
+
+    pub async fn bulk_remove_unprocessed_identity(&self, items: &[Hash]) -> Result<(), Error> {
+        let items: Vec<[u8; 32]> = items
+            .iter()
+            .map(|commitment| commitment.to_be_bytes())
+            .collect();
+
+        sqlx::query(
+            r#"
+            DELETE FROM unprocessed_identities
+            WHERE commitment = ANY($1::BYTEA[])
             "#,
         )
-        .bind(leaf_index as i64)
-        .bind(identity)
-        .bind(root)
-        .bind(<&str>::from(Status::Pending));
-
-        tx.execute(insert_pending_identity_query).await?;
-
-        tx.commit().await?;
+        .bind(&items)
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
     }
@@ -213,6 +240,7 @@ impl Database {
             UPDATE identities
             SET    status = $2, mined_at = NULL
             WHERE  leaf_index > $1
+            AND    status <> $2
             "#,
         )
         .bind(root_leaf_index)
@@ -538,19 +566,6 @@ impl Database {
         Ok(None)
     }
 
-    pub async fn remove_unprocessed_identity(&self, commitment: &Hash) -> Result<(), Error> {
-        let query = sqlx::query(
-            r#"
-                DELETE FROM unprocessed_identities WHERE commitment = $1
-            "#,
-        )
-        .bind(commitment);
-
-        self.pool.execute(query).await?;
-
-        Ok(())
-    }
-
     pub async fn update_err_unprocessed_commitment(
         &self,
         commitment: Hash,
@@ -611,9 +626,48 @@ mod test {
     use postgres_docker_utils::DockerContainerGuard;
     use semaphore::Field;
 
-    use super::{Database, Options};
+    use super::{Database, Error, Options};
     use crate::identity_tree::{Hash, Status};
     use crate::secret::SecretUrl;
+
+    // Test only methods
+    impl Database {
+        pub async fn insert_pending_identity(
+            &self,
+            leaf_index: usize,
+            identity: &Hash,
+            root: &Hash,
+        ) -> Result<(), Error> {
+            sqlx::query(
+                r#"
+                INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of)
+                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                ON CONFLICT (root) DO NOTHING;
+                "#,
+            )
+            .bind(leaf_index as i64)
+            .bind(identity)
+            .bind(root)
+            .bind(<&str>::from(Status::Pending))
+            .execute(&self.pool)
+            .await?;
+
+            Ok(())
+        }
+
+        pub async fn remove_unprocessed_identity(&self, commitment: &Hash) -> Result<(), Error> {
+            sqlx::query(
+                r#"
+                    DELETE FROM unprocessed_identities WHERE commitment = $1
+                "#,
+            )
+            .bind(commitment)
+            .execute(&self.pool)
+            .await?;
+
+            Ok(())
+        }
+    }
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {
@@ -717,6 +771,45 @@ mod test {
 
         let next_leaf_index = db.get_next_leaf_index().await?;
         assert_eq!(next_leaf_index, 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn bulk_operations_test() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let identities = mock_identities(10);
+        let roots = mock_roots(10);
+
+        let next_leaf_index = db.get_next_leaf_index().await?;
+        assert_eq!(next_leaf_index, 0, "Db should contain not leaf indexes");
+
+        for identity in &identities {
+            db.insert_new_identity(*identity).await?;
+        }
+
+        let bulk_items = (0..10)
+            .map(|i| (i, identities[i], roots[i]))
+            .collect::<Vec<_>>();
+
+        db.bulk_insert_pending_identity(&bulk_items).await?;
+        db.bulk_remove_unprocessed_identity(&identities).await?;
+
+        let next_leaf_index = db.get_next_leaf_index().await?;
+        assert_eq!(next_leaf_index, 10);
+
+        let new_unprocessed_commitments = db.get_unprocessed_commitments(Status::New).await?;
+        assert!(new_unprocessed_commitments.is_empty());
+
+        for i in 0..10 {
+            let root = db
+                .get_root_state(&roots[i])
+                .await?
+                .context("Fetching root state")?;
+
+            assert_eq!(root.status, Status::Pending);
+        }
 
         Ok(())
     }

@@ -10,7 +10,7 @@ anyhow = "1.0.72"
 async-trait = "0.1.71"
 axum = "0.6.19"
 chrono = "0.4.26"
-clap = { version = "4.3.14", features = ["env", "derive"] }
+clap = { version = "4.4.9", features = ["env", "derive"] }
 ethers = { version = "2.0.10", features = ["openssl"] }
 hyper = "0.14.27"
 oz-api = { path = "../oz-api" }

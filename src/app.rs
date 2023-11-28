@@ -228,7 +228,7 @@ impl App {
                 &initial_leaf_value,
                 initial_root_hash,
                 mined_items.clone(),
-                &mmap_file_path,
+                mmap_file_path,
             )
             .await?
             {

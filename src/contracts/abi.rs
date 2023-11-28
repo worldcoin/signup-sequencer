@@ -25,7 +25,7 @@ impl From<u8> for TreeChangeKind {
             0 => Self::Insertion,
             1 => Self::Deletion,
             2 => Self::Update,
-            _ => panic!("Invalid value for TreeChangeKind: {}", value),
+            _ => panic!("Invalid value for TreeChangeKind: {value}"),
         }
     }
 }

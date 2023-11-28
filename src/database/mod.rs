@@ -2049,7 +2049,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn can_insert_same_root_multiple_times() -> eyre::Result<()> {
+    async fn can_insert_same_root_multiple_times() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
         let identities = mock_identities(2);
         let roots = mock_roots(2);

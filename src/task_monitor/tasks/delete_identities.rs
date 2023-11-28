@@ -91,7 +91,7 @@ async fn delete_identities(
             );
 
             // Insert the new items into pending identities
-            let items = data.into_iter().zip(leaf_indices.into_iter());
+            let items = data.into_iter().zip(leaf_indices);
             for ((root, _proof), leaf_index) in items {
                 database
                     .insert_pending_identity(leaf_index, &Hash::ZERO, &root)

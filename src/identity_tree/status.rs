@@ -141,7 +141,7 @@ mod tests {
         let s = s.leak() as &'static str;
 
         // Unwrap from the redundant JSON quotes
-        s.trim_start_matches("\"").trim_end_matches("\"")
+        s.trim_start_matches('\"').trim_end_matches('\"')
     }
 
     #[test_case("pending" => Status::Processed(ProcessedStatus::Pending))]

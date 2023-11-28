@@ -121,7 +121,7 @@ async fn insert_identities(
         "Length mismatch when appending identities to tree"
     );
 
-    let items = data.into_iter().zip(identities.into_iter());
+    let items = data.into_iter().zip(identities);
 
     for ((root, _proof, leaf_index), identity) in items {
         database

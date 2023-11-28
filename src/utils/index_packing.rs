@@ -1,3 +1,4 @@
+#[must_use]
 pub fn pack_indices(indices: &[u32]) -> Vec<u8> {
     let mut packed = Vec::with_capacity(indices.len() * 4);
 
@@ -8,6 +9,7 @@ pub fn pack_indices(indices: &[u32]) -> Vec<u8> {
     packed
 }
 
+#[must_use]
 pub fn unpack_indices(packed: &[u8]) -> Vec<u32> {
     let mut indices = Vec::with_capacity(packed.len() / 4);
 

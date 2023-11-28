@@ -36,9 +36,11 @@ async fn monitor_txs_loop(
     let mut monitored_txs_receiver = monitored_txs_receiver.lock().await;
 
     while let Some(tx) = monitored_txs_receiver.recv().await {
-        if !identity_manager.mine_transaction(tx.clone()).await? {
-            panic!("Failed to mine transaction: {}", tx);
-        }
+        assert!(
+            (identity_manager.mine_transaction(tx.clone()).await?),
+            "Failed to mine transaction: {}",
+            tx
+        );
     }
 
     Ok(())

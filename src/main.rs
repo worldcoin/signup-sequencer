@@ -1,5 +1,5 @@
 #![doc = include_str!("../Readme.md")]
-#![warn(clippy::all, clippy::pedantic, clippy::cargo)]
+#![warn(clippy::cargo)]
 #![allow(clippy::module_name_repetitions, clippy::wildcard_imports)]
 
 use cli_batteries::{run, version};

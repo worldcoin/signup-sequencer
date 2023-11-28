@@ -200,7 +200,7 @@ async fn finalize_mainnet_roots(
                 database,
                 identity_manager,
                 processed_tree,
-                &log,
+                log,
                 max_epoch_duration,
             )
             .await?;
@@ -311,7 +311,10 @@ async fn update_eligible_recoveries(
         .context("Could not fetch deletion indices from tx")?;
 
     let commitments = processed_tree.commitments_by_indices(commitments.iter().copied());
-    let commitments: Vec<U256> = commitments.into_iter().map(|c| c.into()).collect();
+    let commitments: Vec<U256> = commitments
+        .into_iter()
+        .map(std::convert::Into::into)
+        .collect();
 
     // Check if any deleted commitments correspond with entries in the
     // recoveries table and insert the new commitment into the unprocessed

@@ -310,7 +310,7 @@ async fn fetch_identity_history(
 ) -> anyhow::Result<Option<IdentityHistoryResponse>> {
     let uri = format!("{uri}/identityHistory");
     let body = IdentityHistoryRequest {
-        identity_commitment: identity.clone(),
+        identity_commitment: *identity,
     };
 
     let req = Request::post(uri)

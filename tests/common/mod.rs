@@ -1,6 +1,6 @@
 // We include this module in multiple in multiple integration
 // test crates - so some code may not be used in some cases
-#![allow(dead_code)]
+#![allow(dead_code, clippy::too_many_arguments)]
 
 pub mod abi;
 mod chain_mock;

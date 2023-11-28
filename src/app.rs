@@ -228,7 +228,7 @@ impl App {
                 &initial_leaf_value,
                 initial_root_hash,
                 mined_items.clone(),
-                &mmap_file_path,
+                mmap_file_path,
             )
             .await?
             {
@@ -872,7 +872,7 @@ mod test {
         );
 
         // check if the index is correct
-        assert_eq!(last_mined_index_in_dense, identities.iter().count());
+        assert_eq!(last_mined_index_in_dense, identities.len());
         // since there are less identities then dense prefix, the leavs should be empty
         // vector
         assert!(leaves.is_empty());
@@ -893,7 +893,7 @@ mod test {
         assert_eq!(last_mined_index_in_dense, (1 << dense_prefix_depth) - 1);
 
         // since there are more identities then dense prefix, the leavs should be 2
-        assert_eq!(leaves.iter().count(), 2);
+        assert_eq!(leaves.len(), 2);
 
         // additional check for correctness
         assert_eq!(leaves[0], identities[8].element);

@@ -1,6 +1,10 @@
 #![doc = include_str!("../Readme.md")]
-#![warn(clippy::all, clippy::pedantic, clippy::cargo)]
-#![allow(clippy::module_name_repetitions, clippy::wildcard_imports)]
+#![warn(clippy::cargo)]
+#![allow(
+    clippy::module_name_repetitions,
+    clippy::wildcard_imports,
+    clippy::too_many_arguments
+)]
 
 pub mod app;
 mod contracts;

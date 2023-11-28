@@ -1,4 +1,5 @@
-#[must_use] pub fn pack_indices(indices: &[u32]) -> Vec<u8> {
+#[must_use]
+pub fn pack_indices(indices: &[u32]) -> Vec<u8> {
     let mut packed = Vec::with_capacity(indices.len() * 4);
 
     for index in indices {
@@ -8,7 +9,8 @@
     packed
 }
 
-#[must_use] pub fn unpack_indices(packed: &[u8]) -> Vec<u32> {
+#[must_use]
+pub fn unpack_indices(packed: &[u8]) -> Vec<u32> {
     let mut indices = Vec::with_capacity(packed.len() / 4);
 
     for packed_index in packed.chunks_exact(4) {

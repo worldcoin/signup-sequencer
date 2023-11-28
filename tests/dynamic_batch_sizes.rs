@@ -5,7 +5,6 @@ use std::str::FromStr;
 use common::prelude::*;
 use hyper::Uri;
 
-
 use crate::common::{test_add_batch_size, test_remove_batch_size};
 
 const SUPPORTED_DEPTH: usize = 20;

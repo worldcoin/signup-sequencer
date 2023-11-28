@@ -207,11 +207,13 @@ impl ToResponseCode for VerifySemaphoreProofResponse {
 }
 
 impl IdentityHistoryEntryKind {
-    #[must_use] pub fn is_insertion(&self) -> bool {
+    #[must_use]
+    pub fn is_insertion(&self) -> bool {
         matches!(self, IdentityHistoryEntryKind::Insertion)
     }
 
-    #[must_use] pub fn is_deletion(&self) -> bool {
+    #[must_use]
+    pub fn is_deletion(&self) -> bool {
         matches!(self, IdentityHistoryEntryKind::Deletion)
     }
 }

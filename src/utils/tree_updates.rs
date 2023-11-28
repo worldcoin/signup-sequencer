@@ -1,6 +1,7 @@
 use crate::identity_tree::TreeUpdate;
 
-#[must_use] pub fn dedup_tree_updates(updates: Vec<TreeUpdate>) -> Vec<TreeUpdate> {
+#[must_use]
+pub fn dedup_tree_updates(updates: Vec<TreeUpdate>) -> Vec<TreeUpdate> {
     let mut deduped = Vec::new();
     let mut temp: Option<TreeUpdate> = None;
 

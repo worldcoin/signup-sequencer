@@ -145,7 +145,6 @@ impl Database {
             r#"
             INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of)
             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-            ON CONFLICT (root) DO NOTHING;
             "#,
         )
         .bind(leaf_index as i64)
@@ -166,7 +165,11 @@ impl Database {
     ) -> Result<Option<usize>, Error> {
         let root_index_query = sqlx::query(
             r#"
-            SELECT id FROM identities WHERE root = $1
+            SELECT id
+            FROM identities
+            WHERE root = $1
+            ORDER BY id ASC
+            LIMIT 1
             "#,
         )
         .bind(root);
@@ -465,7 +468,9 @@ impl Database {
                 pending_as_of as pending_valid_as_of,
                 mined_at as mined_valid_as_of
             FROM identities
-            WHERE root = $1;
+            WHERE root = $1
+            ORDER BY id
+            LIMIT 1
             "#,
         )
         .bind(root);
@@ -2039,6 +2044,28 @@ mod test {
         assert_eq!(history[0].commitment, identities[0]);
         assert_eq!(history[0].leaf_index, Some(0));
         assert!(!history[0].held_back, "Identity should not be held back");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn can_insert_same_root_multiple_times() -> eyre::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+        let identities = mock_identities(2);
+        let roots = mock_roots(2);
+
+        db.insert_pending_identity(0, &identities[0], &roots[0])
+            .await?;
+
+        db.insert_pending_identity(1, &identities[1], &roots[0])
+            .await?;
+
+        let root_state = db
+            .get_root_state(&roots[0])
+            .await?
+            .context("Missing root")?;
+
+        assert_eq!(root_state.status, ProcessedStatus::Pending);
 
         Ok(())
     }

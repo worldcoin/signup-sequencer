@@ -1397,7 +1397,7 @@ mod test {
 
         db.mark_all_as_pending().await?;
 
-        for root in roots.iter() {
+        for root in &roots {
             let root = db
                 .get_root_state(root)
                 .await?

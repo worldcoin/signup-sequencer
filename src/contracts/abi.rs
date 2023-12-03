@@ -2,7 +2,7 @@
 
 use ethers::prelude::abigen;
 
-/// The `TreeChanged` event emitted by the `IdentityManager` contract.
+/// The `TreeChanged` event is emitted by the `IdentityManager` contract.
 /// Maps to the following enum in the contract code:
 ///
 /// ```sol

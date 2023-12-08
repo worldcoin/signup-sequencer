@@ -1,0 +1,20 @@
+[package]
+name = "cognitoauth"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "cognito srp authentication library"
+repository = "https://github.com/lucdew/cognito-srp-auth"
+keywords = ["crypto", "aws", "aws cognito"]
+categories = ["cryptography", "authentication"]
+readme = "README.md"
+rust-version = "1.56"
+
+[dependencies]
+aws-config = "1.0.3"
+aws-sdk-cognitoidentityprovider = "1.4.0"
+aws-smithy-client = { version = "0.60.0", features = [] }
+cognito_srp = "0.1.1"
+thiserror = "1.0.32"
+tracing = "0.1"
+

@@ -19,17 +19,17 @@ Sign-up Sequencer does sequencing of data (identities) that are committed in a b
 Sequencer has 6 API routes.
 
 1. `/insertIdentity` - Accepts identity commitment hash as input which gets added in queue for processing.
-    Identities go trough three tasks.
+    Identities go through three tasks.
     1. Insertion: In the initial stage, the identities are placed into the Sequencer's database.
     The database is polled every few seconds and added to insertion task.
-    2. Processing: The processing of identities, where current batching tree is taken and processed so we we
+    2. Processing: The processing of identities, where current batching tree is taken and processed so we 
     end up with pre root (the root of tree before proofs are generated), post root, start index and
     identity commitments (with their proofs). All of those get sent to a [prover](#semaphore-mtb) for proof generation.
     The identities transaction is then mined, with aforementioned fields and pending identities are sent to task to be mined on-chain.
     3. Mining:  The transaction ID from processing task gets mined and Sequencer database gets updated accordingly.
     Now with blockchain and database being in sync, the mined tree gets updated as well.
 2. `/inclusionProof` - Takes the identity commitment hash, and checks for any errors that might have occurred in the insert identity steps.
-    Then leaf index is fetched from the database, corresponding to the identity hash provided, and then the we check if the identity is
+    Then leaf index is fetched from the database, corresponding to the identity hash provided, and then we check if the identity is
     indeed in the tree. The inclusion proof is then returned to the API caller.
 3. `/deleteIdentity` - Takes an identity commitment hash, ensures that it exists and hasn't been deleted yet. This identity is then scheduled for deletion.
 4. `/recoverIdentity` - Takes two identity commitment hashes. The first must exist and will be scheduled for deletion and the other will be inserted as a replacement after the first identity has been deleted and a set amount of time (depends on configuration parameters) has passed.
@@ -37,7 +37,7 @@ Sequencer has 6 API routes.
     The proving key is fetched based on the depth index, and verification key as well.
     The list of prime fields is created based on request input mentioned before, and then we proceed to verify the proof.
     Sequencer uses groth16 zk-SNARK implementation.
-    The API call returns the proof as response.
+    The API call returns the proof as a response.
 6.  `/addBatchSize` - Adds a prover with specific batch size to a list of provers.
 7.  `/removeBatchSize` - Removes the prover based on batch size.
 8.  `/listBatchSizes` - Lists all provers that are added to the Sequencer.
@@ -77,7 +77,7 @@ Semaphore-mtb is a service for batch processing of Merkle tree updates.
 
 Clone [semaphore-mtb](https://github.com/worldcoin/semaphore-mtb) and execute `go build .` (you will need a golang compiler)
 
-Go build will create a executable named gnark-mbu.  If you went trough the worldcoin id contracts deploy script,
+Go build will create an executable named gnark-mbu.  If you went through the worldcoin id contracts deploy script,
 you will have a generated keys file that is used by semaphore-mtb.
 ```shell
 ./gnark-mbu start --keys-file path/to/world-id-contracts/mtb/keys

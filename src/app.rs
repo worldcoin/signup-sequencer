@@ -443,6 +443,8 @@ impl App {
             return Err(ServerError::UnreducedCommitment);
         }
 
+        // TODO: ensure that the id is not in the tree or in unprocessed identities
+
         if self.database.identity_exists(commitment).await? {
             return Err(ServerError::DuplicateCommitment);
         }
@@ -581,10 +583,6 @@ impl App {
                 Status::Processed(ProcessedStatus::Processed) => IdentityHistoryEntryStatus::Mined,
                 Status::Processed(ProcessedStatus::Mined) => IdentityHistoryEntryStatus::Bridged,
                 Status::Unprocessed(UnprocessedStatus::New) => IdentityHistoryEntryStatus::Buffered,
-                // This status virtually never happens so we'll mark it as buffered
-                Status::Unprocessed(UnprocessedStatus::Failed) => {
-                    IdentityHistoryEntryStatus::Buffered
-                }
             };
 
             match status {

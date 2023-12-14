@@ -62,43 +62,6 @@ async fn insert_identities(
     latest_tree: &TreeVersion<Latest>,
     identities: Vec<UnprocessedCommitment>,
 ) -> AnyhowResult<()> {
-    // Dedup
-    let mut commitments_set = HashSet::new();
-    let mut deduped = Vec::with_capacity(identities.len());
-
-    for identity in identities {
-        if commitments_set.contains(&identity.commitment) {
-            database
-                .update_err_unprocessed_commitment(
-                    identity.commitment,
-                    "Duplicate commitment.".into(),
-                )
-                .await?;
-        } else {
-            commitments_set.insert(identity.commitment);
-            deduped.push(identity);
-        }
-    }
-
-    // Validate the identities are not in the database
-    let mut identities = Vec::with_capacity(deduped.len());
-    for identity in deduped {
-        if database
-            .get_identity_leaf_index(&identity.commitment)
-            .await?
-            .is_some()
-        {
-            database
-                .update_err_unprocessed_commitment(
-                    identity.commitment,
-                    "Duplicate commitment.".into(),
-                )
-                .await?;
-        } else {
-            identities.push(identity);
-        }
-    }
-
     let next_db_index = database.get_next_leaf_index().await?;
     let next_leaf = latest_tree.next_leaf();
 

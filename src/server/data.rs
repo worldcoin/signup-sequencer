@@ -165,7 +165,6 @@ impl From<InclusionProof> for InclusionProofResponse {
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
         match self.0.status {
-            Status::Unprocessed(UnprocessedStatus::Failed) => StatusCode::BAD_REQUEST,
             Status::Unprocessed(UnprocessedStatus::New)
             | Status::Processed(ProcessedStatus::Pending) => StatusCode::ACCEPTED,
             Status::Processed(ProcessedStatus::Mined | ProcessedStatus::Processed) => {

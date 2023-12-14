@@ -5341,6 +5341,7 @@ dependencies = [
  "tracing-futures",
  "tracing-subscriber 0.3.17",
  "tracing-test",
+ "tx-sitter-client",
  "url",
  "zeroize",
 ]
@@ -6313,7 +6314,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tx-sitter"
+name = "tx-sitter-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",

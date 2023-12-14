@@ -10,7 +10,7 @@ use tracing::instrument;
 use url::Url;
 pub use write::TxError;
 
-use self::write::{TransactionId, WriteProvider};
+use self::{write::TransactionId, write_oz::WriteProvider};
 use crate::serde_utils::JsonStrWrapper;
 
 pub mod read;
@@ -39,7 +39,7 @@ pub struct Ethereum {
     read_provider:            Arc<ReadProvider>,
     // Mapping of chain id to provider
     secondary_read_providers: HashMap<u64, Arc<ReadProvider>>,
-    write_provider:           Arc<dyn WriteProvider>,
+    write_provider:           Arc<WriteProvider>,
 }
 
 impl Ethereum {
@@ -57,8 +57,8 @@ impl Ethereum {
             );
         }
 
-        let write_provider: Arc<dyn WriteProvider> =
-            Arc::new(write_oz::Provider::new(read_provider.clone(), &options.write_options).await?);
+        let write_provider: Arc<WriteProvider> =
+            Arc::new(write_oz::WriteProvider::new(read_provider.clone(), &options.write_options).await?);
 
         Ok(Self {
             read_provider: Arc::new(read_provider),

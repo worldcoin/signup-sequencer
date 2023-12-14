@@ -52,18 +52,3 @@ pub enum TxError {
     #[error("Error parsing transaction id: {0}")]
     Parse(Box<dyn Error + Send + Sync + 'static>),
 }
-
-#[async_trait]
-pub trait WriteProvider: Sync + Send + fmt::Debug {
-    async fn send_transaction(
-        &self,
-        tx: TypedTransaction,
-        only_once: bool,
-    ) -> Result<TransactionId, TxError>;
-
-    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError>;
-
-    async fn mine_transaction(&self, tx: TransactionId) -> Result<bool, TxError>;
-
-    fn address(&self) -> Address;
-}

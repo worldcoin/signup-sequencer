@@ -11,7 +11,8 @@ use tokio::time::timeout;
 use tracing::{error, info, info_span, Instrument};
 
 use super::error::Error;
-use super::Options;
+use super::inner::{Inner, TransactionResult};
+use super::options::OzOptions;
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::TxError;
 
@@ -32,7 +33,7 @@ pub struct OzRelay {
 }
 
 impl OzRelay {
-    pub async fn new(options: &Options) -> AnyhowResult<Self> {
+    pub async fn new(options: &OzOptions) -> AnyhowResult<Self> {
         let oz_api = if options.oz_api_key.is_empty() && options.oz_api_secret.is_empty() {
             tracing::warn!(
                 "OpenZeppelin Defender API Key and Secret are empty. Connection will operate \
@@ -212,5 +213,29 @@ impl OzRelay {
             .collect();
 
         Ok(pending_txs)
+    }
+}
+
+#[async_trait::async_trait]
+impl Inner for OzRelay {
+    async fn send_transaction(
+        &self,
+        tx: TypedTransaction,
+        only_once: bool,
+    ) -> Result<TransactionId, TxError> {
+        self.send_transaction(tx, only_once).await
+    }
+
+    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
+        self.fetch_pending_transactions().await
+    }
+
+    async fn mine_transaction(&self, tx: TransactionId) -> Result<TransactionResult, TxError> {
+        let transaction = self.mine_transaction(tx).await?;
+
+        Ok(TransactionResult {
+            transaction_id: transaction.transaction_id,
+            hash:           transaction.hash,
+        })
     }
 }

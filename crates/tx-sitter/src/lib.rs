@@ -4,17 +4,15 @@ use reqwest::Response;
 pub mod data;
 
 pub struct TxSitterClient {
-    client:  reqwest::Client,
-    url:     String,
-    api_key: String,
+    client: reqwest::Client,
+    url:    String,
 }
 
 impl TxSitterClient {
-    pub fn new(url: impl ToString, api_key: impl ToString) -> Self {
+    pub fn new(url: impl ToString) -> Self {
         Self {
-            client:  reqwest::Client::new(),
-            url:     url.to_string(),
-            api_key: api_key.to_string(),
+            client: reqwest::Client::new(),
+            url:    url.to_string(),
         }
     }
 
@@ -52,17 +50,15 @@ impl TxSitterClient {
     }
 
     pub async fn send_tx(&self, req: &SendTxRequest) -> anyhow::Result<SendTxResponse> {
-        self.json_post(&format!("{}/1/api/{}/tx", self.url, self.api_key), req)
-            .await
+        self.json_post(&format!("{}/tx", self.url), req).await
     }
 
     pub async fn get_tx(&self, tx_id: &str) -> anyhow::Result<GetTxResponse> {
-        self.json_get(&format!("{}/1/api/{}/tx/{}", self.url, self.api_key, tx_id))
-            .await
+        self.json_get(&format!("{}/tx/{}", self.url, tx_id)).await
     }
 
     pub async fn get_txs(&self, tx_status: Option<TxStatus>) -> anyhow::Result<Vec<GetTxResponse>> {
-        let mut url = format!("{}/1/api/{}/txs", self.url, self.api_key);
+        let mut url = format!("{}/txs", self.url);
 
         if let Some(tx_status) = tx_status {
             url.push_str(&format!("?status={}", tx_status));

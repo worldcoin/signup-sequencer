@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -9,7 +8,7 @@ use tracing::instrument;
 
 use crate::database::types::UnprocessedCommitment;
 use crate::database::Database;
-use crate::identity_tree::{Hash, Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
+use crate::identity_tree::{Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
 
 pub struct InsertIdentities {
     database:       Arc<Database>,
@@ -62,40 +61,20 @@ async fn insert_identities(
     latest_tree: &TreeVersion<Latest>,
     identities: Vec<UnprocessedCommitment>,
 ) -> AnyhowResult<()> {
-    // Dedup
-    let mut commitments_set = HashSet::new();
-    let mut deduped = Vec::with_capacity(identities.len());
-
+    // Filter out any identities that are already in the `identities` table
+    let mut filtered_identities = vec![];
     for identity in identities {
-        if commitments_set.contains(&identity.commitment) {
-            database
-                .update_err_unprocessed_commitment(
-                    identity.commitment,
-                    "Duplicate commitment.".into(),
-                )
-                .await?;
-        } else {
-            commitments_set.insert(identity.commitment);
-            deduped.push(identity);
-        }
-    }
-
-    // Validate the identities are not in the database
-    let mut identities = Vec::with_capacity(deduped.len());
-    for identity in deduped {
         if database
             .get_identity_leaf_index(&identity.commitment)
             .await?
             .is_some()
         {
+            tracing::warn!(?identity.commitment, "Duplicate identity");
             database
-                .update_err_unprocessed_commitment(
-                    identity.commitment,
-                    "Duplicate commitment.".into(),
-                )
+                .remove_unprocessed_identity(&identity.commitment)
                 .await?;
         } else {
-            identities.push(identity);
+            filtered_identities.push(identity.commitment);
         }
     }
 
@@ -108,20 +87,15 @@ async fn insert_identities(
          {next_db_index}"
     );
 
-    let identities: Vec<Hash> = identities
-        .into_iter()
-        .map(|insert| insert.commitment)
-        .collect();
-
-    let data = latest_tree.append_many(&identities);
+    let data = latest_tree.append_many(&filtered_identities);
 
     assert_eq!(
         data.len(),
-        identities.len(),
+        filtered_identities.len(),
         "Length mismatch when appending identities to tree"
     );
 
-    let items = data.into_iter().zip(identities);
+    let items = data.into_iter().zip(filtered_identities);
 
     for ((root, _proof, leaf_index), identity) in items {
         database

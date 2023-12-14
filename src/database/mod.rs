@@ -864,26 +864,6 @@ impl Database {
         Ok(())
     }
 
-    pub async fn update_err_unprocessed_commitment(
-        &self,
-        commitment: Hash,
-        message: String,
-    ) -> Result<(), Error> {
-        let query = sqlx::query(
-            r#"
-                UPDATE unprocessed_identities SET error_message = $1, status = $2
-                WHERE commitment = $3
-            "#,
-        )
-        .bind(message)
-        .bind(<&str>::from(UnprocessedStatus::Failed))
-        .bind(commitment);
-
-        self.pool.execute(query).await?;
-
-        Ok(())
-    }
-
     pub async fn identity_exists(&self, commitment: Hash) -> Result<bool, Error> {
         let query_unprocessed_identity = sqlx::query(
             r#"SELECT exists(SELECT 1 FROM unprocessed_identities where commitment = $1)"#,

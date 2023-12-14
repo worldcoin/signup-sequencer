@@ -31,11 +31,6 @@ pub enum ProcessedStatus {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum UnprocessedStatus {
-    /// Unprocessed identity failed to be inserted into the tree for some reason
-    ///
-    /// Usually accompanied by an appropriate error message
-    Failed,
-
     /// Root is unprocessed - i.e. not included in sequencer's
     /// in-memory tree.
     New,
@@ -98,7 +93,6 @@ impl FromStr for UnprocessedStatus {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "new" => Ok(Self::New),
-            "failed" => Ok(Self::Failed),
             _ => Err(UnknownStatus),
         }
     }
@@ -108,7 +102,6 @@ impl From<UnprocessedStatus> for &str {
     fn from(scope: UnprocessedStatus) -> Self {
         match scope {
             UnprocessedStatus::New => "new",
-            UnprocessedStatus::Failed => "failed",
         }
     }
 }
@@ -134,7 +127,6 @@ mod tests {
     #[test_case(Status::Processed(ProcessedStatus::Pending) => "pending")]
     #[test_case(Status::Processed(ProcessedStatus::Mined) => "mined")]
     #[test_case(Status::Unprocessed(UnprocessedStatus::New) => "new")]
-    #[test_case(Status::Unprocessed(UnprocessedStatus::Failed) => "failed")]
     fn serialize_status(api_status: Status) -> &'static str {
         let s = serde_json::to_string(&api_status).unwrap();
 
@@ -147,7 +139,6 @@ mod tests {
     #[test_case("pending" => Status::Processed(ProcessedStatus::Pending))]
     #[test_case("mined" => Status::Processed(ProcessedStatus::Mined))]
     #[test_case("new" => Status::Unprocessed(UnprocessedStatus::New))]
-    #[test_case("failed" => Status::Unprocessed(UnprocessedStatus::Failed))]
     fn deserialize_status(s: &str) -> Status {
         // Wrapped because JSON expected `"something"` and not `something`
         let wrapped = format!("\"{s}\"");

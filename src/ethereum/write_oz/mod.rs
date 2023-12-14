@@ -44,8 +44,12 @@ impl WriteProvider {
         let address = options.address();
 
         let inner: Arc<dyn Inner> = match options {
-            ParsedOptions::Oz(oz_options) => Arc::new(OzRelay::new(&oz_options).await?),
+            ParsedOptions::Oz(oz_options) => {
+                tracing::info!("Initializing OZ Relayer");
+                Arc::new(OzRelay::new(&oz_options).await?)
+            }
             ParsedOptions::TxSitter(tx_sitter_options) => {
+                tracing::info!("Initializing TxSitter");
                 Arc::new(TxSitter::new(tx_sitter_options.tx_sitter_url))
             }
         };

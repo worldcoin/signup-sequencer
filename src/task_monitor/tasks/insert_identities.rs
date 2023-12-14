@@ -61,6 +61,23 @@ async fn insert_identities(
     latest_tree: &TreeVersion<Latest>,
     identities: Vec<UnprocessedCommitment>,
 ) -> AnyhowResult<()> {
+    // Filter out any identities that are already in the `identities` table
+    let mut filtered_identities = vec![];
+    for identity in identities {
+        if database
+            .get_identity_leaf_index(&identity.commitment)
+            .await
+            .is_ok()
+        {
+            tracing::warn!(?identity.commitment, "Duplicate identity");
+            database
+                .remove_unprocessed_identity(&identity.commitment)
+                .await?;
+        } else {
+            filtered_identities.push(identity.commitment);
+        }
+    }
+
     let next_db_index = database.get_next_leaf_index().await?;
     let next_leaf = latest_tree.next_leaf();
 
@@ -70,20 +87,15 @@ async fn insert_identities(
          {next_db_index}"
     );
 
-    let identities: Vec<Hash> = identities
-        .into_iter()
-        .map(|insert| insert.commitment)
-        .collect();
-
-    let data = latest_tree.append_many(&identities);
+    let data = latest_tree.append_many(&filtered_identities);
 
     assert_eq!(
         data.len(),
-        identities.len(),
+        filtered_identities.len(),
         "Length mismatch when appending identities to tree"
     );
 
-    let items = data.into_iter().zip(identities);
+    let items = data.into_iter().zip(filtered_identities);
 
     for ((root, _proof, leaf_index), identity) in items {
         database

@@ -1,12 +1,16 @@
+use std::time::Duration;
+
 use anyhow::Context;
 use async_trait::async_trait;
 use ethers::types::transaction::eip2718::TypedTransaction;
-use tx_sitter_client::data::SendTxRequest;
+use tx_sitter_client::data::{SendTxRequest, TransactionPriority, TxStatus};
 use tx_sitter_client::TxSitterClient;
 
 use super::inner::{Inner, TransactionResult};
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::TxError;
+
+const MINING_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub struct TxSitter {
     client: TxSitterClient,
@@ -18,6 +22,28 @@ impl TxSitter {
             client: TxSitterClient::new(url),
         }
     }
+
+    pub async fn mine_transaction_inner(
+        &self,
+        tx_id: TransactionId,
+    ) -> Result<TransactionResult, TxError> {
+        loop {
+            let tx = self.client.get_tx(&tx_id.0).await.map_err(TxError::Send)?;
+
+            if tx.status == TxStatus::Mined || tx.status == TxStatus::Finalized {
+                return Ok(TransactionResult {
+                    transaction_id: tx.tx_id,
+                    hash:           Some(
+                        tx.tx_hash
+                            .context("Missing hash on a mined tx")
+                            .map_err(TxError::Send)?,
+                    ),
+                });
+            }
+
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+    }
 }
 
 #[async_trait]
@@ -25,25 +51,59 @@ impl Inner for TxSitter {
     async fn send_transaction(
         &self,
         tx: TypedTransaction,
-        only_once: bool,
+        _only_once: bool,
     ) -> Result<TransactionId, TxError> {
-        let x = self.client.send_tx(&SendTxRequest {
-            to: *tx.to_addr().context("Tx receiver must be an address")?,
-            value:     *tx.value().context("Missing tx value")?,
-            data:      todo!(),
-            gas_limit: todo!(),
-            priority:  todo!(),
-            tx_id:     todo!(),
-        }).await.unwrap();
+        // TODO: Handle only_once
+        let tx = self
+            .client
+            .send_tx(&SendTxRequest {
+                to:        *tx
+                    .to_addr()
+                    .context("Tx receiver must be an address")
+                    .map_err(TxError::Send)?,
+                value:     *tx
+                    .value()
+                    .context("Missing tx value")
+                    .map_err(TxError::Send)?,
+                data:      tx.data().cloned(),
+                gas_limit: *tx
+                    .gas()
+                    .context("Missing tx gas limit")
+                    .map_err(TxError::Send)?,
+                priority:  TransactionPriority::Regular,
+                tx_id:     None,
+            })
+            .await
+            .map_err(TxError::Send)?;
 
-        todo!()
+        Ok(TransactionId(tx.tx_id))
     }
 
     async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
-        todo!()
+        let unsent_txs = self
+            .client
+            .get_txs(Some(TxStatus::Unsent))
+            .await
+            .map_err(TxError::Send)?;
+
+        let pending_txs = self
+            .client
+            .get_txs(Some(TxStatus::Pending))
+            .await
+            .map_err(TxError::Send)?;
+
+        let mut txs = vec![];
+
+        for tx in unsent_txs.into_iter().chain(pending_txs) {
+            txs.push(TransactionId(tx.tx_id));
+        }
+
+        Ok(txs)
     }
 
     async fn mine_transaction(&self, tx: TransactionId) -> Result<TransactionResult, TxError> {
-        todo!()
+        tokio::time::timeout(MINING_TIMEOUT, self.mine_transaction_inner(tx))
+            .await
+            .map_err(|_| TxError::ConfirmationTimeout)?
     }
 }

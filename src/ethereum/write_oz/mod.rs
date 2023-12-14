@@ -46,7 +46,7 @@ impl WriteProvider {
         let inner: Arc<dyn Inner> = match options {
             ParsedOptions::Oz(oz_options) => Arc::new(OzRelay::new(&oz_options).await?),
             ParsedOptions::TxSitter(tx_sitter_options) => {
-                Arc::new(TxSitter::new(&tx_sitter_options.tx_sitter_url))
+                Arc::new(TxSitter::new(tx_sitter_options.tx_sitter_url))
             }
         };
 

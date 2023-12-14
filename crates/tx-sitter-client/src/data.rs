@@ -61,7 +61,7 @@ pub struct GetTxResponse {
     pub status:  TxStatus,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Display)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Display, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "camelCase")]
 pub enum TxStatus {

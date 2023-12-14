@@ -78,7 +78,7 @@ impl OzRelay {
         loop {
             let transaction = self.query(id).await.map_err(|error| {
                 error!(?error, "Failed to get transaction status");
-                TxError::Send(Box::new(error))
+                TxError::Send(error.into())
             })?;
 
             let status = transaction.status;
@@ -145,7 +145,7 @@ impl OzRelay {
 
             let existing_transactions = self.list_recent_transactions().await.map_err(|e| {
                 error!(?e, "error occurred");
-                TxError::Send(Box::new(e))
+                TxError::Send(e.into())
             })?;
 
             let existing_transaction =
@@ -186,7 +186,7 @@ impl OzRelay {
             })?
             .map_err(|error| {
                 error!(?error, "Failed to send transaction");
-                TxError::Send(Box::new(error))
+                TxError::Send(error.into())
             })?;
 
         info!(?tx_id, "Transaction submitted to OZ Relay");

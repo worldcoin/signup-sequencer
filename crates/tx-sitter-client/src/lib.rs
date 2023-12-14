@@ -66,4 +66,8 @@ impl TxSitterClient {
 
         self.json_get(&url).await
     }
+
+    pub fn rpc_url(&self) -> String {
+        format!("{}/rpc", self.url.clone())
+    }
 }

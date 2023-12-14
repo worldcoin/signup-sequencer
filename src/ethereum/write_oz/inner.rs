@@ -1,4 +1,5 @@
-use ethers::types::{transaction::eip2718::TypedTransaction, H160, H256};
+use ethers::types::transaction::eip2718::TypedTransaction;
+use ethers::types::H256;
 
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::TxError;
@@ -18,5 +19,5 @@ pub trait Inner: Send + Sync + 'static {
 
 pub struct TransactionResult {
     pub transaction_id: String,
-    pub hash: Option<H256>,
+    pub hash:           Option<H256>,
 }

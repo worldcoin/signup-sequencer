@@ -66,8 +66,8 @@ async fn insert_identities(
     for identity in identities {
         if database
             .get_identity_leaf_index(&identity.commitment)
-            .await
-            .is_ok()
+            .await?
+            .is_some()
         {
             tracing::warn!(?identity.commitment, "Duplicate identity");
             database

@@ -8,7 +8,7 @@ use tracing::instrument;
 
 use crate::database::types::UnprocessedCommitment;
 use crate::database::Database;
-use crate::identity_tree::{Hash, Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
+use crate::identity_tree::{Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
 
 pub struct InsertIdentities {
     database:       Arc<Database>,

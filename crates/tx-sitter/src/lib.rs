@@ -18,17 +18,6 @@ impl TxSitterClient {
         }
     }
 
-    async fn post<R>(&self, url: &str) -> anyhow::Result<R>
-    where
-        R: serde::de::DeserializeOwned,
-    {
-        let response = self.client.post(url).send().await?;
-
-        let response = Self::validate_response(response).await?;
-
-        Ok(response.json().await?)
-    }
-
     async fn json_post<T, R>(&self, url: &str, body: T) -> anyhow::Result<R>
     where
         T: serde::Serialize,

@@ -1,5 +1,6 @@
 use data::{GetTxResponse, SendTxRequest, SendTxResponse, TxStatus};
 use reqwest::Response;
+use tracing::instrument;
 
 pub mod data;
 
@@ -41,22 +42,28 @@ impl TxSitterClient {
 
     async fn validate_response(response: Response) -> anyhow::Result<Response> {
         if !response.status().is_success() {
+            let status = response.status();
             let body = response.text().await?;
 
-            return Err(anyhow::anyhow!("{body}"));
+            return Err(anyhow::anyhow!(
+                "Response failed with status {status} - {body}"
+            ));
         }
 
         Ok(response)
     }
 
+    #[instrument(skip(self))]
     pub async fn send_tx(&self, req: &SendTxRequest) -> anyhow::Result<SendTxResponse> {
         self.json_post(&format!("{}/tx", self.url), req).await
     }
 
+    #[instrument(skip(self))]
     pub async fn get_tx(&self, tx_id: &str) -> anyhow::Result<GetTxResponse> {
         self.json_get(&format!("{}/tx/{}", self.url, tx_id)).await
     }
 
+    #[instrument(skip(self))]
     pub async fn get_txs(&self, tx_status: Option<TxStatus>) -> anyhow::Result<Vec<GetTxResponse>> {
         let mut url = format!("{}/txs", self.url);
 

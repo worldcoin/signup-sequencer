@@ -6323,6 +6323,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum",
+ "tracing",
 ]
 
 [[package]]

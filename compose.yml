@@ -18,7 +18,7 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=sequencer
   tx-sitter:
-    image: tx-sitter
+    image: ghcr.io/worldcoin/tx-sitter-monolith:dev
     ports:
       - 3000:3000
     environment:

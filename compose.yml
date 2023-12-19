@@ -19,6 +19,10 @@ services:
       - POSTGRES_DB=sequencer
   tx-sitter:
     image: ghcr.io/worldcoin/tx-sitter-monolith:dev
+    depends_on:
+      - tx-sitter-db
+      - chain
+    restart: always
     ports:
       - 3000:3000
     environment:
@@ -34,3 +38,32 @@ services:
       - TX_SITTER__PREDEFINED__RELAYER__KEY_ID=d10607662a85424f02a33fb1e6d095bd0ac7154396ff09762e41f82ff2233aaa
       - TX_SITTER__SERVER__HOST=0.0.0.0:3000
       - TX_SITTER__SERVER__DISABLE_AUTH=true
+      - RUST_LOG=info
+  semaphore:
+    image: ghcr.io/worldcoin/semaphore-mtb:latest
+    restart: always
+    environment:
+      - MTB_MODE=insertion
+    volumes:
+      - ./keys/insertion_b10t30.ps:/mtb/keys
+  sequencer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - sequencer-db
+      - chain
+      - semaphore
+    restart: always
+    ports:
+      - 3001:3001
+    environment:
+      - TREE_DEPTH=30
+      - DENSE_TREE_PREFIX_DEPTH=22
+      - TREE_GC_THRESHOLD=10000000
+      - IDENTITY_MANAGER_ADDRESS=0xf7134CE138832c1456F2a91D64621eE90c2bddEa
+      - TX_SITTER_URL=http://tx-sitter:3000/1/api/6fCURXZ4QpWevXgy1a_JX65wZUN6xjtnQgIS8IE2rW4-S4kbYGUGy33aeePr6Rr3/
+      - TX_SITTER_ADDRESS=0x9497c82f012c197a82a325d3c687798ba8850bbc
+      - ETHEREUM_PROVIDER=http://chain:8545
+      - 'PROVER_URLS=[{"url": "http://semaphore:3001", "prover_type": "insertion", "batch_size": 100,"timeout_s": 30}]'
+      - DATABASE=postgres://postgres:postgres@sequencer-db:5432/sequencer?sslmode=disable

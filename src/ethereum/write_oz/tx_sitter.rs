@@ -3,6 +3,7 @@ use std::time::Duration;
 use anyhow::Context;
 use async_trait::async_trait;
 use ethers::types::transaction::eip2718::TypedTransaction;
+use ethers::types::U256;
 use tx_sitter_client::data::{SendTxRequest, TransactionPriority, TxStatus};
 use tx_sitter_client::TxSitterClient;
 
@@ -61,10 +62,7 @@ impl Inner for TxSitter {
                     .to_addr()
                     .context("Tx receiver must be an address")
                     .map_err(TxError::Send)?,
-                value:     *tx
-                    .value()
-                    .context("Missing tx value")
-                    .map_err(TxError::Send)?,
+                value:     tx.value().copied().unwrap_or(U256::zero()),
                 data:      tx.data().cloned(),
                 gas_limit: *tx
                     .gas()

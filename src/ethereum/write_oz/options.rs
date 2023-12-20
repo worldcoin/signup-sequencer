@@ -46,6 +46,9 @@ pub struct Options {
 
     #[clap(long, env)]
     pub tx_sitter_address: Option<H160>,
+
+    #[clap(long, env)]
+    pub tx_sitter_gas_limit: Option<u64>,
 }
 
 fn duration_from_str(value: &str) -> Result<Duration, ParseIntError> {
@@ -134,8 +137,9 @@ impl<'a> TryFrom<&'a Options> for OzOptions {
 }
 
 pub struct TxSitterOptions {
-    pub tx_sitter_url:     String,
-    pub tx_sitter_address: H160,
+    pub tx_sitter_url:       String,
+    pub tx_sitter_address:   H160,
+    pub tx_sitter_gas_limit: Option<u64>,
 }
 
 impl<'a> TryFrom<&'a Options> for TxSitterOptions {
@@ -143,13 +147,14 @@ impl<'a> TryFrom<&'a Options> for TxSitterOptions {
 
     fn try_from(value: &'a Options) -> Result<Self, Self::Error> {
         Ok(Self {
-            tx_sitter_url:     value
+            tx_sitter_url:       value
                 .tx_sitter_url
                 .clone()
                 .ok_or_else(|| anyhow!("Missing tx_sitter_url"))?,
-            tx_sitter_address: value
+            tx_sitter_address:   value
                 .tx_sitter_address
                 .ok_or_else(|| anyhow!("Missing tx_sitter_address"))?,
+            tx_sitter_gas_limit: value.tx_sitter_gas_limit,
         })
     }
 }

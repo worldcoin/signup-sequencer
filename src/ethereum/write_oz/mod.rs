@@ -50,7 +50,7 @@ impl WriteProvider {
             }
             ParsedOptions::TxSitter(tx_sitter_options) => {
                 tracing::info!("Initializing TxSitter");
-                Arc::new(TxSitter::new(tx_sitter_options.tx_sitter_url))
+                Arc::new(TxSitter::new(&tx_sitter_options))
             }
         };
 

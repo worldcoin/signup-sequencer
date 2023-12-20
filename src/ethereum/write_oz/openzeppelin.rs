@@ -132,10 +132,9 @@ impl OzRelay {
     /// take multiple seconds to restart.
     pub async fn send_transaction(
         &self,
-        tx: TypedTransaction,
+        mut tx: TypedTransaction,
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
-        let mut tx = tx.clone();
         if let Some(gas_limit) = self.gas_limit {
             tx.set_gas(gas_limit);
         }

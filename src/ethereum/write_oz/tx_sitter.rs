@@ -8,19 +8,22 @@ use tx_sitter_client::data::{SendTxRequest, TransactionPriority, TxStatus};
 use tx_sitter_client::TxSitterClient;
 
 use super::inner::{Inner, TransactionResult};
+use super::options::TxSitterOptions;
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::TxError;
 
 const MINING_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub struct TxSitter {
-    client: TxSitterClient,
+    client:    TxSitterClient,
+    gas_limit: Option<u64>,
 }
 
 impl TxSitter {
-    pub fn new(url: impl ToString) -> Self {
+    pub fn new(options: &TxSitterOptions) -> Self {
         Self {
-            client: TxSitterClient::new(url),
+            client:    TxSitterClient::new(&options.tx_sitter_url),
+            gas_limit: options.tx_sitter_gas_limit,
         }
     }
 
@@ -51,9 +54,13 @@ impl TxSitter {
 impl Inner for TxSitter {
     async fn send_transaction(
         &self,
-        tx: TypedTransaction,
+        mut tx: TypedTransaction,
         _only_once: bool,
     ) -> Result<TransactionId, TxError> {
+        if let Some(gas_limit) = self.gas_limit {
+            tx.set_gas(gas_limit);
+        }
+
         // TODO: Handle only_once
         let tx = self
             .client

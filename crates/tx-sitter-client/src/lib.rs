@@ -45,6 +45,7 @@ impl TxSitterClient {
             let status = response.status();
             let body = response.text().await?;
 
+            tracing::error!("Response failed with status {} - {}", status, body);
             return Err(anyhow::anyhow!(
                 "Response failed with status {status} - {body}"
             ));

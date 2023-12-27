@@ -10,13 +10,14 @@ use tracing::instrument;
 use url::Url;
 pub use write::TxError;
 
-use self::write::{TransactionId, WriteProvider};
+use self::write::TransactionId;
+use self::write_provider::WriteProvider;
 use crate::serde_utils::JsonStrWrapper;
 
 pub mod read;
 pub mod write;
 
-mod write_oz;
+mod write_provider;
 
 // TODO: Log and metrics for signer / nonces.
 #[derive(Clone, Debug, PartialEq, Parser)]
@@ -31,7 +32,7 @@ pub struct Options {
     pub secondary_providers: JsonStrWrapper<Vec<Url>>,
 
     #[clap(flatten)]
-    pub write_options: write_oz::Options,
+    pub write_options: write_provider::Options,
 }
 
 #[derive(Clone, Debug)]
@@ -39,7 +40,7 @@ pub struct Ethereum {
     read_provider:            Arc<ReadProvider>,
     // Mapping of chain id to provider
     secondary_read_providers: HashMap<u64, Arc<ReadProvider>>,
-    write_provider:           Arc<dyn WriteProvider>,
+    write_provider:           Arc<WriteProvider>,
 }
 
 impl Ethereum {
@@ -57,8 +58,10 @@ impl Ethereum {
             );
         }
 
-        let write_provider: Arc<dyn WriteProvider> =
-            Arc::new(write_oz::Provider::new(read_provider.clone(), &options.write_options).await?);
+        let write_provider: Arc<WriteProvider> = Arc::new(
+            write_provider::WriteProvider::new(read_provider.clone(), &options.write_options)
+                .await?,
+        );
 
         Ok(Self {
             read_provider: Arc::new(read_provider),

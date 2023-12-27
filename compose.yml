@@ -1,0 +1,36 @@
+version: '3'
+services:
+  chain:
+    image: ghcr.io/foundry-rs/foundry
+    ports:
+      - 8545:8545
+    command: ["anvil --host 0.0.0.0 --chain-id 31337 --block-time 2 --fork-url https://eth-sepolia.g.alchemy.com/v2/rbe0ZJX0TXJ7udcCB07HHggMt5x5Rcy9@4910128"]
+  tx-sitter-db:
+    image: postgres:latest
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=tx-sitter
+  sequencer-db:
+    image: postgres:latest
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=sequencer
+  tx-sitter:
+    image: ghcr.io/worldcoin/tx-sitter-monolith:dev
+    ports:
+      - 3000:3000
+    environment:
+      - TX_SITTER__SERVICE__ESCALATION_INTERVAL=1m
+      - TX_SITTER__DATABASE__KIND=connection_string
+      - TX_SITTER__DATABASE__CONNECTION_STRING=postgres://postgres:postgres@tx-sitter-db:5432/tx-sitter?sslmode=disable
+      - TX_SITTER__KEYS__KIND=local
+      - TX_SITTER__PREDEFINED__NETWORK__CHAIN_ID=31337
+      - TX_SITTER__PREDEFINED__NETWORK__HTTP_URL=http://chain:8545
+      - TX_SITTER__PREDEFINED__NETWORK__WS_URL=ws://chain:8545
+      - TX_SITTER__PREDEFINED__RELAYER__ID=1b908a34-5dc1-4d2d-a146-5eb46e975830
+      - TX_SITTER__PREDEFINED__RELAYER__CHAIN_ID=31337
+      - TX_SITTER__PREDEFINED__RELAYER__KEY_ID=d10607662a85424f02a33fb1e6d095bd0ac7154396ff09762e41f82ff2233aaa
+      - TX_SITTER__SERVER__HOST=0.0.0.0:3000
+      - TX_SITTER__SERVER__DISABLE_AUTH=true

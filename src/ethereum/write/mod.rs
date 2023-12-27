@@ -1,10 +1,8 @@
 use std::error::Error;
 use std::fmt;
 
-use async_trait::async_trait;
 use ethers::providers::ProviderError;
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::{Address, TransactionReceipt, H256};
+use ethers::types::{TransactionReceipt, H256};
 use thiserror::Error;
 
 #[derive(Clone, Debug)]
@@ -35,7 +33,7 @@ pub enum TxError {
     SendTimeout,
 
     #[error("Error sending transaction: {0}")]
-    Send(Box<dyn Error + Send + Sync + 'static>),
+    Send(anyhow::Error),
 
     #[error("Timeout while waiting for confirmations")]
     ConfirmationTimeout,
@@ -51,19 +49,7 @@ pub enum TxError {
 
     #[error("Error parsing transaction id: {0}")]
     Parse(Box<dyn Error + Send + Sync + 'static>),
-}
 
-#[async_trait]
-pub trait WriteProvider: Sync + Send + fmt::Debug {
-    async fn send_transaction(
-        &self,
-        tx: TypedTransaction,
-        only_once: bool,
-    ) -> Result<TransactionId, TxError>;
-
-    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError>;
-
-    async fn mine_transaction(&self, tx: TransactionId) -> Result<bool, TxError>;
-
-    fn address(&self) -> Address;
+    #[error("{0}")]
+    Other(anyhow::Error),
 }

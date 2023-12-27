@@ -5341,6 +5341,7 @@ dependencies = [
  "tracing-futures",
  "tracing-subscriber 0.3.17",
  "tracing-test",
+ "tx-sitter-client",
  "url",
  "zeroize",
 ]
@@ -6310,6 +6311,19 @@ dependencies = [
  "thiserror",
  "url",
  "utf-8",
+]
+
+[[package]]
+name = "tx-sitter-client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ethers",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "strum",
+ "tracing",
 ]
 
 [[package]]

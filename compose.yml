@@ -4,7 +4,7 @@ services:
     image: ghcr.io/foundry-rs/foundry
     ports:
       - 8545:8545
-    command: ["anvil --host 0.0.0.0 --chain-id 31337 --block-time 2 --fork-url https://eth-sepolia.g.alchemy.com/v2/rbe0ZJX0TXJ7udcCB07HHggMt5x5Rcy9@4910128"]
+    command: ["anvil --host 0.0.0.0 --chain-id 31337 --block-time 2 --fork-url https://eth-sepolia.g.alchemy.com/v2/rbe0ZJX0TXJ7udcCB07HHggMt5x5Rcy9@4979871"]
   tx-sitter-db:
     image: postgres:latest
     environment:
@@ -18,7 +18,7 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=sequencer
   tx-sitter:
-    image: ghcr.io/worldcoin/tx-sitter-monolith:dev
+    image: ghcr.io/worldcoin/tx-sitter-monolith:sha-8a5f5ee
     depends_on:
       - tx-sitter-db
       - chain
@@ -30,22 +30,42 @@ services:
       - TX_SITTER__DATABASE__KIND=connection_string
       - TX_SITTER__DATABASE__CONNECTION_STRING=postgres://postgres:postgres@tx-sitter-db:5432/tx-sitter?sslmode=disable
       - TX_SITTER__KEYS__KIND=local
-      - TX_SITTER__PREDEFINED__NETWORK__CHAIN_ID=31337
-      - TX_SITTER__PREDEFINED__NETWORK__HTTP_URL=http://chain:8545
-      - TX_SITTER__PREDEFINED__NETWORK__WS_URL=ws://chain:8545
-      - TX_SITTER__PREDEFINED__RELAYER__ID=1b908a34-5dc1-4d2d-a146-5eb46e975830
-      - TX_SITTER__PREDEFINED__RELAYER__CHAIN_ID=31337
-      - TX_SITTER__PREDEFINED__RELAYER__KEY_ID=d10607662a85424f02a33fb1e6d095bd0ac7154396ff09762e41f82ff2233aaa
+      - TX_SITTER__SERVICE__PREDEFINED__NETWORK__CHAIN_ID=31337
+      - TX_SITTER__SERVICE__PREDEFINED__NETWORK__NAME=Anvil
+      - TX_SITTER__SERVICE__PREDEFINED__NETWORK__HTTP_RPC=http://chain:8545
+      - TX_SITTER__SERVICE__PREDEFINED__NETWORK__WS_RPC=ws://chain:8545
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__ID=1b908a34-5dc1-4d2d-a146-5eb46e975830
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__NAME=Relayer
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__CHAIN_ID=31337
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__KEY_ID=d10607662a85424f02a33fb1e6d095bd0ac7154396ff09762e41f82ff2233aaa
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__API_KEY=G5CKNF3BTS2hRl60bpdYMNPqXvXsP-QZd2lrtmgctsnllwU9D3Z4D8gOt04M0QNH
       - TX_SITTER__SERVER__HOST=0.0.0.0:3000
       - TX_SITTER__SERVER__DISABLE_AUTH=true
       - RUST_LOG=info
-  semaphore:
+  semaphore-insertion:
     image: ghcr.io/worldcoin/semaphore-mtb:latest
+    hostname: semaphore-insertion
     restart: always
-    environment:
-      - MTB_MODE=insertion
+    command: [
+      "start",
+      "--keys-file", "/mtb/keys",
+      "--prover-address", "0.0.0.0:3001",
+      "--mode", "insertion"
+    ]
     volumes:
-      - ./keys/insertion_b10t30.ps:/mtb/keys
+      - ./keys/insertion_b100t30.ps:/mtb/keys
+  semaphore-deletion:
+    image: ghcr.io/worldcoin/semaphore-mtb:latest
+    hostname: semaphore-deletion
+    restart: always
+    command: [
+      "start",
+      "--keys-file", "/mtb/keys",
+      "--prover-address", "0.0.0.0:3001",
+      "--mode", "deletion"
+    ]
+    volumes:
+      - ./keys/deletion_b10t30.ps:/mtb/keys
   sequencer:
     build:
       context: .
@@ -53,17 +73,20 @@ services:
     depends_on:
       - sequencer-db
       - chain
-      - semaphore
+      - semaphore-insertion
+      - semaphore-deletion
     restart: always
     ports:
-      - 3001:3001
+      - 8080:8080
     environment:
       - TREE_DEPTH=30
       - DENSE_TREE_PREFIX_DEPTH=22
       - TREE_GC_THRESHOLD=10000000
-      - IDENTITY_MANAGER_ADDRESS=0xf7134CE138832c1456F2a91D64621eE90c2bddEa
-      - TX_SITTER_URL=http://tx-sitter:3000/1/api/6fCURXZ4QpWevXgy1a_JX65wZUN6xjtnQgIS8IE2rW4-S4kbYGUGy33aeePr6Rr3/
-      - TX_SITTER_ADDRESS=0x9497c82f012c197a82a325d3c687798ba8850bbc
+      - SERVER=http://0.0.0.0:8080
+      - IDENTITY_MANAGER_ADDRESS=0x48483748eb0446A16cAE79141D0688e3F624Cb73
+      - TX_SITTER_URL=http://tx-sitter:3000/1/api/G5CKNF3BTS2hRl60bpdYMNPqXvXsP-QZd2lrtmgctsnllwU9D3Z4D8gOt04M0QNH
+      - TX_SITTER_ADDRESS=0x1d7ffed610cc4cdC097ecDc835Ae5FEE93C9e3Da
+      - TX_SITTER_GAS_LIMIT=2000000
       - ETHEREUM_PROVIDER=http://chain:8545
-      - 'PROVER_URLS=[{"url": "http://semaphore:3001", "prover_type": "insertion", "batch_size": 100,"timeout_s": 30}]'
+      - 'PROVER_URLS=[{"url": "http://semaphore-insertion:3001", "prover_type": "insertion", "batch_size": 100,"timeout_s": 30}, {"url": "http://semaphore-deletion:3001", "prover_type": "deletion", "batch_size": 10,"timeout_s": 30}]'
       - DATABASE=postgres://postgres:postgres@sequencer-db:5432/sequencer?sslmode=disable

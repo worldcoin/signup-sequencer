@@ -7,3 +7,5 @@ commitments.json
 !.editorconfig
 !.dockerignore
 !.cargo
+
+keys/

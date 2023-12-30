@@ -67,9 +67,7 @@ services:
     volumes:
       - ./keys/deletion_b10t30.ps:/mtb/keys
   sequencer:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/worldcoin/signup-sequencer:latest
     depends_on:
       - sequencer-db
       - chain

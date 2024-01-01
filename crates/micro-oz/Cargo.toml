@@ -6,7 +6,7 @@ publish = false
 
 [dependencies]
 
-anyhow = "1.0.72"
+anyhow = "1.0.78"
 async-trait = "0.1.71"
 axum = "0.6.19"
 chrono = "0.4.26"

@@ -1128,7 +1128,10 @@ mod test {
         let mock_provers = mock_provers();
 
         db.insert_provers(mock_provers.clone()).await?;
+
         db.remove_prover(100, ProverType::Insertion).await?;
+        db.remove_prover(100, ProverType::Deletion).await?;
+
         let provers = db.get_provers().await?;
 
         assert_eq!(provers, HashSet::new());

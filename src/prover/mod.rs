@@ -86,7 +86,7 @@ pub struct ProverConfiguration {
     pub prover_type: ProverType,
 }
 
-#[derive(Debug, Copy, Clone, sqlx::Type, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Copy, Clone, sqlx::Type, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 #[sqlx(type_name = "prover_enum", rename_all = "PascalCase")]
 pub enum ProverType {
@@ -97,13 +97,17 @@ pub enum ProverType {
 
 impl Hash for ProverConfiguration {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        self.url.hash(state);
         self.batch_size.hash(state);
+        self.prover_type.hash(state);
     }
 }
 
 impl PartialEq for ProverConfiguration {
     fn eq(&self, other: &Self) -> bool {
-        self.batch_size == other.batch_size
+        self.url.eq(&other.url)
+            && self.batch_size.eq(&other.batch_size)
+            && self.prover_type.eq(&other.prover_type)
     }
 }
 

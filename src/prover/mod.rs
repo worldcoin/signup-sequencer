@@ -97,7 +97,6 @@ pub enum ProverType {
 
 impl Hash for ProverConfiguration {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.url.hash(state);
         self.batch_size.hash(state);
         self.prover_type.hash(state);
     }
@@ -105,9 +104,7 @@ impl Hash for ProverConfiguration {
 
 impl PartialEq for ProverConfiguration {
     fn eq(&self, other: &Self) -> bool {
-        self.url.eq(&other.url)
-            && self.batch_size.eq(&other.batch_size)
-            && self.prover_type.eq(&other.prover_type)
+        self.batch_size.eq(&other.batch_size) && self.prover_type.eq(&other.prover_type)
     }
 }
 

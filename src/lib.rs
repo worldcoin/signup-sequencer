@@ -35,9 +35,6 @@ pub struct Options {
     pub server: server::Options,
 }
 
-/// ```
-/// assert!(true);
-/// ```
 #[allow(clippy::missing_errors_doc)]
 pub async fn main(options: Options) -> anyhow::Result<()> {
     // Create App struct
@@ -51,40 +48,4 @@ pub async fn main(options: Options) -> anyhow::Result<()> {
     app.shutdown().await?;
 
     Ok(())
-}
-
-#[cfg(test)]
-pub mod test {
-    use tracing::{error, warn};
-    use tracing_test::traced_test;
-
-    use super::*;
-
-    #[test]
-    #[allow(clippy::disallowed_methods)] // False positive from macro
-    #[traced_test]
-    fn test_with_log_output() {
-        error!("logged on the error level");
-        assert!(logs_contain("logged on the error level"));
-    }
-
-    #[tokio::test]
-    #[allow(clippy::disallowed_methods)] // False positive from macro
-    #[traced_test]
-    async fn async_test_with_log() {
-        // Local log
-        info!("This is being logged on the info level");
-
-        // Log from a spawned task (which runs in a separate thread)
-        tokio::spawn(async {
-            warn!("This is being logged on the warn level from a spawned task");
-        })
-        .await
-        .unwrap();
-
-        // Ensure that `logs_contain` works as intended
-        assert!(logs_contain("logged on the info level"));
-        assert!(logs_contain("logged on the warn level"));
-        assert!(!logs_contain("logged on the error level"));
-    }
 }

@@ -74,7 +74,7 @@ pub struct Options {
 pub struct App {
     database:           Arc<Database>,
     identity_manager:   SharedIdentityManager,
-    identity_committer: Arc<TaskMonitor>,
+    task_monitor:       Arc<TaskMonitor>,
     tree_state:         TreeState,
     snark_scalar_field: Hash,
 }
@@ -172,7 +172,7 @@ impl App {
             .await?;
         }
 
-        let identity_committer = Arc::new(TaskMonitor::new(
+        let task_monitor = Arc::new(TaskMonitor::new(
             database.clone(),
             identity_manager.clone(),
             tree_state.clone(),
@@ -188,13 +188,13 @@ impl App {
         .expect("This should just parse.");
 
         // Process to push new identities to Ethereum
-        identity_committer.start().await;
+        task_monitor.start().await;
 
         // Sync with chain on start up
         let app = Self {
             database,
             identity_manager,
-            identity_committer,
+            task_monitor,
             tree_state,
             snark_scalar_field,
         };
@@ -820,7 +820,7 @@ impl App {
     /// gracefully.
     pub async fn shutdown(&self) -> anyhow::Result<()> {
         info!("Shutting down identity committer.");
-        self.identity_committer.shutdown().await
+        self.task_monitor.shutdown().await
     }
 }
 

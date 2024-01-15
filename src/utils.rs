@@ -1,7 +1,6 @@
 use std::future::Future;
 use std::time::Duration;
 
-use anyhow::{Error as EyreError, Result as AnyhowResult};
 use futures::FutureExt;
 use tokio::select;
 use tokio::sync::broadcast;
@@ -11,41 +10,13 @@ use tracing::{error, info};
 pub mod index_packing;
 pub mod tree_updates;
 
-pub trait Any<A> {
-    fn any(self) -> AnyhowResult<A>;
-}
-
-impl<A, B> Any<A> for Result<A, B>
-where
-    B: Into<EyreError>,
-{
-    fn any(self) -> AnyhowResult<A> {
-        self.map_err(Into::into)
-    }
-}
-
-pub trait AnyFlatten<A> {
-    fn any_flatten(self) -> AnyhowResult<A>;
-}
-
-impl<A, B, C> AnyFlatten<A> for Result<Result<A, B>, C>
-where
-    B: Into<EyreError>,
-    C: Into<EyreError>,
-{
-    fn any_flatten(self) -> AnyhowResult<A> {
-        self.map_err(Into::into)
-            .and_then(|inner| inner.map_err(Into::into))
-    }
-}
-
 pub fn spawn_monitored_with_backoff<S, F>(
     future_spawner: S,
     shutdown_sender: broadcast::Sender<()>,
     backoff_duration: Duration,
 ) -> JoinHandle<()>
 where
-    F: Future<Output = AnyhowResult<()>> + Send + 'static,
+    F: Future<Output = anyhow::Result<()>> + Send + 'static,
     S: Fn() -> F + Send + Sync + 'static,
 {
     // Run task in background, returning a handle.

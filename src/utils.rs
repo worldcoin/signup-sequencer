@@ -7,6 +7,7 @@ use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tracing::{error, info};
 
+pub mod batch_type;
 pub mod index_packing;
 pub mod tree_updates;
 

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, Result as AnyhowResult};
+use anyhow::Context;
 use chrono::Utc;
 use ethers::abi::RawLog;
 use ethers::contract::EthEvent;
@@ -76,7 +76,7 @@ async fn finalize_roots_loop(
     scanning_chain_head_offset: u64,
     time_between_scans: Duration,
     max_epoch_duration: Duration,
-) -> AnyhowResult<()> {
+) -> anyhow::Result<()> {
     let mainnet_abi = identity_manager.abi();
     let secondary_abis = identity_manager.secondary_abis();
 

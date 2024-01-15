@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, Result as AnyhowResult};
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use ethers::types::U256;
 use ruint::Uint;
@@ -74,7 +74,7 @@ async fn process_identities(
     monitored_txs_sender: &mpsc::Sender<TransactionId>,
     wake_up_notify: &Notify,
     timeout_secs: u64,
-) -> AnyhowResult<()> {
+) -> anyhow::Result<()> {
     info!("Awaiting for a clean slate");
     identity_manager.await_clean_slate().await?;
 
@@ -211,7 +211,7 @@ async fn commit_identities(
     batching_tree: &TreeVersion<Intermediate>,
     monitored_txs_sender: &mpsc::Sender<TransactionId>,
     updates: &[AppliedTreeUpdate],
-) -> AnyhowResult<()> {
+) -> anyhow::Result<()> {
     // If the update is an insertion
     let tx_id = if updates
         .first()
@@ -259,7 +259,7 @@ pub async fn insert_identities(
     batching_tree: &TreeVersion<Intermediate>,
     updates: &[AppliedTreeUpdate],
     prover: ReadOnlyProver<'_, Prover>,
-) -> AnyhowResult<Option<TransactionId>> {
+) -> anyhow::Result<Option<TransactionId>> {
     TaskMonitor::log_identities_queues(database).await?;
 
     if updates.is_empty() {
@@ -444,7 +444,7 @@ pub async fn delete_identities(
     batching_tree: &TreeVersion<Intermediate>,
     updates: &[AppliedTreeUpdate],
     prover: ReadOnlyProver<'_, Prover>,
-) -> AnyhowResult<Option<TransactionId>> {
+) -> anyhow::Result<Option<TransactionId>> {
     TaskMonitor::log_identities_queues(database).await?;
 
     if updates.is_empty() {

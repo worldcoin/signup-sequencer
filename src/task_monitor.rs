@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use once_cell::sync::Lazy;
 use prometheus::{linear_buckets, register_gauge, register_histogram, Gauge, Histogram};
@@ -52,7 +51,7 @@ static BATCH_SIZES: Lazy<Histogram> = Lazy::new(|| {
 });
 
 impl RunningInstance {
-    async fn shutdown(self) -> AnyhowResult<()> {
+    async fn shutdown(self) -> anyhow::Result<()> {
         info!("Sending a shutdown signal to the committer.");
         // Ignoring errors here, since we have two options: either the channel is full,
         // which is impossible, since this is the only use, and this method takes
@@ -286,19 +285,19 @@ impl TaskMonitor {
         });
     }
 
-    async fn log_pending_identities_count(database: &Database) -> AnyhowResult<()> {
+    async fn log_pending_identities_count(database: &Database) -> anyhow::Result<()> {
         let identities = database.count_pending_identities().await?;
         PENDING_IDENTITIES.set(f64::from(identities));
         Ok(())
     }
 
-    async fn log_unprocessed_identities_count(database: &Database) -> AnyhowResult<()> {
+    async fn log_unprocessed_identities_count(database: &Database) -> anyhow::Result<()> {
         let identities = database.count_unprocessed_identities().await?;
         UNPROCESSED_IDENTITIES.set(f64::from(identities));
         Ok(())
     }
 
-    async fn log_identities_queues(database: &Database) -> AnyhowResult<()> {
+    async fn log_identities_queues(database: &Database) -> anyhow::Result<()> {
         TaskMonitor::log_unprocessed_identities_count(database).await?;
         TaskMonitor::log_pending_identities_count(database).await?;
         Ok(())
@@ -313,7 +312,7 @@ impl TaskMonitor {
     ///
     /// Will return an Error if the committer thread cannot be shut down
     /// gracefully.
-    pub async fn shutdown(&self) -> AnyhowResult<()> {
+    pub async fn shutdown(&self) -> anyhow::Result<()> {
         let mut instance = self.instance.write().await;
         if let Some(instance) = instance.take() {
             instance.shutdown().await?;

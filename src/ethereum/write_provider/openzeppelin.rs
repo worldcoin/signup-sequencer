@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 use std::time::Duration;
 
-use anyhow::Result as AnyhowResult;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use once_cell::sync::Lazy;
 use oz_api::data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status};
@@ -33,7 +32,7 @@ pub struct OzRelay {
 }
 
 impl OzRelay {
-    pub async fn new(options: &OzOptions) -> AnyhowResult<Self> {
+    pub async fn new(options: &OzOptions) -> anyhow::Result<Self> {
         let oz_api = if options.oz_api_key.is_empty() && options.oz_api_secret.is_empty() {
             tracing::warn!(
                 "OpenZeppelin Defender API Key and Secret are empty. Connection will operate \

@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::Result as AnyhowResult;
 use chrono::{Duration, Utc};
 use clap::Parser;
 use ruint::Uint;
@@ -86,7 +85,7 @@ impl App {
     /// Will return `Err` if the internal Ethereum handler errors or if the
     /// `options.storage_file` is not accessible.
     #[instrument(name = "App::new", level = "debug")]
-    pub async fn new(options: Options) -> AnyhowResult<Self> {
+    pub async fn new(options: Options) -> anyhow::Result<Self> {
         let ethereum = Ethereum::new(options.ethereum);
         let db = Database::new(options.database);
 
@@ -212,7 +211,7 @@ impl App {
         initial_root_hash: Hash,
         mmap_file_path: &str,
         force_cache_purge: bool,
-    ) -> AnyhowResult<TreeState> {
+    ) -> anyhow::Result<TreeState> {
         let mut mined_items = database
             .get_commitments_by_status(ProcessedStatus::Mined)
             .await?;
@@ -362,7 +361,7 @@ impl App {
         initial_leaf_value: Hash,
         mined_items: Vec<TreeUpdate>,
         mmap_file_path: &str,
-    ) -> AnyhowResult<TreeState> {
+    ) -> anyhow::Result<TreeState> {
         // Flatten the updates for initial leaves
         let mined_items = dedup_tree_updates(mined_items);
 
@@ -819,7 +818,7 @@ impl App {
     ///
     /// Will return an Error if any of the components cannot be shut down
     /// gracefully.
-    pub async fn shutdown(&self) -> AnyhowResult<()> {
+    pub async fn shutdown(&self) -> anyhow::Result<()> {
         info!("Shutting down identity committer.");
         self.identity_committer.shutdown().await
     }

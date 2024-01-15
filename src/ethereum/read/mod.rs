@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result as AnyhowResult};
+use anyhow::anyhow;
 use chrono::{Duration as ChronoDuration, Utc};
 use ethers::abi::Error as AbiError;
 use ethers::providers::{Http, Middleware, Provider};
@@ -22,7 +22,7 @@ pub struct ReadProvider {
 }
 
 impl ReadProvider {
-    pub async fn new(url: Url) -> AnyhowResult<Self> {
+    pub async fn new(url: Url) -> anyhow::Result<Self> {
         // Connect to the Ethereum provider
         // TODO: Allow multiple providers with failover / broadcast.
         // TODO: Requests don't seem to process in parallel. Check if this is

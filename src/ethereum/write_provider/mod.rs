@@ -1,7 +1,6 @@
 use std::fmt;
 use std::sync::Arc;
 
-use anyhow::Result as AnyhowResult;
 use ethers::providers::Middleware;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::{Address, U64};
@@ -39,7 +38,7 @@ impl fmt::Debug for WriteProvider {
 }
 
 impl WriteProvider {
-    pub async fn new(read_provider: ReadProvider, options: &Options) -> AnyhowResult<Self> {
+    pub async fn new(read_provider: ReadProvider, options: &Options) -> anyhow::Result<Self> {
         let options = options.to_parsed()?;
         let address = options.address();
 

@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use anyhow::Result as AnyhowResult;
 use tokio::sync::{mpsc, Mutex};
 
 use crate::contracts::{IdentityManager, SharedIdentityManager};
@@ -32,7 +31,7 @@ impl MonitorTxs {
 async fn monitor_txs_loop(
     identity_manager: &IdentityManager,
     monitored_txs_receiver: &Mutex<mpsc::Receiver<TransactionId>>,
-) -> AnyhowResult<()> {
+) -> anyhow::Result<()> {
     let mut monitored_txs_receiver = monitored_txs_receiver.lock().await;
 
     while let Some(tx) = monitored_txs_receiver.recv().await {

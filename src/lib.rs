@@ -20,7 +20,6 @@ pub mod utils;
 
 use std::sync::Arc;
 
-use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use tracing::info;
 
@@ -40,7 +39,7 @@ pub struct Options {
 /// assert!(true);
 /// ```
 #[allow(clippy::missing_errors_doc)]
-pub async fn main(options: Options) -> AnyhowResult<()> {
+pub async fn main(options: Options) -> anyhow::Result<()> {
     // Create App struct
     let app = Arc::new(App::new(options.app).await?);
     let app_for_server = app.clone();

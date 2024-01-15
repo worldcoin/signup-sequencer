@@ -4,7 +4,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{bail, ensure, Result as AnyhowResult};
+use anyhow::{bail, ensure};
 use axum::extract::{Query, State};
 use axum::routing::{get, post};
 use axum::{middleware, Json, Router};
@@ -148,7 +148,7 @@ async fn list_batch_sizes(
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
 /// a path beyond `/`, or cannot be cast into an IP address. Also returns an
 /// `Err` if the server cannot bind to the given address.
-pub async fn main(app: Arc<App>, options: Options) -> AnyhowResult<()> {
+pub async fn main(app: Arc<App>, options: Options) -> anyhow::Result<()> {
     ensure!(
         options.server.scheme() == "http",
         "Only http:// is supported in {}",
@@ -186,7 +186,7 @@ pub async fn bind_from_listener(
     app: Arc<App>,
     serve_timeout: Duration,
     listener: TcpListener,
-) -> AnyhowResult<()> {
+) -> anyhow::Result<()> {
     let router = Router::new()
         .route("/verifySemaphoreProof", post(verify_semaphore_proof))
         .route("/inclusionProof", post(inclusion_proof))

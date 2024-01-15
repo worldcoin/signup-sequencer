@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::Result as AnyhowResult;
 use clap::Parser;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::Address;
@@ -45,7 +44,7 @@ pub struct Ethereum {
 
 impl Ethereum {
     #[instrument(name = "Ethereum::new", level = "debug", skip_all)]
-    pub async fn new(options: Options) -> AnyhowResult<Self> {
+    pub async fn new(options: Options) -> anyhow::Result<Self> {
         let read_provider = ReadProvider::new(options.ethereum_provider).await?;
 
         let mut secondary_read_providers = HashMap::new();

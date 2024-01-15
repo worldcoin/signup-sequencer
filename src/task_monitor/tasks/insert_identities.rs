@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Result as AnyhowResult;
 use tokio::sync::Notify;
 use tokio::time::sleep;
 use tracing::instrument;
@@ -38,7 +37,7 @@ async fn insert_identities_loop(
     database: &Database,
     latest_tree: &TreeVersion<Latest>,
     wake_up_notify: &Notify,
-) -> AnyhowResult<()> {
+) -> anyhow::Result<()> {
     loop {
         // get commits from database
         let unprocessed = database
@@ -60,7 +59,7 @@ async fn insert_identities(
     database: &Database,
     latest_tree: &TreeVersion<Latest>,
     identities: Vec<UnprocessedCommitment>,
-) -> AnyhowResult<()> {
+) -> anyhow::Result<()> {
     // Filter out any identities that are already in the `identities` table
     let mut filtered_identities = vec![];
     for identity in identities {

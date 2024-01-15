@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use anyhow::Result as AnyhowResult;
 use chrono::Utc;
 use tokio::sync::Notify;
 use tracing::info;
@@ -53,7 +52,7 @@ async fn delete_identities(
     deletion_time_interval: i64,
     min_deletion_batch_size: usize,
     wake_up_notify: Arc<Notify>,
-) -> AnyhowResult<()> {
+) -> anyhow::Result<()> {
     info!("Starting deletion processor.");
 
     let deletion_time_interval = chrono::Duration::seconds(deletion_time_interval);

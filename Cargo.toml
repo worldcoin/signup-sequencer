@@ -97,6 +97,7 @@ regex = { version = "1.7.1", features = ["std"] }
 semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main", features = [
     "depth_20",
 ] }
+similar-asserts = "1.5.0"
 test-case = "3.0"
 tracing-subscriber = "0.3.11"
 tracing-test = "0.2"

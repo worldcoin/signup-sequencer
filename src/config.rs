@@ -226,7 +226,7 @@ mod tests {
         tree_depth = 30
         dense_tree_prefix_depth = 20
         tree_gc_threshold = 10000
-        cache_file = "cache_file"
+        cache_file = "/data/cache_file"
         force_cache_purge = false
         initial_leaf_value = "0x0000000000000000000000000000000000000000000000000000000000000001"
 
@@ -241,10 +241,10 @@ mod tests {
     "#};
 
     #[test]
-    fn reserialize_full_toml() {
+    fn full_toml_round_trip() {
         let config: Config = toml::from_str(FULL_TOML).unwrap();
-        let reserialized = toml::to_string_pretty(&config).unwrap();
+        let serialized = toml::to_string_pretty(&config).unwrap();
 
-        assert_eq!(reserialized.trim(), FULL_TOML.trim());
+        similar_asserts::assert_eq!(serialized.trim(), FULL_TOML.trim());
     }
 }

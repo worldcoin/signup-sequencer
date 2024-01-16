@@ -5,6 +5,7 @@
 pub mod abi;
 mod chain_mock;
 mod prover_mock;
+pub mod test_config;
 
 pub mod prelude {
     pub use std::time::Duration;
@@ -36,8 +37,12 @@ pub mod prelude {
     pub use serde::{Deserialize, Serialize};
     pub use serde_json::json;
     pub use signup_sequencer::app::App;
+    pub use signup_sequencer::config::{
+        AppConfig, Config, DatabaseConfig, OzDefenderConfig, ProvidersConfig, RelayerConfig,
+        ServerConfig, TreeConfig, TxSitterConfig,
+    };
     pub use signup_sequencer::identity_tree::Hash;
-    pub use signup_sequencer::{server, Options};
+    pub use signup_sequencer::server;
     pub use tokio::spawn;
     pub use tokio::task::JoinHandle;
     pub use tracing::{error, info, instrument};
@@ -55,7 +60,7 @@ pub mod prelude {
 }
 
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
+use std::net::{SocketAddr, TcpListener};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -578,18 +583,11 @@ fn construct_verify_proof_body(
 }
 
 #[instrument(skip_all)]
-pub async fn spawn_app(options: Options) -> anyhow::Result<(JoinHandle<()>, SocketAddr)> {
-    let app = App::new(options.app).await.expect("Failed to create App");
+pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, SocketAddr)> {
+    let server_config = config.server.clone();
+    let app = App::new(config).await.expect("Failed to create App");
 
-    let ip: IpAddr = match options.server.server.host() {
-        Some(Host::Ipv4(ip)) => ip.into(),
-        Some(Host::Ipv6(ip)) => ip.into(),
-        Some(_) => return Err(anyhow::anyhow!("Cannot bind {}", options.server.server)),
-        None => Ipv4Addr::LOCALHOST.into(),
-    };
-    let port = options.server.server.port().unwrap_or(9998);
-    let addr = SocketAddr::new(ip, port);
-    let listener = TcpListener::bind(addr).expect("Failed to bind random port");
+    let listener = TcpListener::bind(server_config.address).expect("Failed to bind random port");
     let local_addr = listener.local_addr()?;
 
     let app = spawn({

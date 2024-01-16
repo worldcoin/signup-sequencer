@@ -115,25 +115,6 @@ pub struct ProverService {
     prover_type: ProverType,
 }
 
-// TODO: we could just import this from the sequencer
-#[derive(Debug, Copy, Clone, sqlx::Type, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-#[sqlx(type_name = "prover_enum", rename_all = "PascalCase")]
-pub enum ProverType {
-    #[default]
-    Insertion,
-    Deletion,
-}
-
-impl std::fmt::Display for ProverType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            ProverType::Insertion => write!(f, "insertion"),
-            ProverType::Deletion => write!(f, "deletion"),
-        }
-    }
-}
-
 struct Prover {
     is_available: bool,
     tree_depth:   u8,

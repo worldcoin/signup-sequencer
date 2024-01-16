@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::identity_tree::{
     Hash, InclusionProof, ProcessedStatus, RootItem, Status, UnprocessedStatus,
 };
-use crate::prover::{ProverConfiguration, ProverType};
+use crate::prover::{ProverConfig, ProverType};
 
 #[derive(Serialize)]
 #[serde(transparent)]
@@ -14,7 +14,7 @@ pub struct InclusionProofResponse(pub InclusionProof);
 
 #[derive(Serialize)]
 #[serde(transparent)]
-pub struct ListBatchSizesResponse(pub Vec<ProverConfiguration>);
+pub struct ListBatchSizesResponse(pub Vec<ProverConfig>);
 
 #[derive(Serialize)]
 #[serde(transparent)]
@@ -174,8 +174,8 @@ impl ToResponseCode for InclusionProofResponse {
     }
 }
 
-impl From<Vec<ProverConfiguration>> for ListBatchSizesResponse {
-    fn from(value: Vec<ProverConfiguration>) -> Self {
+impl From<Vec<ProverConfig>> for ListBatchSizesResponse {
+    fn from(value: Vec<ProverConfig>) -> Self {
         Self(value)
     }
 }

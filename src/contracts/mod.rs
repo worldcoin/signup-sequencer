@@ -17,7 +17,7 @@ use self::abi::{BridgedWorldId, DeleteIdentitiesCall, WorldId};
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::{Ethereum, ReadProvider};
 use crate::prover::identity::Identity;
-use crate::prover::{Proof, Prover, ProverConfiguration, ProverMap, ProverType};
+use crate::prover::{Proof, Prover, ProverConfig, ProverMap, ProverType};
 use crate::serde_utils::JsonStrWrapper;
 use crate::server::error::Error as ServerError;
 use crate::utils::index_packing::unpack_indices;
@@ -445,7 +445,7 @@ impl IdentityManager {
             return Err(ServerError::BatchSizeAlreadyExists);
         }
 
-        let prover = Prover::new(&ProverConfiguration {
+        let prover = Prover::new(&ProverConfig {
             url: url.to_string(),
             batch_size,
             prover_type,
@@ -482,7 +482,7 @@ impl IdentityManager {
         }
     }
 
-    pub async fn list_batch_sizes(&self) -> Result<Vec<ProverConfiguration>, ServerError> {
+    pub async fn list_batch_sizes(&self) -> Result<Vec<ProverConfig>, ServerError> {
         let mut provers = self
             .insertion_prover_map
             .read()

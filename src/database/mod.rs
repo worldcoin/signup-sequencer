@@ -21,7 +21,7 @@ use crate::identity_tree::{
 };
 
 pub mod types;
-use crate::prover::{ProverConfiguration, ProverType, Provers};
+use crate::prover::{ProverConfig, ProverType};
 use crate::secret::SecretUrl;
 
 // Statically link in migration files
@@ -532,7 +532,7 @@ impl Database {
         Ok(result.get::<i64, _>(0) as i32)
     }
 
-    pub async fn get_provers(&self) -> Result<Provers, Error> {
+    pub async fn get_provers(&self) -> Result<HashSet<ProverConfig>, Error> {
         let query = sqlx::query(
             r#"
                 SELECT batch_size, url, timeout_s, prover_type
@@ -549,14 +549,15 @@ impl Database {
                 let url = row.get::<String, _>(1);
                 let timeout_s = row.get::<i64, _>(2) as u64;
                 let prover_type = row.get::<ProverType, _>(3);
-                ProverConfiguration {
+
+                ProverConfig {
                     url,
                     timeout_s,
                     batch_size,
                     prover_type,
                 }
             })
-            .collect::<Provers>())
+            .collect())
     }
 
     pub async fn insert_prover_configuration(
@@ -584,7 +585,7 @@ impl Database {
         Ok(())
     }
 
-    pub async fn insert_provers(&self, provers: HashSet<ProverConfiguration>) -> Result<(), Error> {
+    pub async fn insert_provers(&self, provers: HashSet<ProverConfig>) -> Result<(), Error> {
         if provers.is_empty() {
             return Ok(());
         }
@@ -917,7 +918,7 @@ mod test {
 
     use super::{Database, Options};
     use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
-    use crate::prover::{ProverConfiguration, ProverType};
+    use crate::prover::{ProverConfig, ProverType};
     use crate::secret::SecretUrl;
 
     macro_rules! assert_same_time {
@@ -1047,17 +1048,17 @@ mod test {
         Ok(())
     }
 
-    fn mock_provers() -> HashSet<ProverConfiguration> {
+    fn mock_provers() -> HashSet<ProverConfig> {
         let mut provers = HashSet::new();
 
-        provers.insert(ProverConfiguration {
+        provers.insert(ProverConfig {
             batch_size:  100,
             url:         "http://localhost:8080".to_string(),
             timeout_s:   100,
             prover_type: ProverType::Insertion,
         });
 
-        provers.insert(ProverConfiguration {
+        provers.insert(ProverConfig {
             batch_size:  100,
             url:         "http://localhost:8080".to_string(),
             timeout_s:   100,
@@ -1071,14 +1072,14 @@ mod test {
     async fn test_insert_prover_configuration() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
-        let mock_prover_configuration_0 = ProverConfiguration {
+        let mock_prover_configuration_0 = ProverConfig {
             batch_size:  100,
             url:         "http://localhost:8080".to_string(),
             timeout_s:   100,
             prover_type: ProverType::Insertion,
         };
 
-        let mock_prover_configuration_1 = ProverConfiguration {
+        let mock_prover_configuration_1 = ProverConfig {
             batch_size:  100,
             url:         "http://localhost:8081".to_string(),
             timeout_s:   100,

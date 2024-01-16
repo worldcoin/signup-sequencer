@@ -1,4 +1,6 @@
-use crate::prover::{Prover, ProverConfiguration, ProverType, Provers};
+use std::collections::HashSet;
+
+use crate::prover::{Prover, ProverConfig, ProverType};
 use crate::utils::min_map::MinMap;
 
 /// A map that contains a prover for each batch size.
@@ -37,10 +39,10 @@ impl ProverMap {
         self.map.key_exists(batch_size)
     }
 
-    pub fn as_configuration_vec(&self) -> Vec<ProverConfiguration> {
+    pub fn as_configuration_vec(&self) -> Vec<ProverConfig> {
         self.map
             .iter()
-            .map(|(k, v)| ProverConfiguration {
+            .map(|(k, v)| ProverConfig {
                 url:         v.url(),
                 timeout_s:   v.timeout_s(),
                 batch_size:  *k,
@@ -51,7 +53,7 @@ impl ProverMap {
 }
 
 /// Builds an insertion prover map from the provided configuration.
-pub fn initialize_prover_maps(db_provers: Provers) -> anyhow::Result<(ProverMap, ProverMap)> {
+pub fn initialize_prover_maps(db_provers: HashSet<ProverConfig>) -> anyhow::Result<(ProverMap, ProverMap)> {
     let mut insertion_map = ProverMap::default();
     let mut deletion_map = ProverMap::default();
 

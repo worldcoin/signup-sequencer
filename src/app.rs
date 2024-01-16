@@ -17,7 +17,7 @@ use crate::identity_tree::{
     TreeUpdate, TreeVersionReadOps, UnprocessedStatus,
 };
 use crate::prover::map::initialize_prover_maps;
-use crate::prover::{self, ProverConfiguration, ProverType, Provers};
+use crate::prover::{self, ProverConfig, ProverType};
 use crate::server::data::{
     IdentityHistoryEntry, IdentityHistoryEntryKind, IdentityHistoryEntryStatus,
     InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofQuery,
@@ -45,14 +45,6 @@ pub struct Options {
 
     #[clap(flatten)]
     pub committer: task_monitor::Options,
-
-    /// Block number to start syncing from
-    #[clap(long, env, default_value = "0")]
-    pub starting_block: u64,
-
-    /// Timeout for the tree lock (seconds).
-    #[clap(long, env, default_value = "120")]
-    pub lock_timeout: u64,
 
     /// The depth of the tree prefix that is vectorized.
     #[clap(long, env, default_value = "20")]
@@ -92,7 +84,7 @@ impl App {
         let (ethereum, db) = tokio::try_join!(ethereum, db)?;
 
         let database = Arc::new(db);
-        let mut provers: HashSet<ProverConfiguration> = database.get_provers().await?;
+        let mut provers: HashSet<ProverConfig> = database.get_provers().await?;
 
         let non_inserted_provers = Self::merge_env_provers(options.batch_provers, &mut provers);
 
@@ -614,12 +606,15 @@ impl App {
         Ok(history)
     }
 
-    fn merge_env_provers(options: prover::Options, existing_provers: &mut Provers) -> Provers {
-        let options_set: HashSet<ProverConfiguration> = options
+    fn merge_env_provers(
+        options: prover::Options,
+        existing_provers: &mut HashSet<ProverConfig>,
+    ) -> HashSet<ProverConfig> {
+        let options_set: HashSet<ProverConfig> = options
             .prover_urls
             .0
             .into_iter()
-            .map(|opt| ProverConfiguration {
+            .map(|opt| ProverConfig {
                 url:         opt.url,
                 batch_size:  opt.batch_size,
                 timeout_s:   opt.timeout_s,

@@ -7,6 +7,7 @@
 )]
 
 pub mod app;
+pub mod config;
 mod contracts;
 mod database;
 mod ethereum;

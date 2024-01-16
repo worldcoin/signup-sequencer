@@ -20,7 +20,7 @@ use std::time::Duration;
 use clap::Parser;
 use ethers::types::U256;
 use ethers::utils::keccak256;
-pub use map::{InsertionProverMap, ProverMap, ReadOnlyProver};
+pub use map::ProverMap;
 use once_cell::sync::Lazy;
 use prometheus::{exponential_buckets, register_histogram, Histogram};
 pub use proof::Proof;

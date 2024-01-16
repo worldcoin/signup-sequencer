@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use ethers::types::U256;
 use ruint::Uint;
 use semaphore::merkle_tree::Proof;
-use semaphore::poseidon_tree::Branch;
+use semaphore::poseidon_tree::{Branch, PoseidonHash};
 use tokio::sync::{mpsc, Notify};
 use tokio::{select, time};
 use tracing::instrument;
@@ -18,7 +18,7 @@ use crate::identity_tree::{
     AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
 use crate::prover::identity::Identity;
-use crate::prover::{Prover, ReadOnlyProver};
+use crate::prover::Prover;
 use crate::task_monitor::TaskMonitor;
 use crate::utils::batch_type::BatchType;
 use crate::utils::index_packing::pack_indices;
@@ -185,7 +185,7 @@ async fn commit_identities(
             "Insertion batch",
         );
 
-        insert_identities(database, identity_manager, batching_tree, updates, prover).await?
+        insert_identities(database, identity_manager, batching_tree, updates, &prover).await?
     } else {
         let prover = identity_manager
             .get_suitable_deletion_prover(updates.len())
@@ -197,7 +197,7 @@ async fn commit_identities(
             "Deletion batch"
         );
 
-        delete_identities(database, identity_manager, batching_tree, updates, prover).await?
+        delete_identities(database, identity_manager, batching_tree, updates, &prover).await?
     };
 
     if let Some(tx_id) = tx_id {
@@ -213,45 +213,9 @@ pub async fn insert_identities(
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
     updates: &[AppliedTreeUpdate],
-    prover: ReadOnlyProver<'_, Prover>,
+    prover: &Prover,
 ) -> anyhow::Result<Option<TransactionId>> {
-    TaskMonitor::log_identities_queues(database).await?;
-
-    if updates.is_empty() {
-        tracing::warn!("Identity commit requested with zero identities. Continuing.");
-        return Ok(None);
-    }
-
-    tracing::debug!("Starting identity commit for {} identities.", updates.len());
-
-    let mut last_index = updates
-        .first()
-        .expect("Updates is non empty.")
-        .update
-        .leaf_index;
-
-    for update in &updates[1..] {
-        if last_index + 1 != update.update.leaf_index {
-            let leaf_indexes = updates
-                .iter()
-                .map(|update| update.update.leaf_index)
-                .collect::<Vec<_>>();
-            let commitments = updates
-                .iter()
-                .map(|update| update.update.element)
-                .collect::<Vec<_>>();
-
-            panic!(
-                "Identities are not consecutive leaves in the tree (leaf_indexes = {:?}, \
-                 commitments = {:?})",
-                leaf_indexes, commitments
-            );
-        }
-
-        last_index = update.update.leaf_index;
-    }
-
-    // Grab the initial conditions before the updates are applied to the tree.
+    assert_updates_are_consecutive(updates);
 
     let start_index = updates[0].update.leaf_index;
     let pre_root: U256 = batching_tree.get_root().into();
@@ -270,11 +234,7 @@ pub async fn insert_identities(
     // intermediate versions of the tree
     let mut merkle_proofs: Vec<_> = updates
         .iter()
-        .map(|update_with_tree| {
-            update_with_tree
-                .result
-                .proof(update_with_tree.update.leaf_index)
-        })
+        .map(|update| update.result.proof(update.update.leaf_index))
         .collect();
 
     // Grab some variables for sizes to make querying easier.
@@ -324,21 +284,7 @@ pub async fn insert_identities(
     // With the updates applied we can grab the value of the tree's new root and
     // build our identities for sending to the identity manager.
     let post_root: U256 = latest_tree_from_updates.root().into();
-    let identity_commitments: Vec<Identity> = commitments
-        .iter()
-        .zip(merkle_proofs)
-        .map(|(id, prf)| {
-            let commitment: U256 = id.into();
-            let proof: Vec<U256> = prf
-                .0
-                .iter()
-                .map(|branch| match branch {
-                    Branch::Left(v) | Branch::Right(v) => U256::from(*v),
-                })
-                .collect();
-            Identity::new(commitment, proof)
-        })
-        .collect();
+    let identity_commitments = zip_commitments_and_proofs(commitments, merkle_proofs);
 
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
@@ -393,22 +339,37 @@ pub async fn insert_identities(
     Ok(Some(transaction_id))
 }
 
+fn assert_updates_are_consecutive(updates: &[AppliedTreeUpdate]) {
+    for updates in updates.windows(2) {
+        let first = &updates[0];
+        let second = &updates[1];
+
+        if first.update.leaf_index + 1 != second.update.leaf_index {
+            let leaf_indexes = updates
+                .iter()
+                .map(|update| update.update.leaf_index)
+                .collect::<Vec<_>>();
+            let commitments = updates
+                .iter()
+                .map(|update| update.update.element)
+                .collect::<Vec<_>>();
+
+            panic!(
+                "Identities are not consecutive leaves in the tree (leaf_indexes = {:?}, \
+                 commitments = {:?})",
+                leaf_indexes, commitments
+            );
+        }
+    }
+}
+
 pub async fn delete_identities(
     database: &Database,
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
     updates: &[AppliedTreeUpdate],
-    prover: ReadOnlyProver<'_, Prover>,
+    prover: &Prover,
 ) -> anyhow::Result<Option<TransactionId>> {
-    TaskMonitor::log_identities_queues(database).await?;
-
-    if updates.is_empty() {
-        tracing::warn!("Identity commit requested with zero identities. Continuing.");
-        return Ok(None);
-    }
-
-    tracing::debug!("Starting identity commit for {} identities.", updates.len());
-
     // Grab the initial conditions before the updates are applied to the tree.
     let pre_root: U256 = batching_tree.get_root().into();
 
@@ -479,23 +440,7 @@ pub async fn delete_identities(
     // With the updates applied we can grab the value of the tree's new root and
     // build our identities for sending to the identity manager.
     let post_root: U256 = latest_tree_from_updates.root().into();
-
-    // Get the previous identity
-    let identity_commitments: Vec<Identity> = commitments
-        .iter()
-        .zip(merkle_proofs)
-        .map(|(id, prf)| {
-            let commitment: U256 = id.into();
-            let proof: Vec<U256> = prf
-                .0
-                .iter()
-                .map(|branch| match branch {
-                    Branch::Left(v) | Branch::Right(v) => U256::from(*v),
-                })
-                .collect();
-            Identity::new(commitment, proof)
-        })
-        .collect();
+    let identity_commitments = zip_commitments_and_proofs(commitments, merkle_proofs);
 
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
@@ -538,6 +483,27 @@ pub async fn delete_identities(
     TaskMonitor::log_batch_size(updates.len());
 
     Ok(Some(transaction_id))
+}
+
+fn zip_commitments_and_proofs(
+    commitments: Vec<U256>,
+    merkle_proofs: Vec<Proof<PoseidonHash>>,
+) -> Vec<Identity> {
+    commitments
+        .iter()
+        .zip(merkle_proofs)
+        .map(|(id, prf)| {
+            let commitment: U256 = id.into();
+            let proof: Vec<U256> = prf
+                .0
+                .iter()
+                .map(|branch| match branch {
+                    Branch::Left(v) | Branch::Right(v) => U256::from(*v),
+                })
+                .collect();
+            Identity::new(commitment, proof)
+        })
+        .collect()
 }
 
 fn determine_batch_type(tree: &TreeVersion<Intermediate>) -> Option<BatchType> {

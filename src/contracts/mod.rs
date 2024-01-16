@@ -10,15 +10,14 @@ use clap::Parser;
 use ethers::providers::Middleware;
 use ethers::types::{Address, H256, U256};
 use semaphore::Field;
-use tokio::sync::RwLockReadGuard;
+use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{error, info, instrument, warn};
 
 use self::abi::{BridgedWorldId, DeleteIdentitiesCall, WorldId};
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::{Ethereum, ReadProvider};
 use crate::prover::identity::Identity;
-use crate::prover::map::{DeletionProverMap, InsertionProverMap, ReadOnlyInsertionProver};
-use crate::prover::{Proof, Prover, ProverConfiguration, ProverType, ReadOnlyProver};
+use crate::prover::{Proof, Prover, ProverConfiguration, ProverMap, ProverType};
 use crate::serde_utils::JsonStrWrapper;
 use crate::server::error::Error as ServerError;
 use crate::utils::index_packing::unpack_indices;
@@ -58,8 +57,8 @@ pub struct Options {
 #[derive(Debug)]
 pub struct IdentityManager {
     ethereum:             Ethereum,
-    insertion_prover_map: InsertionProverMap,
-    deletion_prover_map:  DeletionProverMap,
+    insertion_prover_map: RwLock<ProverMap>,
+    deletion_prover_map:  RwLock<ProverMap>,
     abi:                  WorldId<ReadProvider>,
     secondary_abis:       Vec<BridgedWorldId<ReadProvider>>,
     initial_leaf_value:   Field,
@@ -80,8 +79,8 @@ impl IdentityManager {
     pub async fn new(
         options: Options,
         ethereum: Ethereum,
-        insertion_prover_map: InsertionProverMap,
-        deletion_prover_map: DeletionProverMap,
+        insertion_prover_map: ProverMap,
+        deletion_prover_map: ProverMap,
     ) -> anyhow::Result<Self>
     where
         Self: Sized,
@@ -128,6 +127,9 @@ impl IdentityManager {
 
         let initial_leaf_value = options.initial_leaf_value;
         let tree_depth = options.tree_depth;
+
+        let insertion_prover_map = RwLock::new(insertion_prover_map);
+        let deletion_prover_map = RwLock::new(deletion_prover_map);
 
         let identity_manager = Self {
             ethereum,
@@ -179,7 +181,7 @@ impl IdentityManager {
     pub async fn get_suitable_insertion_prover(
         &self,
         num_identities: usize,
-    ) -> anyhow::Result<ReadOnlyProver<Prover>> {
+    ) -> anyhow::Result<RwLockReadGuard<Prover>> {
         let prover_map = self.insertion_prover_map.read().await;
 
         match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
@@ -193,7 +195,7 @@ impl IdentityManager {
     pub async fn get_suitable_deletion_prover(
         &self,
         num_identities: usize,
-    ) -> anyhow::Result<ReadOnlyProver<Prover>> {
+    ) -> anyhow::Result<RwLockReadGuard<Prover>> {
         let prover_map = self.deletion_prover_map.read().await;
 
         match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
@@ -210,7 +212,7 @@ impl IdentityManager {
 
     #[instrument(level = "debug", skip(prover, identity_commitments))]
     pub async fn prepare_insertion_proof(
-        prover: ReadOnlyInsertionProver<'_>,
+        prover: &Prover,
         start_index: usize,
         pre_root: U256,
         identity_commitments: &[Identity],
@@ -240,7 +242,7 @@ impl IdentityManager {
 
     #[instrument(level = "debug", skip(prover, identity_commitments))]
     pub async fn prepare_deletion_proof(
-        prover: ReadOnlyProver<'_, Prover>,
+        prover: &Prover,
         pre_root: U256,
         deletion_indices: Vec<u32>,
         identity_commitments: Vec<Identity>,

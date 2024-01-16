@@ -48,6 +48,10 @@ where
         self.map.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
     pub fn max_key(&self) -> Option<K> {
         self.map.keys().next_back().copied()
     }

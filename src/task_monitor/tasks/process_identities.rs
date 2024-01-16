@@ -141,7 +141,6 @@ async fn process_identities(
         }
 
         commit_identities(
-            database,
             identity_manager,
             batching_tree,
             monitored_txs_sender,
@@ -161,7 +160,6 @@ async fn process_identities(
 }
 
 async fn commit_identities(
-    database: &Database,
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
     monitored_txs_sender: &mpsc::Sender<TransactionId>,
@@ -185,7 +183,7 @@ async fn commit_identities(
             "Insertion batch",
         );
 
-        insert_identities(database, identity_manager, batching_tree, updates, &prover).await?
+        insert_identities(identity_manager, batching_tree, updates, &prover).await?
     } else {
         let prover = identity_manager
             .get_suitable_deletion_prover(updates.len())
@@ -197,7 +195,7 @@ async fn commit_identities(
             "Deletion batch"
         );
 
-        delete_identities(database, identity_manager, batching_tree, updates, &prover).await?
+        delete_identities(identity_manager, batching_tree, updates, &prover).await?
     };
 
     if let Some(tx_id) = tx_id {
@@ -209,7 +207,6 @@ async fn commit_identities(
 
 #[instrument(level = "info", skip_all)]
 pub async fn insert_identities(
-    database: &Database,
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
     updates: &[AppliedTreeUpdate],
@@ -364,7 +361,6 @@ fn assert_updates_are_consecutive(updates: &[AppliedTreeUpdate]) {
 }
 
 pub async fn delete_identities(
-    database: &Database,
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
     updates: &[AppliedTreeUpdate],

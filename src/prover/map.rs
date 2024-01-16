@@ -1,22 +1,12 @@
-use tokio::sync::RwLock;
-
 use crate::prover::{Prover, ProverConfiguration, ProverType, Provers};
 use crate::utils::min_map::MinMap;
 
 /// A map that contains a prover for each batch size.
 ///
 /// Provides utility methods for getting the appropriate provers
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ProverMap {
     map: MinMap<usize, Prover>,
-}
-
-impl Default for ProverMap {
-    fn default() -> Self {
-        Self {
-            map: MinMap::default(),
-        }
-    }
 }
 
 impl ProverMap {

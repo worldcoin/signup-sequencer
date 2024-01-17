@@ -42,6 +42,7 @@ pub mod prelude {
         ServerConfig, TreeConfig, TxSitterConfig,
     };
     pub use signup_sequencer::identity_tree::Hash;
+    pub use signup_sequencer::prover::ProverType;
     pub use signup_sequencer::server;
     pub use tokio::spawn;
     pub use tokio::task::JoinHandle;
@@ -51,6 +52,10 @@ pub mod prelude {
     pub use url::{Host, Url};
 
     pub use super::prover_mock::ProverService;
+    pub use super::test_config::{
+        self, TestConfigBuilder, DEFAULT_BATCH_DELETION_TIMEOUT_SECONDS,
+        DEFAULT_TREE_DENSE_PREFIX_DEPTH, DEFAULT_TREE_DEPTH,
+    };
     pub use super::{
         abi as ContractAbi, generate_reference_proof_json, generate_test_identities,
         init_tracing_subscriber, spawn_app, spawn_deps, spawn_mock_deletion_prover,
@@ -68,10 +73,10 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use hyper::StatusCode;
 use signup_sequencer::identity_tree::Status;
+use signup_sequencer::task_monitor::TaskMonitor;
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
-use self::prover_mock::ProverType;
 
 const NUM_ATTEMPTS_FOR_INCLUSION_PROOF: usize = 20;
 
@@ -586,6 +591,11 @@ fn construct_verify_proof_body(
 pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, SocketAddr)> {
     let server_config = config.server.clone();
     let app = App::new(config).await.expect("Failed to create App");
+    let app = Arc::new(app);
+
+    let task_monitor = TaskMonitor::new(app.clone());
+
+    task_monitor.start().await;
 
     let listener = TcpListener::bind(server_config.address).expect("Failed to bind random port");
     let local_addr = listener.local_addr()?;
@@ -593,7 +603,7 @@ pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, Socket
     let app = spawn({
         async move {
             info!("App thread starting");
-            server::bind_from_listener(Arc::new(app), Duration::from_secs(30), listener)
+            server::bind_from_listener(app, Duration::from_secs(30), listener)
                 .await
                 .expect("Failed to bind address");
             info!("App thread stopping");
@@ -689,8 +699,7 @@ pub async fn spawn_mock_insertion_prover(
     tree_depth: u8,
 ) -> anyhow::Result<ProverService> {
     let mock_prover_service =
-        prover_mock::ProverService::new(batch_size, tree_depth, prover_mock::ProverType::Insertion)
-            .await?;
+        prover_mock::ProverService::new(batch_size, tree_depth, ProverType::Insertion).await?;
 
     Ok(mock_prover_service)
 }
@@ -700,8 +709,7 @@ pub async fn spawn_mock_deletion_prover(
     tree_depth: u8,
 ) -> anyhow::Result<ProverService> {
     let mock_prover_service =
-        prover_mock::ProverService::new(batch_size, tree_depth, prover_mock::ProverType::Deletion)
-            .await?;
+        prover_mock::ProverService::new(batch_size, tree_depth, ProverType::Deletion).await?;
 
     Ok(mock_prover_service)
 }
@@ -715,6 +723,7 @@ pub fn init_tracing_subscriber() {
     let result = if quiet_mode {
         tracing_subscriber::fmt()
             .with_env_filter("info,signup_sequencer=debug")
+            .compact()
             .with_timer(Uptime::default())
             .try_init()
     } else {

@@ -51,6 +51,18 @@ impl fmt::Debug for SecretUrl {
     }
 }
 
+impl From<Url> for SecretUrl {
+    fn from(url: Url) -> Self {
+        Self::new(url)
+    }
+}
+
+impl From<SecretUrl> for Url {
+    fn from(secret_url: SecretUrl) -> Self {
+        secret_url.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

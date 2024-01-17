@@ -7,7 +7,6 @@ use hyper::Uri;
 
 use crate::common::{test_add_batch_size, test_remove_batch_size};
 
-const SUPPORTED_DEPTH: usize = 20;
 const IDLE_TIME: u64 = 10;
 
 #[tokio::test]
@@ -19,17 +18,14 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let first_batch_size: usize = 3;
     let second_batch_size: usize = 2;
 
-    #[allow(clippy::cast_possible_truncation)]
-    let tree_depth: u8 = SUPPORTED_DEPTH as u8;
-
-    let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
+    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
         initial_root,
         &[first_batch_size, second_batch_size],
         &[],
-        tree_depth,
+        DEFAULT_TREE_DEPTH as u8,
     )
     .await?;
 
@@ -45,50 +41,18 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         temp_dir.path().join("testfile")
     );
 
-    // We initially spawn the service with a single prover for batch size 3.
+    let config = TestConfigBuilder::new()
+        .db_url(&db_url)
+        .oz_api_url(&micro_oz.endpoint())
+        .oz_address(micro_oz.address())
+        .identity_manager_address(mock_chain.identity_manager.address())
+        .primary_network_provider(mock_chain.anvil.endpoint())
+        .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
+        // We initially spawn the sequencer with only the first prover
+        .add_prover(first_prover)
+        .build()?;
 
-    let mut options = Options::try_parse_from([
-        "signup-sequencer",
-        "--identity-manager-address",
-        "0x0000000000000000000000000000000000000000", // placeholder, updated below
-        "--database",
-        &db_url,
-        "--database-max-connections",
-        "1",
-        "--tree-depth",
-        &format!("{tree_depth}"),
-        "--prover-urls",
-        &first_prover.arg_string(),
-        "--batch-timeout-seconds",
-        "3",
-        "--dense-tree-prefix-depth",
-        "10",
-        "--tree-gc-threshold",
-        "1",
-        "--oz-api-key",
-        "",
-        "--oz-api-secret",
-        "",
-        "--oz-api-url",
-        &micro_oz.endpoint(),
-        "--oz-address",
-        &format!("{:?}", micro_oz.address()),
-        "--time-between-scans-seconds",
-        "1",
-        "--dense-tree-mmap-file",
-        temp_dir.path().join("testfile").to_str().unwrap(),
-    ])
-    .context("Failed to create options")?;
-
-    options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
-
-    options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
-    options.app.ethereum.ethereum_provider =
-        Url::parse(&mock_chain.anvil.endpoint()).expect("Failed to parse Anvil url");
-
-    let (app, local_addr) = spawn_app(options.clone())
-        .await
-        .expect("Failed to spawn app.");
+    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(first_batch_size * 5);
     let identities_ref: Vec<Field> = test_identities

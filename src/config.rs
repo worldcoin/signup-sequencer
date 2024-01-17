@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Duration;
 
+use ethers::types::{Address, H160};
 use semaphore::Field;
 use serde::{Deserialize, Serialize};
 
@@ -10,10 +12,13 @@ use crate::serde_utils::JsonStrWrapper;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    pub app:      AppConfig,
-    pub tree:     TreeConfig,
-    pub database: DatabaseConfig,
-    pub server:   ServerConfig,
+    pub app:       AppConfig,
+    pub tree:      TreeConfig,
+    pub network:   NetworkConfig,
+    pub providers: ProvidersConfig,
+    pub relayer:   RelayerConfig,
+    pub database:  DatabaseConfig,
+    pub server:    ServerConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,9 +89,10 @@ pub struct TreeConfig {
     #[serde(default = "default::tree_gc_threshold")]
     pub tree_gc_threshold: usize,
 
+    // TODO: Allow running without a cache file
     /// Path and file name to use for mmap file when building dense tree
-    #[serde(default)]
-    pub cache_file: Option<String>,
+    #[serde(default = "default::cache_file")]
+    pub cache_file: String,
 
     /// If set will not use cached tree state
     #[serde(default = "default::force_cache_purge")]
@@ -96,6 +102,86 @@ pub struct TreeConfig {
     /// used in the identity manager contract.
     #[serde(default = "default::initial_leaf_value")]
     pub initial_leaf_value: Field,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkConfig {
+    /// The address of the identity manager contract.
+    pub identity_manager_address: Address,
+
+    /// The addresses of world id contracts on secondary chains
+    /// mapped by chain id
+    #[serde(default)]
+    pub relayed_identity_manager_addresses: JsonStrWrapper<HashMap<u64, Address>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProvidersConfig {
+    /// Provider url for the primary chain
+    pub primary_network_provider: SecretUrl,
+
+    /// Provider urls for the secondary chains
+    #[serde(default)]
+    pub relayed_network_providers: JsonStrWrapper<Vec<SecretUrl>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+#[serde(rename_all = "snake_case")]
+pub enum RelayerConfig {
+    OzDefender(OzDefenderConfig),
+    TxSitter(TxSitterConfig),
+}
+
+impl RelayerConfig {
+    // TODO: Extract into a common field
+    pub fn address(&self) -> Address {
+        match self {
+            RelayerConfig::OzDefender(config) => config.oz_address,
+            RelayerConfig::TxSitter(config) => config.tx_sitter_address,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OzDefenderConfig {
+    /// Api url
+    #[serde(default = "default::oz_api_url")]
+    pub oz_api_url: String,
+
+    /// OpenZeppelin Defender API Key
+    pub oz_api_key: String,
+
+    /// OpenZeppelin Defender API Secret
+    pub oz_api_secret: String,
+
+    /// Address of OZ Relayer
+    pub oz_address: H160,
+
+    /// For how long should we track and retry the transaction (in
+    /// seconds) Default: 7 days (7 * 24 * 60 * 60 = 604800 seconds)
+    #[serde(with = "humantime_serde")]
+    #[serde(default = "default::oz_transaction_validity")]
+    pub oz_transaction_validity: Duration,
+
+    #[serde(with = "humantime_serde")]
+    #[serde(default = "default::oz_send_timeout")]
+    pub oz_send_timeout: Duration,
+
+    #[serde(with = "humantime_serde")]
+    #[serde(default = "default::oz_mine_timeout")]
+    pub oz_mine_timeout: Duration,
+
+    pub oz_gas_limit: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TxSitterConfig {
+    pub tx_sitter_url: String,
+
+    pub tx_sitter_address: H160,
+
+    pub tx_sitter_gas_limit: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,8 +204,24 @@ pub struct ServerConfig {
     pub serve_timeout: Duration,
 }
 
-mod default {
+pub mod default {
     use std::time::Duration;
+
+    pub fn oz_api_url() -> String {
+        "https://api.defender.openzeppelin.com".to_string()
+    }
+
+    pub fn oz_transaction_validity() -> Duration {
+        Duration::from_secs(604800)
+    }
+
+    pub fn oz_send_timeout() -> Duration {
+        Duration::from_secs(60)
+    }
+
+    pub fn oz_mine_timeout() -> Duration {
+        Duration::from_secs(60)
+    }
 
     pub fn batch_insertion_timeout() -> Duration {
         Duration::from_secs(180)
@@ -177,6 +279,10 @@ mod default {
         10_000
     }
 
+    pub fn cache_file() -> String {
+        "/data/cache_file".to_string()
+    }
+
     pub fn force_cache_purge() -> bool {
         false
     }
@@ -197,6 +303,17 @@ mod tests {
         provers_urls = "[]"
 
         [tree]
+
+        [network]
+        identity_manager_address = "0x0000000000000000000000000000000000000000"
+
+        [providers]
+        primary_network_provider = "http://localhost:8545"
+
+        [relayer]
+        kind = "tx_sitter"
+        tx_sitter_url = "http://localhost:3000"
+        tx_sitter_address = "0x0000000000000000000000000000000000000000"
 
         [database]
         database = "postgres://user:password@localhost:5432/database"
@@ -229,6 +346,20 @@ mod tests {
         cache_file = "/data/cache_file"
         force_cache_purge = false
         initial_leaf_value = "0x0000000000000000000000000000000000000000000000000000000000000001"
+
+        [network]
+        identity_manager_address = "0x0000000000000000000000000000000000000000"
+        relayed_identity_manager_addresses = "{}"
+
+        [providers]
+        primary_network_provider = "http://localhost:8545/"
+        relayed_network_providers = "[]"
+
+        [relayer]
+        kind = "tx_sitter"
+        tx_sitter_url = "http://localhost:3000"
+        tx_sitter_address = "0x0000000000000000000000000000000000000000"
+        tx_sitter_gas_limit = 100000
 
         [database]
         database = "postgres://user:password@localhost:5432/database"

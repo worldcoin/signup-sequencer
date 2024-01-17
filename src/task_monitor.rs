@@ -1,21 +1,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use clap::Parser;
 use once_cell::sync::Lazy;
 use prometheus::{linear_buckets, register_gauge, register_histogram, Gauge, Histogram};
-use tokio::sync::{broadcast, mpsc, Notify, RwLock};
+use tokio::sync::{broadcast, mpsc, Mutex, Notify, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{info, instrument, warn};
 
-use self::tasks::delete_identities::DeleteIdentities;
-use self::tasks::finalize_identities::FinalizeRoots;
-use self::tasks::insert_identities::InsertIdentities;
-use self::tasks::monitor_txs::MonitorTxs;
-use self::tasks::process_identities::ProcessIdentities;
-use crate::contracts::SharedIdentityManager;
+use crate::app::App;
 use crate::database::Database;
-use crate::identity_tree::TreeState;
 
 pub mod tasks;
 
@@ -68,53 +61,6 @@ impl RunningInstance {
     }
 }
 
-/// Configuration options for the component responsible for committing
-/// identities when queried.
-#[derive(Clone, Debug, PartialEq, Eq, Parser)]
-#[group(skip)]
-pub struct Options {
-    /// The maximum number of seconds the sequencer will wait before sending a
-    /// batch of identities to the chain, even if the batch is not full.
-    // TODO: do we want to change this to batch_insertion_timeout_secs
-    #[clap(long, env, default_value = "180")]
-    pub batch_timeout_seconds: u64,
-
-    /// TODO:
-    #[clap(long, env, default_value = "3600")]
-    pub batch_deletion_timeout_seconds: i64,
-
-    /// TODO:
-    #[clap(long, env, default_value = "100")]
-    pub min_batch_deletion_size: usize,
-
-    /// The parameter to control the delay between mining a deletion batch and
-    /// inserting the recovery identities
-    ///
-    /// The sequencer will insert the recovery identities after
-    /// max_epoch_duration_seconds + root_history_expiry) seconds have passed
-    ///
-    /// By default the value is set to 0 so the sequencer will only use
-    /// root_history_expiry
-    #[clap(long, env, default_value = "0")]
-    pub max_epoch_duration_seconds: u64,
-
-    /// The maximum number of windows to scan for finalization logs
-    #[clap(long, env, default_value = "100")]
-    pub scanning_window_size: u64,
-
-    /// The offset from the latest block to scan
-    #[clap(long, env, default_value = "0")]
-    pub scanning_chain_head_offset: u64,
-
-    /// The number of seconds to wait between fetching logs
-    #[clap(long, env, default_value = "30")]
-    pub time_between_scans_seconds: u64,
-
-    /// The number of txs in the channel that we'll be monitoring
-    #[clap(long, env, default_value = "100")]
-    pub monitored_txs_capacity: usize,
-}
-
 /// A worker that commits identities to the blockchain.
 ///
 /// This uses the database to keep track of identities that need to be
@@ -126,55 +72,15 @@ pub struct TaskMonitor {
     /// when shutdown is called we want to be able to gracefully
     /// await the join handles - which requires ownership of the handle and by
     /// extension the instance.
-    instance:                  RwLock<Option<RunningInstance>>,
-    database:                  Arc<Database>,
-    identity_manager:          SharedIdentityManager,
-    tree_state:                TreeState,
-    batch_insert_timeout_secs: u64,
-
-    // Finalization params
-    scanning_window_size:           u64,
-    scanning_chain_head_offset:     u64,
-    time_between_scans:             Duration,
-    max_epoch_duration:             Duration,
-    // TODO: docs
-    batch_deletion_timeout_seconds: i64,
-    // TODO: docs
-    min_batch_deletion_size:        usize,
-    monitored_txs_capacity:         usize,
+    instance: RwLock<Option<RunningInstance>>,
+    app:      Arc<App>,
 }
 
 impl TaskMonitor {
-    pub fn new(
-        database: Arc<Database>,
-        contracts: SharedIdentityManager,
-        tree_state: TreeState,
-        options: &Options,
-    ) -> Self {
-        let Options {
-            batch_timeout_seconds,
-            scanning_window_size,
-            scanning_chain_head_offset,
-            time_between_scans_seconds,
-            max_epoch_duration_seconds,
-            monitored_txs_capacity,
-            batch_deletion_timeout_seconds,
-            min_batch_deletion_size,
-        } = *options;
-
+    pub fn new(app: Arc<App>) -> Self {
         Self {
             instance: RwLock::new(None),
-            database,
-            identity_manager: contracts,
-            tree_state,
-            batch_insert_timeout_secs: batch_timeout_seconds,
-            scanning_window_size,
-            scanning_chain_head_offset,
-            time_between_scans: Duration::from_secs(time_between_scans_seconds),
-            batch_deletion_timeout_seconds,
-            min_batch_deletion_size,
-            max_epoch_duration: Duration::from_secs(max_epoch_duration_seconds),
-            monitored_txs_capacity,
+            app,
         }
     }
 
@@ -190,89 +96,80 @@ impl TaskMonitor {
         let (shutdown_sender, _) = broadcast::channel(1);
 
         let (monitored_txs_sender, monitored_txs_receiver) =
-            mpsc::channel(self.monitored_txs_capacity);
+            mpsc::channel(self.app.config.app.monitored_txs_capacity);
 
-        let wake_up_notify = Arc::new(Notify::new());
+        let monitored_txs_sender = Arc::new(monitored_txs_sender);
+        let monitored_txs_receiver = Arc::new(Mutex::new(monitored_txs_receiver));
+
+        let base_wake_up_notify = Arc::new(Notify::new());
         // Immediately notify so we can start processing if we have pending identities
         // in the database
-        wake_up_notify.notify_one();
+        base_wake_up_notify.notify_one();
 
         let mut handles = Vec::new();
 
-        // Finalize identities task
-        let finalize_identities = FinalizeRoots::new(
-            self.database.clone(),
-            self.identity_manager.clone(),
-            self.tree_state.get_processed_tree(),
-            self.tree_state.get_mined_tree(),
-            self.scanning_window_size,
-            self.scanning_chain_head_offset,
-            self.time_between_scans,
-            self.max_epoch_duration,
-        );
+        let app = self.app.clone();
+        let finalize_identities = move || tasks::finalize_identities::finalize_roots(app.clone());
 
         let finalize_identities_handle = crate::utils::spawn_monitored_with_backoff(
-            move || finalize_identities.clone().run(),
+            finalize_identities,
             shutdown_sender.clone(),
             FINALIZE_IDENTITIES_BACKOFF,
         );
 
         handles.push(finalize_identities_handle);
 
-        // Process identities task
-        let process_identities = ProcessIdentities::new(
-            self.database.clone(),
-            self.identity_manager.clone(),
-            self.tree_state.get_batching_tree(),
-            self.batch_insert_timeout_secs,
-            monitored_txs_sender,
-            wake_up_notify.clone(),
-        );
+        let app = self.app.clone();
+        let wake_up_notify = base_wake_up_notify.clone();
+        let process_identities = move || {
+            tasks::process_identities::process_identities(
+                app.clone(),
+                monitored_txs_sender.clone(),
+                wake_up_notify.clone(),
+            )
+        };
 
         let process_identities_handle = crate::utils::spawn_monitored_with_backoff(
-            move || process_identities.clone().run(),
+            process_identities,
             shutdown_sender.clone(),
             PROCESS_IDENTITIES_BACKOFF,
         );
 
         handles.push(process_identities_handle);
 
-        let monitor_txs = MonitorTxs::new(self.identity_manager.clone(), monitored_txs_receiver);
+        let app = self.app.clone();
+        let monitor_txs =
+            move || tasks::monitor_txs::monitor_txs(app.clone(), monitored_txs_receiver.clone());
 
         let monitor_txs_handle = crate::utils::spawn_monitored_with_backoff(
-            move || monitor_txs.clone().run(),
+            monitor_txs,
             shutdown_sender.clone(),
             PROCESS_IDENTITIES_BACKOFF,
         );
 
         handles.push(monitor_txs_handle);
 
-        // Insert identities task
-        let insert_identities = InsertIdentities::new(
-            self.database.clone(),
-            self.tree_state.get_latest_tree(),
-            wake_up_notify.clone(),
-        );
-
+        let app = self.app.clone();
+        let wake_up_notify = base_wake_up_notify.clone();
+        let insert_identities = move || {
+            self::tasks::insert_identities::insert_identities(app.clone(), wake_up_notify.clone())
+        };
         let insert_identities_handle = crate::utils::spawn_monitored_with_backoff(
-            move || insert_identities.clone().run(),
+            insert_identities,
             shutdown_sender.clone(),
             INSERT_IDENTITIES_BACKOFF,
         );
 
         handles.push(insert_identities_handle);
 
-        // Delete identities task
-        let delete_identities = DeleteIdentities::new(
-            self.database.clone(),
-            self.tree_state.get_latest_tree(),
-            self.batch_deletion_timeout_seconds,
-            self.min_batch_deletion_size,
-            wake_up_notify,
-        );
+        let app = self.app.clone();
+        let wake_up_notify = base_wake_up_notify.clone();
+        let delete_identities = move || {
+            self::tasks::delete_identities::delete_identities(app.clone(), wake_up_notify.clone())
+        };
 
         let delete_identities_handle = crate::utils::spawn_monitored_with_backoff(
-            move || delete_identities.clone().run(),
+            delete_identities,
             shutdown_sender.clone(),
             DELETE_IDENTITIES_BACKOFF,
         );

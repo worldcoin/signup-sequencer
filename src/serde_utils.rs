@@ -1,10 +1,11 @@
-use std::{fmt, borrow::Cow};
+use std::borrow::Cow;
+use std::fmt;
 use std::str::FromStr;
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct JsonStrWrapper<T>(pub T);
 
 impl<T> FromStr for JsonStrWrapper<T>
@@ -42,7 +43,8 @@ where
 
 impl<'de, T> Deserialize<'de> for JsonStrWrapper<T>
 where
-    // TODO: Is there some way to use T: Deserialize<'de> here?
+    // TODO: Is there some way to use T:
+    // Deserialize<'de> here?
     T: DeserializeOwned,
 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -51,6 +53,12 @@ where
         serde_json::from_str(&s)
             .map(JsonStrWrapper)
             .map_err(serde::de::Error::custom)
+    }
+}
+
+impl<T> From<T> for JsonStrWrapper<T> {
+    fn from(t: T) -> Self {
+        Self(t)
     }
 }
 

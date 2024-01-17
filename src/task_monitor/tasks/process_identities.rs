@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -11,8 +10,8 @@ use tokio::sync::{mpsc, Notify};
 use tokio::{select, time};
 use tracing::instrument;
 
-use crate::contracts::{IdentityManager, SharedIdentityManager};
-use crate::database::Database;
+use crate::app::App;
+use crate::contracts::IdentityManager;
 use crate::ethereum::write::TransactionId;
 use crate::identity_tree::{
     AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
@@ -27,63 +26,19 @@ use crate::utils::index_packing::pack_indices;
 /// trigger a forced batch insertion.
 const DEBOUNCE_THRESHOLD_SECS: i64 = 1;
 
-pub struct ProcessIdentities {
-    database:                  Arc<Database>,
-    identity_manager:          SharedIdentityManager,
-    batching_tree:             TreeVersion<Intermediate>,
-    batch_insert_timeout_secs: u64,
-    monitored_txs_sender:      mpsc::Sender<TransactionId>,
-    wake_up_notify:            Arc<Notify>,
-}
-
-impl ProcessIdentities {
-    pub fn new(
-        database: Arc<Database>,
-        identity_manager: SharedIdentityManager,
-        batching_tree: TreeVersion<Intermediate>,
-        batch_insert_timeout_secs: u64,
-        monitored_txs_sender: mpsc::Sender<TransactionId>,
-        wake_up_notify: Arc<Notify>,
-    ) -> Arc<Self> {
-        Arc::new(Self {
-            database,
-            identity_manager,
-            batching_tree,
-            batch_insert_timeout_secs,
-            monitored_txs_sender,
-            wake_up_notify,
-        })
-    }
-
-    pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
-        process_identities(
-            &self.database,
-            &self.identity_manager,
-            &self.batching_tree,
-            &self.monitored_txs_sender,
-            &self.wake_up_notify,
-            self.batch_insert_timeout_secs,
-        )
-        .await
-    }
-}
-
-async fn process_identities(
-    database: &Database,
-    identity_manager: &IdentityManager,
-    batching_tree: &TreeVersion<Intermediate>,
-    monitored_txs_sender: &mpsc::Sender<TransactionId>,
-    wake_up_notify: &Notify,
-    timeout_secs: u64,
+pub async fn process_identities(
+    app: Arc<App>,
+    monitored_txs_sender: Arc<mpsc::Sender<TransactionId>>,
+    wake_up_notify: Arc<Notify>,
 ) -> anyhow::Result<()> {
     tracing::info!("Awaiting for a clean slate");
-    identity_manager.await_clean_slate().await?;
+    app.identity_manager.await_clean_slate().await?;
 
     tracing::info!("Starting identity processor.");
 
     // We start a timer and force it to perform one initial tick to avoid an
     // immediate trigger.
-    let mut timer = time::interval(Duration::from_secs(timeout_secs));
+    let mut timer = time::interval(app.config.app.batch_insertion_timeout);
     timer.tick().await;
 
     // When both futures are woken at once, the choice is made
@@ -94,7 +49,8 @@ async fn process_identities(
     // inserted. If we have an incomplete batch but are within a small delta of the
     // tick happening anyway in the wake branch, we insert the current
     // (possibly-incomplete) batch anyway.
-    let mut last_batch_time: DateTime<Utc> = database
+    let mut last_batch_time: DateTime<Utc> = app
+        .database
         .get_latest_insertion_timestamp()
         .await?
         .unwrap_or(Utc::now());
@@ -110,21 +66,24 @@ async fn process_identities(
             },
         }
 
-        let Some(batch_type) = determine_batch_type(batching_tree) else {
+        let Some(batch_type) = determine_batch_type(app.tree_state.batching_tree()) else {
             continue;
         };
 
         let batch_size = if batch_type.is_deletion() {
-            identity_manager.max_deletion_batch_size().await
+            app.identity_manager.max_deletion_batch_size().await
         } else {
-            identity_manager.max_insertion_batch_size().await
+            app.identity_manager.max_insertion_batch_size().await
         };
 
-        let updates = batching_tree.peek_next_updates(batch_size);
+        let updates = app.tree_state.batching_tree().peek_next_updates(batch_size);
 
         let current_time = Utc::now();
+        let batch_insertion_timeout =
+            chrono::Duration::from_std(app.config.app.batch_insertion_timeout)?;
+
         let timeout_batch_time = last_batch_time
-            + chrono::Duration::seconds(timeout_secs as i64)
+            + batch_insertion_timeout
             + chrono::Duration::seconds(DEBOUNCE_THRESHOLD_SECS);
 
         let can_skip_batch = current_time < timeout_batch_time;
@@ -141,16 +100,16 @@ async fn process_identities(
         }
 
         commit_identities(
-            identity_manager,
-            batching_tree,
-            monitored_txs_sender,
+            &app.identity_manager,
+            app.tree_state.batching_tree(),
+            &monitored_txs_sender,
             &updates,
         )
         .await?;
 
         timer.reset();
         last_batch_time = Utc::now();
-        database
+        app.database
             .update_latest_insertion_timestamp(last_batch_time)
             .await?;
 

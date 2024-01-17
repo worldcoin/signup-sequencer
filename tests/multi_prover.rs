@@ -7,11 +7,9 @@ use common::prelude::*;
 #[tokio::test]
 async fn multi_prover() -> anyhow::Result<()> {
     init_tracing_subscriber();
-    info!("Starting unavailable prover test");
+    info!("Starting multi prover test");
 
-    let tree_depth: u8 = 20;
-
-    let mut ref_tree = PoseidonTree::new(tree_depth as usize + 1, ruint::Uint::ZERO);
+    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let batch_timeout_seconds: u64 = 11;
@@ -23,20 +21,12 @@ async fn multi_prover() -> anyhow::Result<()> {
         initial_root,
         &[batch_size_3, batch_size_10],
         &[],
-        tree_depth,
+        DEFAULT_TREE_DEPTH as u8,
     )
     .await?;
 
     let prover_mock_batch_size_3 = &insertion_prover_map[&batch_size_3];
     let prover_mock_batch_size_10 = &insertion_prover_map[&batch_size_10];
-
-    let prover_arg_string = format!(
-        "[{},{}]",
-        prover_mock_batch_size_3.arg_string_single(),
-        prover_mock_batch_size_10.arg_string_single()
-    );
-
-    info!("Running with {prover_arg_string}");
 
     let db_socket_addr = db_container.address();
     let db_url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
@@ -47,47 +37,19 @@ async fn multi_prover() -> anyhow::Result<()> {
         temp_dir.path().join("testfile")
     );
 
-    let mut options = Options::try_parse_from([
-        "signup-sequencer",
-        "--identity-manager-address",
-        "0x0000000000000000000000000000000000000000", // placeholder, updated below
-        "--database",
-        &db_url,
-        "--database-max-connections",
-        "1",
-        "--tree-depth",
-        &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_arg_string,
-        "--batch-timeout-seconds",
-        &format!("{batch_timeout_seconds}"),
-        "--dense-tree-prefix-depth",
-        "10",
-        "--tree-gc-threshold",
-        "1",
-        "--oz-api-key",
-        "",
-        "--oz-api-secret",
-        "",
-        "--oz-api-url",
-        &micro_oz.endpoint(),
-        "--oz-address",
-        &format!("{:?}", micro_oz.address()),
-        "--time-between-scans-seconds",
-        "1",
-        "--dense-tree-mmap-file",
-        temp_dir.path().join("testfile").to_str().unwrap(),
-    ])
-    .context("Failed to create options")?;
+    let config = TestConfigBuilder::new()
+        .db_url(&db_url)
+        .oz_api_url(&micro_oz.endpoint())
+        .oz_address(micro_oz.address())
+        .identity_manager_address(mock_chain.identity_manager.address())
+        .primary_network_provider(mock_chain.anvil.endpoint())
+        .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
+        .add_prover(prover_mock_batch_size_3)
+        .add_prover(prover_mock_batch_size_10)
+        .build()?;
 
-    options.server.server = Url::parse("http://127.0.0.1:0/")?;
-
-    options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
-    options.app.ethereum.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint())?;
-
-    let (app, local_addr) = spawn_app(options.clone())
-        .await
-        .expect("Failed to spawn app.");
+    tracing::info!("Spawning app");
+    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(batch_size_3 + batch_size_10);
 

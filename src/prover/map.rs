@@ -53,7 +53,9 @@ impl ProverMap {
 }
 
 /// Builds an insertion prover map from the provided configuration.
-pub fn initialize_prover_maps(db_provers: HashSet<ProverConfig>) -> anyhow::Result<(ProverMap, ProverMap)> {
+pub fn initialize_prover_maps(
+    db_provers: HashSet<ProverConfig>,
+) -> anyhow::Result<(ProverMap, ProverMap)> {
     let mut insertion_map = ProverMap::default();
     let mut deletion_map = ProverMap::default();
 

@@ -16,7 +16,6 @@ use std::hash::{Hash, Hasher};
 use std::mem::size_of;
 use std::time::Duration;
 
-use clap::Parser;
 use ethers::types::U256;
 use ethers::utils::keccak256;
 pub use map::ProverMap;
@@ -27,7 +26,6 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::prover::identity::Identity;
-use crate::serde_utils::JsonStrWrapper;
 use crate::utils::index_packing::pack_indices;
 
 /// The endpoint used for proving operations.
@@ -50,20 +48,6 @@ static PROVER_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
     )
     .unwrap()
 });
-
-#[derive(Clone, Debug, PartialEq, Eq, Parser)]
-#[group(skip)]
-pub struct Options {
-    /// The options for configuring the batch insertion prover service.
-    ///
-    /// This should be a JSON array containing objects of the following format `{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30,"prover_type", "insertion"}`
-    #[clap(
-        long,
-        env,
-        default_value = r#"[{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30,"prover_type": "insertion"}]"# //TODO: update this and test
-    )]
-    pub prover_urls: JsonStrWrapper<Vec<ProverConfig>>,
-}
 
 /// Configuration options for the component responsible for interacting with the
 /// prover service.
@@ -92,6 +76,15 @@ pub enum ProverType {
     #[default]
     Insertion,
     Deletion,
+}
+
+impl std::fmt::Display for ProverType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ProverType::Insertion => write!(f, "insertion"),
+            ProverType::Deletion => write!(f, "deletion"),
+        }
+    }
 }
 
 impl Hash for ProverConfig {

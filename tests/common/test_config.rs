@@ -2,19 +2,26 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use anyhow::Context;
-use ethers::types::{Address, H160};
+use ethers::types::Address;
 use signup_sequencer::config::{
     default, AppConfig, Config, DatabaseConfig, NetworkConfig, OzDefenderConfig, ProvidersConfig,
     RelayerConfig, ServerConfig, TreeConfig,
 };
-use signup_sequencer::prover::{ProverConfig, ProverType};
+use signup_sequencer::prover::ProverConfig;
 use signup_sequencer::secret::SecretUrl;
 use url::Url;
 
 use crate::ProverService;
 
+pub const DEFAULT_BATCH_INSERTION_TIMEOUT_SECONDS: u64 = 10;
+pub const DEFAULT_BATCH_DELETION_TIMEOUT_SECONDS: u64 = 10;
+pub const DEFAULT_TREE_DEPTH: usize = 20;
+pub const DEFAULT_TREE_DENSE_PREFIX_DEPTH: usize = 10;
+pub const DEFAULT_TIME_BETWEEN_SCANS_SECONDS: u64 = 1;
+
 pub struct TestConfigBuilder {
     tree_depth:               usize,
+    dense_tree_prefix_depth:  usize,
     prover_urls:              Vec<ProverConfig>,
     batch_insertion_timeout:  Duration,
     batch_deletion_timeout:   Duration,
@@ -30,10 +37,11 @@ pub struct TestConfigBuilder {
 impl TestConfigBuilder {
     pub fn new() -> Self {
         Self {
-            tree_depth:               18,
+            tree_depth:               DEFAULT_TREE_DEPTH,
+            dense_tree_prefix_depth:  DEFAULT_TREE_DENSE_PREFIX_DEPTH,
             prover_urls:              vec![],
-            batch_insertion_timeout:  Duration::from_secs(10),
-            batch_deletion_timeout:   Duration::from_secs(10),
+            batch_insertion_timeout:  Duration::from_secs(DEFAULT_BATCH_INSERTION_TIMEOUT_SECONDS),
+            batch_deletion_timeout:   Duration::from_secs(DEFAULT_BATCH_DELETION_TIMEOUT_SECONDS),
             min_batch_deletion_size:  1,
             db_url:                   None,
             oz_api_url:               None,
@@ -42,6 +50,26 @@ impl TestConfigBuilder {
             identity_manager_address: None,
             primary_network_provider: None,
         }
+    }
+
+    pub fn min_batch_deletion_size(mut self, min_batch_deletion_size: usize) -> Self {
+        self.min_batch_deletion_size = min_batch_deletion_size;
+        self
+    }
+
+    pub fn batch_insertion_timeout(mut self, batch_insertion_timeout: Duration) -> Self {
+        self.batch_insertion_timeout = batch_insertion_timeout;
+        self
+    }
+
+    pub fn tree_depth(mut self, tree_depth: usize) -> Self {
+        self.tree_depth = tree_depth;
+        self
+    }
+
+    pub fn dense_tree_prefix_depth(mut self, dense_tree_prefix_depth: usize) -> Self {
+        self.dense_tree_prefix_depth = dense_tree_prefix_depth;
+        self
     }
 
     pub fn db_url(mut self, db_url: &str) -> Self {
@@ -69,8 +97,12 @@ impl TestConfigBuilder {
         self
     }
 
-    pub fn primary_network_provider(mut self, primary_network_provider: &SecretUrl) -> Self {
-        self.primary_network_provider = Some(primary_network_provider.clone());
+    pub fn primary_network_provider(mut self, primary_network_provider: impl AsRef<str>) -> Self {
+        let primary_network_provider = primary_network_provider.as_ref();
+        let url: Url = primary_network_provider.parse().expect("Invalid URL");
+
+        self.primary_network_provider = Some(url.into());
+
         self
     }
 
@@ -88,8 +120,9 @@ impl TestConfigBuilder {
         self
     }
 
-    pub fn into_config(self) -> anyhow::Result<Config> {
+    pub fn build(self) -> anyhow::Result<Config> {
         let db_url = self.db_url.context("Missing database url")?;
+
         let database = SecretUrl::new(Url::parse(&db_url)?);
 
         let config = Config {
@@ -101,12 +134,12 @@ impl TestConfigBuilder {
                 max_epoch_duration:         default::max_epoch_duration(),
                 scanning_window_size:       default::scanning_window_size(),
                 scanning_chain_head_offset: default::scanning_chain_head_offset(),
-                time_between_scans:         default::time_between_scans(),
+                time_between_scans:         Duration::from_secs(DEFAULT_TIME_BETWEEN_SCANS_SECONDS),
                 monitored_txs_capacity:     default::monitored_txs_capacity(),
             },
             tree:      TreeConfig {
                 tree_depth:              self.tree_depth,
-                dense_tree_prefix_depth: default::dense_tree_prefix_depth(),
+                dense_tree_prefix_depth: self.dense_tree_prefix_depth,
                 tree_gc_threshold:       default::tree_gc_threshold(),
                 cache_file:              self.cache_file.context("Missing cache file")?,
                 force_cache_purge:       default::force_cache_purge(),

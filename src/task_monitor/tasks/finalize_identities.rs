@@ -10,83 +10,27 @@ use ethers::providers::Middleware;
 use ethers::types::{Address, Log, Topic, ValueOrArray, U256};
 use tracing::{info, instrument};
 
+use crate::app::App;
 use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangeKind, TreeChangedFilter};
 use crate::contracts::scanner::BlockScanner;
-use crate::contracts::{IdentityManager, SharedIdentityManager};
+use crate::contracts::IdentityManager;
 use crate::database::Database;
 use crate::identity_tree::{Canonical, Intermediate, TreeVersion, TreeWithNextVersion};
 use crate::task_monitor::TaskMonitor;
 
-pub struct FinalizeRoots {
-    database:         Arc<Database>,
-    identity_manager: SharedIdentityManager,
-    processed_tree:   TreeVersion<Intermediate>,
-    finalized_tree:   TreeVersion<Canonical>,
+pub async fn finalize_roots(app: Arc<App>) -> anyhow::Result<()> {
+    let mainnet_abi = app.identity_manager.abi();
+    let secondary_abis = app.identity_manager.secondary_abis();
 
-    scanning_window_size:       u64,
-    scanning_chain_head_offset: u64,
-    time_between_scans:         Duration,
-    max_epoch_duration:         Duration,
-}
-
-impl FinalizeRoots {
-    pub fn new(
-        database: Arc<Database>,
-        identity_manager: SharedIdentityManager,
-        processed_tree: TreeVersion<Intermediate>,
-        finalized_tree: TreeVersion<Canonical>,
-        scanning_window_size: u64,
-        scanning_chain_head_offset: u64,
-        time_between_scans: Duration,
-        max_epoch_duration: Duration,
-    ) -> Arc<Self> {
-        Arc::new(Self {
-            database,
-            identity_manager,
-            processed_tree,
-            finalized_tree,
-            scanning_window_size,
-            scanning_chain_head_offset,
-            time_between_scans,
-            max_epoch_duration,
-        })
-    }
-
-    pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
-        finalize_roots_loop(
-            &self.database,
-            &self.identity_manager,
-            &self.processed_tree,
-            &self.finalized_tree,
-            self.scanning_window_size,
-            self.scanning_chain_head_offset,
-            self.time_between_scans,
-            self.max_epoch_duration,
-        )
-        .await
-    }
-}
-
-async fn finalize_roots_loop(
-    database: &Database,
-    identity_manager: &IdentityManager,
-    processed_tree: &TreeVersion<Intermediate>,
-    finalized_tree: &TreeVersion<Canonical>,
-    scanning_window_size: u64,
-    scanning_chain_head_offset: u64,
-    time_between_scans: Duration,
-    max_epoch_duration: Duration,
-) -> anyhow::Result<()> {
-    let mainnet_abi = identity_manager.abi();
-    let secondary_abis = identity_manager.secondary_abis();
-
-    let mut mainnet_scanner =
-        BlockScanner::new_latest(mainnet_abi.client().clone(), scanning_window_size)
-            .await?
-            .with_offset(scanning_chain_head_offset);
+    let mut mainnet_scanner = BlockScanner::new_latest(
+        mainnet_abi.client().clone(),
+        app.config.app.scanning_window_size,
+    )
+    .await?
+    .with_offset(app.config.app.scanning_chain_head_offset);
 
     let mut secondary_scanners =
-        init_secondary_scanners(secondary_abis, scanning_window_size).await?;
+        init_secondary_scanners(secondary_abis, app.config.app.scanning_window_size).await?;
 
     let mainnet_address = mainnet_abi.address();
 
@@ -94,20 +38,26 @@ async fn finalize_roots_loop(
         let mainnet_logs = fetch_mainnet_logs(&mut mainnet_scanner, mainnet_address).await?;
 
         finalize_mainnet_roots(
-            database,
-            identity_manager,
-            processed_tree,
+            &app.database,
+            &app.identity_manager,
+            app.tree_state.processed_tree(),
             &mainnet_logs,
-            max_epoch_duration,
+            app.config.app.max_epoch_duration,
         )
         .await?;
 
         let mut roots = extract_roots_from_mainnet_logs(mainnet_logs);
         roots.extend(fetch_secondary_logs(&mut secondary_scanners).await?);
 
-        finalize_secondary_roots(database, identity_manager, finalized_tree, roots).await?;
+        finalize_secondary_roots(
+            &app.database,
+            &app.identity_manager,
+            app.tree_state.mined_tree(),
+            roots,
+        )
+        .await?;
 
-        tokio::time::sleep(time_between_scans).await;
+        tokio::time::sleep(app.config.app.time_between_scans).await;
     }
 }
 

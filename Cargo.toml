@@ -38,6 +38,7 @@ cli-batteries = { git = "https://github.com/recmo/cli-batteries", rev = "fc1186d
     "otlp",
     "datadog",
 ] }
+config = "0.13.4"
 ethers = { version = "2.0.10", features = ["ws", "ipc", "openssl", "abigen"] }
 ethers-solc = "2.0.10"
 eyre = "0.6"

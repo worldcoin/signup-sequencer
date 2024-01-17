@@ -5,42 +5,16 @@ use tokio::sync::Notify;
 use tokio::time::sleep;
 use tracing::instrument;
 
+use crate::app::App;
 use crate::database::types::UnprocessedCommitment;
 use crate::database::Database;
 use crate::identity_tree::{Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
 
-pub struct InsertIdentities {
-    database:       Arc<Database>,
-    latest_tree:    TreeVersion<Latest>,
-    wake_up_notify: Arc<Notify>,
-}
-
-impl InsertIdentities {
-    pub fn new(
-        database: Arc<Database>,
-        latest_tree: TreeVersion<Latest>,
-        wake_up_notify: Arc<Notify>,
-    ) -> Arc<Self> {
-        Arc::new(Self {
-            database,
-            latest_tree,
-            wake_up_notify,
-        })
-    }
-
-    pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
-        insert_identities_loop(&self.database, &self.latest_tree, &self.wake_up_notify).await
-    }
-}
-
-async fn insert_identities_loop(
-    database: &Database,
-    latest_tree: &TreeVersion<Latest>,
-    wake_up_notify: &Notify,
-) -> anyhow::Result<()> {
+pub async fn insert_identities(app: Arc<App>, wake_up_notify: Arc<Notify>) -> anyhow::Result<()> {
     loop {
         // get commits from database
-        let unprocessed = database
+        let unprocessed = app
+            .database
             .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
             .await?;
         if unprocessed.is_empty() {
@@ -48,14 +22,14 @@ async fn insert_identities_loop(
             continue;
         }
 
-        insert_identities(database, latest_tree, unprocessed).await?;
+        insert_identities_batch(&app.database, app.tree_state.latest_tree(), unprocessed).await?;
         // Notify the identity processing task, that there are new identities
         wake_up_notify.notify_one();
     }
 }
 
 #[instrument(level = "info", skip_all)]
-async fn insert_identities(
+async fn insert_identities_batch(
     database: &Database,
     latest_tree: &TreeVersion<Latest>,
     identities: Vec<UnprocessedCommitment>,

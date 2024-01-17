@@ -8,7 +8,6 @@ use std::collections::HashSet;
 
 use anyhow::{anyhow, Context, Error as ErrReport};
 use chrono::{DateTime, Utc};
-use clap::Parser;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
 use sqlx::{Executor, Pool, Postgres, Row};
@@ -16,34 +15,18 @@ use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
 use self::types::{CommitmentHistoryEntry, DeletionEntry, LatestDeletionEntry, RecoveryEntry};
+use crate::config::DatabaseConfig;
 use crate::identity_tree::{
     Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate, UnprocessedStatus,
 };
 
 pub mod types;
 use crate::prover::{ProverConfig, ProverType};
-use crate::secret::SecretUrl;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 
 const MAX_UNPROCESSED_FETCH_COUNT: i64 = 10_000;
-
-#[derive(Clone, Debug, PartialEq, Eq, Parser)]
-pub struct Options {
-    /// Database server connection string.
-    /// Example: `postgres://user:password@localhost:5432/database`
-    #[clap(long, env)]
-    pub database: SecretUrl,
-
-    /// Allow creation or migration of the database schema.
-    #[clap(long, default_value = "true")]
-    pub database_migrate: bool,
-
-    /// Maximum number of connections in the database connection pool
-    #[clap(long, env, default_value = "10")]
-    pub database_max_connections: u32,
-}
 
 pub struct Database {
     pool: Pool<Postgres>,
@@ -51,20 +34,19 @@ pub struct Database {
 
 impl Database {
     #[instrument(skip_all)]
-    pub async fn new(options: Options) -> Result<Self, ErrReport> {
-        info!(url = %&options.database, "Connecting to database");
+    pub async fn new(config: &DatabaseConfig) -> Result<Self, ErrReport> {
+        info!(url = %&config.database, "Connecting to database");
 
         // Create database if requested and does not exist
-        if options.database_migrate && !Postgres::database_exists(options.database.expose()).await?
-        {
-            warn!(url = %&options.database, "Database does not exist, creating database");
-            Postgres::create_database(options.database.expose()).await?;
+        if config.migrate && !Postgres::database_exists(config.database.expose()).await? {
+            warn!(url = %&config.database, "Database does not exist, creating database");
+            Postgres::create_database(config.database.expose()).await?;
         }
 
         // Create a connection pool
         let pool = PoolOptions::<Postgres>::new()
-            .max_connections(options.database_max_connections)
-            .connect(options.database.expose())
+            .max_connections(config.max_connections)
+            .connect(config.database.expose())
             .await
             .context("error connecting to database")?;
 
@@ -73,7 +55,7 @@ impl Database {
             .await
             .context("error getting database version")?
             .get::<String, _>(0);
-        info!(url = %&options.database, ?version, "Connected to database");
+        info!(url = %&config.database, ?version, "Connected to database");
 
         // Run migrations if requested.
         let latest = MIGRATOR
@@ -82,8 +64,8 @@ impl Database {
             .expect("Missing migrations")
             .version;
 
-        if options.database_migrate {
-            info!(url = %&options.database, "Running migrations");
+        if config.migrate {
+            info!(url = %&config.database, "Running migrations");
             MIGRATOR.run(&pool).await?;
         }
 
@@ -92,7 +74,7 @@ impl Database {
         if let Some((version, dirty)) = pool.acquire().await?.version().await? {
             if dirty {
                 error!(
-                    url = %&options.database,
+                    url = %&config.database,
                     version,
                     expected = latest,
                     "Database is in incomplete migration state.",
@@ -100,7 +82,7 @@ impl Database {
                 return Err(anyhow!("Database is in incomplete migration state."));
             } else if version < latest {
                 error!(
-                    url = %&options.database,
+                    url = %&config.database,
                     version,
                     expected = latest,
                     "Database is not up to date, try rerunning with --database-migrate",
@@ -110,7 +92,7 @@ impl Database {
                 ));
             } else if version > latest {
                 error!(
-                    url = %&options.database,
+                    url = %&config.database,
                     version,
                     latest,
                     "Database version is newer than this version of the software, please update.",
@@ -120,13 +102,13 @@ impl Database {
                 ));
             }
             info!(
-                url = %&options.database,
+                url = %&config.database,
                 version,
                 latest,
                 "Database version is up to date.",
             );
         } else {
-            error!(url = %&options.database, "Could not get database version");
+            error!(url = %&config.database, "Could not get database version");
             return Err(anyhow!("Could not get database version."));
         }
 
@@ -916,7 +898,8 @@ mod test {
     use ruint::Uint;
     use semaphore::Field;
 
-    use super::{Database, Options};
+    use super::Database;
+    use crate::config::DatabaseConfig;
     use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
     use crate::prover::{ProverConfig, ProverType};
     use crate::secret::SecretUrl;
@@ -948,10 +931,10 @@ mod test {
         let db_socket_addr = db_container.address();
         let url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
 
-        let db = Database::new(Options {
-            database:                 SecretUrl::from_str(&url)?,
-            database_migrate:         true,
-            database_max_connections: 1,
+        let db = Database::new(&DatabaseConfig {
+            database:        SecretUrl::from_str(&url)?,
+            migrate:         true,
+            max_connections: 1,
         })
         .await?;
 

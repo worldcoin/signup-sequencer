@@ -31,6 +31,10 @@ impl ProverMap {
         self.map.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
     pub fn max_batch_size(&self) -> usize {
         self.map.max_key().unwrap_or(0)
     }

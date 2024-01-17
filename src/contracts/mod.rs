@@ -86,7 +86,7 @@ impl IdentityManager {
         let mut secondary_abis = Vec::new();
         for (chain_id, address) in &config.network.relayed_identity_manager_addresses.0 {
             let provider = secondary_providers
-                .get(&chain_id)
+                .get(chain_id)
                 .ok_or_else(|| anyhow!("No provider for chain id: {}", chain_id))?;
 
             let abi = BridgedWorldId::new(*address, provider.clone());

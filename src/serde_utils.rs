@@ -85,7 +85,7 @@ mod tests {
     fn json_value() {
         let wrapper = JsonStrWrapper(vec![1, 2, 3]);
 
-        let s = serde_json::to_value(&wrapper).unwrap();
+        let s = serde_json::to_value(wrapper).unwrap();
 
         assert_eq!(s, Value::String("[1,2,3]".to_string()));
 

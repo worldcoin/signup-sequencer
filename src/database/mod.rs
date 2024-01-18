@@ -339,7 +339,7 @@ impl Database {
             SELECT leaf_index, commitment
             FROM identities
             WHERE status = $1
-            ORDER BY id ASC, leaf_index ASC;
+            ORDER BY id ASC;
             "#,
         )
         .bind(<&str>::from(status));

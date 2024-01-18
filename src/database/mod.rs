@@ -339,7 +339,7 @@ impl Database {
             SELECT leaf_index, commitment
             FROM identities
             WHERE status = $1
-            ORDER BY leaf_index ASC, id ASC;
+            ORDER BY id ASC, leaf_index ASC;
             "#,
         )
         .bind(<&str>::from(status));
@@ -1658,7 +1658,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn get_commitments_by_status_results_are_not_deduplicated() -> anyhow::Result<()> {
+    async fn get_commitments_by_status_results_are_in_id_order() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
         let identities = mock_identities(5);
@@ -1687,49 +1687,26 @@ mod test {
             pending_tree_updates[0].element, identities[0],
             "First element is the original value"
         );
-        assert_eq!(
-            pending_tree_updates[1].element,
-            Hash::ZERO,
-            "Second element is the updated (deleted) value"
-        );
 
-        // 3rd identity
-        assert_eq!(
-            pending_tree_updates[4].element, identities[3],
-            "First element is the original value"
-        );
+        for (idx, identity) in identities.iter().enumerate() {
+            assert_eq!(
+                pending_tree_updates[idx].element, *identity,
+                "Element {} is the original value",
+                idx
+            );
+        }
+
+        // Deletions
         assert_eq!(
             pending_tree_updates[5].element,
             Hash::ZERO,
-            "Second element is the updated (deleted) value"
+            "First deletion is at the end"
         );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn get_commitments_by_status_results_are_sorted() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
-
-        let identities = mock_identities(5);
-
-        let roots = mock_roots(5);
-
-        let unordered_indexes = vec![3, 1, 4, 2, 0];
-        for i in unordered_indexes {
-            db.insert_pending_identity(i, &identities[i], &roots[i])
-                .await
-                .context("Inserting identity")?;
-        }
-
-        let pending_tree_updates = db
-            .get_commitments_by_status(ProcessedStatus::Pending)
-            .await?;
-        assert_eq!(pending_tree_updates.len(), 5);
-        for i in 0..5 {
-            assert_eq!(pending_tree_updates[i].element, identities[i]);
-            assert_eq!(pending_tree_updates[i].leaf_index, i);
-        }
+        assert_eq!(
+            pending_tree_updates[6].element,
+            Hash::ZERO,
+            "Second deletion is at the end"
+        );
 
         Ok(())
     }

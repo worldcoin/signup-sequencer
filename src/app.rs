@@ -215,6 +215,7 @@ impl App {
         let mut mined_items = database
             .get_commitments_by_status(ProcessedStatus::Mined)
             .await?;
+
         mined_items.sort_by_key(|item| item.leaf_index);
 
         if !force_cache_purge {

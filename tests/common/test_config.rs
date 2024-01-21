@@ -8,7 +8,7 @@ use signup_sequencer::config::{
     RelayerConfig, ServerConfig, TreeConfig,
 };
 use signup_sequencer::prover::ProverConfig;
-use signup_sequencer::secret::SecretUrl;
+use signup_sequencer::utils::secret::SecretUrl;
 use url::Url;
 
 use crate::ProverService;

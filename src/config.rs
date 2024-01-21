@@ -7,8 +7,8 @@ use semaphore::Field;
 use serde::{Deserialize, Serialize};
 
 use crate::prover::ProverConfig;
-use crate::secret::SecretUrl;
-use crate::serde_utils::JsonStrWrapper;
+use crate::utils::secret::SecretUrl;
+use crate::utils::serde_utils::JsonStrWrapper;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {

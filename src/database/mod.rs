@@ -902,7 +902,7 @@ mod test {
     use crate::config::DatabaseConfig;
     use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
     use crate::prover::{ProverConfig, ProverType};
-    use crate::secret::SecretUrl;
+    use crate::utils::secret::SecretUrl;
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {

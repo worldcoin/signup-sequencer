@@ -9,8 +9,6 @@ mod database;
 mod ethereum;
 pub mod identity_tree;
 pub mod prover;
-pub mod secret;
-mod serde_utils;
 pub mod server;
 pub mod task_monitor;
 pub mod utils;

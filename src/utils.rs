@@ -7,7 +7,11 @@ use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tracing::{error, info};
 
+pub mod batch_type;
 pub mod index_packing;
+pub mod min_map;
+pub mod secret;
+pub mod serde_utils;
 pub mod tree_updates;
 
 pub fn spawn_monitored_with_backoff<S, F>(

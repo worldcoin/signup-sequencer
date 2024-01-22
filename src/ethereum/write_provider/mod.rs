@@ -8,18 +8,15 @@ use tracing::{info, warn};
 
 use self::inner::Inner;
 use self::openzeppelin::OzRelay;
-use self::options::ParsedOptions;
 use self::tx_sitter::TxSitter;
 use super::write::TransactionId;
 use super::{ReadProvider, TxError};
+use crate::config::RelayerConfig;
 
 mod error;
 mod inner;
 mod openzeppelin;
-mod options;
 mod tx_sitter;
-
-pub use self::options::Options;
 
 pub struct WriteProvider {
     read_provider: ReadProvider,
@@ -38,18 +35,17 @@ impl fmt::Debug for WriteProvider {
 }
 
 impl WriteProvider {
-    pub async fn new(read_provider: ReadProvider, options: &Options) -> anyhow::Result<Self> {
-        let options = options.to_parsed()?;
-        let address = options.address();
+    pub async fn new(read_provider: ReadProvider, config: &RelayerConfig) -> anyhow::Result<Self> {
+        let address = config.address();
 
-        let inner: Arc<dyn Inner> = match options {
-            ParsedOptions::Oz(oz_options) => {
+        let inner: Arc<dyn Inner> = match config {
+            RelayerConfig::OzDefender(oz_config) => {
                 tracing::info!("Initializing OZ Relayer");
-                Arc::new(OzRelay::new(&oz_options).await?)
+                Arc::new(OzRelay::new(oz_config).await?)
             }
-            ParsedOptions::TxSitter(tx_sitter_options) => {
+            RelayerConfig::TxSitter(tx_sitter_config) => {
                 tracing::info!("Initializing TxSitter");
-                Arc::new(TxSitter::new(&tx_sitter_options))
+                Arc::new(TxSitter::new(tx_sitter_config))
             }
         };
 

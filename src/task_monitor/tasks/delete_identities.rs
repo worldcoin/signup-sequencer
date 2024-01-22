@@ -1,75 +1,34 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use anyhow::Context;
 use chrono::Utc;
 use tokio::sync::Notify;
 use tracing::info;
 
+use crate::app::App;
 use crate::database::types::DeletionEntry;
-use crate::database::Database;
-use crate::identity_tree::{Hash, Latest, TreeVersion};
+use crate::identity_tree::Hash;
 
-pub struct DeleteIdentities {
-    database:                Arc<Database>,
-    latest_tree:             TreeVersion<Latest>,
-    deletion_time_interval:  i64,
-    min_deletion_batch_size: usize,
-    wake_up_notify:          Arc<Notify>,
-}
-
-impl DeleteIdentities {
-    pub fn new(
-        database: Arc<Database>,
-        latest_tree: TreeVersion<Latest>,
-        deletion_time_interval: i64,
-        min_deletion_batch_size: usize,
-        wake_up_notify: Arc<Notify>,
-    ) -> Arc<Self> {
-        Arc::new(Self {
-            database,
-            latest_tree,
-            deletion_time_interval,
-            min_deletion_batch_size,
-            wake_up_notify,
-        })
-    }
-
-    pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
-        delete_identities(
-            &self.database,
-            &self.latest_tree,
-            self.deletion_time_interval,
-            self.min_deletion_batch_size,
-            self.wake_up_notify.clone(),
-        )
-        .await
-    }
-}
-
-async fn delete_identities(
-    database: &Database,
-    latest_tree: &TreeVersion<Latest>,
-    deletion_time_interval: i64,
-    min_deletion_batch_size: usize,
-    wake_up_notify: Arc<Notify>,
-) -> anyhow::Result<()> {
+pub async fn delete_identities(app: Arc<App>, wake_up_notify: Arc<Notify>) -> anyhow::Result<()> {
     info!("Starting deletion processor.");
 
-    let deletion_time_interval = chrono::Duration::seconds(deletion_time_interval);
+    let batch_deletion_timeout = chrono::Duration::from_std(app.config.app.batch_deletion_timeout)
+        .context("Invalid batch deletion timeout duration")?;
 
     loop {
-        let deletions = database.get_deletions().await?;
+        let deletions = app.database.get_deletions().await?;
         if deletions.is_empty() {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             continue;
         }
 
-        let last_deletion_timestamp = database.get_latest_deletion().await?.timestamp;
+        let last_deletion_timestamp = app.database.get_latest_deletion().await?.timestamp;
 
         // If the minimum deletions batch size is reached or the deletion time interval
         // has elapsed, run a batch of deletions
-        if deletions.len() >= min_deletion_batch_size
-            || Utc::now() - last_deletion_timestamp > deletion_time_interval
+        if deletions.len() >= app.config.app.min_batch_deletion_size
+            || Utc::now() - last_deletion_timestamp > batch_deletion_timeout
         {
             // Dedup deletion entries
             let deletions = deletions.into_iter().collect::<HashSet<DeletionEntry>>();
@@ -81,7 +40,7 @@ async fn delete_identities(
 
             // Delete the commitments at the target leaf indices in the latest tree,
             // generating the proof for each update
-            let data = latest_tree.delete_many(&leaf_indices);
+            let data = app.tree_state.latest_tree().delete_many(&leaf_indices);
 
             assert_eq!(
                 data.len(),
@@ -92,13 +51,13 @@ async fn delete_identities(
             // Insert the new items into pending identities
             let items = data.into_iter().zip(leaf_indices);
             for ((root, _proof), leaf_index) in items {
-                database
+                app.database
                     .insert_pending_identity(leaf_index, &Hash::ZERO, &root)
                     .await?;
             }
 
             // Remove the previous commitments from the deletions table
-            database.remove_deletions(previous_commitments).await?;
+            app.database.remove_deletions(previous_commitments).await?;
             wake_up_notify.notify_one();
         }
     }

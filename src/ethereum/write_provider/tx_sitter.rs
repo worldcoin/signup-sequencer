@@ -8,7 +8,7 @@ use tx_sitter_client::data::{SendTxRequest, TransactionPriority, TxStatus};
 use tx_sitter_client::TxSitterClient;
 
 use super::inner::{Inner, TransactionResult};
-use super::options::TxSitterOptions;
+use crate::config::TxSitterConfig;
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::TxError;
 
@@ -20,10 +20,10 @@ pub struct TxSitter {
 }
 
 impl TxSitter {
-    pub fn new(options: &TxSitterOptions) -> Self {
+    pub fn new(config: &TxSitterConfig) -> Self {
         Self {
-            client:    TxSitterClient::new(&options.tx_sitter_url),
-            gas_limit: options.tx_sitter_gas_limit,
+            client:    TxSitterClient::new(&config.tx_sitter_url),
+            gas_limit: config.tx_sitter_gas_limit,
         }
     }
 

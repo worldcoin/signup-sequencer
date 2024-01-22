@@ -9,15 +9,13 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     init_tracing_subscriber();
     info!("Starting unavailable prover test");
 
-    let tree_depth: u8 = 20;
-
-    let mut ref_tree = PoseidonTree::new(tree_depth as usize + 1, ruint::Uint::ZERO);
+    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let batch_size: usize = 3;
 
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], tree_depth).await?;
+        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8).await?;
 
     let prover_mock = &insertion_prover_map[&batch_size];
 
@@ -32,47 +30,17 @@ async fn unavailable_prover() -> anyhow::Result<()> {
         temp_dir.path().join("testfile")
     );
 
-    let mut options = Options::try_parse_from([
-        "signup-sequencer",
-        "--identity-manager-address",
-        "0x0000000000000000000000000000000000000000", // placeholder, updated below
-        "--database",
-        &db_url,
-        "--database-max-connections",
-        "1",
-        "--tree-depth",
-        &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_mock.arg_string(),
-        "--batch-timeout-seconds",
-        "10",
-        "--dense-tree-prefix-depth",
-        "10",
-        "--tree-gc-threshold",
-        "1",
-        "--oz-api-key",
-        "",
-        "--oz-api-secret",
-        "",
-        "--oz-api-url",
-        &micro_oz.endpoint(),
-        "--oz-address",
-        &format!("{:?}", micro_oz.address()),
-        "--time-between-scans-seconds",
-        "1",
-        "--dense-tree-mmap-file",
-        temp_dir.path().join("testfile").to_str().unwrap(),
-    ])
-    .context("Failed to create options")?;
+    let config = TestConfigBuilder::new()
+        .db_url(&db_url)
+        .oz_api_url(&micro_oz.endpoint())
+        .oz_address(micro_oz.address())
+        .identity_manager_address(mock_chain.identity_manager.address())
+        .primary_network_provider(mock_chain.anvil.endpoint())
+        .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
+        .add_prover(prover_mock)
+        .build()?;
 
-    options.server.server = Url::parse("http://127.0.0.1:0/")?;
-
-    options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
-    options.app.ethereum.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint())?;
-
-    let (app, local_addr) = spawn_app(options.clone())
-        .await
-        .expect("Failed to spawn app.");
+    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(batch_size * 2);
     let identities_ref: Vec<Field> = test_identities

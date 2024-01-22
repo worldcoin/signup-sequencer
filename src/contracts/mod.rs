@@ -2,64 +2,31 @@
 pub mod abi;
 pub mod scanner;
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
-use clap::Parser;
 use ethers::providers::Middleware;
-use ethers::types::{Address, H256, U256};
+use ethers::types::{H256, U256};
 use semaphore::Field;
-use tokio::sync::RwLockReadGuard;
+use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{error, info, instrument, warn};
 
 use self::abi::{BridgedWorldId, DeleteIdentitiesCall, WorldId};
+use crate::config::Config;
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::{Ethereum, ReadProvider};
 use crate::prover::identity::Identity;
-use crate::prover::map::{DeletionProverMap, InsertionProverMap, ReadOnlyInsertionProver};
-use crate::prover::{Proof, Prover, ProverConfiguration, ProverType, ReadOnlyProver};
-use crate::serde_utils::JsonStrWrapper;
+use crate::prover::{Proof, Prover, ProverConfig, ProverMap, ProverType};
 use crate::server::error::Error as ServerError;
 use crate::utils::index_packing::unpack_indices;
-
-/// Configuration options for the component responsible for interacting with the
-/// contract.
-#[derive(Clone, Debug, PartialEq, Eq, Parser)]
-#[group(skip)]
-pub struct Options {
-    /// The address of the identity manager contract.
-    #[clap(long, env)]
-    pub identity_manager_address: Address,
-
-    /// The addresses of world id contracts on secondary chains
-    /// mapped by chain id
-    #[clap(long, env, default_value = "{}")]
-    pub relayed_identity_manager_addresses: JsonStrWrapper<HashMap<u64, Address>>,
-
-    /// The depth of the tree that the contract is working with. This needs to
-    /// agree with the verifier in the deployed contract, and also with
-    /// `semaphore-mtb`.
-    #[clap(long, env, default_value = "10")]
-    pub tree_depth: usize,
-
-    /// Initial value of the Merkle tree leaves. Defaults to the initial value
-    /// used in the identity manager contract.
-    #[clap(
-        long,
-        env,
-        default_value = "0000000000000000000000000000000000000000000000000000000000000000"
-    )]
-    pub initial_leaf_value: Field,
-}
 
 /// A structure representing the interface to the batch-based identity manager
 /// contract.
 #[derive(Debug)]
 pub struct IdentityManager {
     ethereum:             Ethereum,
-    insertion_prover_map: InsertionProverMap,
-    deletion_prover_map:  DeletionProverMap,
+    insertion_prover_map: RwLock<ProverMap>,
+    deletion_prover_map:  RwLock<ProverMap>,
     abi:                  WorldId<ReadProvider>,
     secondary_abis:       Vec<BridgedWorldId<ReadProvider>>,
     initial_leaf_value:   Field,
@@ -78,16 +45,16 @@ impl IdentityManager {
 
     #[instrument(level = "debug", skip_all)]
     pub async fn new(
-        options: Options,
+        config: &Config,
         ethereum: Ethereum,
-        insertion_prover_map: InsertionProverMap,
-        deletion_prover_map: DeletionProverMap,
+        insertion_prover_map: ProverMap,
+        deletion_prover_map: ProverMap,
     ) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
         // Check that there is code deployed at the target address.
-        let address = options.identity_manager_address;
+        let address = config.network.identity_manager_address;
         let code = ethereum.provider().get_code(address, None).await?;
         if code.as_ref().is_empty() {
             error!(
@@ -98,7 +65,7 @@ impl IdentityManager {
 
         // Connect to the running batching contract.
         let abi = WorldId::new(
-            options.identity_manager_address,
+            config.network.identity_manager_address,
             ethereum.provider().clone(),
         );
 
@@ -117,17 +84,20 @@ impl IdentityManager {
         let secondary_providers = ethereum.secondary_providers();
 
         let mut secondary_abis = Vec::new();
-        for (chain_id, address) in options.relayed_identity_manager_addresses.0 {
+        for (chain_id, address) in &config.network.relayed_identity_manager_addresses.0 {
             let provider = secondary_providers
-                .get(&chain_id)
+                .get(chain_id)
                 .ok_or_else(|| anyhow!("No provider for chain id: {}", chain_id))?;
 
-            let abi = BridgedWorldId::new(address, provider.clone());
+            let abi = BridgedWorldId::new(*address, provider.clone());
             secondary_abis.push(abi);
         }
 
-        let initial_leaf_value = options.initial_leaf_value;
-        let tree_depth = options.tree_depth;
+        let initial_leaf_value = config.tree.initial_leaf_value;
+        let tree_depth = config.tree.tree_depth;
+
+        let insertion_prover_map = RwLock::new(insertion_prover_map);
+        let deletion_prover_map = RwLock::new(deletion_prover_map);
 
         let identity_manager = Self {
             ethereum,
@@ -179,7 +149,7 @@ impl IdentityManager {
     pub async fn get_suitable_insertion_prover(
         &self,
         num_identities: usize,
-    ) -> anyhow::Result<ReadOnlyProver<Prover>> {
+    ) -> anyhow::Result<RwLockReadGuard<Prover>> {
         let prover_map = self.insertion_prover_map.read().await;
 
         match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
@@ -193,7 +163,7 @@ impl IdentityManager {
     pub async fn get_suitable_deletion_prover(
         &self,
         num_identities: usize,
-    ) -> anyhow::Result<ReadOnlyProver<Prover>> {
+    ) -> anyhow::Result<RwLockReadGuard<Prover>> {
         let prover_map = self.deletion_prover_map.read().await;
 
         match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
@@ -210,7 +180,7 @@ impl IdentityManager {
 
     #[instrument(level = "debug", skip(prover, identity_commitments))]
     pub async fn prepare_insertion_proof(
-        prover: ReadOnlyInsertionProver<'_>,
+        prover: &Prover,
         start_index: usize,
         pre_root: U256,
         identity_commitments: &[Identity],
@@ -240,7 +210,7 @@ impl IdentityManager {
 
     #[instrument(level = "debug", skip(prover, identity_commitments))]
     pub async fn prepare_deletion_proof(
-        prover: ReadOnlyProver<'_, Prover>,
+        prover: &Prover,
         pre_root: U256,
         deletion_indices: Vec<u32>,
         identity_commitments: Vec<Identity>,
@@ -443,7 +413,7 @@ impl IdentityManager {
             return Err(ServerError::BatchSizeAlreadyExists);
         }
 
-        let prover = Prover::new(&ProverConfiguration {
+        let prover = Prover::new(&ProverConfig {
             url: url.to_string(),
             batch_size,
             prover_type,
@@ -480,7 +450,7 @@ impl IdentityManager {
         }
     }
 
-    pub async fn list_batch_sizes(&self) -> Result<Vec<ProverConfiguration>, ServerError> {
+    pub async fn list_batch_sizes(&self) -> Result<Vec<ProverConfig>, ServerError> {
         let mut provers = self
             .insertion_prover_map
             .read()

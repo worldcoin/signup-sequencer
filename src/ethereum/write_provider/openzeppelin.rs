@@ -11,7 +11,7 @@ use tracing::{error, info, info_span, Instrument};
 
 use super::error::Error;
 use super::inner::{Inner, TransactionResult};
-use super::options::OzOptions;
+use crate::config::OzDefenderConfig;
 use crate::ethereum::write::TransactionId;
 use crate::ethereum::TxError;
 
@@ -32,7 +32,7 @@ pub struct OzRelay {
 }
 
 impl OzRelay {
-    pub async fn new(options: &OzOptions) -> anyhow::Result<Self> {
+    pub async fn new(options: &OzDefenderConfig) -> anyhow::Result<Self> {
         let oz_api = if options.oz_api_key.is_empty() && options.oz_api_secret.is_empty() {
             tracing::warn!(
                 "OpenZeppelin Defender API Key and Secret are empty. Connection will operate \

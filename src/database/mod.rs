@@ -8,7 +8,6 @@ use std::collections::HashSet;
 
 use anyhow::{anyhow, Context, Error as ErrReport};
 use chrono::{DateTime, Utc};
-use clap::Parser;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
 use sqlx::{Executor, Pool, Postgres, Row};
@@ -16,34 +15,18 @@ use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
 use self::types::{CommitmentHistoryEntry, DeletionEntry, LatestDeletionEntry, RecoveryEntry};
+use crate::config::DatabaseConfig;
 use crate::identity_tree::{
     Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate, UnprocessedStatus,
 };
 
 pub mod types;
-use crate::prover::{ProverConfiguration, ProverType, Provers};
-use crate::secret::SecretUrl;
+use crate::prover::{ProverConfig, ProverType};
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 
 const MAX_UNPROCESSED_FETCH_COUNT: i64 = 10_000;
-
-#[derive(Clone, Debug, PartialEq, Eq, Parser)]
-pub struct Options {
-    /// Database server connection string.
-    /// Example: `postgres://user:password@localhost:5432/database`
-    #[clap(long, env)]
-    pub database: SecretUrl,
-
-    /// Allow creation or migration of the database schema.
-    #[clap(long, default_value = "true")]
-    pub database_migrate: bool,
-
-    /// Maximum number of connections in the database connection pool
-    #[clap(long, env, default_value = "10")]
-    pub database_max_connections: u32,
-}
 
 pub struct Database {
     pool: Pool<Postgres>,
@@ -51,20 +34,19 @@ pub struct Database {
 
 impl Database {
     #[instrument(skip_all)]
-    pub async fn new(options: Options) -> Result<Self, ErrReport> {
-        info!(url = %&options.database, "Connecting to database");
+    pub async fn new(config: &DatabaseConfig) -> Result<Self, ErrReport> {
+        info!(url = %&config.database, "Connecting to database");
 
         // Create database if requested and does not exist
-        if options.database_migrate && !Postgres::database_exists(options.database.expose()).await?
-        {
-            warn!(url = %&options.database, "Database does not exist, creating database");
-            Postgres::create_database(options.database.expose()).await?;
+        if config.migrate && !Postgres::database_exists(config.database.expose()).await? {
+            warn!(url = %&config.database, "Database does not exist, creating database");
+            Postgres::create_database(config.database.expose()).await?;
         }
 
         // Create a connection pool
         let pool = PoolOptions::<Postgres>::new()
-            .max_connections(options.database_max_connections)
-            .connect(options.database.expose())
+            .max_connections(config.max_connections)
+            .connect(config.database.expose())
             .await
             .context("error connecting to database")?;
 
@@ -73,7 +55,7 @@ impl Database {
             .await
             .context("error getting database version")?
             .get::<String, _>(0);
-        info!(url = %&options.database, ?version, "Connected to database");
+        info!(url = %&config.database, ?version, "Connected to database");
 
         // Run migrations if requested.
         let latest = MIGRATOR
@@ -82,8 +64,8 @@ impl Database {
             .expect("Missing migrations")
             .version;
 
-        if options.database_migrate {
-            info!(url = %&options.database, "Running migrations");
+        if config.migrate {
+            info!(url = %&config.database, "Running migrations");
             MIGRATOR.run(&pool).await?;
         }
 
@@ -92,7 +74,7 @@ impl Database {
         if let Some((version, dirty)) = pool.acquire().await?.version().await? {
             if dirty {
                 error!(
-                    url = %&options.database,
+                    url = %&config.database,
                     version,
                     expected = latest,
                     "Database is in incomplete migration state.",
@@ -100,7 +82,7 @@ impl Database {
                 return Err(anyhow!("Database is in incomplete migration state."));
             } else if version < latest {
                 error!(
-                    url = %&options.database,
+                    url = %&config.database,
                     version,
                     expected = latest,
                     "Database is not up to date, try rerunning with --database-migrate",
@@ -110,7 +92,7 @@ impl Database {
                 ));
             } else if version > latest {
                 error!(
-                    url = %&options.database,
+                    url = %&config.database,
                     version,
                     latest,
                     "Database version is newer than this version of the software, please update.",
@@ -120,13 +102,13 @@ impl Database {
                 ));
             }
             info!(
-                url = %&options.database,
+                url = %&config.database,
                 version,
                 latest,
                 "Database version is up to date.",
             );
         } else {
-            error!(url = %&options.database, "Could not get database version");
+            error!(url = %&config.database, "Could not get database version");
             return Err(anyhow!("Could not get database version."));
         }
 
@@ -532,7 +514,7 @@ impl Database {
         Ok(result.get::<i64, _>(0) as i32)
     }
 
-    pub async fn get_provers(&self) -> Result<Provers, Error> {
+    pub async fn get_provers(&self) -> Result<HashSet<ProverConfig>, Error> {
         let query = sqlx::query(
             r#"
                 SELECT batch_size, url, timeout_s, prover_type
@@ -549,14 +531,15 @@ impl Database {
                 let url = row.get::<String, _>(1);
                 let timeout_s = row.get::<i64, _>(2) as u64;
                 let prover_type = row.get::<ProverType, _>(3);
-                ProverConfiguration {
+
+                ProverConfig {
                     url,
                     timeout_s,
                     batch_size,
                     prover_type,
                 }
             })
-            .collect::<Provers>())
+            .collect())
     }
 
     pub async fn insert_prover_configuration(
@@ -584,7 +567,7 @@ impl Database {
         Ok(())
     }
 
-    pub async fn insert_provers(&self, provers: HashSet<ProverConfiguration>) -> Result<(), Error> {
+    pub async fn insert_provers(&self, provers: HashSet<ProverConfig>) -> Result<(), Error> {
         if provers.is_empty() {
             return Ok(());
         }
@@ -915,10 +898,11 @@ mod test {
     use ruint::Uint;
     use semaphore::Field;
 
-    use super::{Database, Options};
+    use super::Database;
+    use crate::config::DatabaseConfig;
     use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
-    use crate::prover::{ProverConfiguration, ProverType};
-    use crate::secret::SecretUrl;
+    use crate::prover::{ProverConfig, ProverType};
+    use crate::utils::secret::SecretUrl;
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {
@@ -947,10 +931,10 @@ mod test {
         let db_socket_addr = db_container.address();
         let url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
 
-        let db = Database::new(Options {
-            database:                 SecretUrl::from_str(&url)?,
-            database_migrate:         true,
-            database_max_connections: 1,
+        let db = Database::new(&DatabaseConfig {
+            database:        SecretUrl::from_str(&url)?,
+            migrate:         true,
+            max_connections: 1,
         })
         .await?;
 
@@ -1047,17 +1031,17 @@ mod test {
         Ok(())
     }
 
-    fn mock_provers() -> HashSet<ProverConfiguration> {
+    fn mock_provers() -> HashSet<ProverConfig> {
         let mut provers = HashSet::new();
 
-        provers.insert(ProverConfiguration {
+        provers.insert(ProverConfig {
             batch_size:  100,
             url:         "http://localhost:8080".to_string(),
             timeout_s:   100,
             prover_type: ProverType::Insertion,
         });
 
-        provers.insert(ProverConfiguration {
+        provers.insert(ProverConfig {
             batch_size:  100,
             url:         "http://localhost:8080".to_string(),
             timeout_s:   100,
@@ -1071,14 +1055,14 @@ mod test {
     async fn test_insert_prover_configuration() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
-        let mock_prover_configuration_0 = ProverConfiguration {
+        let mock_prover_configuration_0 = ProverConfig {
             batch_size:  100,
             url:         "http://localhost:8080".to_string(),
             timeout_s:   100,
             prover_type: ProverType::Insertion,
         };
 
-        let mock_prover_configuration_1 = ProverConfiguration {
+        let mock_prover_configuration_1 = ProverConfig {
             batch_size:  100,
             url:         "http://localhost:8081".to_string(),
             timeout_s:   100,

@@ -519,6 +519,10 @@ impl TreeState {
         }
     }
 
+    pub fn latest_tree(&self) -> &TreeVersion<Latest> {
+        &self.latest
+    }
+
     #[must_use]
     pub fn get_latest_tree(&self) -> TreeVersion<Latest> {
         self.latest.clone()
@@ -529,14 +533,26 @@ impl TreeState {
         self.mined.clone()
     }
 
+    pub fn mined_tree(&self) -> &TreeVersion<Canonical> {
+        &self.mined
+    }
+
     #[must_use]
     pub fn get_processed_tree(&self) -> TreeVersion<Intermediate> {
         self.processed.clone()
     }
 
+    pub fn processed_tree(&self) -> &TreeVersion<Intermediate> {
+        &self.processed
+    }
+
     #[must_use]
     pub fn get_batching_tree(&self) -> TreeVersion<Intermediate> {
         self.batching.clone()
+    }
+
+    pub fn batching_tree(&self) -> &TreeVersion<Intermediate> {
+        &self.batching
     }
 
     #[must_use]

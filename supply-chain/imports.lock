@@ -408,6 +408,13 @@ user-id = 6743
 user-login = "epage"
 user-name = "Ed Page"
 
+[[publisher.toml]]
+version = "0.8.8"
+when = "2023-11-06"
+user-id = 6743
+user-login = "epage"
+user-name = "Ed Page"
+
 [[publisher.toml_datetime]]
 version = "0.6.5"
 when = "2023-10-23"
@@ -418,6 +425,13 @@ user-name = "Ed Page"
 [[publisher.toml_edit]]
 version = "0.19.15"
 when = "2023-09-08"
+user-id = 6743
+user-login = "epage"
+user-name = "Ed Page"
+
+[[publisher.toml_edit]]
+version = "0.21.0"
+when = "2023-11-06"
 user-id = 6743
 user-login = "epage"
 user-name = "Ed Page"
@@ -492,6 +506,13 @@ user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
 
+[[publisher.windows-sys]]
+version = "0.52.0"
+when = "2023-11-15"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
 [[publisher.windows-targets]]
 version = "0.42.2"
 when = "2023-03-13"
@@ -502,6 +523,13 @@ user-name = "Kenny Kerr"
 [[publisher.windows-targets]]
 version = "0.48.0"
 when = "2023-03-31"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows-targets]]
+version = "0.52.0"
+when = "2023-11-15"
 user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
@@ -520,6 +548,13 @@ user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
 
+[[publisher.windows_aarch64_gnullvm]]
+version = "0.52.0"
+when = "2023-11-15"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
 [[publisher.windows_aarch64_msvc]]
 version = "0.33.0"
 when = "2022-02-24"
@@ -544,6 +579,13 @@ user-name = "Kenny Kerr"
 [[publisher.windows_aarch64_msvc]]
 version = "0.48.0"
 when = "2023-03-31"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows_aarch64_msvc]]
+version = "0.52.0"
+when = "2023-11-15"
 user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
@@ -576,6 +618,13 @@ user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
 
+[[publisher.windows_i686_gnu]]
+version = "0.52.0"
+when = "2023-11-15"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
 [[publisher.windows_i686_msvc]]
 version = "0.33.0"
 when = "2022-02-24"
@@ -604,6 +653,13 @@ user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
 
+[[publisher.windows_i686_msvc]]
+version = "0.52.0"
+when = "2023-11-15"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
 [[publisher.windows_x86_64_gnu]]
 version = "0.33.0"
 when = "2022-02-24"
@@ -628,6 +684,13 @@ user-name = "Kenny Kerr"
 [[publisher.windows_x86_64_gnu]]
 version = "0.48.0"
 when = "2023-03-31"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows_x86_64_gnu]]
+version = "0.52.0"
+when = "2023-11-15"
 user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
@@ -646,6 +709,13 @@ user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
 
+[[publisher.windows_x86_64_gnullvm]]
+version = "0.52.0"
+when = "2023-11-15"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
 [[publisher.windows_x86_64_msvc]]
 version = "0.33.0"
 when = "2022-02-24"
@@ -670,6 +740,13 @@ user-name = "Kenny Kerr"
 [[publisher.windows_x86_64_msvc]]
 version = "0.48.0"
 when = "2023-03-31"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows_x86_64_msvc]]
+version = "0.52.0"
+when = "2023-11-15"
 user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
@@ -1249,6 +1326,12 @@ who = "Johan Andersson <opensource@embark-studios.com>"
 criteria = "safe-to-deploy"
 version = "0.22.4"
 notes = "Inspected it to confirm that it only contains data definitions and no runtime code"
+
+[[audits.embark.audits.yaml-rust]]
+who = "Johan Andersson <opensource@embark-studios.com>"
+criteria = "safe-to-deploy"
+version = "0.4.5"
+notes = "No unsafe usage or ambient capabilities"
 
 [[audits.google.audits.aes]]
 who = "Joshua Liebow-Feeser <joshlf@google.com>"
@@ -1959,6 +2042,12 @@ who = "Jan-Erik Rediger <jrediger@mozilla.com>"
 criteria = "safe-to-deploy"
 delta = "0.2.16 -> 0.3.5"
 aggregated-from = "https://raw.githubusercontent.com/mozilla/glean/main/supply-chain/audits.toml"
+
+[[audits.mozilla.audits.ron]]
+who = "Mike Hommey <mh+mozilla@glandium.org>"
+criteria = "safe-to-deploy"
+delta = "0.7.0 -> 0.7.1"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
 [[audits.mozilla.audits.rustc-hash]]
 who = "Bobby Holley <bobbyholley@gmail.com>"

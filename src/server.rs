@@ -1,21 +1,19 @@
 pub mod error;
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
+use std::net::TcpListener;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{bail, ensure};
 use axum::extract::{Query, State};
 use axum::routing::{get, post};
 use axum::{middleware, Json, Router};
-use clap::Parser;
 use cli_batteries::await_shutdown;
 use error::Error;
 use hyper::StatusCode;
 use tracing::info;
-use url::{Host, Url};
 
 use crate::app::App;
+use crate::config::ServerConfig;
 
 mod custom_middleware;
 pub mod data;
@@ -26,19 +24,6 @@ use self::data::{
     RecoveryRequest, RemoveBatchSizeRequest, ToResponseCode, VerifySemaphoreProofQuery,
     VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
 };
-
-#[derive(Clone, Debug, PartialEq, Eq, Parser)]
-#[group(skip)]
-pub struct Options {
-    // TODO: This should be a `SocketAddr`. It makes no sense for us to allow a full on URL here
-    /// API Server url
-    #[clap(long, env, default_value = "http://127.0.0.1:8080/")]
-    pub server: Url,
-
-    /// Request handling timeout (seconds)
-    #[clap(long, env, default_value = "300")]
-    pub serve_timeout: u64,
-}
 
 async fn inclusion_proof(
     State(app): State<Arc<App>>,
@@ -148,32 +133,11 @@ async fn list_batch_sizes(
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
 /// a path beyond `/`, or cannot be cast into an IP address. Also returns an
 /// `Err` if the server cannot bind to the given address.
-pub async fn main(app: Arc<App>, options: Options) -> anyhow::Result<()> {
-    ensure!(
-        options.server.scheme() == "http",
-        "Only http:// is supported in {}",
-        options.server
-    );
-    ensure!(
-        options.server.path() == "/",
-        "Only / is supported in {}",
-        options.server
-    );
+pub async fn run(app: Arc<App>, config: ServerConfig) -> anyhow::Result<()> {
+    info!("Will listen on {}", config.address);
+    let listener = TcpListener::bind(config.address)?;
 
-    let ip: IpAddr = match options.server.host() {
-        Some(Host::Ipv4(ip)) => ip.into(),
-        Some(Host::Ipv6(ip)) => ip.into(),
-        Some(_) => bail!("Cannot bind {}", options.server),
-        None => Ipv4Addr::LOCALHOST.into(),
-    };
-    let port = options.server.port().unwrap_or(9998);
-    let addr = SocketAddr::new(ip, port);
-
-    info!("Will listen on {}", addr);
-    let listener = TcpListener::bind(addr)?;
-
-    let serve_timeout = Duration::from_secs(options.serve_timeout);
-    bind_from_listener(app, serve_timeout, listener).await?;
+    bind_from_listener(app, config.serve_timeout, listener).await?;
 
     Ok(())
 }

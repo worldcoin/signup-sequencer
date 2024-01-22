@@ -2,7 +2,6 @@ mod common;
 
 use common::prelude::*;
 
-const SUPPORTED_DEPTH: usize = 20;
 const IDLE_TIME: u64 = 12;
 
 #[tokio::test]
@@ -11,11 +10,13 @@ async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
     init_tracing_subscriber();
     info!("Starting integration test");
 
+    let tree_depth = 20;
+    let dense_prefix = 3;
+
     let batch_size: usize = 4;
-    let dense_prefix_depth: usize = 3;
 
     // 2^3 = 8, so 2 batches
-    let num_identities_in_dense_prefix = 2usize.pow(dense_prefix_depth as u32);
+    let num_identities_in_dense_prefix = 2usize.pow(dense_prefix as u32);
     let num_identities_above_dense_prefix = batch_size * 2;
 
     // A total of 4 batches (4 * 4 = 16 identities)
@@ -23,14 +24,11 @@ async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
 
     let num_batches_total = num_identities_total / batch_size;
 
-    #[allow(clippy::cast_possible_truncation)]
-    let tree_depth: u8 = SUPPORTED_DEPTH as u8;
-
-    let mut ref_tree = PoseidonTree::new(SUPPORTED_DEPTH + 1, ruint::Uint::ZERO);
+    let mut ref_tree = PoseidonTree::new(tree_depth + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let (mock_chain, db_container, prover_map, _deletion_prover_map, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], tree_depth).await?;
+        spawn_deps(initial_root, &[batch_size], &[], tree_depth as u8).await?;
 
     let prover_mock = &prover_map[&batch_size];
 
@@ -44,43 +42,19 @@ async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
         temp_dir.path().join("testfile")
     );
 
-    let mut options = Options::try_parse_from([
-        "signup-sequencer",
-        "--identity-manager-address",
-        "0x0000000000000000000000000000000000000000", // placeholder, updated below
-        "--database",
-        &db_url,
-        "--database-max-connections",
-        "1",
-        "--tree-depth",
-        &format!("{tree_depth}"),
-        "--prover-urls",
-        &prover_mock.arg_string(),
-        "--batch-timeout-seconds",
-        "10",
-        "--dense-tree-prefix-depth",
-        &format!("{dense_prefix_depth}"),
-        "--tree-gc-threshold",
-        "1",
-        "--oz-api-key",
-        "",
-        "--oz-api-secret",
-        "",
-        "--oz-api-url",
-        &micro_oz.endpoint(),
-        "--oz-address",
-        &format!("{:?}", micro_oz.address()),
-        "--dense-tree-mmap-file",
-        temp_dir.path().join("testfile").to_str().unwrap(),
-    ])
-    .context("Failed to create options")?;
+    let config = TestConfigBuilder::new()
+        .db_url(&db_url)
+        .oz_api_url(&micro_oz.endpoint())
+        .oz_address(micro_oz.address())
+        .tree_depth(tree_depth)
+        .dense_tree_prefix_depth(dense_prefix)
+        .identity_manager_address(mock_chain.identity_manager.address())
+        .primary_network_provider(mock_chain.anvil.endpoint())
+        .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
+        .add_prover(prover_mock)
+        .build()?;
 
-    options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
-
-    options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
-    options.app.ethereum.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint())?;
-
-    let (app, local_addr) = spawn_app(options.clone())
+    let (app, local_addr) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
 
@@ -127,7 +101,7 @@ async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
     reset_shutdown();
 
     // Test loading the state from a file when the on-chain contract has the state.
-    let (app, local_addr) = spawn_app(options.clone())
+    let (app, local_addr) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();

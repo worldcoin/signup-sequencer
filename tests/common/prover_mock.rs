@@ -13,6 +13,7 @@ use ethers::utils::keccak256;
 use hyper::StatusCode;
 use semaphore::poseidon_tree::{Branch, Proof as TreeProof};
 use serde::{Deserialize, Serialize};
+use signup_sequencer::prover::ProverType;
 use signup_sequencer::utils::index_packing::pack_indices;
 use tokio::sync::Mutex;
 
@@ -113,25 +114,6 @@ pub struct ProverService {
     address:     SocketAddr,
     batch_size:  usize,
     prover_type: ProverType,
-}
-
-// TODO: we could just import this from the sequencer
-#[derive(Debug, Copy, Clone, sqlx::Type, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-#[sqlx(type_name = "prover_enum", rename_all = "PascalCase")]
-pub enum ProverType {
-    #[default]
-    Insertion,
-    Deletion,
-}
-
-impl std::fmt::Display for ProverType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            ProverType::Insertion => write!(f, "insertion"),
-            ProverType::Deletion => write!(f, "deletion"),
-        }
-    }
 }
 
 struct Prover {

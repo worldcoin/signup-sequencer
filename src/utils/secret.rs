@@ -1,9 +1,11 @@
 use std::fmt;
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
 use url::Url;
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct SecretUrl(Url);
 
 impl SecretUrl {
@@ -46,6 +48,18 @@ impl fmt::Display for SecretUrl {
 impl fmt::Debug for SecretUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.format().fmt(f)
+    }
+}
+
+impl From<Url> for SecretUrl {
+    fn from(url: Url) -> Self {
+        Self::new(url)
+    }
+}
+
+impl From<SecretUrl> for Url {
+    fn from(secret_url: SecretUrl) -> Self {
+        secret_url.0
     }
 }
 

@@ -1,38 +1,20 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use clap::Parser;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::Address;
 pub use read::{EventError, ReadProvider};
 use tracing::instrument;
-use url::Url;
 pub use write::TxError;
 
 use self::write::TransactionId;
 use self::write_provider::WriteProvider;
-use crate::serde_utils::JsonStrWrapper;
+use crate::config::Config;
 
 pub mod read;
 pub mod write;
 
 mod write_provider;
-
-// TODO: Log and metrics for signer / nonces.
-#[derive(Clone, Debug, PartialEq, Parser)]
-#[group(skip)]
-pub struct Options {
-    /// Ethereum API Provider
-    #[clap(long, env, default_value = "http://localhost:8545")]
-    pub ethereum_provider: Url,
-
-    /// Provider urls for the secondary chains
-    #[clap(long, env, default_value = "[]")]
-    pub secondary_providers: JsonStrWrapper<Vec<Url>>,
-
-    #[clap(flatten)]
-    pub write_options: write_provider::Options,
-}
 
 #[derive(Clone, Debug)]
 pub struct Ethereum {
@@ -44,13 +26,14 @@ pub struct Ethereum {
 
 impl Ethereum {
     #[instrument(name = "Ethereum::new", level = "debug", skip_all)]
-    pub async fn new(options: Options) -> anyhow::Result<Self> {
-        let read_provider = ReadProvider::new(options.ethereum_provider).await?;
+    pub async fn new(config: &Config) -> anyhow::Result<Self> {
+        let read_provider =
+            ReadProvider::new(config.providers.primary_network_provider.clone().into()).await?;
 
         let mut secondary_read_providers = HashMap::new();
 
-        for secondary_url in &options.secondary_providers.0 {
-            let secondary_read_provider = ReadProvider::new(secondary_url.clone()).await?;
+        for secondary_url in &config.providers.relayed_network_providers.0 {
+            let secondary_read_provider = ReadProvider::new(secondary_url.clone().into()).await?;
             secondary_read_providers.insert(
                 secondary_read_provider.chain_id.as_u64(),
                 Arc::new(secondary_read_provider),
@@ -58,8 +41,7 @@ impl Ethereum {
         }
 
         let write_provider: Arc<WriteProvider> = Arc::new(
-            write_provider::WriteProvider::new(read_provider.clone(), &options.write_options)
-                .await?,
+            write_provider::WriteProvider::new(read_provider.clone(), &config.relayer).await?,
         );
 
         Ok(Self {

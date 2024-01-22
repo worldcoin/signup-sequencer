@@ -6,7 +6,6 @@ use common::prelude::*;
 
 use crate::common::test_delete_identity;
 
-const SUPPORTED_DEPTH: u8 = 18;
 const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
@@ -17,12 +16,8 @@ async fn delete_padded_identity() -> anyhow::Result<()> {
 
     let insertion_batch_size: usize = 8;
     let deletion_batch_size: usize = 3;
-    let batch_deletion_timeout_seconds: usize = 10;
 
-    #[allow(clippy::cast_possible_truncation)]
-    let tree_depth: u8 = SUPPORTED_DEPTH;
-
-    let mut ref_tree = PoseidonTree::new((SUPPORTED_DEPTH + 1).into(), ruint::Uint::ZERO);
+    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let (mock_chain, db_container, insertion_prover_map, deletion_prover_map, micro_oz) =
@@ -30,7 +25,7 @@ async fn delete_padded_identity() -> anyhow::Result<()> {
             initial_root,
             &[insertion_batch_size],
             &[deletion_batch_size],
-            tree_depth,
+            DEFAULT_TREE_DEPTH as u8,
         )
         .await?;
 
@@ -46,56 +41,18 @@ async fn delete_padded_identity() -> anyhow::Result<()> {
         temp_dir.path().join("testfile")
     );
 
-    let mut options = Options::try_parse_from([
-        "signup-sequencer",
-        "--identity-manager-address",
-        "0x0000000000000000000000000000000000000000", // placeholder, updated below
-        "--database",
-        &db_url,
-        "--database-max-connections",
-        "1",
-        "--tree-depth",
-        &format!("{tree_depth}"),
-        "--prover-urls",
-        &format!(
-            "[{}, {}]",
-            mock_insertion_prover.arg_string_single(),
-            mock_deletion_prover.arg_string_single()
-        ),
-        "--batch-timeout-seconds",
-        "10",
-        "--batch-deletion-timeout-seconds",
-        &format!("{batch_deletion_timeout_seconds}"),
-        "--min-batch-deletion-size",
-        &format!("{deletion_batch_size}"),
-        "--dense-tree-prefix-depth",
-        "10",
-        "--tree-gc-threshold",
-        "1",
-        "--oz-api-key",
-        "",
-        "--oz-api-secret",
-        "",
-        "--oz-api-url",
-        &micro_oz.endpoint(),
-        "--oz-address",
-        &format!("{:?}", micro_oz.address()),
-        "--dense-tree-mmap-file",
-        temp_dir.path().join("testfile").to_str().unwrap(),
-    ])
-    .context("Failed to create options")?;
+    let config = TestConfigBuilder::new()
+        .db_url(&db_url)
+        .oz_api_url(&micro_oz.endpoint())
+        .oz_address(micro_oz.address())
+        .identity_manager_address(mock_chain.identity_manager.address())
+        .primary_network_provider(mock_chain.anvil.endpoint())
+        .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
+        .add_prover(mock_insertion_prover)
+        .add_prover(mock_deletion_prover)
+        .build()?;
 
-    options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
-
-    options.app.contracts.identity_manager_address = mock_chain.identity_manager.address();
-    options.app.ethereum.ethereum_provider = Url::parse(&mock_chain.anvil.endpoint()).expect(
-        "
-    Failed to parse Anvil url",
-    );
-
-    let (app, local_addr) = spawn_app(options.clone())
-        .await
-        .expect("Failed to spawn app.");
+    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(insertion_batch_size * 3);
     let identities_ref: Vec<Field> = test_identities
@@ -132,7 +89,7 @@ async fn delete_padded_identity() -> anyhow::Result<()> {
     test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 1, false).await;
 
     tokio::time::sleep(Duration::from_secs(
-        batch_deletion_timeout_seconds as u64 * 3,
+        DEFAULT_BATCH_DELETION_TIMEOUT_SECONDS * 3,
     ))
     .await;
 

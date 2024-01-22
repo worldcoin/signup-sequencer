@@ -1,88 +1,44 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use ethers::types::U256;
 use ruint::Uint;
 use semaphore::merkle_tree::Proof;
-use semaphore::poseidon_tree::Branch;
+use semaphore::poseidon_tree::{Branch, PoseidonHash};
 use tokio::sync::{mpsc, Notify};
 use tokio::{select, time};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::instrument;
 
-use crate::contracts::{IdentityManager, SharedIdentityManager};
-use crate::database::Database;
+use crate::app::App;
+use crate::contracts::IdentityManager;
 use crate::ethereum::write::TransactionId;
 use crate::identity_tree::{
     AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
 use crate::prover::identity::Identity;
-use crate::prover::{Prover, ReadOnlyProver};
+use crate::prover::Prover;
 use crate::task_monitor::TaskMonitor;
+use crate::utils::batch_type::BatchType;
 use crate::utils::index_packing::pack_indices;
 
 /// The number of seconds either side of the timer tick to treat as enough to
 /// trigger a forced batch insertion.
-const DEBOUNCE_THRESHOLD_SECS: u64 = 1;
+const DEBOUNCE_THRESHOLD_SECS: i64 = 1;
 
-pub struct ProcessIdentities {
-    database:                  Arc<Database>,
-    identity_manager:          SharedIdentityManager,
-    batching_tree:             TreeVersion<Intermediate>,
-    batch_insert_timeout_secs: u64,
-    monitored_txs_sender:      mpsc::Sender<TransactionId>,
-    wake_up_notify:            Arc<Notify>,
-}
-
-impl ProcessIdentities {
-    pub fn new(
-        database: Arc<Database>,
-        identity_manager: SharedIdentityManager,
-        batching_tree: TreeVersion<Intermediate>,
-        batch_insert_timeout_secs: u64,
-        monitored_txs_sender: mpsc::Sender<TransactionId>,
-        wake_up_notify: Arc<Notify>,
-    ) -> Arc<Self> {
-        Arc::new(Self {
-            database,
-            identity_manager,
-            batching_tree,
-            batch_insert_timeout_secs,
-            monitored_txs_sender,
-            wake_up_notify,
-        })
-    }
-
-    pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
-        process_identities(
-            &self.database,
-            &self.identity_manager,
-            &self.batching_tree,
-            &self.monitored_txs_sender,
-            &self.wake_up_notify,
-            self.batch_insert_timeout_secs,
-        )
-        .await
-    }
-}
-
-async fn process_identities(
-    database: &Database,
-    identity_manager: &IdentityManager,
-    batching_tree: &TreeVersion<Intermediate>,
-    monitored_txs_sender: &mpsc::Sender<TransactionId>,
-    wake_up_notify: &Notify,
-    timeout_secs: u64,
+pub async fn process_identities(
+    app: Arc<App>,
+    monitored_txs_sender: Arc<mpsc::Sender<TransactionId>>,
+    wake_up_notify: Arc<Notify>,
 ) -> anyhow::Result<()> {
-    info!("Awaiting for a clean slate");
-    identity_manager.await_clean_slate().await?;
+    tracing::info!("Awaiting for a clean slate");
+    app.identity_manager.await_clean_slate().await?;
 
-    info!("Starting identity processor.");
+    tracing::info!("Starting identity processor.");
 
     // We start a timer and force it to perform one initial tick to avoid an
     // immediate trigger.
-    let mut timer = time::interval(Duration::from_secs(timeout_secs));
+    let mut timer = time::interval(app.config.app.batch_insertion_timeout);
     timer.tick().await;
 
     // When both futures are woken at once, the choice is made
@@ -93,120 +49,76 @@ async fn process_identities(
     // inserted. If we have an incomplete batch but are within a small delta of the
     // tick happening anyway in the wake branch, we insert the current
     // (possibly-incomplete) batch anyway.
-    let mut last_batch_time: DateTime<Utc> = database
+    let mut last_batch_time: DateTime<Utc> = app
+        .database
         .get_latest_insertion_timestamp()
         .await?
         .unwrap_or(Utc::now());
 
     loop {
-        // We ping-pong between two cases for being woken. This ensures that there is a
-        // maximum time that users can wait for their identity commitment to be
-        // processed, but also that we are not inefficient with on-chain gas by being
-        // too eager.
+        // We wait either for a timer tick or a full batch
         select! {
             _ = timer.tick() => {
-                debug!("Identity batch insertion woken due to timeout.");
-
-                // If the timer has fired we want to insert whatever
-                // identities we have, even if it's not many. This ensures
-                // a minimum quality of service for API users.
-                let next_update = batching_tree.peek_next_updates(1);
-                if next_update.is_empty() {
-                    continue;
-                }
-
-                let batch_size = if next_update[0].update.element == Hash::ZERO {
-                    identity_manager.max_deletion_batch_size().await
-                }else{
-                    identity_manager.max_insertion_batch_size().await
-                };
-
-                let updates = batching_tree.peek_next_updates(batch_size);
-
-                commit_identities(
-                    database,
-                    identity_manager,
-                    batching_tree,
-                    monitored_txs_sender,
-                    &updates,
-                ).await?;
-
-                last_batch_time = Utc::now();
-                database.update_latest_insertion_timestamp(last_batch_time).await?;
-
-                // Also wake up if woken up due to a tick
-                wake_up_notify.notify_one();
+                tracing::info!("Identity batch insertion woken due to timeout");
             }
             () = wake_up_notify.notified() => {
-                tracing::trace!("Identity batch insertion woken due to request.");
-
-                // Capture the time difference since the last batch, and compute
-                // whether we want to insert anyway. We do this if the difference
-                // is less than some debounce threshold.
-                //
-                // We unconditionally convert `u64 -> i64` as numbers should
-                // always be small. If the numbers are not always small then
-                // we _want_ to panic as something is horribly broken.
-                let current_time = Utc::now();
-                let diff_secs = current_time - last_batch_time;
-                #[allow(clippy::cast_sign_loss)]
-                let diff_secs_u64 = diff_secs.num_seconds() as u64;
-                let should_process_anyway =
-                    timeout_secs.abs_diff(diff_secs_u64) <= DEBOUNCE_THRESHOLD_SECS;
-
-                let next_update = batching_tree.peek_next_updates(1);
-                if next_update.is_empty() {
-                    continue;
-                }
-
-                let batch_size = if next_update[0].update.element == Hash::ZERO {
-                    identity_manager.max_deletion_batch_size().await
-                }else{
-                    identity_manager.max_insertion_batch_size().await
-                };
-
-                // We have _at most_ one complete batch here.
-                let updates = batching_tree.peek_next_updates(batch_size);
-
-                // If there are not enough identities to insert at this
-                // stage we can wait. The timer will ensure that the API
-                // clients do not wait too long for their submission to be
-                // completed.
-                if updates.len() < batch_size && !should_process_anyway {
-                    // We do not reset the timer here as we may want to
-                    // insert anyway soon.
-                    tracing::trace!(
-                        "Pending identities ({}) is less than batch size ({}). Waiting.",
-                        updates.len(),
-                        batch_size
-                    );
-                    continue;
-                }
-
-                commit_identities(
-                    database,
-                    identity_manager,
-                    batching_tree,
-                    monitored_txs_sender,
-                    &updates,
-                ).await?;
-
-                // We've inserted the identities, so we want to ensure that
-                // we don't trigger again until either we get a full batch
-                // or the timer ticks.
-                timer.reset();
-                last_batch_time = Utc::now();
-                database.update_latest_insertion_timestamp(last_batch_time).await?;
-
-                // We want to check if there's a full batch available immediately
-                wake_up_notify.notify_one();
-            }
+                tracing::trace!("Identity batch insertion woken due to request");
+            },
         }
+
+        let Some(batch_type) = determine_batch_type(app.tree_state.batching_tree()) else {
+            continue;
+        };
+
+        let batch_size = if batch_type.is_deletion() {
+            app.identity_manager.max_deletion_batch_size().await
+        } else {
+            app.identity_manager.max_insertion_batch_size().await
+        };
+
+        let updates = app.tree_state.batching_tree().peek_next_updates(batch_size);
+
+        let current_time = Utc::now();
+        let batch_insertion_timeout =
+            chrono::Duration::from_std(app.config.app.batch_insertion_timeout)?;
+
+        let timeout_batch_time = last_batch_time
+            + batch_insertion_timeout
+            + chrono::Duration::seconds(DEBOUNCE_THRESHOLD_SECS);
+
+        let can_skip_batch = current_time < timeout_batch_time;
+
+        if updates.len() < batch_size && can_skip_batch {
+            tracing::trace!(
+                num_updates = updates.len(),
+                batch_size,
+                ?last_batch_time,
+                "Pending identities is less than batch size, skipping batch",
+            );
+
+            continue;
+        }
+
+        commit_identities(
+            &app.identity_manager,
+            app.tree_state.batching_tree(),
+            &monitored_txs_sender,
+            &updates,
+        )
+        .await?;
+
+        timer.reset();
+        last_batch_time = Utc::now();
+        app.database
+            .update_latest_insertion_timestamp(last_batch_time)
+            .await?;
+
+        // We want to check if there's a full batch available immediately
+        wake_up_notify.notify_one();
     }
 }
 
 async fn commit_identities(
-    database: &Database,
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
     monitored_txs_sender: &mpsc::Sender<TransactionId>,
@@ -224,25 +136,25 @@ async fn commit_identities(
             .get_suitable_insertion_prover(updates.len())
             .await?;
 
-        info!(
-            "Sending timed-out insertion batch with {}/{} updates.",
-            updates.len(),
-            prover.batch_size()
+        tracing::info!(
+            num_updates = updates.len(),
+            batch_size = prover.batch_size(),
+            "Insertion batch",
         );
 
-        insert_identities(database, identity_manager, batching_tree, updates, prover).await?
+        insert_identities(identity_manager, batching_tree, updates, &prover).await?
     } else {
         let prover = identity_manager
             .get_suitable_deletion_prover(updates.len())
             .await?;
 
-        info!(
-            "Sending timed-out deletion batch with {}/{} updates.",
-            updates.len(),
-            prover.batch_size()
+        tracing::info!(
+            num_updates = updates.len(),
+            batch_size = prover.batch_size(),
+            "Deletion batch"
         );
 
-        delete_identities(database, identity_manager, batching_tree, updates, prover).await?
+        delete_identities(identity_manager, batching_tree, updates, &prover).await?
     };
 
     if let Some(tx_id) = tx_id {
@@ -254,49 +166,12 @@ async fn commit_identities(
 
 #[instrument(level = "info", skip_all)]
 pub async fn insert_identities(
-    database: &Database,
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
     updates: &[AppliedTreeUpdate],
-    prover: ReadOnlyProver<'_, Prover>,
+    prover: &Prover,
 ) -> anyhow::Result<Option<TransactionId>> {
-    TaskMonitor::log_identities_queues(database).await?;
-
-    if updates.is_empty() {
-        warn!("Identity commit requested with zero identities. Continuing.");
-        return Ok(None);
-    }
-
-    debug!("Starting identity commit for {} identities.", updates.len());
-
-    let mut last_index = updates
-        .first()
-        .expect("Updates is non empty.")
-        .update
-        .leaf_index;
-
-    for update in &updates[1..] {
-        if last_index + 1 != update.update.leaf_index {
-            let leaf_indexes = updates
-                .iter()
-                .map(|update| update.update.leaf_index)
-                .collect::<Vec<_>>();
-            let commitments = updates
-                .iter()
-                .map(|update| update.update.element)
-                .collect::<Vec<_>>();
-
-            panic!(
-                "Identities are not consecutive leaves in the tree (leaf_indexes = {:?}, \
-                 commitments = {:?})",
-                leaf_indexes, commitments
-            );
-        }
-
-        last_index = update.update.leaf_index;
-    }
-
-    // Grab the initial conditions before the updates are applied to the tree.
+    assert_updates_are_consecutive(updates);
 
     let start_index = updates[0].update.leaf_index;
     let pre_root: U256 = batching_tree.get_root().into();
@@ -315,11 +190,7 @@ pub async fn insert_identities(
     // intermediate versions of the tree
     let mut merkle_proofs: Vec<_> = updates
         .iter()
-        .map(|update_with_tree| {
-            update_with_tree
-                .result
-                .proof(update_with_tree.update.leaf_index)
-        })
+        .map(|update| update.result.proof(update.update.leaf_index))
         .collect();
 
     // Grab some variables for sizes to make querying easier.
@@ -369,21 +240,7 @@ pub async fn insert_identities(
     // With the updates applied we can grab the value of the tree's new root and
     // build our identities for sending to the identity manager.
     let post_root: U256 = latest_tree_from_updates.root().into();
-    let identity_commitments: Vec<Identity> = commitments
-        .iter()
-        .zip(merkle_proofs)
-        .map(|(id, prf)| {
-            let commitment: U256 = id.into();
-            let proof: Vec<U256> = prf
-                .0
-                .iter()
-                .map(|branch| match branch {
-                    Branch::Left(v) | Branch::Right(v) => U256::from(*v),
-                })
-                .collect();
-            Identity::new(commitment, proof)
-        })
-        .collect();
+    let identity_commitments = zip_commitments_and_proofs(commitments, merkle_proofs);
 
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
@@ -397,7 +254,7 @@ pub async fn insert_identities(
     )
     .await?;
 
-    info!(
+    tracing::info!(
         start_index,
         ?pre_root,
         ?post_root,
@@ -416,11 +273,11 @@ pub async fn insert_identities(
         )
         .await
         .map_err(|e| {
-            error!(?e, "Failed to insert identity to contract.");
+            tracing::error!(?e, "Failed to insert identity to contract.");
             e
         })?;
 
-    info!(
+    tracing::info!(
         start_index,
         ?pre_root,
         ?post_root,
@@ -431,29 +288,43 @@ pub async fn insert_identities(
     // Update the batching tree only after submitting the identities to the chain
     batching_tree.apply_updates_up_to(post_root.into());
 
-    info!(start_index, ?pre_root, ?post_root, "Tree updated");
+    tracing::info!(start_index, ?pre_root, ?post_root, "Tree updated");
 
     TaskMonitor::log_batch_size(updates.len());
 
     Ok(Some(transaction_id))
 }
 
+fn assert_updates_are_consecutive(updates: &[AppliedTreeUpdate]) {
+    for updates in updates.windows(2) {
+        let first = &updates[0];
+        let second = &updates[1];
+
+        if first.update.leaf_index + 1 != second.update.leaf_index {
+            let leaf_indexes = updates
+                .iter()
+                .map(|update| update.update.leaf_index)
+                .collect::<Vec<_>>();
+            let commitments = updates
+                .iter()
+                .map(|update| update.update.element)
+                .collect::<Vec<_>>();
+
+            panic!(
+                "Identities are not consecutive leaves in the tree (leaf_indexes = {:?}, \
+                 commitments = {:?})",
+                leaf_indexes, commitments
+            );
+        }
+    }
+}
+
 pub async fn delete_identities(
-    database: &Database,
     identity_manager: &IdentityManager,
     batching_tree: &TreeVersion<Intermediate>,
     updates: &[AppliedTreeUpdate],
-    prover: ReadOnlyProver<'_, Prover>,
+    prover: &Prover,
 ) -> anyhow::Result<Option<TransactionId>> {
-    TaskMonitor::log_identities_queues(database).await?;
-
-    if updates.is_empty() {
-        warn!("Identity commit requested with zero identities. Continuing.");
-        return Ok(None);
-    }
-
-    debug!("Starting identity commit for {} identities.", updates.len());
-
     // Grab the initial conditions before the updates are applied to the tree.
     let pre_root: U256 = batching_tree.get_root().into();
 
@@ -524,23 +395,7 @@ pub async fn delete_identities(
     // With the updates applied we can grab the value of the tree's new root and
     // build our identities for sending to the identity manager.
     let post_root: U256 = latest_tree_from_updates.root().into();
-
-    // Get the previous identity
-    let identity_commitments: Vec<Identity> = commitments
-        .iter()
-        .zip(merkle_proofs)
-        .map(|(id, prf)| {
-            let commitment: U256 = id.into();
-            let proof: Vec<U256> = prf
-                .0
-                .iter()
-                .map(|branch| match branch {
-                    Branch::Left(v) | Branch::Right(v) => U256::from(*v),
-                })
-                .collect();
-            Identity::new(commitment, proof)
-        })
-        .collect();
+    let identity_commitments = zip_commitments_and_proofs(commitments, merkle_proofs);
 
     identity_manager.validate_merkle_proofs(&identity_commitments)?;
 
@@ -556,7 +411,7 @@ pub async fn delete_identities(
 
     let packed_deletion_indices = pack_indices(&deletion_indices);
 
-    info!(?pre_root, ?post_root, "Submitting deletion batch");
+    tracing::info!(?pre_root, ?post_root, "Submitting deletion batch");
 
     // With all the data prepared we can submit the identities to the on-chain
     // identity manager and wait for that transaction to be mined.
@@ -564,11 +419,11 @@ pub async fn delete_identities(
         .delete_identities(proof, packed_deletion_indices, pre_root, post_root)
         .await
         .map_err(|e| {
-            error!(?e, "Failed to insert identity to contract.");
+            tracing::error!(?e, "Failed to insert identity to contract.");
             e
         })?;
 
-    info!(
+    tracing::info!(
         ?pre_root,
         ?post_root,
         ?transaction_id,
@@ -578,9 +433,45 @@ pub async fn delete_identities(
     // Update the batching tree only after submitting the identities to the chain
     batching_tree.apply_updates_up_to(post_root.into());
 
-    info!(?pre_root, ?post_root, "Tree updated");
+    tracing::info!(?pre_root, ?post_root, "Tree updated");
 
     TaskMonitor::log_batch_size(updates.len());
 
     Ok(Some(transaction_id))
+}
+
+fn zip_commitments_and_proofs(
+    commitments: Vec<U256>,
+    merkle_proofs: Vec<Proof<PoseidonHash>>,
+) -> Vec<Identity> {
+    commitments
+        .iter()
+        .zip(merkle_proofs)
+        .map(|(id, prf)| {
+            let commitment: U256 = id.into();
+            let proof: Vec<U256> = prf
+                .0
+                .iter()
+                .map(|branch| match branch {
+                    Branch::Left(v) | Branch::Right(v) => U256::from(*v),
+                })
+                .collect();
+            Identity::new(commitment, proof)
+        })
+        .collect()
+}
+
+fn determine_batch_type(tree: &TreeVersion<Intermediate>) -> Option<BatchType> {
+    let next_update = tree.peek_next_updates(1);
+    if next_update.is_empty() {
+        return None;
+    }
+
+    let batch_type = if next_update[0].update.element == Hash::ZERO {
+        BatchType::Deletion
+    } else {
+        BatchType::Insertion
+    };
+
+    Some(batch_type)
 }

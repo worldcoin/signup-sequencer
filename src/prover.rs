@@ -1,21 +1,32 @@
-mod identity;
+//! This module contains exports for generic utilities for dealing with provers.
+//!
+//! These include utilities for interacting with the currently extant batch
+//! insert proving service, as well as common types that will later be used with
+//! the batch update proving service once that arrives.
+//!
+//! APIs are designed to be imported for use qualified (e.g.
+//! `batch_insertion::Prover`, `batch_insertion::Identity` and so on).
+
+pub mod identity;
+pub mod map;
+pub mod proof;
 
 use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::mem::size_of;
 use std::time::Duration;
 
-use clap::Parser;
 use ethers::types::U256;
 use ethers::utils::keccak256;
+pub use map::ProverMap;
 use once_cell::sync::Lazy;
 use prometheus::{exponential_buckets, register_histogram, Histogram};
+pub use proof::Proof;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::database::prover::ProverConfiguration as DbProverConfiguration;
-pub use crate::prover::batch_insertion::identity::Identity;
-use crate::prover::Proof;
-use crate::serde_utils::JsonStrWrapper;
+use crate::prover::identity::Identity;
+use crate::utils::index_packing::pack_indices;
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";
@@ -38,24 +49,10 @@ static PROVER_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
     .unwrap()
 });
 
-#[derive(Clone, Debug, PartialEq, Eq, Parser)]
-#[group(skip)]
-pub struct Options {
-    /// The options for configuring the batch insertion prover service.
-    ///
-    /// This should be a JSON array containing objects of the following format `{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}`
-    #[clap(
-        long,
-        env,
-        default_value = r#"[{"url": "http://localhost:3001","batch_size": 3,"timeout_s": 30}]"#
-    )]
-    pub prover_urls: JsonStrWrapper<Vec<ProverConfiguration>>,
-}
-
 /// Configuration options for the component responsible for interacting with the
 /// prover service.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProverConfiguration {
+#[derive(Clone, Debug, Eq, Serialize, Deserialize)]
+pub struct ProverConfig {
     /// The URL at which to contact the semaphore prover service for proof
     /// generation.
     pub url: String,
@@ -67,15 +64,50 @@ pub struct ProverConfiguration {
     /// The batch size that the prover is set up to work with. This must match
     /// the deployed prover.
     pub batch_size: usize,
+
+    // TODO: add docs
+    pub prover_type: ProverType,
+}
+
+#[derive(Debug, Copy, Clone, sqlx::Type, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+#[sqlx(type_name = "prover_enum", rename_all = "PascalCase")]
+pub enum ProverType {
+    #[default]
+    Insertion,
+    Deletion,
+}
+
+impl std::fmt::Display for ProverType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ProverType::Insertion => write!(f, "insertion"),
+            ProverType::Deletion => write!(f, "deletion"),
+        }
+    }
+}
+
+impl Hash for ProverConfig {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.batch_size.hash(state);
+        self.prover_type.hash(state);
+    }
+}
+
+impl PartialEq for ProverConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.batch_size.eq(&other.batch_size) && self.prover_type.eq(&other.prover_type)
+    }
 }
 
 /// A representation of the connection to the MTB prover service.
 #[derive(Clone, Debug)]
 pub struct Prover {
-    target_url: Url,
-    client:     reqwest::Client,
-    batch_size: usize,
-    timeout_s:  u64,
+    target_url:  Url,
+    client:      reqwest::Client,
+    batch_size:  usize,
+    timeout_s:   u64,
+    prover_type: ProverType,
 }
 
 impl Prover {
@@ -83,20 +115,20 @@ impl Prover {
     ///
     /// # Arguments
     /// - `options`: The prover configuration options.
-    pub fn new(options: &ProverConfiguration) -> anyhow::Result<Self> {
+    pub fn new(options: &ProverConfig) -> anyhow::Result<Self> {
         let target_url = Url::parse(&options.url)?;
         let timeout_duration = Duration::from_secs(options.timeout_s);
-        let timeout_s = options.timeout_s;
-        let batch_size = options.batch_size;
         let client = reqwest::Client::builder()
             .connect_timeout(timeout_duration)
             .https_only(false)
             .build()?;
+
         let mtb = Self {
             target_url,
             client,
-            batch_size,
-            timeout_s,
+            batch_size: options.batch_size,
+            timeout_s: options.timeout_s,
+            prover_type: options.prover_type,
         };
 
         Ok(mtb)
@@ -104,7 +136,7 @@ impl Prover {
 
     /// Creates a new batch insertion prover from the prover taken from the
     /// database
-    pub fn from_prover_conf(prover_conf: &DbProverConfiguration) -> anyhow::Result<Self> {
+    pub fn from_prover_conf(prover_conf: &ProverConfig) -> anyhow::Result<Self> {
         let target_url = Url::parse(&prover_conf.url)?;
         let timeout_duration = Duration::from_secs(prover_conf.timeout_s);
         let client = reqwest::Client::builder()
@@ -117,11 +149,16 @@ impl Prover {
             client,
             batch_size: prover_conf.batch_size,
             timeout_s: prover_conf.timeout_s,
+            prover_type: prover_conf.prover_type,
         })
     }
 
     pub fn batch_size(&self) -> usize {
         self.batch_size
+    }
+
+    pub fn prover_type(&self) -> ProverType {
+        self.prover_type
     }
 
     pub fn timeout_s(&self) -> u64 {
@@ -140,7 +177,7 @@ impl Prover {
     ///   were inserted.
     /// - `identities`: A list of identity insertions, ordered in the order the
     ///   identities were inserted into the merkle tree.
-    pub async fn generate_proof(
+    pub async fn generate_insertion_proof(
         &self,
         start_index: u32,
         pre_root: U256,
@@ -156,18 +193,78 @@ impl Prover {
         let total_proving_time_timer = TOTAL_PROVING_TIME.start_timer();
 
         let identity_commitments: Vec<U256> = identities.iter().map(|id| id.commitment).collect();
-        let input_hash =
-            compute_input_hash(start_index, pre_root, post_root, &identity_commitments);
+        let input_hash = compute_insertion_proof_input_hash(
+            start_index,
+            pre_root,
+            post_root,
+            &identity_commitments,
+        );
         let merkle_proofs = identities
             .iter()
             .map(|id| id.merkle_proof.clone())
             .collect();
 
-        let proof_input = ProofInput {
+        let proof_input = InsertionProofInput {
             input_hash,
             start_index,
             pre_root,
             post_root,
+            identity_commitments,
+            merkle_proofs,
+        };
+
+        let request = self
+            .client
+            .post(self.target_url.join(MTB_PROVE_ENDPOINT)?)
+            .body("OH MY GOD")
+            .json(&proof_input)
+            .build()?;
+
+        let prover_proving_time_timer = PROVER_PROVING_TIME.start_timer();
+        let proof_term = self.client.execute(request).await?;
+        let proof_term = proof_term.error_for_status()?;
+        prover_proving_time_timer.observe_duration();
+
+        let json = proof_term.text().await?;
+
+        let Ok(proof) = serde_json::from_str::<Proof>(&json) else {
+            let error: ProverError = serde_json::from_str(&json)?;
+            return Err(anyhow::Error::msg(format!("{error}")));
+        };
+
+        total_proving_time_timer.observe_duration();
+
+        Ok(proof)
+    }
+
+    pub async fn generate_deletion_proof(
+        &self,
+        pre_root: U256,
+        post_root: U256,
+        deletion_indices: Vec<u32>,
+        identities: Vec<Identity>,
+    ) -> anyhow::Result<Proof> {
+        if identities.len() != self.batch_size {
+            return Err(anyhow::Error::msg(
+                "Provided batch does not match prover batch size.",
+            ));
+        }
+
+        let total_proving_time_timer = TOTAL_PROVING_TIME.start_timer();
+
+        let (identity_commitments, merkle_proofs): (Vec<U256>, Vec<Vec<U256>>) = identities
+            .into_iter()
+            .map(|id| (id.commitment, id.merkle_proof))
+            .unzip();
+
+        let input_hash =
+            compute_deletion_proof_input_hash(deletion_indices.clone(), pre_root, post_root);
+
+        let proof_input = DeletionProofInput {
+            input_hash,
+            pre_root,
+            post_root,
+            deletion_indices,
             identity_commitments,
             merkle_proofs,
         };
@@ -222,7 +319,7 @@ impl Prover {
 ///   provided in the order that they were inserted into the tree.
 ///
 /// The result is computed using the inputs in _big-endian_ byte ordering.
-pub fn compute_input_hash(
+pub fn compute_insertion_proof_input_hash(
     start_index: u32,
     pre_root: U256,
     post_root: U256,
@@ -238,12 +335,40 @@ pub fn compute_input_hash(
     bytes.extend(pre_root_bytes.iter());
     bytes.extend(post_root_bytes.iter());
 
-    for commitment in identity_commitments.iter() {
+    for commitment in identity_commitments {
         let mut commitment_bytes: [u8; size_of::<U256>()] = Default::default();
         commitment.to_big_endian(commitment_bytes.as_mut_slice());
         bytes.extend(commitment_bytes.iter());
     }
 
+    keccak256(bytes).into()
+}
+
+// TODO: check this and update docs
+
+pub fn compute_deletion_proof_input_hash(
+    deletion_indices: Vec<u32>,
+    pre_root: U256,
+    post_root: U256,
+) -> U256 {
+    // Convert pre_root and post_root to bytes
+    let mut pre_root_bytes = vec![0u8; 32];
+    pre_root.to_big_endian(&mut pre_root_bytes);
+
+    let mut post_root_bytes = vec![0u8; 32];
+    post_root.to_big_endian(&mut post_root_bytes);
+
+    let mut bytes = vec![];
+
+    // Append packed_deletion_indices
+    let packed_indices = pack_indices(&deletion_indices);
+    bytes.extend_from_slice(&packed_indices);
+
+    // Append pre_root and post_root bytes
+    bytes.extend_from_slice(&pre_root_bytes);
+    bytes.extend_from_slice(&post_root_bytes);
+
+    // Compute and return the Keccak-256 hash
     keccak256(bytes).into()
 }
 
@@ -266,11 +391,22 @@ impl Display for ProverError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProofInput {
+struct InsertionProofInput {
     input_hash:           U256,
     start_index:          u32,
     pre_root:             U256,
     post_root:            U256,
+    identity_commitments: Vec<U256>,
+    merkle_proofs:        Vec<Vec<U256>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeletionProofInput {
+    input_hash:           U256,
+    pre_root:             U256,
+    post_root:            U256,
+    deletion_indices:     Vec<u32>,
     identity_commitments: Vec<U256>,
     merkle_proofs:        Vec<Vec<U256>>,
 }
@@ -284,10 +420,11 @@ mod test {
         let mock_url: String = "0.0.0.0:3001".into();
         let mock_service = mock::Service::new(mock_url.clone()).await?;
 
-        let options = ProverConfiguration {
-            url:        "http://localhost:3001".into(),
-            timeout_s:  30,
-            batch_size: 3,
+        let options = ProverConfig {
+            url:         "http://localhost:3001".into(),
+            timeout_s:   30,
+            batch_size:  3,
+            prover_type: ProverType::Insertion,
         };
         let mtb = Prover::new(&options).unwrap();
         let input_data = get_default_proof_input();
@@ -295,7 +432,7 @@ mod test {
 
         let expected_proof = get_default_proof_output();
         let proof = mtb
-            .generate_proof(
+            .generate_insertion_proof(
                 input_data.start_index,
                 input_data.pre_root,
                 input_data.post_root,
@@ -315,10 +452,11 @@ mod test {
         let mock_url: String = "0.0.0.0:3002".into();
         let mock_service = mock::Service::new(mock_url.clone()).await?;
 
-        let options = ProverConfiguration {
-            url:        "http://localhost:3002".into(),
-            timeout_s:  30,
-            batch_size: 3,
+        let options = ProverConfig {
+            url:         "http://localhost:3002".into(),
+            timeout_s:   30,
+            batch_size:  3,
+            prover_type: ProverType::Insertion,
         };
         let mtb = Prover::new(&options).unwrap();
         let mut input_data = get_default_proof_input();
@@ -326,7 +464,7 @@ mod test {
         input_data.post_root = U256::from(2);
 
         let prover_result = mtb
-            .generate_proof(
+            .generate_insertion_proof(
                 input_data.start_index,
                 input_data.pre_root,
                 input_data.post_root,
@@ -342,17 +480,18 @@ mod test {
 
     #[tokio::test]
     async fn prover_should_error_if_batch_size_wrong() -> anyhow::Result<()> {
-        let options = ProverConfiguration {
-            url:        "http://localhost:3002".into(),
-            timeout_s:  30,
-            batch_size: 10,
+        let options = ProverConfig {
+            url:         "http://localhost:3002".into(),
+            timeout_s:   30,
+            batch_size:  10,
+            prover_type: ProverType::Insertion,
         };
         let mtb = Prover::new(&options).unwrap();
         let input_data = get_default_proof_input();
         let identities = extract_identities_from(&input_data);
 
         let prover_result = mtb
-            .generate_proof(
+            .generate_insertion_proof(
                 input_data.start_index,
                 input_data.pre_root,
                 input_data.post_root,
@@ -374,7 +513,7 @@ mod test {
         let input = get_default_proof_input();
 
         assert_eq!(
-            compute_input_hash(
+            compute_insertion_proof_input_hash(
                 input.start_index,
                 input.pre_root,
                 input.post_root,
@@ -386,13 +525,13 @@ mod test {
 
     #[test]
     fn proof_input_should_serde() {
-        let expected_data: ProofInput = serde_json::from_str(EXPECTED_JSON).unwrap();
+        let expected_data: InsertionProofInput = serde_json::from_str(EXPECTED_JSON).unwrap();
         let proof_input = get_default_proof_input();
 
         assert_eq!(proof_input, expected_data);
     }
 
-    fn extract_identities_from(proof_input: &ProofInput) -> Vec<Identity> {
+    fn extract_identities_from(proof_input: &InsertionProofInput) -> Vec<Identity> {
         proof_input
             .identity_commitments
             .iter()
@@ -414,7 +553,7 @@ mod test {
         ])
     }
 
-    fn get_default_proof_input() -> ProofInput {
+    fn get_default_proof_input() -> InsertionProofInput {
         let start_index: u32 = 0;
         let pre_root: U256 =
             "0x1b7201da72494f1e28717ad1a52eb469f95892f957713533de6175e5da190af2".into();
@@ -462,7 +601,7 @@ mod test {
         let input_hash: U256 =
             "0xa2d9c54a0aecf0f2aeb502c4a14ac45209d636986294c5e3168a54a7f143b1d8".into();
 
-        ProofInput {
+        InsertionProofInput {
             input_hash,
             start_index,
             pre_root,
@@ -548,7 +687,7 @@ pub mod mock {
 
     impl Service {
         pub async fn new(url: String) -> anyhow::Result<Self> {
-            let prove = |Json(payload): Json<ProofInput>| async move {
+            let prove = |Json(payload): Json<InsertionProofInput>| async move {
                 match payload.post_root.div_mod(U256::from(2)) {
                     (_, y) if y != U256::zero() => {
                         Json(ProveResponse::ProofSuccess(test::get_default_proof_output()))

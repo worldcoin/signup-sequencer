@@ -49,7 +49,7 @@ async fn sequencer_app(args: Args) -> anyhow::Result<()> {
     task_monitor.start().await;
 
     // Start server (will stop on shutdown signal)
-    server::main(app_for_server, server_config).await?;
+    server::run(app_for_server, server_config).await?;
 
     tracing::info!("Stopping the app");
     task_monitor.shutdown().await?;

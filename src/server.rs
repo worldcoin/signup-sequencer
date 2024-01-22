@@ -133,7 +133,7 @@ async fn list_batch_sizes(
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
 /// a path beyond `/`, or cannot be cast into an IP address. Also returns an
 /// `Err` if the server cannot bind to the given address.
-pub async fn main(app: Arc<App>, config: ServerConfig) -> anyhow::Result<()> {
+pub async fn run(app: Arc<App>, config: ServerConfig) -> anyhow::Result<()> {
     info!("Will listen on {}", config.address);
     let listener = TcpListener::bind(config.address)?;
 

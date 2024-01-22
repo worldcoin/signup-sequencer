@@ -5454,7 +5454,7 @@ dependencies = [
 
 [[package]]
 name = "signup-sequencer"
-version = "1.0.1"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "async-stream",

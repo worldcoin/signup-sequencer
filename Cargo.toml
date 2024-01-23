@@ -82,6 +82,7 @@ tokio = { version = "1.17", features = [
 toml = "0.8.8"
 tracing = "0.1"
 tracing-futures = "0.2"
+tracing-subscriber = "0.3.11"
 tx-sitter-client = { path = "crates/tx-sitter-client" }
 url = { version = "2.2", features = ["serde"] }
 zeroize = "1.6.0"

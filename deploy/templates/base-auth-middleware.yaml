@@ -1,8 +1,0 @@
-## Temporary auth remove soon
-apiVersion: traefik.containo.us/v1alpha1
-kind: Middleware
-metadata:
-  name: {{ include "mychart.fullname" . }}-basic-auth
-spec:
-  basicAuth:
-    secret: {{ include "mychart.fullname" . }}-basic-auth-secret

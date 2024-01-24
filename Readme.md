@@ -22,7 +22,7 @@ Sequencer has 6 API routes.
     Identities go through three tasks.
     1. Insertion: In the initial stage, the identities are placed into the Sequencer's database.
     The database is polled every few seconds and added to insertion task.
-    2. Processing: The processing of identities, where current batching tree is taken and processed so we 
+    2. Processing: The processing of identities, where current batching tree is taken and processed so we
     end up with pre root (the root of tree before proofs are generated), post root, start index and
     identity commitments (with their proofs). All of those get sent to a [prover](#semaphore-mtb) for proof generation.
     The identities transaction is then mined, with aforementioned fields and pending identities are sent to task to be mined on-chain.
@@ -100,8 +100,17 @@ TREE_DEPTH=*your tree depth (eg. 16)* cargo run -- --batch-size *batch size for 
 Lint, build, test
 
 ```shell
-cargo fmt && cargo clippy --all-targets && cargo build --all-targets && cargo test --all-targets
+cargo fmt --all
+cargo clippy --workspcae --tests
+
+cargo test --workspace
+# or
+cargo nextest run --workspace
 ```
+
+We recommend using [nextest](https://nexte.st/) as it speeds up the tests by roughly 30%.
+
+## Database migrations
 
 ## Contributing
 

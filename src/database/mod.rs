@@ -24,7 +24,7 @@ pub mod types;
 use crate::prover::{ProverConfig, ProverType};
 
 // Statically link in migration files
-static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
+static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
 const MAX_UNPROCESSED_FETCH_COUNT: i64 = 10_000;
 

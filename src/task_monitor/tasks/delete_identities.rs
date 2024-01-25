@@ -40,7 +40,7 @@ pub async fn delete_identities(app: Arc<App>, wake_up_notify: Arc<Notify>) -> an
 
             // Delete the commitments at the target leaf indices in the latest tree,
             // generating the proof for each update
-            let data = app.tree_state.latest_tree().delete_many(&leaf_indices);
+            let data = app.tree_state()?.latest_tree().delete_many(&leaf_indices);
 
             assert_eq!(
                 data.len(),

@@ -63,6 +63,8 @@ pub enum Error {
     NoProversOnIdInsert,
     #[error("Identity Manager had no provers on point of identity deletion.")]
     NoProversOnIdDeletion,
+    #[error("The tree is uninitialized. Try again in a few moments.")]
+    TreeStateUninitialized,
     #[error(transparent)]
     Other(#[from] EyreError),
 }

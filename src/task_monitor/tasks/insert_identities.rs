@@ -22,7 +22,8 @@ pub async fn insert_identities(app: Arc<App>, wake_up_notify: Arc<Notify>) -> an
             continue;
         }
 
-        insert_identities_batch(&app.database, app.tree_state.latest_tree(), unprocessed).await?;
+        insert_identities_batch(&app.database, app.tree_state()?.latest_tree(), unprocessed)
+            .await?;
         // Notify the identity processing task, that there are new identities
         wake_up_notify.notify_one();
     }

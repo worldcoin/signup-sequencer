@@ -66,7 +66,7 @@ pub async fn process_identities(
             },
         }
 
-        let Some(batch_type) = determine_batch_type(app.tree_state.batching_tree()) else {
+        let Some(batch_type) = determine_batch_type(app.tree_state()?.batching_tree()) else {
             continue;
         };
 
@@ -76,7 +76,10 @@ pub async fn process_identities(
             app.identity_manager.max_insertion_batch_size().await
         };
 
-        let updates = app.tree_state.batching_tree().peek_next_updates(batch_size);
+        let updates = app
+            .tree_state()?
+            .batching_tree()
+            .peek_next_updates(batch_size);
 
         let current_time = Utc::now();
         let batch_insertion_timeout =
@@ -101,7 +104,7 @@ pub async fn process_identities(
 
         commit_identities(
             &app.identity_manager,
-            app.tree_state.batching_tree(),
+            app.tree_state()?.batching_tree(),
             &monitored_txs_sender,
             &updates,
         )

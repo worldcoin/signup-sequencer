@@ -67,7 +67,6 @@ pub mod prelude {
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener};
 use std::str::FromStr;
-use std::sync::Arc;
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
@@ -591,7 +590,6 @@ fn construct_verify_proof_body(
 pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, SocketAddr)> {
     let server_config = config.server.clone();
     let app = App::new(config).await.expect("Failed to create App");
-    let app = Arc::new(app);
 
     let task_monitor = TaskMonitor::new(app.clone());
 

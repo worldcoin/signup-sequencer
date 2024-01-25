@@ -5,7 +5,7 @@ use once_cell::sync::Lazy;
 use prometheus::{linear_buckets, register_gauge, register_histogram, Gauge, Histogram};
 use tokio::sync::{broadcast, mpsc, Mutex, Notify, RwLock};
 use tokio::task::JoinHandle;
-use tracing::{info, instrument, warn};
+use tracing::{info, instrument, trace, warn};
 
 use crate::app::App;
 use crate::database::Database;
@@ -77,18 +77,27 @@ pub struct TaskMonitor {
 }
 
 impl TaskMonitor {
-    pub fn new(app: Arc<App>) -> Self {
-        Self {
+    pub fn new(app: Arc<App>) -> Arc<Self> {
+        Arc::new(Self {
             instance: RwLock::new(None),
             app,
-        }
+        })
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn start(&self) {
+    pub async fn start(self: Arc<Self>) {
         let mut instance = self.instance.write().await;
         if instance.is_some() {
             warn!("Identity committer already running");
+        }
+
+        // TODO: This probably isn't the best way to do this.
+        // We could use a channel to notify the task that the tree is initialized
+        // This would require us to build the `TaskMonitor` within `App::new`
+        // Maybe this is okay?
+        while self.app.tree_state().is_err() {
+            trace!("Waiting for the tree to be initialized");
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
         // We could use the second element of the tuple as `mut shutdown_receiver`,

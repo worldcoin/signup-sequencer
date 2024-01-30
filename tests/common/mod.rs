@@ -73,6 +73,7 @@ use futures::StreamExt;
 use hyper::StatusCode;
 use signup_sequencer::identity_tree::Status;
 use signup_sequencer::task_monitor::TaskMonitor;
+use tracing::trace;
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
@@ -592,11 +593,17 @@ pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, Socket
     let app = App::new(config).await.expect("Failed to create App");
 
     let task_monitor = TaskMonitor::new(app.clone());
-
     task_monitor.start().await;
 
     let listener = TcpListener::bind(server_config.address).expect("Failed to bind random port");
     let local_addr = listener.local_addr()?;
+
+    // For our tests to work we need the tree to be initialised so we
+    // need to sleep for a short moment.
+    while app.tree_state().is_err() {
+        trace!("Waiting for the tree to be initialized");
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
 
     let app = spawn({
         async move {

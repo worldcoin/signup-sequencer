@@ -92,7 +92,7 @@ fn parse_exposed_port(s: &str) -> anyhow::Result<SocketAddr> {
         .iter()
         .map(|p| p.parse::<SocketAddr>())
         .next()
-        .context("Missing exposed port")??)
+        .context("Missing exposed port, is your docker daemon running?")??)
 }
 
 #[cfg(test)]

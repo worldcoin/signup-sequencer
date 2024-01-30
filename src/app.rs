@@ -6,7 +6,6 @@ use chrono::{Duration, Utc};
 use ruint::Uint;
 use semaphore::poseidon_tree::LazyPoseidonTree;
 use semaphore::protocol::verify_proof;
-use tokio::sync::broadcast;
 use tracing::{info, instrument, warn};
 
 use crate::config::Config;
@@ -25,11 +24,7 @@ use crate::server::data::{
     VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
 };
 use crate::server::error::Error as ServerError;
-use crate::utils::spawn_monitored_with_backoff;
 use crate::utils::tree_updates::dedup_tree_updates;
-
-// TODO: different versions of `Duration` are being used in different places.
-const TREE_INIT_BACKOFF: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub struct App {
     pub database:           Arc<Database>,
@@ -45,10 +40,9 @@ impl App {
     /// Will return `Err` if the internal Ethereum handler errors or if the
     /// `options.storage_file` is not accessible.
     ///
-    /// Upon calling `new`, a task is spawned which will attempt to innitialize
-    /// the tree. Until the tree is initialized, `app.tree_state()` will
-    /// return an `Err`, and any methods which rely on the tree state will also
-    /// error.
+    /// Upon calling `new`, the tree state will be uninitialized, and calling
+    /// `app.tree_state()` will return an `Err`, and any methods which rely
+    /// on the tree state will also error.
     #[instrument(name = "App::new", level = "debug", skip_all)]
     pub async fn new(config: Config) -> anyhow::Result<Arc<Self>> {
         let ethereum = Ethereum::new(&config);
@@ -66,40 +60,15 @@ impl App {
 
         let (insertion_prover_map, deletion_prover_map) = initialize_prover_maps(provers)?;
 
-        let identity_manager = IdentityManager::new(
-            &config,
-            ethereum.clone(),
-            insertion_prover_map,
-            deletion_prover_map,
-        )
-        .await?;
-
-        let identity_manager = Arc::new(identity_manager);
-
-        // Await for all pending transactions
-        identity_manager.await_clean_slate().await?;
-
-        // Prefetch latest root & mark it as mined
-        let root_hash = identity_manager.latest_root().await?;
-        let root_hash = root_hash.into();
-
-        let initial_root_hash = LazyPoseidonTree::new(
-            identity_manager.tree_depth(),
-            identity_manager.initial_leaf_value(),
-        )
-        .root();
-
-        // We don't store the initial root in the database, so we have to skip this step
-        // if the contract root hash is equal to initial root hash
-        if root_hash != initial_root_hash {
-            // Note that we don't have a way of queuing a root here for finalization.
-            // so it's going to stay as "processed" until the next root is mined.
-            database.mark_root_as_processed(&root_hash).await?;
-        } else {
-            // Db is either empty or we're restarting with a new contract/chain
-            // so we should mark everything as pending
-            database.mark_all_as_pending().await?;
-        }
+        let identity_manager = Arc::new(
+            IdentityManager::new(
+                &config,
+                ethereum.clone(),
+                insertion_prover_map,
+                deletion_prover_map,
+            )
+            .await?,
+        );
 
         // TODO Export the reduced-ness check that this is enabling from the
         //  `semaphore-rs` library when we bump the version.
@@ -117,22 +86,37 @@ impl App {
             config,
         });
 
-        // Now that we have a long lived reference to the app, we can spawn
-        // the task that will initialize the tree.
-        let moved_app = app.clone();
-        let tree_init_future = move || moved_app.clone().init_tree(initial_root_hash);
-
-        // TODO: Do we want to provide a shutdown here? I think probably not, perhaps
-        // TODO: `spawn_monitored_with_backoff` should accept and optional shutdown
-        // TODO: channel.
-        let (shutdown_sender, _) = broadcast::channel(1);
-
-        spawn_monitored_with_backoff(tree_init_future, shutdown_sender, TREE_INIT_BACKOFF);
-
         Ok(app)
     }
 
-    async fn init_tree(self: Arc<Self>, initial_root_hash: Hash) -> anyhow::Result<()> {
+    /// Initializes the tree state. This should only ever be called once.
+    /// Attempts to call this method more than once will result in a panic.
+    pub async fn init_tree(self: Arc<Self>) -> anyhow::Result<()> {
+        // Await for all pending transactions
+        self.identity_manager.await_clean_slate().await?;
+
+        // Prefetch latest root & mark it as mined
+        let root_hash = self.identity_manager.latest_root().await?;
+        let root_hash = root_hash.into();
+
+        let initial_root_hash = LazyPoseidonTree::new(
+            self.identity_manager.tree_depth(),
+            self.identity_manager.initial_leaf_value(),
+        )
+        .root();
+
+        // We don't store the initial root in the database, so we have to skip this step
+        // if the contract root hash is equal to initial root hash
+        if root_hash != initial_root_hash {
+            // Note that we don't have a way of queuing a root here for finalization.
+            // so it's going to stay as "processed" until the next root is mined.
+            self.database.mark_root_as_processed(&root_hash).await?;
+        } else {
+            // Db is either empty or we're restarting with a new contract/chain
+            // so we should mark everything as pending
+            self.database.mark_all_as_pending().await?;
+        }
+
         let timer = Instant::now();
         let mut tree_state = self.restore_or_initialize_tree(initial_root_hash).await?;
         info!("Tree state initialization took: {:?}", timer.elapsed());

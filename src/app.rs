@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 use chrono::{Duration, Utc};
@@ -29,7 +29,7 @@ use crate::utils::tree_updates::dedup_tree_updates;
 pub struct App {
     pub database:           Arc<Database>,
     pub identity_manager:   SharedIdentityManager,
-    pub tree_state:         TreeState,
+    tree_state:             OnceLock<TreeState>,
     pub snark_scalar_field: Hash,
     pub config:             Config,
 }
@@ -39,8 +39,12 @@ impl App {
     ///
     /// Will return `Err` if the internal Ethereum handler errors or if the
     /// `options.storage_file` is not accessible.
+    ///
+    /// Upon calling `new`, the tree state will be uninitialized, and calling
+    /// `app.tree_state()` will return an `Err`, and any methods which rely
+    /// on the tree state will also error.
     #[instrument(name = "App::new", level = "debug", skip_all)]
-    pub async fn new(config: Config) -> anyhow::Result<Self> {
+    pub async fn new(config: Config) -> anyhow::Result<Arc<Self>> {
         let ethereum = Ethereum::new(&config);
         let db = Database::new(&config.database);
 
@@ -56,77 +60,15 @@ impl App {
 
         let (insertion_prover_map, deletion_prover_map) = initialize_prover_maps(provers)?;
 
-        let identity_manager = IdentityManager::new(
-            &config,
-            ethereum.clone(),
-            insertion_prover_map,
-            deletion_prover_map,
-        )
-        .await?;
-
-        let identity_manager = Arc::new(identity_manager);
-
-        // Await for all pending transactions
-        identity_manager.await_clean_slate().await?;
-
-        // Prefetch latest root & mark it as mined
-        let root_hash = identity_manager.latest_root().await?;
-        let root_hash = root_hash.into();
-
-        let initial_root_hash = LazyPoseidonTree::new(
-            identity_manager.tree_depth(),
-            identity_manager.initial_leaf_value(),
-        )
-        .root();
-
-        // We don't store the initial root in the database, so we have to skip this step
-        // if the contract root hash is equal to initial root hash
-        if root_hash != initial_root_hash {
-            // Note that we don't have a way of queuing a root here for finalization.
-            // so it's going to stay as "processed" until the next root is mined.
-            database.mark_root_as_processed(&root_hash).await?;
-        } else {
-            // Db is either empty or we're restarting with a new contract/chain
-            // so we should mark everything as pending
-            database.mark_all_as_pending().await?;
-        }
-
-        let timer = Instant::now();
-        let mut tree_state = Self::restore_or_initialize_tree(
-            &database,
-            // Poseidon tree depth is one more than the contract's tree depth
-            identity_manager.tree_depth(),
-            config.tree.dense_tree_prefix_depth,
-            config.tree.tree_gc_threshold,
-            identity_manager.initial_leaf_value(),
-            initial_root_hash,
-            &config.tree.cache_file,
-            config.tree.force_cache_purge,
-        )
-        .await?;
-        info!("Tree state initialization took: {:?}", timer.elapsed());
-
-        let tree_root = tree_state.get_processed_tree().get_root();
-
-        if tree_root != root_hash {
-            warn!(
-                "Cached tree root is different from the contract root. Purging cache and \
-                 reinitializing."
-            );
-
-            tree_state = Self::restore_or_initialize_tree(
-                &database,
-                // Poseidon tree depth is one more than the contract's tree depth
-                identity_manager.tree_depth(),
-                config.tree.dense_tree_prefix_depth,
-                config.tree.tree_gc_threshold,
-                identity_manager.initial_leaf_value(),
-                initial_root_hash,
-                &config.tree.cache_file,
-                true,
+        let identity_manager = Arc::new(
+            IdentityManager::new(
+                &config,
+                ethereum.clone(),
+                insertion_prover_map,
+                deletion_prover_map,
             )
-            .await?;
-        }
+            .await?,
+        );
 
         // TODO Export the reduced-ness check that this is enabling from the
         //  `semaphore-rs` library when we bump the version.
@@ -136,47 +78,85 @@ impl App {
         )
         .expect("This should just parse.");
 
-        // Sync with chain on start up
-        let app = Self {
+        let app = Arc::new(Self {
             database,
             identity_manager,
-            tree_state,
+            tree_state: OnceLock::new(),
             snark_scalar_field,
             config,
-        };
+        });
 
         Ok(app)
     }
 
+    /// Initializes the tree state. This should only ever be called once.
+    /// Attempts to call this method more than once will result in a panic.
+    pub async fn init_tree(self: Arc<Self>) -> anyhow::Result<()> {
+        // Await for all pending transactions
+        self.identity_manager.await_clean_slate().await?;
+
+        // Prefetch latest root & mark it as mined
+        let root_hash = self.identity_manager.latest_root().await?;
+        let root_hash = root_hash.into();
+
+        let initial_root_hash = LazyPoseidonTree::new(
+            self.identity_manager.tree_depth(),
+            self.identity_manager.initial_leaf_value(),
+        )
+        .root();
+
+        // We don't store the initial root in the database, so we have to skip this step
+        // if the contract root hash is equal to initial root hash
+        if root_hash != initial_root_hash {
+            // Note that we don't have a way of queuing a root here for finalization.
+            // so it's going to stay as "processed" until the next root is mined.
+            self.database.mark_root_as_processed(&root_hash).await?;
+        } else {
+            // Db is either empty or we're restarting with a new contract/chain
+            // so we should mark everything as pending
+            self.database.mark_all_as_pending().await?;
+        }
+
+        let timer = Instant::now();
+        let mut tree_state = self.restore_or_initialize_tree(initial_root_hash).await?;
+        info!("Tree state initialization took: {:?}", timer.elapsed());
+
+        let tree_root = tree_state.get_processed_tree().get_root();
+
+        if tree_root != initial_root_hash {
+            warn!(
+                "Cached tree root is different from the contract root. Purging cache and \
+                 reinitializing."
+            );
+
+            tree_state = self.restore_or_initialize_tree(initial_root_hash).await?;
+        }
+
+        self.tree_state.set(tree_state).map_err(|_| {
+            anyhow::anyhow!(
+                "Failed to set tree state. 'App::init_tree' should only be called once."
+            )
+        })?;
+
+        Ok::<(), anyhow::Error>(())
+    }
+
     async fn restore_or_initialize_tree(
-        database: &Database,
-        tree_depth: usize,
-        dense_prefix_depth: usize,
-        gc_threshold: usize,
-        initial_leaf_value: Hash,
+        &self,
         initial_root_hash: Hash,
-        mmap_file_path: &str,
-        force_cache_purge: bool,
     ) -> anyhow::Result<TreeState> {
-        let mut mined_items = database
+        let mut mined_items = self
+            .database
             .get_commitments_by_status(ProcessedStatus::Mined)
             .await?;
 
         mined_items.sort_by_key(|item| item.leaf_index);
 
-        if !force_cache_purge {
+        if !self.config.tree.force_cache_purge {
             info!("Attempting to restore tree from cache");
-            if let Some(tree_state) = Self::get_cached_tree_state(
-                database,
-                tree_depth,
-                dense_prefix_depth,
-                gc_threshold,
-                &initial_leaf_value,
-                initial_root_hash,
-                mined_items.clone(),
-                mmap_file_path,
-            )
-            .await?
+            if let Some(tree_state) = self
+                .get_cached_tree_state(mined_items.clone(), initial_root_hash)
+                .await?
             {
                 info!("tree restored from cache");
                 return Ok(tree_state);
@@ -184,16 +164,7 @@ impl App {
         }
 
         info!("Initializing tree from the database");
-        let tree_state = Self::initialize_tree(
-            database,
-            tree_depth,
-            dense_prefix_depth,
-            gc_threshold,
-            initial_leaf_value,
-            mined_items,
-            mmap_file_path,
-        )
-        .await?;
+        let tree_state = self.initialize_tree(mined_items).await?;
 
         info!("tree initialization successful");
 
@@ -232,39 +203,35 @@ impl App {
     }
 
     async fn get_cached_tree_state(
-        database: &Database,
-        tree_depth: usize,
-        dense_prefix_depth: usize,
-        gc_threshold: usize,
-        initial_leaf_value: &Hash,
-        initial_root_hash: Hash,
+        &self,
         mined_items: Vec<TreeUpdate>,
-        mmap_file_path: &str,
+        initial_root_hash: Hash,
     ) -> anyhow::Result<Option<TreeState>> {
         let mined_items = dedup_tree_updates(mined_items);
 
         let mut last_mined_index_in_dense: usize = 0;
         let leftover_items = Self::get_leftover_leaves_and_update_index(
             &mut last_mined_index_in_dense,
-            dense_prefix_depth,
+            self.config.tree.dense_tree_prefix_depth,
             &mined_items,
         );
 
         let Some(mined_builder) = CanonicalTreeBuilder::restore(
-            tree_depth,
-            dense_prefix_depth,
-            initial_leaf_value,
+            self.identity_manager.tree_depth(),
+            self.config.tree.dense_tree_prefix_depth,
+            &self.identity_manager.initial_leaf_value(),
             last_mined_index_in_dense,
             &leftover_items,
-            gc_threshold,
-            mmap_file_path,
+            self.config.tree.tree_gc_threshold,
+            &self.config.tree.cache_file,
         ) else {
             return Ok(None);
         };
 
         let (mined, mut processed_builder) = mined_builder.seal();
 
-        match database
+        match self
+            .database
             .get_latest_root_by_status(ProcessedStatus::Mined)
             .await?
         {
@@ -280,7 +247,8 @@ impl App {
             }
         }
 
-        let processed_items = database
+        let processed_items = self
+            .database
             .get_commitments_by_status(ProcessedStatus::Processed)
             .await?;
 
@@ -290,7 +258,8 @@ impl App {
 
         let (processed, batching_builder) = processed_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
-        let pending_items = database
+        let pending_items = self
+            .database
             .get_commitments_by_status(ProcessedStatus::Pending)
             .await?;
         for update in pending_items {
@@ -300,17 +269,17 @@ impl App {
         Ok(Some(TreeState::new(mined, processed, batching, latest)))
     }
 
-    async fn initialize_tree(
-        database: &Database,
-        tree_depth: usize,
-        dense_prefix_depth: usize,
-        gc_threshold: usize,
-        initial_leaf_value: Hash,
-        mined_items: Vec<TreeUpdate>,
-        mmap_file_path: &str,
-    ) -> anyhow::Result<TreeState> {
+    pub fn tree_state(&self) -> anyhow::Result<&TreeState> {
+        Ok(self
+            .tree_state
+            .get()
+            .ok_or(ServerError::TreeStateUninitialized)?)
+    }
+
+    async fn initialize_tree(&self, mined_items: Vec<TreeUpdate>) -> anyhow::Result<TreeState> {
         // Flatten the updates for initial leaves
         let mined_items = dedup_tree_updates(mined_items);
+        let initial_leaf_value = self.identity_manager.initial_leaf_value();
 
         let initial_leaves = if mined_items.is_empty() {
             vec![]
@@ -326,17 +295,18 @@ impl App {
         };
 
         let mined_builder = CanonicalTreeBuilder::new(
-            tree_depth,
-            dense_prefix_depth,
-            gc_threshold,
+            self.identity_manager.tree_depth(),
+            self.config.tree.dense_tree_prefix_depth,
+            self.config.tree.tree_gc_threshold,
             initial_leaf_value,
             &initial_leaves,
-            mmap_file_path,
+            &self.config.tree.cache_file,
         );
 
         let (mined, mut processed_builder) = mined_builder.seal();
 
-        let processed_items = database
+        let processed_items = self
+            .database
             .get_commitments_by_status(ProcessedStatus::Processed)
             .await?;
 
@@ -347,7 +317,8 @@ impl App {
         let (processed, batching_builder) = processed_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
 
-        let pending_items = database
+        let pending_items = self
+            .database
             .get_commitments_by_status(ProcessedStatus::Pending)
             .await?;
         for update in pending_items {
@@ -432,7 +403,7 @@ impl App {
             .leaf_index;
 
         // Check if the id has already been deleted
-        if self.tree_state.get_latest_tree().get_leaf(leaf_index) == Uint::ZERO {
+        if self.tree_state()?.get_latest_tree().get_leaf(leaf_index) == Uint::ZERO {
             return Err(ServerError::IdentityAlreadyDeleted);
         }
 
@@ -536,7 +507,7 @@ impl App {
                 // should be set to Batched
                 IdentityHistoryEntryStatus::Pending => {
                     if let Some(leaf_index) = entry.leaf_index {
-                        if self.tree_state.get_batching_tree().get_leaf(leaf_index)
+                        if self.tree_state()?.get_batching_tree().get_leaf(leaf_index)
                             == entry.commitment
                         {
                             status = IdentityHistoryEntryStatus::Batched;
@@ -672,7 +643,7 @@ impl App {
             .await?
             .ok_or(ServerError::IdentityCommitmentNotFound)?;
 
-        let (leaf, proof) = self.tree_state.get_proof_for(&item);
+        let (leaf, proof) = self.tree_state()?.get_proof_for(&item);
 
         if leaf != *commitment {
             return Err(ServerError::InvalidCommitment);
@@ -723,10 +694,11 @@ impl App {
         max_root_age: Duration,
         root_state: &RootItem,
     ) -> Result<(), ServerError> {
-        let latest_root = self.tree_state.get_latest_tree().get_root();
-        let batching_root = self.tree_state.get_batching_tree().get_root();
-        let processed_root = self.tree_state.get_processed_tree().get_root();
-        let mined_root = self.tree_state.get_mined_tree().get_root();
+        let tree_state = self.tree_state()?;
+        let latest_root = tree_state.get_latest_tree().get_root();
+        let batching_root = tree_state.get_batching_tree().get_root();
+        let processed_root = tree_state.get_processed_tree().get_root();
+        let mined_root = tree_state.get_mined_tree().get_root();
 
         tracing::info!("Validating age max_root_age: {max_root_age:?}");
 

@@ -3,7 +3,6 @@
 #![allow(clippy::module_name_repetitions, clippy::wildcard_imports)]
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use clap::Parser;
 use cli_batteries::{run, version};
@@ -40,16 +39,15 @@ async fn sequencer_app(args: Args) -> anyhow::Result<()> {
     let server_config = config.server.clone();
 
     // Create App struct
-    let app = Arc::new(App::new(config).await?);
-    let app_for_server = app.clone();
+    let app = App::new(config).await?;
 
-    let task_monitor = TaskMonitor::new(app);
+    let task_monitor = TaskMonitor::new(app.clone());
 
     // Process to push new identities to Ethereum
     task_monitor.start().await;
 
     // Start server (will stop on shutdown signal)
-    server::run(app_for_server, server_config).await?;
+    server::run(app, server_config).await?;
 
     tracing::info!("Stopping the app");
     task_monitor.shutdown().await?;

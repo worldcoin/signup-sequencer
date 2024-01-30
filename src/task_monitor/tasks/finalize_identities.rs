@@ -40,7 +40,7 @@ pub async fn finalize_roots(app: Arc<App>) -> anyhow::Result<()> {
         finalize_mainnet_roots(
             &app.database,
             &app.identity_manager,
-            app.tree_state.processed_tree(),
+            app.tree_state()?.processed_tree(),
             &mainnet_logs,
             app.config.app.max_epoch_duration,
         )
@@ -52,7 +52,7 @@ pub async fn finalize_roots(app: Arc<App>) -> anyhow::Result<()> {
         finalize_secondary_roots(
             &app.database,
             &app.identity_manager,
-            app.tree_state.mined_tree(),
+            app.tree_state()?.mined_tree(),
             roots,
         )
         .await?;

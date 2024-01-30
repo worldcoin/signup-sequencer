@@ -44,7 +44,7 @@ async fn sequencer_app(args: Args) -> anyhow::Result<()> {
     let task_monitor = TaskMonitor::new(app.clone());
 
     // Process to push new identities to Ethereum
-    tokio::spawn(task_monitor.clone().start());
+    task_monitor.start().await;
 
     // Start server (will stop on shutdown signal)
     server::run(app, server_config).await?;

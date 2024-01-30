@@ -78,15 +78,15 @@ pub struct TaskMonitor {
 }
 
 impl TaskMonitor {
-    pub fn new(app: Arc<App>) -> Arc<Self> {
-        Arc::new(Self {
+    pub fn new(app: Arc<App>) -> Self {
+        Self {
             instance: RwLock::new(None),
             app,
-        })
+        }
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub async fn start(self: Arc<Self>) {
+    pub async fn start(&self) {
         let mut instance = self.instance.write().await;
         if instance.is_some() {
             warn!("Identity committer already running");

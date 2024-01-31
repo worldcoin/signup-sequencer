@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::Address;
-pub use read::{EventError, ReadProvider};
+pub use read::ReadProvider;
 use tracing::instrument;
 pub use write::TxError;
 

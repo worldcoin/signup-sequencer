@@ -1,12 +1,16 @@
 // We include this module in multiple in multiple integration
 // test crates - so some code may not be used in some cases
-#![allow(dead_code, clippy::too_many_arguments)]
+#![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
 
 pub mod abi;
 mod chain_mock;
 mod prover_mock;
 pub mod test_config;
 
+// We include this module in multiple in multiple integration
+// test crates - so some code may not be used in some cases
+#[allow(unused)]
 pub mod prelude {
     pub use std::time::Duration;
 

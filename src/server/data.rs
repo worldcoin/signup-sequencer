@@ -8,15 +8,15 @@ use crate::identity_tree::{
 };
 use crate::prover::{ProverConfig, ProverType};
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct InclusionProofResponse(pub InclusionProof);
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ListBatchSizesResponse(pub Vec<ProverConfig>);
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct VerifySemaphoreProofResponse(pub RootItem);
 

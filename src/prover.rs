@@ -87,6 +87,18 @@ impl std::fmt::Display for ProverType {
     }
 }
 
+impl std::str::FromStr for ProverType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "insertion" => Ok(ProverType::Insertion),
+            "deletion" => Ok(ProverType::Deletion),
+            _ => Err(anyhow::anyhow!("Invalid prover type: {}", s)),
+        }
+    }
+}
+
 impl Hash for ProverConfig {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.batch_size.hash(state);
@@ -391,24 +403,24 @@ impl Display for ProverError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct InsertionProofInput {
-    input_hash:           U256,
-    start_index:          u32,
-    pre_root:             U256,
-    post_root:            U256,
-    identity_commitments: Vec<U256>,
-    merkle_proofs:        Vec<Vec<U256>>,
+pub struct InsertionProofInput {
+    pub input_hash:           U256,
+    pub start_index:          u32,
+    pub pre_root:             U256,
+    pub post_root:            U256,
+    pub identity_commitments: Vec<U256>,
+    pub merkle_proofs:        Vec<Vec<U256>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DeletionProofInput {
-    input_hash:           U256,
-    pre_root:             U256,
-    post_root:            U256,
-    deletion_indices:     Vec<u32>,
-    identity_commitments: Vec<U256>,
-    merkle_proofs:        Vec<Vec<U256>>,
+pub struct DeletionProofInput {
+    pub input_hash:           U256,
+    pub pre_root:             U256,
+    pub post_root:            U256,
+    pub deletion_indices:     Vec<u32>,
+    pub identity_commitments: Vec<U256>,
+    pub merkle_proofs:        Vec<Vec<U256>>,
 }
 
 #[cfg(test)]

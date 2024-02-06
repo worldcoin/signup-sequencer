@@ -57,7 +57,7 @@ pub async fn delete_identities(app: Arc<App>, wake_up_notify: Arc<Notify>) -> an
             }
 
             // Remove the previous commitments from the deletions table
-            app.database.remove_deletions(previous_commitments).await?;
+            app.database.remove_deletions(&previous_commitments).await?;
             wake_up_notify.notify_one();
         }
     }

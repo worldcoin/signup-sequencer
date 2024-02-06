@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use sqlx::prelude::FromRow;
 
 use crate::identity_tree::{Hash, Status, UnprocessedStatus};
 
@@ -11,6 +12,7 @@ pub struct UnprocessedCommitment {
     pub eligibility_timestamp: DateTime<Utc>,
 }
 
+#[derive(FromRow)]
 pub struct RecoveryEntry {
     pub existing_commitment: Hash,
     pub new_commitment:      Hash,

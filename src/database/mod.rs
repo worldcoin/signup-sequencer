@@ -9,6 +9,7 @@ use std::collections::HashSet;
 
 use anyhow::{anyhow, Context, Error as ErrReport};
 use chrono::{DateTime, Utc};
+use ruint::aliases::U256;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
 use sqlx::{Executor, Pool, Postgres, Row};
@@ -707,25 +708,36 @@ impl Database {
         Ok(())
     }
 
-    // TODO: consider using a larger value than i64 for leaf index, ruint should
-    // have postgres compatibility for u256
     pub async fn get_recoveries(&self) -> Result<Vec<RecoveryEntry>, Error> {
-        let query = sqlx::query(
+        Ok(
+            sqlx::query_as::<_, RecoveryEntry>("SELECT * FROM recoveries")
+                .fetch_all(&self.pool)
+                .await?,
+        )
+    }
+
+    pub async fn find_recoveries_by_prev_commit(
+        &self,
+        prev_commits: &[U256],
+    ) -> Result<Vec<RecoveryEntry>, Error> {
+        // TODO: upstream PgHasArrayType impl to ruint
+        let prev_commits = prev_commits
+            .iter()
+            .map(|c| c.to_be_bytes())
+            .collect::<Vec<[u8; 32]>>();
+
+        let res = sqlx::query_as::<_, RecoveryEntry>(
             r#"
             SELECT *
             FROM recoveries
+            WHERE existing_commitment = ANY($1)
             "#,
-        );
+        )
+        .bind(&prev_commits)
+        .fetch_all(&self.pool)
+        .await?;
 
-        let result = self.pool.fetch_all(query).await?;
-
-        Ok(result
-            .into_iter()
-            .map(|row| RecoveryEntry {
-                existing_commitment: row.get::<Hash, _>(0),
-                new_commitment:      row.get::<Hash, _>(1),
-            })
-            .collect::<Vec<RecoveryEntry>>())
+        Ok(res)
     }
 
     pub async fn insert_new_deletion(
@@ -768,26 +780,16 @@ impl Database {
     }
 
     /// Remove a list of entries from the deletions table
-    pub async fn remove_deletions(&self, commitments: Vec<Hash>) -> Result<(), Error> {
-        let placeholders: String = commitments
+    pub async fn remove_deletions(&self, commitments: &[Hash]) -> Result<(), Error> {
+        let commitments = commitments
             .iter()
-            .enumerate()
-            .map(|(i, _)| format!("${}", i + 1))
-            .collect::<Vec<String>>()
-            .join(", ");
+            .map(|c| c.to_be_bytes())
+            .collect::<Vec<[u8; 32]>>();
 
-        let query = format!(
-            "DELETE FROM deletions WHERE commitment IN ({})",
-            placeholders
-        );
-
-        let mut query = sqlx::query(&query);
-
-        for commitment in &commitments {
-            query = query.bind(commitment);
-        }
-
-        query.execute(&self.pool).await?;
+        sqlx::query("DELETE FROM deletions WHERE commitment = Any($1)")
+            .bind(commitments)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }
@@ -1337,6 +1339,25 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_find_recoveries_from_prev() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let old_identities = mock_identities(3);
+        let new_identities = mock_identities(3);
+
+        for (old, new) in old_identities.clone().into_iter().zip(new_identities) {
+            db.insert_new_recovery(&old, &new).await?;
+        }
+
+        let recoveries = db
+            .find_recoveries_by_prev_commit(&old_identities[0..2])
+            .await?;
+        assert_eq!(recoveries.len(), 2);
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn get_last_leaf_index() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
@@ -1831,7 +1852,7 @@ mod test {
             .context("Inserting new identity")?;
 
         // Remove identities 0 to 2
-        db.remove_deletions(identities[0..=2].to_vec()).await?;
+        db.remove_deletions(&identities[0..=2]).await?;
         let deletions = db.get_deletions().await?;
 
         assert_eq!(deletions.len(), 1);

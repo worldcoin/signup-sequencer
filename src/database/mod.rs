@@ -4,6 +4,7 @@
     clippy::cast_possible_wrap
 )]
 
+use std::cmp::Ordering;
 use std::collections::HashSet;
 
 use anyhow::{anyhow, Context, Error as ErrReport};
@@ -70,46 +71,54 @@ impl Database {
         }
 
         // Validate database schema version
-        #[allow(deprecated)] // HACK: No good alternative to `version()`?
-        if let Some((version, dirty)) = pool.acquire().await?.version().await? {
-            if dirty {
+        let mut conn = pool.acquire().await?;
+
+        if conn.dirty_version().await?.is_some() {
+            error!(
+                url = %&config.database,
+                version,
+                expected = latest,
+                "Database is in incomplete migration state.",
+            );
+            return Err(anyhow!("Database is in incomplete migration state."));
+        }
+
+        let version = conn
+            .list_applied_migrations()
+            .await?
+            .last()
+            .expect("Missing migrations")
+            .version;
+
+        match version.cmp(&latest) {
+            Ordering::Less => {
                 error!(
                     url = %&config.database,
                     version,
                     expected = latest,
-                    "Database is in incomplete migration state.",
-                );
-                return Err(anyhow!("Database is in incomplete migration state."));
-            } else if version < latest {
-                error!(
-                    url = %&config.database,
-                    version,
-                    expected = latest,
-                    "Database is not up to date, try rerunning with --database-migrate",
-                );
+                    "Database is not up to date, try rerunning with --database-migrate",         );
                 return Err(anyhow!(
                     "Database is not up to date, try rerunning with --database-migrate"
                 ));
-            } else if version > latest {
+            }
+            Ordering::Greater => {
                 error!(
                     url = %&config.database,
                     version,
                     latest,
-                    "Database version is newer than this version of the software, please update.",
-                );
+                    "Database version is newer than this version of the software, please update.",         );
                 return Err(anyhow!(
                     "Database version is newer than this version of the software, please update."
                 ));
             }
-            info!(
-                url = %&config.database,
-                version,
-                latest,
-                "Database version is up to date.",
-            );
-        } else {
-            error!(url = %&config.database, "Could not get database version");
-            return Err(anyhow!("Could not get database version."));
+            Ordering::Equal => {
+                info!(
+                    url = %&config.database,
+                    version,
+                    latest,
+                    "Database version is up to date.",
+                );
+            }
         }
 
         Ok(Self { pool })
@@ -174,7 +183,7 @@ impl Database {
 
         let mut tx = self.pool.begin().await?;
 
-        let root_id = Self::get_id_by_root(&mut tx, root).await?;
+        let root_id = Self::get_id_by_root(tx.as_mut(), root).await?;
 
         let Some(root_id) = root_id else {
             return Err(Error::MissingRoot { root: *root });
@@ -240,7 +249,7 @@ impl Database {
 
         let mut tx = self.pool.begin().await?;
 
-        let root_id = Self::get_id_by_root(&mut tx, root).await?;
+        let root_id = Self::get_id_by_root(tx.as_mut(), root).await?;
 
         let Some(root_id) = root_id else {
             return Err(Error::MissingRoot { root: *root });

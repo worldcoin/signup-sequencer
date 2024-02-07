@@ -8,6 +8,7 @@ use tracing::info;
 
 use crate::app::App;
 use crate::database::types::DeletionEntry;
+use crate::database::DatabaseExt;
 use crate::identity_tree::Hash;
 
 pub async fn delete_identities(app: Arc<App>, wake_up_notify: Arc<Notify>) -> anyhow::Result<()> {

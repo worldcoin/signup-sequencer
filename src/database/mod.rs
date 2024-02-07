@@ -6,6 +6,7 @@
 
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use std::ops::Deref;
 
 use anyhow::{anyhow, Context, Error as ErrReport};
 use chrono::{DateTime, Utc};
@@ -31,7 +32,123 @@ static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 const MAX_UNPROCESSED_FETCH_COUNT: i64 = 10_000;
 
 pub struct Database {
-    pool: Pool<Postgres>,
+    pub pool: Pool<Postgres>,
+}
+
+impl Deref for Database {
+    type Target = Pool<Postgres>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.pool
+    }
+}
+
+impl<'a, T> DatabaseExt<'a> for T where T: Executor<'a, Database = Postgres> {}
+
+pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
+    async fn insert_pending_identity(
+        self,
+        leaf_index: usize,
+        identity: &Hash,
+        root: &Hash,
+    ) -> Result<(), Error> {
+        let insert_pending_identity_query = sqlx::query(
+            r#"
+            INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of)
+            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+            "#,
+        )
+        .bind(leaf_index as i64)
+        .bind(identity)
+        .bind(root)
+        .bind(<&str>::from(ProcessedStatus::Pending));
+
+        self.execute(insert_pending_identity_query).await?;
+
+        Ok(())
+    }
+
+    async fn get_id_by_root(self, root: &Hash) -> Result<Option<usize>, Error> {
+        let root_index_query = sqlx::query(
+            r#"
+            SELECT id
+            FROM identities
+            WHERE root = $1
+            ORDER BY id ASC
+            LIMIT 1
+            "#,
+        )
+        .bind(root);
+
+        let row = self.fetch_optional(root_index_query).await?;
+
+        let Some(row) = row else { return Ok(None) };
+        let root_id = row.get::<i64, _>(0);
+
+        Ok(Some(root_id as usize))
+    }
+
+    /// Marks all the identities in the db as
+    #[instrument(skip(self), level = "debug")]
+    async fn mark_all_as_pending(self) -> Result<(), Error> {
+        let pending_status = ProcessedStatus::Pending;
+
+        let update_all_identities = sqlx::query(
+            r#"
+                UPDATE identities
+                SET    status = $1, mined_at = NULL
+                WHERE  status <> $1
+                "#,
+        )
+        .bind(<&str>::from(pending_status));
+
+        self.execute(update_all_identities).await?;
+
+        Ok(())
+    }
+
+    async fn get_next_leaf_index(self) -> Result<usize, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT leaf_index FROM identities
+            ORDER BY leaf_index DESC
+            LIMIT 1
+            "#,
+        );
+
+        let row = self.fetch_optional(query).await?;
+
+        let Some(row) = row else { return Ok(0) };
+        let leaf_index = row.get::<i64, _>(0);
+
+        Ok((leaf_index + 1) as usize)
+    }
+
+    async fn get_identity_leaf_index(self, identity: &Hash) -> Result<Option<TreeItem>, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT leaf_index, status
+            FROM identities
+            WHERE commitment = $1
+            ORDER BY id DESC
+            LIMIT 1;
+            "#,
+        )
+        .bind(identity);
+
+        let Some(row) = self.fetch_optional(query).await? else {
+            return Ok(None);
+        };
+
+        let leaf_index = row.get::<i64, _>(0) as usize;
+
+        let status = row
+            .get::<&str, _>(1)
+            .parse()
+            .expect("Status is unreadable, database is corrupt");
+
+        Ok(Some(TreeItem { status, leaf_index }))
+    }
 }
 
 impl Database {
@@ -125,55 +242,6 @@ impl Database {
         Ok(Self { pool })
     }
 
-    pub async fn insert_pending_identity(
-        &self,
-        leaf_index: usize,
-        identity: &Hash,
-        root: &Hash,
-    ) -> Result<(), Error> {
-        let mut tx = self.pool.begin().await?;
-
-        let insert_pending_identity_query = sqlx::query(
-            r#"
-            INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of)
-            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-            "#,
-        )
-        .bind(leaf_index as i64)
-        .bind(identity)
-        .bind(root)
-        .bind(<&str>::from(ProcessedStatus::Pending));
-
-        tx.execute(insert_pending_identity_query).await?;
-
-        tx.commit().await?;
-
-        Ok(())
-    }
-
-    pub async fn get_id_by_root(
-        tx: impl Executor<'_, Database = Postgres>,
-        root: &Hash,
-    ) -> Result<Option<usize>, Error> {
-        let root_index_query = sqlx::query(
-            r#"
-            SELECT id
-            FROM identities
-            WHERE root = $1
-            ORDER BY id ASC
-            LIMIT 1
-            "#,
-        )
-        .bind(root);
-
-        let row = tx.fetch_optional(root_index_query).await?;
-
-        let Some(row) = row else { return Ok(None) };
-        let root_id = row.get::<i64, _>(0);
-
-        Ok(Some(root_id as usize))
-    }
-
     /// Marks the identities and roots from before a given root hash as mined
     /// Also marks following roots as pending
     #[instrument(skip(self), level = "debug")]
@@ -184,7 +252,7 @@ impl Database {
 
         let mut tx = self.pool.begin().await?;
 
-        let root_id = Self::get_id_by_root(tx.as_mut(), root).await?;
+        let root_id = tx.get_id_by_root(root).await?;
 
         let Some(root_id) = root_id else {
             return Err(Error::MissingRoot { root: *root });
@@ -223,25 +291,6 @@ impl Database {
         Ok(())
     }
 
-    /// Marks all the identities in the db as
-    #[instrument(skip(self), level = "debug")]
-    pub async fn mark_all_as_pending(&self) -> Result<(), Error> {
-        let pending_status = ProcessedStatus::Pending;
-
-        let update_all_identities = sqlx::query(
-            r#"
-            UPDATE identities
-            SET    status = $1, mined_at = NULL
-            WHERE  status <> $1
-            "#,
-        )
-        .bind(<&str>::from(pending_status));
-
-        self.pool.execute(update_all_identities).await?;
-
-        Ok(())
-    }
-
     /// Marks the identities and roots from before a given root hash as
     /// finalized
     #[instrument(skip(self), level = "debug")]
@@ -249,8 +298,10 @@ impl Database {
         let mined_status = ProcessedStatus::Mined;
 
         let mut tx = self.pool.begin().await?;
+        tx.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;")
+            .await?;
 
-        let root_id = Self::get_id_by_root(tx.as_mut(), root).await?;
+        let root_id = tx.get_id_by_root(root).await?;
 
         let Some(root_id) = root_id else {
             return Err(Error::MissingRoot { root: *root });
@@ -274,52 +325,6 @@ impl Database {
         tx.commit().await?;
 
         Ok(())
-    }
-
-    pub async fn get_next_leaf_index(&self) -> Result<usize, Error> {
-        let query = sqlx::query(
-            r#"
-            SELECT leaf_index FROM identities
-            ORDER BY leaf_index DESC
-            LIMIT 1
-            "#,
-        );
-
-        let row = self.pool.fetch_optional(query).await?;
-
-        let Some(row) = row else { return Ok(0) };
-        let leaf_index = row.get::<i64, _>(0);
-
-        Ok((leaf_index + 1) as usize)
-    }
-
-    pub async fn get_identity_leaf_index(
-        &self,
-        identity: &Hash,
-    ) -> Result<Option<TreeItem>, Error> {
-        let query = sqlx::query(
-            r#"
-            SELECT leaf_index, status
-            FROM identities
-            WHERE commitment = $1
-            ORDER BY id DESC
-            LIMIT 1;
-            "#,
-        )
-        .bind(identity);
-
-        let Some(row) = self.pool.fetch_optional(query).await? else {
-            return Ok(None);
-        };
-
-        let leaf_index = row.get::<i64, _>(0) as usize;
-
-        let status = row
-            .get::<&str, _>(1)
-            .parse()
-            .expect("Status is unreadable, database is corrupt");
-
-        Ok(Some(TreeItem { status, leaf_index }))
     }
 
     pub async fn get_commitments_by_status(
@@ -911,6 +916,7 @@ mod test {
 
     use super::Database;
     use crate::config::DatabaseConfig;
+    use crate::database::DatabaseExt as _;
     use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
     use crate::prover::{ProverConfig, ProverType};
     use crate::utils::secret::SecretUrl;

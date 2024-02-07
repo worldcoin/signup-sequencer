@@ -10,7 +10,7 @@ use tracing::{info, instrument, warn};
 
 use crate::config::Config;
 use crate::contracts::{IdentityManager, SharedIdentityManager};
-use crate::database::Database;
+use crate::database::{Database, DatabaseExt as _};
 use crate::ethereum::Ethereum;
 use crate::identity_tree::{
     CanonicalTreeBuilder, Hash, InclusionProof, ProcessedStatus, RootItem, Status, TreeState,

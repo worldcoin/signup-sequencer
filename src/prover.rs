@@ -23,6 +23,7 @@ use once_cell::sync::Lazy;
 use prometheus::{exponential_buckets, register_histogram, Histogram};
 pub use proof::Proof;
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 use url::Url;
 
 use crate::prover::identity::Identity;
@@ -51,18 +52,20 @@ static PROVER_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
 
 /// Configuration options for the component responsible for interacting with the
 /// prover service.
-#[derive(Clone, Debug, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Serialize, Deserialize, FromRow)]
 pub struct ProverConfig {
     /// The URL at which to contact the semaphore prover service for proof
     /// generation.
     pub url: String,
 
     /// The number of seconds to wait before timing out the transaction.
+    #[sqlx(try_from = "i64")]
     pub timeout_s: u64,
 
     // TODO Add and query a prover `info` endpoint instead.
     /// The batch size that the prover is set up to work with. This must match
     /// the deployed prover.
+    #[sqlx(try_from = "i64")]
     pub batch_size: usize,
 
     // TODO: add docs

@@ -7,6 +7,7 @@ use semaphore::merkle_tree::Hasher;
 use semaphore::poseidon_tree::{PoseidonHash, Proof};
 use semaphore::{lazy_merkle_tree, Field};
 use serde::Serialize;
+use sqlx::prelude::FromRow;
 use tracing::{info, warn};
 
 mod status;
@@ -16,8 +17,9 @@ pub type Hash = <PoseidonHash as Hasher>::Hash;
 
 pub use self::status::{ProcessedStatus, Status, UnknownStatus, UnprocessedStatus};
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, FromRow)]
 pub struct TreeUpdate {
+    #[sqlx(try_from = "i64")]
     pub leaf_index: usize,
     pub element:    Hash,
 }
@@ -38,10 +40,11 @@ pub struct TreeItem {
     pub leaf_index: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct RootItem {
     pub root:                Field,
+    #[sqlx(try_from = "&'a str")]
     pub status:              ProcessedStatus,
     pub pending_valid_as_of: chrono::DateTime<Utc>,
     pub mined_valid_as_of:   Option<chrono::DateTime<Utc>>,

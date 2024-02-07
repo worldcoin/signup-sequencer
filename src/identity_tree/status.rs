@@ -63,6 +63,14 @@ impl FromStr for ProcessedStatus {
     }
 }
 
+impl TryFrom<&str> for ProcessedStatus {
+    type Error = UnknownStatus;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        ProcessedStatus::from_str(s)
+    }
+}
+
 impl From<ProcessedStatus> for &str {
     fn from(scope: ProcessedStatus) -> Self {
         match scope {

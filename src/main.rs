@@ -1,6 +1,10 @@
 #![doc = include_str!("../Readme.md")]
 #![warn(clippy::cargo)]
-#![allow(clippy::module_name_repetitions, clippy::wildcard_imports)]
+#![allow(
+    clippy::module_name_repetitions,
+    clippy::wildcard_imports,
+    clippy::multiple_crate_versions
+)]
 
 use std::path::PathBuf;
 

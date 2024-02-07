@@ -174,7 +174,7 @@ impl App {
     pub fn get_leftover_leaves_and_update_index(
         index: &mut usize,
         dense_prefix_depth: usize,
-        mined_items: &Vec<TreeUpdate>,
+        mined_items: &[TreeUpdate],
     ) -> Vec<ruint::Uint<256, 4>> {
         let leftover_items = if mined_items.is_empty() {
             vec![]

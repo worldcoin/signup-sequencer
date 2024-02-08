@@ -374,14 +374,21 @@ impl App {
         Ok(())
     }
 
+    pub async fn delete_identity(&self, commitment: &Hash) -> Result<(), ServerError> {
+        let mut tx = self.database.begin().await?;
+        self.delete_identity_tx(&mut tx, commitment).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     /// Queues a deletion from the merkle tree.
     ///
     /// # Errors
     ///
     /// Will return `Err` if identity is already queued, not in the tree, or the
     /// queue malfunctions.
-    #[instrument(level = "debug", skip(self))]
-    pub async fn delete_identity(
+    #[instrument(level = "debug", skip(self, tx))]
+    pub async fn delete_identity_tx(
         &self,
         tx: &mut Transaction<'_, Postgres>,
         commitment: &Hash,
@@ -412,11 +419,7 @@ impl App {
         }
 
         // Check if the id is already queued for deletion
-        if self
-            .database
-            .identity_is_queued_for_deletion(commitment)
-            .await?
-        {
+        if tx.identity_is_queued_for_deletion(commitment).await? {
             return Err(ServerError::IdentityQueuedForDeletion);
         }
 
@@ -428,9 +431,7 @@ impl App {
         }
 
         // If the id has not been deleted, insert into the deletions table
-        self.database
-            .insert_new_deletion(leaf_index, commitment)
-            .await?;
+        tx.insert_new_deletion(leaf_index, commitment).await?;
 
         Ok(())
     }
@@ -473,16 +474,20 @@ impl App {
             return Err(ServerError::UnreducedCommitment);
         }
 
-        if self.database.identity_exists(*new_commitment).await? {
+        let mut tx = self.database.begin().await?;
+
+        if tx.identity_exists(*new_commitment).await? {
             return Err(ServerError::DuplicateCommitment);
         }
 
         // Delete the existing id and insert the commitments into the recovery table
-        self.delete_identity(existing_commitment).await?;
-
-        self.database
-            .insert_new_recovery(existing_commitment, new_commitment)
+        self.delete_identity_tx(&mut tx, existing_commitment)
             .await?;
+
+        tx.insert_new_recovery(existing_commitment, new_commitment)
+            .await?;
+
+        tx.commit().await?;
 
         Ok(())
     }

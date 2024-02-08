@@ -59,6 +59,13 @@ impl Database {
         // Create a connection pool
         let pool = PoolOptions::<Postgres>::new()
             .max_connections(config.max_connections)
+            .after_connect(|conn, _| {
+                Box::pin(async move {
+                    conn.execute("SET DEFAULT_TRANSACTION_ISOLATION TO 'SERIALIZABLE'")
+                        .await?;
+                    Ok(())
+                })
+            })
             .connect(config.database.expose())
             .await
             .context("error connecting to database")?;
@@ -188,8 +195,6 @@ impl Database {
         let mined_status = ProcessedStatus::Mined;
 
         let mut tx = self.pool.begin().await?;
-        tx.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;")
-            .await?;
 
         let root_id = tx.get_id_by_root(root).await?;
 

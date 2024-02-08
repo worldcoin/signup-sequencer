@@ -6,6 +6,7 @@ use chrono::{Duration, Utc};
 use ruint::Uint;
 use semaphore::poseidon_tree::LazyPoseidonTree;
 use semaphore::protocol::verify_proof;
+use sqlx::{Postgres, Transaction};
 use tracing::{info, instrument, warn};
 
 use crate::config::Config;
@@ -380,7 +381,11 @@ impl App {
     /// Will return `Err` if identity is already queued, not in the tree, or the
     /// queue malfunctions.
     #[instrument(level = "debug", skip(self))]
-    pub async fn delete_identity(&self, commitment: &Hash) -> Result<(), ServerError> {
+    pub async fn delete_identity(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        commitment: &Hash,
+    ) -> Result<(), ServerError> {
         // Ensure that deletion provers exist
         if !self.identity_manager.has_deletion_provers().await {
             warn!(
@@ -390,13 +395,12 @@ impl App {
             return Err(ServerError::NoProversOnIdDeletion);
         }
 
-        if !self.database.identity_exists(*commitment).await? {
+        if !tx.identity_exists(*commitment).await? {
             return Err(ServerError::IdentityCommitmentNotFound);
         }
 
         // Get the leaf index for the id commitment
-        let leaf_index = self
-            .database
+        let leaf_index = tx
             .get_identity_leaf_index(commitment)
             .await?
             .ok_or(ServerError::IdentityCommitmentNotFound)?
@@ -419,8 +423,8 @@ impl App {
         // Check if there are any deletions, if not, set the latest deletion timestamp
         // to now to ensure that the new deletion is processed by the next deletion
         // interval
-        if self.database.get_deletions().await?.is_empty() {
-            self.database.update_latest_deletion(Utc::now()).await?;
+        if tx.get_deletions().await?.is_empty() {
+            tx.update_latest_deletion(Utc::now()).await?;
         }
 
         // If the id has not been deleted, insert into the deletions table

@@ -303,15 +303,6 @@ impl Database {
             .into_iter()
             .collect())
     }
-
-    // TODO: add docs
-    pub async fn identity_is_queued_for_deletion(&self, commitment: &Hash) -> Result<bool, Error> {
-        let query_queued_deletion =
-            sqlx::query(r#"SELECT exists(SELECT 1 FROM deletions where commitment = $1)"#)
-                .bind(commitment);
-        let row_unprocessed = self.pool.fetch_one(query_queued_deletion).await?;
-        Ok(row_unprocessed.get::<bool, _>(0))
-    }
 }
 
 /// This trait provides the individual and composable queries to the database.
@@ -831,6 +822,15 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
         .fetch_one(self)
         .await?
         .get::<bool, _>(0))
+    }
+
+    // TODO: add docs
+    async fn identity_is_queued_for_deletion(self, commitment: &Hash) -> Result<bool, Error> {
+        let query_queued_deletion =
+            sqlx::query(r#"SELECT exists(SELECT 1 FROM deletions where commitment = $1)"#)
+                .bind(commitment);
+        let row_unprocessed = self.fetch_one(query_queued_deletion).await?;
+        Ok(row_unprocessed.get::<bool, _>(0))
     }
 }
 

@@ -45,6 +45,275 @@ impl Deref for Database {
 
 impl<'a, T> DatabaseExt<'a> for T where T: Executor<'a, Database = Postgres> {}
 
+impl Database {
+    #[instrument(skip_all)]
+    pub async fn new(config: &DatabaseConfig) -> Result<Self, ErrReport> {
+        info!(url = %&config.database, "Connecting to database");
+
+        // Create database if requested and does not exist
+        if config.migrate && !Postgres::database_exists(config.database.expose()).await? {
+            warn!(url = %&config.database, "Database does not exist, creating database");
+            Postgres::create_database(config.database.expose()).await?;
+        }
+
+        // Create a connection pool
+        let pool = PoolOptions::<Postgres>::new()
+            .max_connections(config.max_connections)
+            .connect(config.database.expose())
+            .await
+            .context("error connecting to database")?;
+
+        let version = pool
+            .fetch_one("SELECT version()")
+            .await
+            .context("error getting database version")?
+            .get::<String, _>(0);
+        info!(url = %&config.database, ?version, "Connected to database");
+
+        // Run migrations if requested.
+        let latest = MIGRATOR
+            .migrations
+            .last()
+            .expect("Missing migrations")
+            .version;
+
+        if config.migrate {
+            info!(url = %&config.database, "Running migrations");
+            MIGRATOR.run(&pool).await?;
+        }
+
+        // Validate database schema version
+        let mut conn = pool.acquire().await?;
+
+        if conn.dirty_version().await?.is_some() {
+            error!(
+                url = %&config.database,
+                version,
+                expected = latest,
+                "Database is in incomplete migration state.",
+            );
+            return Err(anyhow!("Database is in incomplete migration state."));
+        }
+
+        let version = conn
+            .list_applied_migrations()
+            .await?
+            .last()
+            .expect("Missing migrations")
+            .version;
+
+        match version.cmp(&latest) {
+            Ordering::Less => {
+                error!(
+                    url = %&config.database,
+                    version,
+                    expected = latest,
+                    "Database is not up to date, try rerunning with --database-migrate",         );
+                return Err(anyhow!(
+                    "Database is not up to date, try rerunning with --database-migrate"
+                ));
+            }
+            Ordering::Greater => {
+                error!(
+                    url = %&config.database,
+                    version,
+                    latest,
+                    "Database version is newer than this version of the software, please update.",         );
+                return Err(anyhow!(
+                    "Database version is newer than this version of the software, please update."
+                ));
+            }
+            Ordering::Equal => {
+                info!(
+                    url = %&config.database,
+                    version,
+                    latest,
+                    "Database version is up to date.",
+                );
+            }
+        }
+
+        Ok(Self { pool })
+    }
+
+    /// Marks the identities and roots from before a given root hash as mined
+    /// Also marks following roots as pending
+    #[instrument(skip(self), level = "debug")]
+    pub async fn mark_root_as_processed(&self, root: &Hash) -> Result<(), Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let root_id = tx.get_id_by_root(root).await?;
+
+        let Some(root_id) = root_id else {
+            return Err(Error::MissingRoot { root: *root });
+        };
+
+        let root_id = root_id as i64;
+        // TODO: Can I get rid of line `AND    status <> $2
+        let update_previous_roots = sqlx::query(
+            r#"
+            UPDATE identities
+            SET    status = $2, mined_at = CURRENT_TIMESTAMP
+            WHERE  id <= $1
+            AND    status <> $2
+            AND    status <> $3;
+            "#,
+        )
+        .bind(root_id)
+        .bind(<&str>::from(ProcessedStatus::Processed))
+        .bind(<&str>::from(ProcessedStatus::Mined));
+
+        let update_next_roots = sqlx::query(
+            r#"
+            UPDATE identities
+            SET    status = $2, mined_at = NULL
+            WHERE  id > $1
+            "#,
+        )
+        .bind(root_id)
+        .bind(<&str>::from(ProcessedStatus::Pending));
+
+        tx.execute(update_previous_roots).await?;
+        tx.execute(update_next_roots).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    /// Marks the identities and roots from before a given root hash as
+    /// finalized
+    #[instrument(skip(self), level = "debug")]
+    pub async fn mark_root_as_mined(&self, root: &Hash) -> Result<(), Error> {
+        let mined_status = ProcessedStatus::Mined;
+
+        let mut tx = self.pool.begin().await?;
+        tx.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;")
+            .await?;
+
+        let root_id = tx.get_id_by_root(root).await?;
+
+        let Some(root_id) = root_id else {
+            return Err(Error::MissingRoot { root: *root });
+        };
+
+        let root_id = root_id as i64;
+
+        let update_previous_roots = sqlx::query(
+            r#"
+            UPDATE identities
+            SET    status = $2
+            WHERE  id <= $1
+            AND    status <> $2
+            "#,
+        )
+        .bind(root_id)
+        .bind(<&str>::from(mined_status));
+
+        tx.execute(update_previous_roots).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    pub async fn get_identity_history_entries(
+        &self,
+        commitment: &Hash,
+    ) -> Result<Vec<CommitmentHistoryEntry>, Error> {
+        let unprocessed = sqlx::query(
+            r#"
+            SELECT commitment, status, eligibility
+            FROM unprocessed_identities
+            WHERE commitment = $1
+        "#,
+        )
+        .bind(commitment);
+
+        let rows = self.pool.fetch_all(unprocessed).await?;
+        let unprocessed_updates = rows
+            .into_iter()
+            .map(|row| {
+                let eligibility_timestamp: DateTime<Utc> = row.get(2);
+                let held_back = Utc::now() < eligibility_timestamp;
+
+                CommitmentHistoryEntry {
+                    leaf_index: None,
+                    commitment: row.get::<Hash, _>(0),
+                    held_back,
+                    status: row
+                        .get::<&str, _>(1)
+                        .parse()
+                        .expect("Failed to parse unprocessed status"),
+                }
+            })
+            .collect::<Vec<CommitmentHistoryEntry>>();
+
+        let leaf_index = self.get_identity_leaf_index(commitment).await?;
+        let Some(leaf_index) = leaf_index else {
+            return Ok(unprocessed_updates);
+        };
+
+        let identity_deletions = sqlx::query(
+            r#"
+            SELECT commitment
+            FROM deletions
+            WHERE leaf_index = $1
+            "#,
+        )
+        .bind(leaf_index.leaf_index as i64);
+
+        let rows = self.pool.fetch_all(identity_deletions).await?;
+        let deletions = rows
+            .into_iter()
+            .map(|_row| CommitmentHistoryEntry {
+                leaf_index: Some(leaf_index.leaf_index),
+                commitment: Hash::ZERO,
+                held_back:  false,
+                status:     UnprocessedStatus::New.into(),
+            })
+            .collect::<Vec<CommitmentHistoryEntry>>();
+
+        let processed_updates = sqlx::query(
+            r#"
+            SELECT commitment, status
+            FROM identities
+            WHERE leaf_index = $1
+            ORDER BY id ASC
+            "#,
+        )
+        .bind(leaf_index.leaf_index as i64);
+
+        let rows = self.pool.fetch_all(processed_updates).await?;
+        let processed_updates: Vec<CommitmentHistoryEntry> = rows
+            .into_iter()
+            .map(|row| CommitmentHistoryEntry {
+                leaf_index: Some(leaf_index.leaf_index),
+                commitment: row.get::<Hash, _>(0),
+                held_back:  false,
+                status:     row
+                    .get::<&str, _>(1)
+                    .parse()
+                    .expect("Status is unreadable, database is corrupt"),
+            })
+            .collect();
+
+        Ok([processed_updates, unprocessed_updates, deletions]
+            .concat()
+            .into_iter()
+            .collect())
+    }
+
+    // TODO: add docs
+    pub async fn identity_is_queued_for_deletion(&self, commitment: &Hash) -> Result<bool, Error> {
+        let query_queued_deletion =
+            sqlx::query(r#"SELECT exists(SELECT 1 FROM deletions where commitment = $1)"#)
+                .bind(commitment);
+        let row_unprocessed = self.pool.fetch_one(query_queued_deletion).await?;
+        Ok(row_unprocessed.get::<bool, _>(0))
+    }
+}
+
 /// This trait provides the individual and composable queries to the database.
 /// Each method is a single atomic query, and can be composed withing a
 /// transaction.
@@ -562,279 +831,6 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
         .fetch_one(self)
         .await?
         .get::<bool, _>(0))
-    }
-}
-
-impl Database {
-    #[instrument(skip_all)]
-    pub async fn new(config: &DatabaseConfig) -> Result<Self, ErrReport> {
-        info!(url = %&config.database, "Connecting to database");
-
-        // Create database if requested and does not exist
-        if config.migrate && !Postgres::database_exists(config.database.expose()).await? {
-            warn!(url = %&config.database, "Database does not exist, creating database");
-            Postgres::create_database(config.database.expose()).await?;
-        }
-
-        // Create a connection pool
-        let pool = PoolOptions::<Postgres>::new()
-            .max_connections(config.max_connections)
-            .connect(config.database.expose())
-            .await
-            .context("error connecting to database")?;
-
-        let version = pool
-            .fetch_one("SELECT version()")
-            .await
-            .context("error getting database version")?
-            .get::<String, _>(0);
-        info!(url = %&config.database, ?version, "Connected to database");
-
-        // Run migrations if requested.
-        let latest = MIGRATOR
-            .migrations
-            .last()
-            .expect("Missing migrations")
-            .version;
-
-        if config.migrate {
-            info!(url = %&config.database, "Running migrations");
-            MIGRATOR.run(&pool).await?;
-        }
-
-        // Validate database schema version
-        let mut conn = pool.acquire().await?;
-
-        if conn.dirty_version().await?.is_some() {
-            error!(
-                url = %&config.database,
-                version,
-                expected = latest,
-                "Database is in incomplete migration state.",
-            );
-            return Err(anyhow!("Database is in incomplete migration state."));
-        }
-
-        let version = conn
-            .list_applied_migrations()
-            .await?
-            .last()
-            .expect("Missing migrations")
-            .version;
-
-        match version.cmp(&latest) {
-            Ordering::Less => {
-                error!(
-                    url = %&config.database,
-                    version,
-                    expected = latest,
-                    "Database is not up to date, try rerunning with --database-migrate",         );
-                return Err(anyhow!(
-                    "Database is not up to date, try rerunning with --database-migrate"
-                ));
-            }
-            Ordering::Greater => {
-                error!(
-                    url = %&config.database,
-                    version,
-                    latest,
-                    "Database version is newer than this version of the software, please update.",         );
-                return Err(anyhow!(
-                    "Database version is newer than this version of the software, please update."
-                ));
-            }
-            Ordering::Equal => {
-                info!(
-                    url = %&config.database,
-                    version,
-                    latest,
-                    "Database version is up to date.",
-                );
-            }
-        }
-
-        Ok(Self { pool })
-    }
-
-    /// Marks the identities and roots from before a given root hash as mined
-    /// Also marks following roots as pending
-    #[instrument(skip(self), level = "debug")]
-    pub async fn mark_root_as_processed(&self, root: &Hash) -> Result<(), Error> {
-        let mined_status = ProcessedStatus::Mined;
-        let processed_status = ProcessedStatus::Processed;
-        let pending_status = ProcessedStatus::Pending;
-
-        let mut tx = self.pool.begin().await?;
-
-        let root_id = tx.get_id_by_root(root).await?;
-
-        let Some(root_id) = root_id else {
-            return Err(Error::MissingRoot { root: *root });
-        };
-
-        let root_id = root_id as i64;
-        // TODO: Can I get rid of line `AND    status <> $2
-        let update_previous_roots = sqlx::query(
-            r#"
-            UPDATE identities
-            SET    status = $2, mined_at = CURRENT_TIMESTAMP
-            WHERE  id <= $1
-            AND    status <> $2
-            AND    status <> $3
-            "#,
-        )
-        .bind(root_id)
-        .bind(<&str>::from(processed_status))
-        .bind(<&str>::from(mined_status));
-
-        let update_next_roots = sqlx::query(
-            r#"
-            UPDATE identities
-            SET    status = $2, mined_at = NULL
-            WHERE  id > $1
-            "#,
-        )
-        .bind(root_id)
-        .bind(<&str>::from(pending_status));
-
-        tx.execute(update_previous_roots).await?;
-        tx.execute(update_next_roots).await?;
-
-        tx.commit().await?;
-
-        Ok(())
-    }
-
-    /// Marks the identities and roots from before a given root hash as
-    /// finalized
-    #[instrument(skip(self), level = "debug")]
-    pub async fn mark_root_as_mined(&self, root: &Hash) -> Result<(), Error> {
-        let mined_status = ProcessedStatus::Mined;
-
-        let mut tx = self.pool.begin().await?;
-        tx.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;")
-            .await?;
-
-        let root_id = tx.get_id_by_root(root).await?;
-
-        let Some(root_id) = root_id else {
-            return Err(Error::MissingRoot { root: *root });
-        };
-
-        let root_id = root_id as i64;
-
-        let update_previous_roots = sqlx::query(
-            r#"
-            UPDATE identities
-            SET    status = $2
-            WHERE  id <= $1
-            AND    status <> $2
-            "#,
-        )
-        .bind(root_id)
-        .bind(<&str>::from(mined_status));
-
-        tx.execute(update_previous_roots).await?;
-
-        tx.commit().await?;
-
-        Ok(())
-    }
-
-    pub async fn get_identity_history_entries(
-        &self,
-        commitment: &Hash,
-    ) -> Result<Vec<CommitmentHistoryEntry>, Error> {
-        let unprocessed = sqlx::query(
-            r#"
-            SELECT commitment, status, eligibility
-            FROM unprocessed_identities
-            WHERE commitment = $1
-        "#,
-        )
-        .bind(commitment);
-
-        let rows = self.pool.fetch_all(unprocessed).await?;
-        let unprocessed_updates = rows
-            .into_iter()
-            .map(|row| {
-                let eligibility_timestamp: DateTime<Utc> = row.get(2);
-                let held_back = Utc::now() < eligibility_timestamp;
-
-                CommitmentHistoryEntry {
-                    leaf_index: None,
-                    commitment: row.get::<Hash, _>(0),
-                    held_back,
-                    status: row
-                        .get::<&str, _>(1)
-                        .parse()
-                        .expect("Failed to parse unprocessed status"),
-                }
-            })
-            .collect::<Vec<CommitmentHistoryEntry>>();
-
-        let leaf_index = self.get_identity_leaf_index(commitment).await?;
-        let Some(leaf_index) = leaf_index else {
-            return Ok(unprocessed_updates);
-        };
-
-        let identity_deletions = sqlx::query(
-            r#"
-            SELECT commitment
-            FROM deletions
-            WHERE leaf_index = $1
-            "#,
-        )
-        .bind(leaf_index.leaf_index as i64);
-
-        let rows = self.pool.fetch_all(identity_deletions).await?;
-        let deletions = rows
-            .into_iter()
-            .map(|_row| CommitmentHistoryEntry {
-                leaf_index: Some(leaf_index.leaf_index),
-                commitment: Hash::ZERO,
-                held_back:  false,
-                status:     UnprocessedStatus::New.into(),
-            })
-            .collect::<Vec<CommitmentHistoryEntry>>();
-
-        let processed_updates = sqlx::query(
-            r#"
-            SELECT commitment, status
-            FROM identities
-            WHERE leaf_index = $1
-            ORDER BY id ASC
-            "#,
-        )
-        .bind(leaf_index.leaf_index as i64);
-
-        let rows = self.pool.fetch_all(processed_updates).await?;
-        let processed_updates: Vec<CommitmentHistoryEntry> = rows
-            .into_iter()
-            .map(|row| CommitmentHistoryEntry {
-                leaf_index: Some(leaf_index.leaf_index),
-                commitment: row.get::<Hash, _>(0),
-                held_back:  false,
-                status:     row
-                    .get::<&str, _>(1)
-                    .parse()
-                    .expect("Status is unreadable, database is corrupt"),
-            })
-            .collect();
-
-        Ok([processed_updates, unprocessed_updates, deletions]
-            .concat()
-            .into_iter()
-            .collect())
-    }
-
-    // TODO: add docs
-    pub async fn identity_is_queued_for_deletion(&self, commitment: &Hash) -> Result<bool, Error> {
-        let query_queued_deletion =
-            sqlx::query(r#"SELECT exists(SELECT 1 FROM deletions where commitment = $1)"#)
-                .bind(commitment);
-        let row_unprocessed = self.pool.fetch_one(query_queued_deletion).await?;
-        Ok(row_unprocessed.get::<bool, _>(0))
     }
 }
 

@@ -598,12 +598,13 @@ pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, Socket
     let listener = TcpListener::bind(server_config.address).expect("Failed to bind random port");
     let local_addr = listener.local_addr()?;
 
-    // For our tests to work we need the tree to be initialised so we
-    // need to sleep for a short moment.
+    // For our tests to work we need the tree to be initialized.
     while app.tree_state().is_err() {
         trace!("Waiting for the tree to be initialized");
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
+
+    check_health(&local_addr).await?;
 
     let app = spawn({
         async move {
@@ -616,6 +617,25 @@ pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, Socket
     });
 
     Ok((app, local_addr))
+}
+
+pub async fn check_health(socket_addr: &SocketAddr) -> anyhow::Result<()> {
+    let uri = format!("http://{}", socket_addr);
+    let client = Client::new();
+    let req = Request::builder()
+        .method("GET")
+        .uri(uri.to_owned() + "/health")
+        .body(Body::empty())
+        .expect("Failed to create health check hyper::Body");
+    let response = client
+        .request(req)
+        .await
+        .context("Failed to execute health check request.")?;
+    if !response.status().is_success() {
+        anyhow::bail!("Health check failed");
+    }
+
+    Ok(())
 }
 
 #[derive(Deserialize, Serialize, Debug)]

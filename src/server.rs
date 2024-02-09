@@ -152,6 +152,7 @@ pub async fn bind_from_listener(
     listener: TcpListener,
 ) -> anyhow::Result<()> {
     let router = Router::new()
+        // Operate on identity commitments
         .route("/verifySemaphoreProof", post(verify_semaphore_proof))
         .route("/inclusionProof", post(inclusion_proof))
         .route("/insertIdentity", post(insert_identity))
@@ -162,6 +163,8 @@ pub async fn bind_from_listener(
         .route("/addBatchSize", post(add_batch_size))
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
+        // Health check, return 200 OK
+        .route("/health", get(()))
         .layer(middleware::from_fn(
             custom_middleware::api_metrics_layer::middleware,
         ))

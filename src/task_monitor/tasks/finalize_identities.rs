@@ -245,8 +245,6 @@ fn extract_roots_from_secondary_logs(logs: &[Log]) -> Vec<U256> {
     roots
 }
 
-use crate::identity_tree::Hash;
-
 async fn update_eligible_recoveries(
     database: &Database,
     identity_manager: &IdentityManager,
@@ -266,16 +264,6 @@ async fn update_eligible_recoveries(
         .map(std::convert::Into::into)
         .collect();
 
-    // Check if any deleted commitments correspond with entries in the
-    // recoveries table and insert the new commitment into the unprocessed
-    // identities table with the proper eligibility timestamp
-    let recoveries = database
-        .get_recoveries()
-        .await?
-        .iter()
-        .map(|f| (f.existing_commitment, f.new_commitment))
-        .collect::<HashMap<Hash, Hash>>();
-
     // Fetch the root history expiry time on chain
     let root_history_expiry = identity_manager.root_history_expiry().await?;
 
@@ -289,15 +277,21 @@ async fn update_eligible_recoveries(
 
     let eligibility_timestamp = Utc::now() + delay;
 
+    let mut tx = database.begin().await?;
+
+    // Check if any deleted commitments correspond with entries in the
+    // recoveries table and insert the new commitment into the unprocessed
+    // identities table with the proper eligibility timestamp
+    let deleted_recoveries = tx.delete_recoveries(commitments).await?;
+
     // For each deletion, if there is a corresponding recovery, insert a new
     // identity with the specified eligibility timestamp
-    for prev_commitment in commitments {
-        if let Some(new_commitment) = recoveries.get(&prev_commitment.into()) {
-            database
-                .insert_new_identity(*new_commitment, eligibility_timestamp)
-                .await?;
-        }
+    for recovery in deleted_recoveries {
+        tx.insert_new_identity(recovery.new_commitment, eligibility_timestamp)
+            .await?;
     }
+
+    tx.commit().await?;
 
     Ok(())
 }

@@ -94,9 +94,32 @@ docker run --rm -ti -p 5432:5432 -e POSTGRES_PASSWORD=password postgres
 
 Now you are ready to start up sequencer service!
 
-```shell
-TREE_DEPTH=*your tree depth (eg. 16)* cargo run -- --batch-size *batch size for semaphore-mtb (eg. 3)* --batch-timeout-seconds 10 --database postgres://postgres:password@0.0.0.0:5432 --identity-manager-address *address from worldcoin id contracts identity manager*
---signing-key *private key you used to deploy smart contracts*
+You will also need a relayer (which is part of critical infrastructue and is not open sourced) - you can configure sitter to be between [tx-sitter-monolith](https://github.com/worldcoin/tx-sitter-monolith) (if you run them on one machine make sure that you launch databases on different ports).
+
+The minimal TOML config for the sequencer can be found below (sitter at port 3000, sequencer at 3001). Use the identity manager address from your contract-deployer report.yml. [config.rs](src/config.rs) has an example of a full config file if you need to make changes.
+
+```toml
+[app]
+provers_urls = "[]"
+
+[tree]
+
+[network]
+identity_manager_address = "0x0000000000000000000000000000000000000000"
+
+[providers]
+primary_network_provider = "http://localhost:8545"
+
+[relayer]
+kind = "tx_sitter"
+tx_sitter_url = "http://localhost:3000"
+tx_sitter_address = "0x0000000000000000000000000000000000000000"
+
+[database]
+database = "postgres://user:password@localhost:5432/database"
+
+[server]
+address = "0.0.0.0:3001"
 ```
 
 ## Tests

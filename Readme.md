@@ -92,9 +92,11 @@ you will have a generated keys file that is used by semaphore-mtb.
 docker run --rm -ti -p 5432:5432 -e POSTGRES_PASSWORD=password postgres
 ```
 
-Now you are ready to start up sequencer service!
+### Relayer
 
-You will also need a relayer (which is part of critical infrastructue and is not open sourced) - you can configure sitter to be between [tx-sitter-monolith](https://github.com/worldcoin/tx-sitter-monolith) (if you run them on one machine make sure that you launch databases on different ports).
+You will also need a relayer (which is part of critical infrastructue and is not open sourced) - you can configure a sitter to be between [tx-sitter-monolith](https://github.com/worldcoin/tx-sitter-monolith) (if you run the tx-sitter and the signup-sequencer on the same machine then make sure that you launch databases on different ports).
+
+### Configuration
 
 The minimal TOML config for the sequencer can be found below (sitter at port 3000, sequencer at 3001). Use the identity manager address from your contract-deployer report.yml. [config.rs](src/config.rs) has an example of a full config file if you need to make changes.
 

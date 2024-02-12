@@ -37,17 +37,17 @@ jobs:
           components: rustfmt, clippy
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
-      - name: Cache
-        uses: actions/cache@v3
-        continue-on-error: false
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-lint-
+      # - name: Cache
+      #   uses: actions/cache@v3
+      #   continue-on-error: false
+      #   with:
+      #     path: |
+      #       ~/.cargo/registry/index/
+      #       ~/.cargo/registry/cache/
+      #       ~/.cargo/git/db/
+      #       target/
+      #     key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+      #     restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-lint-
       - name: Install cargo-sort
         uses: actions-rs/install@v0.1
         with:
@@ -84,17 +84,17 @@ jobs:
           override: true
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
-      - name: Cache
-        uses: actions/cache@v3
-        continue-on-error: false
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-test-
+      # - name: Cache
+      #   uses: actions/cache@v3
+      #   continue-on-error: false
+      #   with:
+      #     path: |
+      #       ~/.cargo/registry/index/
+      #       ~/.cargo/registry/cache/
+      #       ~/.cargo/git/db/
+      #       target/
+      #     key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+      #     restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-test-
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
@@ -121,10 +121,10 @@ jobs:
     - uses: actions/checkout@master
     - name: Install Rust
       run: rustup update stable && rustup default stable
-    - uses: actions/cache@v3
-      with:
-        path: ${{ runner.tool_cache }}/cargo-vet
-        key: cargo-vet-bin-${{ env.CARGO_VET_VERSION }}
+    # - uses: actions/cache@v3
+    #   with:
+    #     path: ${{ runner.tool_cache }}/cargo-vet
+    #     key: cargo-vet-bin-${{ env.CARGO_VET_VERSION }}
     - name: Add the tool cache directory to the search path
       run: echo "${{ runner.tool_cache }}/cargo-vet/bin" >> $GITHUB_PATH
     - name: Ensure that the tool cache is populated with the cargo-vet binary

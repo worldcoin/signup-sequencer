@@ -7,6 +7,7 @@ mod chain_mock;
 mod prover_mock;
 pub mod test_config;
 
+#[allow(unused)]
 pub mod prelude {
     pub use std::time::Duration;
 

@@ -7,6 +7,7 @@ mod chain_mock;
 mod prover_mock;
 pub mod test_config;
 
+#[allow(unused)]
 pub mod prelude {
     pub use std::time::Duration;
 
@@ -598,13 +599,12 @@ pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, Socket
     let listener = TcpListener::bind(server_config.address).expect("Failed to bind random port");
     let local_addr = listener.local_addr()?;
 
+    info!("Waiting for tree initialization");
     // For our tests to work we need the tree to be initialized.
     while app.tree_state().is_err() {
         trace!("Waiting for the tree to be initialized");
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
-
-    check_health(&local_addr).await?;
 
     let app = spawn({
         async move {
@@ -615,6 +615,10 @@ pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, Socket
             info!("App thread stopping");
         }
     });
+
+    info!("Checking app health");
+    check_health(&local_addr).await?;
+    info!("App ready");
 
     Ok((app, local_addr))
 }

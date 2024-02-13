@@ -128,6 +128,10 @@ async fn list_batch_sizes(
     Ok((result.to_response_code(), Json(result)))
 }
 
+async fn health() -> Result<(), Error> {
+    Ok(())
+}
+
 /// # Errors
 ///
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
@@ -164,7 +168,7 @@ pub async fn bind_from_listener(
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
         // Health check, return 200 OK
-        .route("/health", get(()))
+        .route("/health", get(health))
         .layer(middleware::from_fn(
             custom_middleware::api_metrics_layer::middleware,
         ))

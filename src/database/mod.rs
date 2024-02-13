@@ -195,6 +195,8 @@ impl Database {
         let mined_status = ProcessedStatus::Mined;
 
         let mut tx = self.pool.begin().await?;
+        tx.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;")
+            .await?;
 
         let root_id = tx.get_id_by_root(root).await?;
 

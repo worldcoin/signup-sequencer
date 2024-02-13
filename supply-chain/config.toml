@@ -2,7 +2,7 @@
 # cargo-vet config file
 
 [cargo-vet]
-version = "0.8"
+version = "0.9"
 
 [imports.bytecodealliance]
 url = "https://raw.githubusercontent.com/bytecodealliance/wasmtime/main/supply-chain/audits.toml"
@@ -11,7 +11,7 @@ url = "https://raw.githubusercontent.com/bytecodealliance/wasmtime/main/supply-c
 url = "https://raw.githubusercontent.com/EmbarkStudios/rust-ecosystem/main/audits.toml"
 
 [imports.google]
-url = "https://raw.githubusercontent.com/google/supply-chain/main/audits.toml"
+url = "https://raw.githubusercontent.com/google/rust-crate-audits/main/audits.toml"
 
 [imports.isrg]
 url = "https://raw.githubusercontent.com/divviup/libprio-rs/main/supply-chain/audits.toml"
@@ -51,6 +51,10 @@ criteria = "safe-to-deploy"
 version = "1.0.2"
 criteria = "safe-to-deploy"
 
+[[exemptions.alloy-rlp]]
+version = "0.3.4"
+criteria = "safe-to-deploy"
+
 [[exemptions.android-tzdata]]
 version = "0.1.1"
 criteria = "safe-to-deploy"
@@ -75,12 +79,24 @@ criteria = "safe-to-deploy"
 version = "0.3.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.ark-ff]]
+version = "0.4.2"
+criteria = "safe-to-deploy"
+
 [[exemptions.ark-ff-asm]]
 version = "0.3.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.ark-ff-asm]]
+version = "0.4.2"
+criteria = "safe-to-deploy"
+
 [[exemptions.ark-ff-macros]]
 version = "0.3.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.ark-ff-macros]]
+version = "0.4.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.ark-groth16]]
@@ -99,6 +115,10 @@ criteria = "safe-to-deploy"
 version = "0.3.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.ark-serialize]]
+version = "0.4.2"
+criteria = "safe-to-deploy"
+
 [[exemptions.ark-serialize-derive]]
 version = "0.3.0"
 criteria = "safe-to-deploy"
@@ -109,6 +129,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.ark-std]]
 version = "0.3.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.ark-std]]
+version = "0.4.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.ascii-canvas]]
@@ -128,7 +152,7 @@ version = "0.3.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.atoi]]
-version = "1.0.0"
+version = "2.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.auto_impl]]
@@ -476,19 +500,11 @@ version = "0.9.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.dirs]]
-version = "4.0.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.dirs]]
 version = "5.0.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.dirs-next]]
 version = "2.0.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.dirs-sys]]
-version = "0.3.7"
 criteria = "safe-to-deploy"
 
 [[exemptions.dirs-sys]]
@@ -553,6 +569,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.errno]]
 version = "0.2.8"
+criteria = "safe-to-deploy"
+
+[[exemptions.etcetera]]
+version = "0.8.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.eth-keystore]]
@@ -631,6 +651,10 @@ criteria = "safe-to-deploy"
 version = "0.2.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.fastrlp]]
+version = "0.3.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.ff]]
 version = "0.12.1"
 criteria = "safe-to-deploy"
@@ -647,6 +671,10 @@ criteria = "safe-to-deploy"
 version = "1.0.25"
 criteria = "safe-to-deploy"
 
+[[exemptions.flume]]
+version = "0.11.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.fs2]]
 version = "0.4.3"
 criteria = "safe-to-deploy"
@@ -660,7 +688,7 @@ version = "0.3.26"
 criteria = "safe-to-deploy"
 
 [[exemptions.futures-intrusive]]
-version = "0.4.2"
+version = "0.5.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.futures-locks]]
@@ -835,8 +863,16 @@ criteria = "safe-to-deploy"
 version = "0.7.4"
 criteria = "safe-to-deploy"
 
+[[exemptions.libm]]
+version = "0.2.2"
+criteria = "safe-to-deploy"
+
 [[exemptions.libmimalloc-sys]]
 version = "0.1.28"
+criteria = "safe-to-deploy"
+
+[[exemptions.libsqlite3-sys]]
+version = "0.25.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.linked-hash-map]]
@@ -929,6 +965,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.nom]]
 version = "7.1.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.num-bigint-dig]]
+version = "0.8.4"
 criteria = "safe-to-deploy"
 
 [[exemptions.object]]
@@ -1028,10 +1068,6 @@ version = "0.11.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.parking_lot_core]]
-version = "0.8.5"
-criteria = "safe-to-deploy"
-
-[[exemptions.parking_lot_core]]
 version = "0.9.4"
 criteria = "safe-to-deploy"
 
@@ -1057,6 +1093,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.pem]]
 version = "1.1.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.pem-rfc7468]]
+version = "0.7.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.pest]]
@@ -1107,6 +1147,10 @@ criteria = "safe-to-deploy"
 version = "1.1.2"
 criteria = "safe-to-deploy"
 
+[[exemptions.pkcs1]]
+version = "0.7.5"
+criteria = "safe-to-deploy"
+
 [[exemptions.pkcs8]]
 version = "0.10.2"
 criteria = "safe-to-deploy"
@@ -1145,6 +1189,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.prometheus]]
 version = "0.13.3"
+criteria = "safe-to-deploy"
+
+[[exemptions.proptest]]
+version = "1.2.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.prost]]
@@ -1204,6 +1252,10 @@ version = "0.6.28"
 criteria = "safe-to-deploy"
 
 [[exemptions.regex-syntax]]
+version = "0.7.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.regex-syntax]]
 version = "0.7.4"
 criteria = "safe-to-deploy"
 
@@ -1255,12 +1307,16 @@ criteria = "safe-to-deploy"
 version = "0.7.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.rsa]]
+version = "0.9.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.ruint]]
-version = "1.7.0"
+version = "1.11.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.ruint-macro]]
-version = "1.0.2"
+version = "1.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.rust-ini]]
@@ -1428,19 +1484,31 @@ version = "0.2.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.sqlx]]
-version = "0.6.2"
+version = "0.7.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.sqlx-core]]
-version = "0.6.2"
+version = "0.7.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.sqlx-macros]]
-version = "0.6.2"
+version = "0.7.2"
 criteria = "safe-to-deploy"
 
-[[exemptions.sqlx-rt]]
-version = "0.6.2"
+[[exemptions.sqlx-macros-core]]
+version = "0.7.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.sqlx-mysql]]
+version = "0.7.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.sqlx-postgres]]
+version = "0.7.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.sqlx-sqlite]]
+version = "0.7.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.stable_deref_trait]]
@@ -1639,6 +1707,10 @@ criteria = "safe-to-deploy"
 version = "0.9.4"
 criteria = "safe-to-deploy"
 
+[[exemptions.unarray]]
+version = "0.1.4"
+criteria = "safe-to-deploy"
+
 [[exemptions.unicode_categories]]
 version = "0.1.1"
 criteria = "safe-to-deploy"
@@ -1809,6 +1881,14 @@ criteria = "safe-to-deploy"
 
 [[exemptions.yansi]]
 version = "0.5.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.zerocopy]]
+version = "0.7.31"
+criteria = "safe-to-deploy"
+
+[[exemptions.zerocopy-derive]]
+version = "0.7.31"
 criteria = "safe-to-deploy"
 
 [[exemptions.zeroize]]

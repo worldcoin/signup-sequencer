@@ -6,6 +6,7 @@ use chrono::{Duration, Utc};
 use ruint::Uint;
 use semaphore::poseidon_tree::LazyPoseidonTree;
 use semaphore::protocol::verify_proof;
+use sqlx::{Postgres, Transaction};
 use tracing::{info, instrument, warn};
 
 use crate::config::Config;
@@ -373,14 +374,25 @@ impl App {
         Ok(())
     }
 
+    pub async fn delete_identity(&self, commitment: &Hash) -> Result<(), ServerError> {
+        let mut tx = self.database.begin().await?;
+        self.delete_identity_tx(&mut tx, commitment).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     /// Queues a deletion from the merkle tree.
     ///
     /// # Errors
     ///
     /// Will return `Err` if identity is already queued, not in the tree, or the
     /// queue malfunctions.
-    #[instrument(level = "debug", skip(self))]
-    pub async fn delete_identity(&self, commitment: &Hash) -> Result<(), ServerError> {
+    #[instrument(level = "debug", skip(self, tx))]
+    pub async fn delete_identity_tx(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        commitment: &Hash,
+    ) -> Result<(), ServerError> {
         // Ensure that deletion provers exist
         if !self.identity_manager.has_deletion_provers().await {
             warn!(
@@ -390,13 +402,12 @@ impl App {
             return Err(ServerError::NoProversOnIdDeletion);
         }
 
-        if !self.database.identity_exists(*commitment).await? {
+        if !tx.identity_exists(*commitment).await? {
             return Err(ServerError::IdentityCommitmentNotFound);
         }
 
         // Get the leaf index for the id commitment
-        let leaf_index = self
-            .database
+        let leaf_index = tx
             .get_identity_leaf_index(commitment)
             .await?
             .ok_or(ServerError::IdentityCommitmentNotFound)?
@@ -408,25 +419,19 @@ impl App {
         }
 
         // Check if the id is already queued for deletion
-        if self
-            .database
-            .identity_is_queued_for_deletion(commitment)
-            .await?
-        {
+        if tx.identity_is_queued_for_deletion(commitment).await? {
             return Err(ServerError::IdentityQueuedForDeletion);
         }
 
         // Check if there are any deletions, if not, set the latest deletion timestamp
         // to now to ensure that the new deletion is processed by the next deletion
         // interval
-        if self.database.get_deletions().await?.is_empty() {
-            self.database.update_latest_deletion(Utc::now()).await?;
+        if tx.get_deletions().await?.is_empty() {
+            tx.update_latest_deletion(Utc::now()).await?;
         }
 
         // If the id has not been deleted, insert into the deletions table
-        self.database
-            .insert_new_deletion(leaf_index, commitment)
-            .await?;
+        tx.insert_new_deletion(leaf_index, commitment).await?;
 
         Ok(())
     }
@@ -469,16 +474,20 @@ impl App {
             return Err(ServerError::UnreducedCommitment);
         }
 
-        if self.database.identity_exists(*new_commitment).await? {
+        let mut tx = self.database.begin().await?;
+
+        if tx.identity_exists(*new_commitment).await? {
             return Err(ServerError::DuplicateCommitment);
         }
 
         // Delete the existing id and insert the commitments into the recovery table
-        self.delete_identity(existing_commitment).await?;
-
-        self.database
-            .insert_new_recovery(existing_commitment, new_commitment)
+        self.delete_identity_tx(&mut tx, existing_commitment)
             .await?;
+
+        tx.insert_new_recovery(existing_commitment, new_commitment)
+            .await?;
+
+        tx.commit().await?;
 
         Ok(())
     }

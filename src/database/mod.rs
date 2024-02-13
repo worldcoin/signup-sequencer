@@ -671,7 +671,7 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
         Ok(())
     }
 
-    async fn get_recoveries(self) -> Result<Vec<RecoveryEntry>, Error> {
+    async fn get_all_recoveries(self) -> Result<Vec<RecoveryEntry>, Error> {
         Ok(
             sqlx::query_as::<_, RecoveryEntry>("SELECT * FROM recoveries")
                 .fetch_all(self)
@@ -679,21 +679,22 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
         )
     }
 
-    async fn find_recoveries_by_prev_commit(
+    async fn delete_recoveries<I: IntoIterator<Item = T>, T: Into<U256>>(
         self,
-        prev_commits: &[U256],
+        prev_commits: I,
     ) -> Result<Vec<RecoveryEntry>, Error> {
         // TODO: upstream PgHasArrayType impl to ruint
         let prev_commits = prev_commits
-            .iter()
-            .map(|c| c.to_be_bytes())
+            .into_iter()
+            .map(|c| c.into().to_be_bytes())
             .collect::<Vec<[u8; 32]>>();
 
         let res = sqlx::query_as::<_, RecoveryEntry>(
             r#"
-            SELECT *
+            DELETE
             FROM recoveries
             WHERE existing_commitment = ANY($1)
+            RETURNING *
             "#,
         )
         .bind(&prev_commits)
@@ -1099,7 +1100,7 @@ mod test {
         db.insert_new_recovery(&existing_commitment, &new_commitment)
             .await?;
 
-        let recoveries = db.get_recoveries().await?;
+        let recoveries = db.get_all_recoveries().await?;
 
         assert_eq!(recoveries.len(), 1);
         assert_eq!(recoveries[0].existing_commitment, existing_commitment);
@@ -1287,14 +1288,14 @@ mod test {
             db.insert_new_recovery(&old, &new).await?;
         }
 
-        let recoveries = db.get_recoveries().await?;
+        let recoveries = db.get_all_recoveries().await?;
         assert_eq!(recoveries.len(), 3);
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_find_recoveries_from_prev() -> anyhow::Result<()> {
+    async fn test_delete_recoveries() -> anyhow::Result<()> {
         let (db, _db_container) = setup_db().await?;
 
         let old_identities = mock_identities(3);
@@ -1304,10 +1305,13 @@ mod test {
             db.insert_new_recovery(&old, &new).await?;
         }
 
-        let recoveries = db
-            .find_recoveries_by_prev_commit(&old_identities[0..2])
+        let deleted_recoveries = db
+            .delete_recoveries(old_identities[0..2].iter().cloned())
             .await?;
-        assert_eq!(recoveries.len(), 2);
+        assert_eq!(deleted_recoveries.len(), 2);
+
+        let remaining = db.get_all_recoveries().await?;
+        assert_eq!(remaining.len(), 1);
 
         Ok(())
     }

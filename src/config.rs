@@ -345,7 +345,7 @@ mod tests {
         tree_gc_threshold = 10000
         cache_file = "/data/cache_file"
         force_cache_purge = false
-        initial_leaf_value = "0x0000000000000000000000000000000000000000000000000000000000000001"
+        initial_leaf_value = "0x1"
 
         [network]
         identity_manager_address = "0x0000000000000000000000000000000000000000"

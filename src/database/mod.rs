@@ -6,9 +6,11 @@
 
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use std::ops::Deref;
 
 use anyhow::{anyhow, Context, Error as ErrReport};
 use chrono::{DateTime, Utc};
+use ruint::aliases::U256;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
 use sqlx::{Executor, Pool, Postgres, Row};
@@ -30,8 +32,18 @@ static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 const MAX_UNPROCESSED_FETCH_COUNT: i64 = 10_000;
 
 pub struct Database {
-    pool: Pool<Postgres>,
+    pub pool: Pool<Postgres>,
 }
+
+impl Deref for Database {
+    type Target = Pool<Postgres>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.pool
+    }
+}
+
+impl<'a, T> DatabaseExt<'a> for T where T: Executor<'a, Database = Postgres> {}
 
 impl Database {
     #[instrument(skip_all)]
@@ -124,66 +136,13 @@ impl Database {
         Ok(Self { pool })
     }
 
-    pub async fn insert_pending_identity(
-        &self,
-        leaf_index: usize,
-        identity: &Hash,
-        root: &Hash,
-    ) -> Result<(), Error> {
-        let mut tx = self.pool.begin().await?;
-
-        let insert_pending_identity_query = sqlx::query(
-            r#"
-            INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of)
-            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-            "#,
-        )
-        .bind(leaf_index as i64)
-        .bind(identity)
-        .bind(root)
-        .bind(<&str>::from(ProcessedStatus::Pending));
-
-        tx.execute(insert_pending_identity_query).await?;
-
-        tx.commit().await?;
-
-        Ok(())
-    }
-
-    pub async fn get_id_by_root(
-        tx: impl Executor<'_, Database = Postgres>,
-        root: &Hash,
-    ) -> Result<Option<usize>, Error> {
-        let root_index_query = sqlx::query(
-            r#"
-            SELECT id
-            FROM identities
-            WHERE root = $1
-            ORDER BY id ASC
-            LIMIT 1
-            "#,
-        )
-        .bind(root);
-
-        let row = tx.fetch_optional(root_index_query).await?;
-
-        let Some(row) = row else { return Ok(None) };
-        let root_id = row.get::<i64, _>(0);
-
-        Ok(Some(root_id as usize))
-    }
-
     /// Marks the identities and roots from before a given root hash as mined
     /// Also marks following roots as pending
     #[instrument(skip(self), level = "debug")]
     pub async fn mark_root_as_processed(&self, root: &Hash) -> Result<(), Error> {
-        let mined_status = ProcessedStatus::Mined;
-        let processed_status = ProcessedStatus::Processed;
-        let pending_status = ProcessedStatus::Pending;
-
         let mut tx = self.pool.begin().await?;
 
-        let root_id = Self::get_id_by_root(tx.as_mut(), root).await?;
+        let root_id = tx.get_id_by_root(root).await?;
 
         let Some(root_id) = root_id else {
             return Err(Error::MissingRoot { root: *root });
@@ -197,12 +156,12 @@ impl Database {
             SET    status = $2, mined_at = CURRENT_TIMESTAMP
             WHERE  id <= $1
             AND    status <> $2
-            AND    status <> $3
+            AND    status <> $3;
             "#,
         )
         .bind(root_id)
-        .bind(<&str>::from(processed_status))
-        .bind(<&str>::from(mined_status));
+        .bind(<&str>::from(ProcessedStatus::Processed))
+        .bind(<&str>::from(ProcessedStatus::Mined));
 
         let update_next_roots = sqlx::query(
             r#"
@@ -212,31 +171,12 @@ impl Database {
             "#,
         )
         .bind(root_id)
-        .bind(<&str>::from(pending_status));
+        .bind(<&str>::from(ProcessedStatus::Pending));
 
         tx.execute(update_previous_roots).await?;
         tx.execute(update_next_roots).await?;
 
         tx.commit().await?;
-
-        Ok(())
-    }
-
-    /// Marks all the identities in the db as
-    #[instrument(skip(self), level = "debug")]
-    pub async fn mark_all_as_pending(&self) -> Result<(), Error> {
-        let pending_status = ProcessedStatus::Pending;
-
-        let update_all_identities = sqlx::query(
-            r#"
-            UPDATE identities
-            SET    status = $1, mined_at = NULL
-            WHERE  status <> $1
-            "#,
-        )
-        .bind(<&str>::from(pending_status));
-
-        self.pool.execute(update_all_identities).await?;
 
         Ok(())
     }
@@ -248,8 +188,10 @@ impl Database {
         let mined_status = ProcessedStatus::Mined;
 
         let mut tx = self.pool.begin().await?;
+        tx.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;")
+            .await?;
 
-        let root_id = Self::get_id_by_root(tx.as_mut(), root).await?;
+        let root_id = tx.get_id_by_root(root).await?;
 
         let Some(root_id) = root_id else {
             return Err(Error::MissingRoot { root: *root });
@@ -273,77 +215,6 @@ impl Database {
         tx.commit().await?;
 
         Ok(())
-    }
-
-    pub async fn get_next_leaf_index(&self) -> Result<usize, Error> {
-        let query = sqlx::query(
-            r#"
-            SELECT leaf_index FROM identities
-            ORDER BY leaf_index DESC
-            LIMIT 1
-            "#,
-        );
-
-        let row = self.pool.fetch_optional(query).await?;
-
-        let Some(row) = row else { return Ok(0) };
-        let leaf_index = row.get::<i64, _>(0);
-
-        Ok((leaf_index + 1) as usize)
-    }
-
-    pub async fn get_identity_leaf_index(
-        &self,
-        identity: &Hash,
-    ) -> Result<Option<TreeItem>, Error> {
-        let query = sqlx::query(
-            r#"
-            SELECT leaf_index, status
-            FROM identities
-            WHERE commitment = $1
-            ORDER BY id DESC
-            LIMIT 1;
-            "#,
-        )
-        .bind(identity);
-
-        let Some(row) = self.pool.fetch_optional(query).await? else {
-            return Ok(None);
-        };
-
-        let leaf_index = row.get::<i64, _>(0) as usize;
-
-        let status = row
-            .get::<&str, _>(1)
-            .parse()
-            .expect("Status is unreadable, database is corrupt");
-
-        Ok(Some(TreeItem { status, leaf_index }))
-    }
-
-    pub async fn get_commitments_by_status(
-        &self,
-        status: ProcessedStatus,
-    ) -> Result<Vec<TreeUpdate>, Error> {
-        let query = sqlx::query(
-            r#"
-            SELECT leaf_index, commitment
-            FROM identities
-            WHERE status = $1
-            ORDER BY id ASC;
-            "#,
-        )
-        .bind(<&str>::from(status));
-
-        let rows = self.pool.fetch_all(query).await?;
-
-        Ok(rows
-            .into_iter()
-            .map(|row| TreeUpdate {
-                leaf_index: row.get::<i64, _>(0) as usize,
-                element:    row.get::<Hash, _>(1),
-            })
-            .collect::<Vec<_>>())
     }
 
     pub async fn get_identity_history_entries(
@@ -432,29 +303,155 @@ impl Database {
             .into_iter()
             .collect())
     }
+}
 
-    pub async fn get_latest_root_by_status(
-        &self,
-        status: ProcessedStatus,
-    ) -> Result<Option<Hash>, Error> {
-        let query = sqlx::query(
+/// This trait provides the individual and composable queries to the database.
+/// Each method is a single atomic query, and can be composed withing a
+/// transaction.
+pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
+    async fn insert_pending_identity(
+        self,
+        leaf_index: usize,
+        identity: &Hash,
+        root: &Hash,
+    ) -> Result<(), Error> {
+        let insert_pending_identity_query = sqlx::query(
             r#"
-              SELECT root FROM identities WHERE status = $1 ORDER BY id DESC LIMIT 1
+            INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of)
+            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
             "#,
         )
-        .bind(<&str>::from(status));
+        .bind(leaf_index as i64)
+        .bind(identity)
+        .bind(root)
+        .bind(<&str>::from(ProcessedStatus::Pending));
 
-        let row = self.pool.fetch_optional(query).await?;
+        self.execute(insert_pending_identity_query).await?;
 
-        Ok(row.map(|r| r.get::<Hash, _>(0)))
+        Ok(())
     }
 
-    pub async fn get_root_state(&self, root: &Hash) -> Result<Option<RootItem>, Error> {
-        // This tries really hard to do everything in one query to prevent race
-        // conditions.
+    async fn get_id_by_root(self, root: &Hash) -> Result<Option<usize>, Error> {
+        let root_index_query = sqlx::query(
+            r#"
+            SELECT id
+            FROM identities
+            WHERE root = $1
+            ORDER BY id ASC
+            LIMIT 1
+            "#,
+        )
+        .bind(root);
+
+        let row = self.fetch_optional(root_index_query).await?;
+
+        let Some(row) = row else { return Ok(None) };
+        let root_id = row.get::<i64, _>(0);
+
+        Ok(Some(root_id as usize))
+    }
+
+    /// Marks all the identities in the db as
+    #[instrument(skip(self), level = "debug")]
+    async fn mark_all_as_pending(self) -> Result<(), Error> {
+        let pending_status = ProcessedStatus::Pending;
+
+        let update_all_identities = sqlx::query(
+            r#"
+                UPDATE identities
+                SET    status = $1, mined_at = NULL
+                WHERE  status <> $1
+                "#,
+        )
+        .bind(<&str>::from(pending_status));
+
+        self.execute(update_all_identities).await?;
+
+        Ok(())
+    }
+
+    async fn get_next_leaf_index(self) -> Result<usize, Error> {
         let query = sqlx::query(
             r#"
+            SELECT leaf_index FROM identities
+            ORDER BY leaf_index DESC
+            LIMIT 1
+            "#,
+        );
+
+        let row = self.fetch_optional(query).await?;
+
+        let Some(row) = row else { return Ok(0) };
+        let leaf_index = row.get::<i64, _>(0);
+
+        Ok((leaf_index + 1) as usize)
+    }
+
+    async fn get_identity_leaf_index(self, identity: &Hash) -> Result<Option<TreeItem>, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT leaf_index, status
+            FROM identities
+            WHERE commitment = $1
+            ORDER BY id DESC
+            LIMIT 1;
+            "#,
+        )
+        .bind(identity);
+
+        let Some(row) = self.fetch_optional(query).await? else {
+            return Ok(None);
+        };
+
+        let leaf_index = row.get::<i64, _>(0) as usize;
+
+        let status = row
+            .get::<&str, _>(1)
+            .parse()
+            .expect("Status is unreadable, database is corrupt");
+
+        Ok(Some(TreeItem { status, leaf_index }))
+    }
+
+    async fn get_commitments_by_status(
+        self,
+        status: ProcessedStatus,
+    ) -> Result<Vec<TreeUpdate>, Error> {
+        Ok(sqlx::query_as::<_, TreeUpdate>(
+            r#"
+            SELECT leaf_index, commitment as element
+            FROM identities
+            WHERE status = $1
+            ORDER BY id ASC;
+            "#,
+        )
+        .bind(<&str>::from(status))
+        .fetch_all(self)
+        .await?)
+    }
+
+    async fn get_latest_root_by_status(
+        self,
+        status: ProcessedStatus,
+    ) -> Result<Option<Hash>, Error> {
+        Ok(sqlx::query(
+            r#"
+            SELECT root FROM identities WHERE status = $1 ORDER BY id DESC LIMIT 1
+            "#,
+        )
+        .bind(<&str>::from(status))
+        .fetch_optional(self)
+        .await?
+        .map(|r| r.get::<Hash, _>(0)))
+    }
+
+    async fn get_root_state(self, root: &Hash) -> Result<Option<RootItem>, Error> {
+        // This tries really hard to do everything in one query to prevent race
+        // conditions.
+        Ok(sqlx::query_as::<_, RootItem>(
+            r#"
             SELECT
+                root,
                 status,
                 pending_as_of as pending_valid_as_of,
                 mined_at as mined_valid_as_of
@@ -464,29 +461,12 @@ impl Database {
             LIMIT 1
             "#,
         )
-        .bind(root);
-
-        let row = self.pool.fetch_optional(query).await?;
-
-        Ok(row.map(|r| {
-            let status = r
-                .get::<&str, _>(0)
-                .parse()
-                .expect("Status is unreadable, database is corrupt");
-
-            let pending_valid_as_of = r.get::<_, _>(1);
-            let mined_valid_as_of = r.get::<_, _>(2);
-
-            RootItem {
-                root: *root,
-                status,
-                pending_valid_as_of,
-                mined_valid_as_of,
-            }
-        }))
+        .bind(root)
+        .fetch_optional(self)
+        .await?)
     }
 
-    pub async fn get_latest_insertion_timestamp(&self) -> Result<Option<DateTime<Utc>>, Error> {
+    async fn get_latest_insertion_timestamp(self) -> Result<Option<DateTime<Utc>>, Error> {
         let query = sqlx::query(
             r#"
             SELECT insertion_timestamp
@@ -494,23 +474,23 @@ impl Database {
             WHERE Lock = 'X';"#,
         );
 
-        let row = self.pool.fetch_optional(query).await?;
+        let row = self.fetch_optional(query).await?;
 
         Ok(row.map(|r| r.get::<DateTime<Utc>, _>(0)))
     }
 
-    pub async fn count_unprocessed_identities(&self) -> Result<i32, Error> {
+    async fn count_unprocessed_identities(self) -> Result<i32, Error> {
         let query = sqlx::query(
             r#"
             SELECT COUNT(*) as unprocessed
             FROM unprocessed_identities
             "#,
         );
-        let result = self.pool.fetch_one(query).await?;
+        let result = self.fetch_one(query).await?;
         Ok(result.get::<i64, _>(0) as i32)
     }
 
-    pub async fn count_pending_identities(&self) -> Result<i32, Error> {
+    async fn count_pending_identities(self) -> Result<i32, Error> {
         let query = sqlx::query(
             r#"
             SELECT COUNT(*) as pending
@@ -519,40 +499,24 @@ impl Database {
             "#,
         )
         .bind(<&str>::from(ProcessedStatus::Pending));
-        let result = self.pool.fetch_one(query).await?;
+        let result = self.fetch_one(query).await?;
         Ok(result.get::<i64, _>(0) as i32)
     }
 
-    pub async fn get_provers(&self) -> Result<HashSet<ProverConfig>, Error> {
-        let query = sqlx::query(
+    async fn get_provers(self) -> Result<HashSet<ProverConfig>, Error> {
+        Ok(sqlx::query_as(
             r#"
-                SELECT batch_size, url, timeout_s, prover_type
-                FROM provers
+            SELECT batch_size, url, timeout_s, prover_type
+            FROM provers
             "#,
-        );
-
-        let result = self.pool.fetch_all(query).await?;
-
-        Ok(result
-            .iter()
-            .map(|row| {
-                let batch_size = row.get::<i64, _>(0) as usize;
-                let url = row.get::<String, _>(1);
-                let timeout_s = row.get::<i64, _>(2) as u64;
-                let prover_type = row.get::<ProverType, _>(3);
-
-                ProverConfig {
-                    url,
-                    timeout_s,
-                    batch_size,
-                    prover_type,
-                }
-            })
-            .collect())
+        )
+        .fetch_all(self)
+        .await?
+        .into_iter()
+        .collect())
     }
-
-    pub async fn insert_prover_configuration(
-        &self,
+    async fn insert_prover_configuration(
+        self,
         batch_size: usize,
         url: impl ToString,
         timeout_seconds: u64,
@@ -571,12 +535,12 @@ impl Database {
         .bind(timeout_seconds as i64)
         .bind(prover_type);
 
-        self.pool.execute(query).await?;
+        self.execute(query).await?;
 
         Ok(())
     }
 
-    pub async fn insert_provers(&self, provers: HashSet<ProverConfig>) -> Result<(), Error> {
+    async fn insert_provers(self, provers: HashSet<ProverConfig>) -> Result<(), Error> {
         if provers.is_empty() {
             return Ok(());
         }
@@ -596,15 +560,11 @@ impl Database {
 
         let query = query_builder.build();
 
-        self.pool.execute(query).await?;
+        self.execute(query).await?;
         Ok(())
     }
 
-    pub async fn remove_prover(
-        &self,
-        batch_size: usize,
-        prover_type: ProverType,
-    ) -> Result<(), Error> {
+    async fn remove_prover(self, batch_size: usize, prover_type: ProverType) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
               DELETE FROM provers WHERE batch_size = $1 AND prover_type = $2
@@ -613,13 +573,13 @@ impl Database {
         .bind(batch_size as i64)
         .bind(prover_type);
 
-        self.pool.execute(query).await?;
+        self.execute(query).await?;
 
         Ok(())
     }
 
-    pub async fn insert_new_identity(
-        &self,
+    async fn insert_new_identity(
+        self,
         identity: Hash,
         eligibility_timestamp: sqlx::types::chrono::DateTime<Utc>,
     ) -> Result<Hash, Error> {
@@ -633,12 +593,12 @@ impl Database {
         .bind(<&str>::from(UnprocessedStatus::New))
         .bind(eligibility_timestamp);
 
-        self.pool.execute(query).await?;
+        self.execute(query).await?;
         Ok(identity)
     }
 
-    pub async fn insert_new_recovery(
-        &self,
+    async fn insert_new_recovery(
+        self,
         existing_commitment: &Hash,
         new_commitment: &Hash,
     ) -> Result<(), Error> {
@@ -650,15 +610,15 @@ impl Database {
         )
         .bind(existing_commitment)
         .bind(new_commitment);
-        self.pool.execute(query).await?;
+        self.execute(query).await?;
         Ok(())
     }
 
-    pub async fn get_latest_deletion(&self) -> Result<LatestDeletionEntry, Error> {
+    async fn get_latest_deletion(self) -> Result<LatestDeletionEntry, Error> {
         let query =
             sqlx::query("SELECT deletion_timestamp FROM latest_deletion_root WHERE Lock = 'X';");
 
-        let row = self.pool.fetch_optional(query).await?;
+        let row = self.fetch_optional(query).await?;
 
         if let Some(row) = row {
             Ok(LatestDeletionEntry {
@@ -671,8 +631,8 @@ impl Database {
         }
     }
 
-    pub async fn update_latest_insertion_timestamp(
-        &self,
+    async fn update_latest_insertion_timestamp(
+        self,
         insertion_timestamp: DateTime<Utc>,
     ) -> Result<(), Error> {
         let query = sqlx::query(
@@ -685,14 +645,11 @@ impl Database {
         )
         .bind(insertion_timestamp);
 
-        self.pool.execute(query).await?;
+        self.execute(query).await?;
         Ok(())
     }
 
-    pub async fn update_latest_deletion(
-        &self,
-        deletion_timestamp: DateTime<Utc>,
-    ) -> Result<(), Error> {
+    async fn update_latest_deletion(self, deletion_timestamp: DateTime<Utc>) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
             INSERT INTO latest_deletion_root (Lock, deletion_timestamp)
@@ -703,36 +660,43 @@ impl Database {
         )
         .bind(deletion_timestamp);
 
-        self.pool.execute(query).await?;
+        self.execute(query).await?;
         Ok(())
     }
 
-    // TODO: consider using a larger value than i64 for leaf index, ruint should
-    // have postgres compatibility for u256
-    pub async fn get_recoveries(&self) -> Result<Vec<RecoveryEntry>, Error> {
-        let query = sqlx::query(
+    async fn get_recoveries(self) -> Result<Vec<RecoveryEntry>, Error> {
+        Ok(
+            sqlx::query_as::<_, RecoveryEntry>("SELECT * FROM recoveries")
+                .fetch_all(self)
+                .await?,
+        )
+    }
+
+    async fn find_recoveries_by_prev_commit(
+        self,
+        prev_commits: &[U256],
+    ) -> Result<Vec<RecoveryEntry>, Error> {
+        // TODO: upstream PgHasArrayType impl to ruint
+        let prev_commits = prev_commits
+            .iter()
+            .map(|c| c.to_be_bytes())
+            .collect::<Vec<[u8; 32]>>();
+
+        let res = sqlx::query_as::<_, RecoveryEntry>(
             r#"
             SELECT *
             FROM recoveries
+            WHERE existing_commitment = ANY($1)
             "#,
-        );
+        )
+        .bind(&prev_commits)
+        .fetch_all(self)
+        .await?;
 
-        let result = self.pool.fetch_all(query).await?;
-
-        Ok(result
-            .into_iter()
-            .map(|row| RecoveryEntry {
-                existing_commitment: row.get::<Hash, _>(0),
-                new_commitment:      row.get::<Hash, _>(1),
-            })
-            .collect::<Vec<RecoveryEntry>>())
+        Ok(res)
     }
 
-    pub async fn insert_new_deletion(
-        &self,
-        leaf_index: usize,
-        identity: &Hash,
-    ) -> Result<(), Error> {
+    async fn insert_new_deletion(self, leaf_index: usize, identity: &Hash) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
             INSERT INTO deletions (leaf_index, commitment)
@@ -742,13 +706,13 @@ impl Database {
         .bind(leaf_index as i64)
         .bind(identity);
 
-        self.pool.execute(query).await?;
+        self.execute(query).await?;
         Ok(())
     }
 
     // TODO: consider using a larger value than i64 for leaf index, ruint should
     // have postgres compatibility for u256
-    pub async fn get_deletions(&self) -> Result<Vec<DeletionEntry>, Error> {
+    async fn get_deletions(self) -> Result<Vec<DeletionEntry>, Error> {
         let query = sqlx::query(
             r#"
             SELECT *
@@ -756,7 +720,7 @@ impl Database {
             "#,
         );
 
-        let result = self.pool.fetch_all(query).await?;
+        let result = self.fetch_all(query).await?;
 
         Ok(result
             .into_iter()
@@ -768,32 +732,22 @@ impl Database {
     }
 
     /// Remove a list of entries from the deletions table
-    pub async fn remove_deletions(&self, commitments: Vec<Hash>) -> Result<(), Error> {
-        let placeholders: String = commitments
+    async fn remove_deletions(self, commitments: &[Hash]) -> Result<(), Error> {
+        let commitments = commitments
             .iter()
-            .enumerate()
-            .map(|(i, _)| format!("${}", i + 1))
-            .collect::<Vec<String>>()
-            .join(", ");
+            .map(|c| c.to_be_bytes())
+            .collect::<Vec<[u8; 32]>>();
 
-        let query = format!(
-            "DELETE FROM deletions WHERE commitment IN ({})",
-            placeholders
-        );
-
-        let mut query = sqlx::query(&query);
-
-        for commitment in &commitments {
-            query = query.bind(commitment);
-        }
-
-        query.execute(&self.pool).await?;
+        sqlx::query("DELETE FROM deletions WHERE commitment = Any($1)")
+            .bind(commitments)
+            .execute(self)
+            .await?;
 
         Ok(())
     }
 
-    pub async fn get_eligible_unprocessed_commitments(
-        &self,
+    async fn get_eligible_unprocessed_commitments(
+        self,
         status: UnprocessedStatus,
     ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
         let query = sqlx::query(
@@ -806,7 +760,7 @@ impl Database {
         .bind(<&str>::from(status))
         .bind(MAX_UNPROCESSED_FETCH_COUNT);
 
-        let result = self.pool.fetch_all(query).await?;
+        let result = self.fetch_all(query).await?;
 
         Ok(result
             .into_iter()
@@ -821,8 +775,8 @@ impl Database {
             .collect::<Vec<_>>())
     }
 
-    pub async fn get_unprocessed_commit_status(
-        &self,
+    async fn get_unprocessed_commit_status(
+        self,
         commitment: &Hash,
     ) -> Result<Option<(UnprocessedStatus, String)>, Error> {
         let query = sqlx::query(
@@ -832,7 +786,7 @@ impl Database {
         )
         .bind(commitment);
 
-        let result = self.pool.fetch_optional(query).await?;
+        let result = self.fetch_optional(query).await?;
 
         if let Some(row) = result {
             return Ok(Some((
@@ -843,7 +797,7 @@ impl Database {
         Ok(None)
     }
 
-    pub async fn remove_unprocessed_identity(&self, commitment: &Hash) -> Result<(), Error> {
+    async fn remove_unprocessed_identity(self, commitment: &Hash) -> Result<(), Error> {
         let query = sqlx::query(
             r#"
                 DELETE FROM unprocessed_identities WHERE commitment = $1
@@ -851,36 +805,31 @@ impl Database {
         )
         .bind(commitment);
 
-        self.pool.execute(query).await?;
+        self.execute(query).await?;
 
         Ok(())
     }
 
-    pub async fn identity_exists(&self, commitment: Hash) -> Result<bool, Error> {
-        let query_unprocessed_identity = sqlx::query(
-            r#"SELECT exists(SELECT 1 FROM unprocessed_identities where commitment = $1)"#,
+    async fn identity_exists(self, commitment: Hash) -> Result<bool, Error> {
+        Ok(sqlx::query(
+            r#"
+            select 
+            EXISTS (select commitment from unprocessed_identities where commitment = $1) OR 
+            EXISTS (select commitment from identities where commitment = $1);
+            "#,
         )
-        .bind(commitment);
-
-        let row_unprocessed = self.pool.fetch_one(query_unprocessed_identity).await?;
-
-        let query_processed_identity =
-            sqlx::query(r#"SELECT exists(SELECT 1 FROM identities where commitment = $1)"#)
-                .bind(commitment);
-
-        let row_processed = self.pool.fetch_one(query_processed_identity).await?;
-
-        let exists = row_unprocessed.get::<bool, _>(0) || row_processed.get::<bool, _>(0);
-
-        Ok(exists)
+        .bind(commitment)
+        .fetch_one(self)
+        .await?
+        .get::<bool, _>(0))
     }
 
     // TODO: add docs
-    pub async fn identity_is_queued_for_deletion(&self, commitment: &Hash) -> Result<bool, Error> {
+    async fn identity_is_queued_for_deletion(self, commitment: &Hash) -> Result<bool, Error> {
         let query_queued_deletion =
             sqlx::query(r#"SELECT exists(SELECT 1 FROM deletions where commitment = $1)"#)
                 .bind(commitment);
-        let row_unprocessed = self.pool.fetch_one(query_queued_deletion).await?;
+        let row_unprocessed = self.fetch_one(query_queued_deletion).await?;
         Ok(row_unprocessed.get::<bool, _>(0))
     }
 }
@@ -909,6 +858,7 @@ mod test {
 
     use super::Database;
     use crate::config::DatabaseConfig;
+    use crate::database::DatabaseExt as _;
     use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
     use crate::prover::{ProverConfig, ProverType};
     use crate::utils::secret::SecretUrl;
@@ -1332,6 +1282,25 @@ mod test {
 
         let recoveries = db.get_recoveries().await?;
         assert_eq!(recoveries.len(), 3);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_find_recoveries_from_prev() -> anyhow::Result<()> {
+        let (db, _db_container) = setup_db().await?;
+
+        let old_identities = mock_identities(3);
+        let new_identities = mock_identities(3);
+
+        for (old, new) in old_identities.clone().into_iter().zip(new_identities) {
+            db.insert_new_recovery(&old, &new).await?;
+        }
+
+        let recoveries = db
+            .find_recoveries_by_prev_commit(&old_identities[0..2])
+            .await?;
+        assert_eq!(recoveries.len(), 2);
 
         Ok(())
     }
@@ -1831,7 +1800,7 @@ mod test {
             .context("Inserting new identity")?;
 
         // Remove identities 0 to 2
-        db.remove_deletions(identities[0..=2].to_vec()).await?;
+        db.remove_deletions(&identities[0..=2]).await?;
         let deletions = db.get_deletions().await?;
 
         assert_eq!(deletions.len(), 1);

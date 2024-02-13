@@ -12,6 +12,7 @@ use tracing::instrument;
 
 use crate::app::App;
 use crate::contracts::IdentityManager;
+use crate::database::DatabaseExt as _;
 use crate::ethereum::write::TransactionId;
 use crate::identity_tree::{
     AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,

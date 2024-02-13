@@ -1,6 +1,6 @@
 #![doc = include_str!("../Readme.md")]
 #![warn(clippy::cargo)]
-#![allow(clippy::too_many_arguments)]
+#![allow(clippy::multiple_crate_versions, clippy::too_many_arguments)]
 
 pub mod app;
 pub mod config;

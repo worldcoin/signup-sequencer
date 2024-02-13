@@ -7,7 +7,7 @@ use tracing::instrument;
 
 use crate::app::App;
 use crate::database::types::UnprocessedCommitment;
-use crate::database::Database;
+use crate::database::{Database, DatabaseExt};
 use crate::identity_tree::{Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
 
 pub async fn insert_identities(app: Arc<App>, wake_up_notify: Arc<Notify>) -> anyhow::Result<()> {

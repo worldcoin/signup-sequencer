@@ -28,7 +28,7 @@ audit-as-crates-io = true
 [policy.cli-batteries]
 audit-as-crates-io = true
 
-[policy."ethers-core:2.0.10@git:08bcb67c36d9a2869950e51ecf76124c9febe035"]
+[policy."ethers-core:2.0.13@git:4d267f763a19e42a09e92741e1489c123f852f53"]
 audit-as-crates-io = true
 
 [[exemptions.Inflector]]
@@ -596,7 +596,7 @@ version = "2.0.10"
 criteria = "safe-to-deploy"
 
 [[exemptions.ethers-core]]
-version = "2.0.10@git:08bcb67c36d9a2869950e51ecf76124c9febe035"
+version = "2.0.13@git:4d267f763a19e42a09e92741e1489c123f852f53"
 criteria = "safe-to-deploy"
 
 [[exemptions.ethers-etherscan]]

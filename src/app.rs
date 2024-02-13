@@ -10,7 +10,7 @@ use tracing::{info, instrument, warn};
 
 use crate::config::Config;
 use crate::contracts::{IdentityManager, SharedIdentityManager};
-use crate::database::Database;
+use crate::database::{Database, DatabaseExt as _};
 use crate::ethereum::Ethereum;
 use crate::identity_tree::{
     CanonicalTreeBuilder, Hash, InclusionProof, ProcessedStatus, RootItem, Status, TreeState,
@@ -174,7 +174,7 @@ impl App {
     pub fn get_leftover_leaves_and_update_index(
         index: &mut usize,
         dense_prefix_depth: usize,
-        mined_items: &Vec<TreeUpdate>,
+        mined_items: &[TreeUpdate],
     ) -> Vec<ruint::Uint<256, 4>> {
         let leftover_items = if mined_items.is_empty() {
             vec![]

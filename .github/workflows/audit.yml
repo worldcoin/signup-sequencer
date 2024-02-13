@@ -3,15 +3,15 @@ name: Security Audit
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - '**/Cargo.toml'
-      - '**/Cargo.lock'
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
   schedule:
-  - cron: '0 2 * * *' # run at 2 AM UTC
+    - cron: "0 2 * * *" # run at 2 AM UTC
 
 env:
-  RUST_VERSION: 1.65
+  RUST_VERSION: 1.74
 
 jobs:
   security-audit:

@@ -9,13 +9,13 @@ on:
     branches:
       - main
   pull_request:
-    types: [opened,synchronize,reopened]
+    types: [opened, synchronize, reopened]
     branches:
       - main
 
 env:
-  RUST_VERSION: "1.74.0-nightly"
-  NIGHTLY_VERSION: nightly-2023-08-29
+  RUST_VERSION: "1.78.0-nightly"
+  NIGHTLY_VERSION: nightly-2024-02-05
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
@@ -111,16 +111,16 @@ jobs:
     env:
       CARGO_VET_VERSION: 0.8.0
     steps:
-    - uses: actions/checkout@master
-    - name: Install Rust
-      run: rustup update stable && rustup default stable
-    - uses: actions/cache@v3
-      with:
-        path: ${{ runner.tool_cache }}/cargo-vet
-        key: cargo-vet-bin-${{ env.CARGO_VET_VERSION }}
-    - name: Add the tool cache directory to the search path
-      run: echo "${{ runner.tool_cache }}/cargo-vet/bin" >> $GITHUB_PATH
-    - name: Ensure that the tool cache is populated with the cargo-vet binary
-      run: cargo install --root ${{ runner.tool_cache }}/cargo-vet --version ${{ env.CARGO_VET_VERSION }} cargo-vet
-    - name: Invoke cargo-vet
-      run: cargo vet --locked
+      - uses: actions/checkout@master
+      - name: Install Rust
+        run: rustup update stable && rustup default stable
+      - uses: actions/cache@v3
+        with:
+          path: ${{ runner.tool_cache }}/cargo-vet
+          key: cargo-vet-bin-${{ env.CARGO_VET_VERSION }}
+      - name: Add the tool cache directory to the search path
+        run: echo "${{ runner.tool_cache }}/cargo-vet/bin" >> $GITHUB_PATH
+      - name: Ensure that the tool cache is populated with the cargo-vet binary
+        run: cargo install --root ${{ runner.tool_cache }}/cargo-vet --version ${{ env.CARGO_VET_VERSION }} cargo-vet
+      - name: Invoke cargo-vet
+        run: cargo vet --locked

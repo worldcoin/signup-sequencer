@@ -8,7 +8,7 @@ use tokio::task::JoinHandle;
 use tracing::{info, instrument, warn};
 
 use crate::app::App;
-use crate::database::Database;
+use crate::database::{Database, DatabaseExt as _};
 
 pub mod tasks;
 

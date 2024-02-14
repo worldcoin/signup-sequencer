@@ -6016,7 +6016,7 @@ checksum = "69758bda2e78f098e4ccb393021a0963bb3442eac05f135c30f61b7370bbafae"
 [[package]]
 name = "telemetry-batteries"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/telemetry-batteries.git?rev=545e96d#545e96ddb84e4325578531d1858a88edba3e91e2"
+source = "git+https://github.com/worldcoin/telemetry-batteries.git?rev=2b51197#2b51197e714d86db25640a60df0af587d5f5d7b3"
 dependencies = [
  "chrono",
  "dirs",

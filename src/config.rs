@@ -5,6 +5,7 @@ use std::time::Duration;
 use ethers::types::{Address, H160};
 use semaphore::Field;
 use serde::{Deserialize, Serialize};
+use telemetry_batteries::metrics::prometheus::PrometheusExporterConfig;
 
 use crate::prover::ProverConfig;
 use crate::utils::secret::SecretUrl;
@@ -213,6 +214,7 @@ pub struct ServiceConfig {
     pub service_name: String,
     pub datadog:      Option<DatadogConfig>,
     pub statsd:       Option<StatsdConfig>,
+    pub prometheus:   Option<PrometheusExporterConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -84,7 +84,7 @@ fn init_telemetry(service: &ServiceConfig) -> anyhow::Result<TracingShutdownHand
             Some(&statsd.metrics_prefix),
         )?;
     } else {
-        PrometheusBattery::init()?;
+        PrometheusBattery::init(service.prometheus.clone())?;
     }
 
     if let Some(ref datadog) = service.datadog {

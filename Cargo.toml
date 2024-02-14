@@ -54,10 +54,9 @@ semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main"
 ] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sqlx = { version = "0.7", default-features = false, features = [
-    "macros",
+sqlx = { version = "0.7", features = [
     "runtime-tokio-native-tls",
-    "migrate",
+    "any",
     "postgres",
     "chrono",
 ] }

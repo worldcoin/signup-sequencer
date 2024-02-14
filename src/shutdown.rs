@@ -74,3 +74,27 @@ async fn signal_shutdown() -> Result<()> {
     info!("Ctrl-C received, shutting down");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use tokio::time::{sleep, Duration};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn shutdown_signal() {
+        let start = tokio::time::Instant::now();
+
+        tokio::spawn(async {
+            sleep(Duration::from_millis(100)).await;
+            shutdown();
+        });
+
+        await_shutdown().await;
+
+        let elapsed = start.elapsed();
+
+        assert!(elapsed > Duration::from_millis(100));
+        assert!(elapsed < Duration::from_millis(200));
+    }
+}

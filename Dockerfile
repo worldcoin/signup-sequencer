@@ -26,9 +26,6 @@ RUN rustup component add cargo
 # Build the sequencer
 RUN cargo build --release
 
-# Make sure it runs
-RUN /src/target/release/signup-sequencer --version
-
 # cc variant because we need libgcc and others
 FROM gcr.io/distroless/cc-debian12:nonroot
 

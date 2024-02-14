@@ -24,7 +24,7 @@ ENV CARGO_HOME="/root/.cargo"
 RUN rustup component add cargo
 
 # Build the sequencer
-RUN cargo build --release --features mimalloc
+RUN cargo build --release
 
 # Make sure it runs
 RUN /src/target/release/signup-sequencer --version

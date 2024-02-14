@@ -413,13 +413,15 @@ mod tests {
         metrics_queue_size = 100
         metrics_buffer_size = 100
         metrics_prefix = "signup_sequencer"
+
+        [service.prometheus.HttpListener]
+        listen_address = "0.0.0.0:9998"
     "#};
 
     #[test]
     fn full_toml_round_trip() {
         let config: Config = toml::from_str(FULL_TOML).unwrap();
         let serialized = toml::to_string_pretty(&config).unwrap();
-
         similar_asserts::assert_eq!(serialized.trim(), FULL_TOML.trim());
     }
 }

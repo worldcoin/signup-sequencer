@@ -14,6 +14,7 @@ use signup_sequencer::config::{Config, ServiceConfig};
 use signup_sequencer::server;
 use signup_sequencer::shutdown::watch_shutdown_signals;
 use signup_sequencer::task_monitor::TaskMonitor;
+use telemetry_batteries::metrics::prometheus::PrometheusBattery;
 use telemetry_batteries::metrics::statsd::StatsdBattery;
 use telemetry_batteries::tracing::datadog::DatadogBattery;
 use telemetry_batteries::tracing::stdout::StdoutBattery;
@@ -82,6 +83,8 @@ fn init_telemetry(service: &ServiceConfig) -> anyhow::Result<TracingShutdownHand
             statsd.metrics_buffer_size,
             Some(&statsd.metrics_prefix),
         )?;
+    } else {
+        PrometheusBattery::init()?;
     }
 
     if let Some(ref datadog) = service.datadog {

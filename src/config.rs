@@ -213,8 +213,15 @@ pub struct ServiceConfig {
     #[serde(default = "default::service_name")]
     pub service_name: String,
     pub datadog:      Option<DatadogConfig>,
-    pub statsd:       Option<StatsdConfig>,
-    pub prometheus:   Option<PrometheusExporterConfig>,
+    #[serde(default = "default::metrics")]
+    pub metrics:      Option<MetricsConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MetricsConfig {
+    Prometheus(PrometheusExporterConfig),
+    Statsd(StatsdConfig),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -234,8 +241,20 @@ pub struct StatsdConfig {
 pub mod default {
     use std::time::Duration;
 
+    use telemetry_batteries::metrics::prometheus::PrometheusExporterConfig;
+
+    use super::MetricsConfig;
+
     pub fn service_name() -> String {
         "signup-sequencer".to_string()
+    }
+
+    pub fn metrics() -> Option<MetricsConfig> {
+        Some(MetricsConfig::Prometheus(
+            PrometheusExporterConfig::HttpListener {
+                listen_address: "0.0.0.0:9998".parse().unwrap(),
+            },
+        ))
     }
 
     pub fn oz_api_url() -> String {
@@ -407,14 +426,7 @@ mod tests {
         [service.datadog]
         traces_endpoint = "http://localhost:8126"
 
-        [service.statsd]
-        metrics_host = "localhost"
-        metrics_port = 8125
-        metrics_queue_size = 100
-        metrics_buffer_size = 100
-        metrics_prefix = "signup_sequencer"
-
-        [service.prometheus.HttpListener]
+        [service.metrics.prometheus.http_listener]
         listen_address = "0.0.0.0:9998"
     "#};
 

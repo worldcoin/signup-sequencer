@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use signup_sequencer::app::App;
-use signup_sequencer::config::{Config, ServiceConfig};
+use signup_sequencer::config::{Config, MetricsConfig, ServiceConfig};
 use signup_sequencer::server;
 use signup_sequencer::shutdown::watch_shutdown_signals;
 use signup_sequencer::task_monitor::TaskMonitor;
@@ -75,16 +75,20 @@ fn load_config(args: &Args) -> anyhow::Result<Config> {
 }
 
 fn init_telemetry(service: &ServiceConfig) -> anyhow::Result<TracingShutdownHandle> {
-    if let Some(ref statsd) = service.statsd {
-        StatsdBattery::init(
-            &statsd.metrics_host,
-            statsd.metrics_port,
-            statsd.metrics_queue_size,
-            statsd.metrics_buffer_size,
-            Some(&statsd.metrics_prefix),
-        )?;
-    } else {
-        PrometheusBattery::init(service.prometheus.clone())?;
+    match service.metrics.clone() {
+        Some(MetricsConfig::Prometheus(prometheus)) => {
+            PrometheusBattery::init(Some(prometheus))?;
+        }
+        Some(MetricsConfig::Statsd(statsd)) => {
+            StatsdBattery::init(
+                &statsd.metrics_host,
+                statsd.metrics_port,
+                statsd.metrics_queue_size,
+                statsd.metrics_buffer_size,
+                Some(&statsd.metrics_prefix),
+            )?;
+        }
+        _ => {}
     }
 
     if let Some(ref datadog) = service.datadog {

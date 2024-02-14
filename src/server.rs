@@ -7,13 +7,13 @@ use std::time::Duration;
 use axum::extract::{Query, State};
 use axum::routing::{get, post};
 use axum::{middleware, Json, Router};
-use cli_batteries::await_shutdown;
 use error::Error;
 use hyper::StatusCode;
 use tracing::info;
 
 use crate::app::App;
 use crate::config::ServerConfig;
+use crate::shutdown::await_shutdown;
 
 mod custom_middleware;
 pub mod data;

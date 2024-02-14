@@ -19,6 +19,8 @@ pub struct Config {
     pub relayer:   RelayerConfig,
     pub database:  DatabaseConfig,
     pub server:    ServerConfig,
+    #[serde(default)]
+    pub service:   ServiceConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,8 +206,35 @@ pub struct ServerConfig {
     pub serve_timeout: Duration,
 }
 
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct ServiceConfig {
+    // Service name - used for logging, metrics and tracing
+    #[serde(default = "default::service_name")]
+    pub service_name: String,
+    pub datadog:      Option<DatadogConfig>,
+    pub statsd:       Option<StatsdConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatadogConfig {
+    pub traces_endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatsdConfig {
+    pub metrics_host:        String,
+    pub metrics_port:        u16,
+    pub metrics_queue_size:  usize,
+    pub metrics_buffer_size: usize,
+    pub metrics_prefix:      String,
+}
+
 pub mod default {
     use std::time::Duration;
+
+    pub fn service_name() -> String {
+        "signup-sequencer".to_string()
+    }
 
     pub fn oz_api_url() -> String {
         "https://api.defender.openzeppelin.com".to_string()
@@ -369,6 +398,19 @@ mod tests {
         [server]
         address = "0.0.0.0:3001"
         serve_timeout = "30s"
+
+        [service]
+        service_name = "signup-sequencer"
+
+        [service.datadog]
+        traces_endpoint = "http://localhost:8126"
+
+        [service.statsd]
+        metrics_host = "localhost"
+        metrics_port = 8125
+        metrics_queue_size = 100
+        metrics_buffer_size = 100
+        metrics_prefix = "signup_sequencer"
     "#};
 
     #[test]

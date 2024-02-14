@@ -10,5 +10,6 @@ mod ethereum;
 pub mod identity_tree;
 pub mod prover;
 pub mod server;
+pub mod shutdown;
 pub mod task_monitor;
 pub mod utils;

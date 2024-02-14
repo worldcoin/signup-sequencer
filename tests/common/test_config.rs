@@ -5,7 +5,7 @@ use anyhow::Context;
 use ethers::types::Address;
 use signup_sequencer::config::{
     default, AppConfig, Config, DatabaseConfig, NetworkConfig, OzDefenderConfig, ProvidersConfig,
-    RelayerConfig, ServerConfig, TreeConfig,
+    RelayerConfig, ServerConfig, ServiceConfig, TreeConfig,
 };
 use signup_sequencer::prover::ProverConfig;
 use signup_sequencer::utils::secret::SecretUrl;
@@ -176,6 +176,7 @@ impl TestConfigBuilder {
                 address:       SocketAddr::from(([127, 0, 0, 1], 0)),
                 serve_timeout: default::serve_timeout(),
             },
+            service:   ServiceConfig::default(),
         };
 
         Ok(config)

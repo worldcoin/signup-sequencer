@@ -13,7 +13,6 @@ pub mod prelude {
 
     pub use anyhow::Context;
     pub use clap::Parser;
-    pub use cli_batteries::{reset_shutdown, shutdown};
     pub use ethers::abi::{AbiEncode, Address};
     pub use ethers::core::abi::Abi;
     pub use ethers::core::k256::ecdsa::SigningKey;
@@ -45,6 +44,7 @@ pub mod prelude {
     pub use signup_sequencer::identity_tree::Hash;
     pub use signup_sequencer::prover::ProverType;
     pub use signup_sequencer::server;
+    pub use signup_sequencer::shutdown::{reset_shutdown, shutdown};
     pub use tokio::spawn;
     pub use tokio::task::JoinHandle;
     pub use tracing::{error, info, instrument};

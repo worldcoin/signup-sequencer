@@ -7,6 +7,8 @@ use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tracing::{error, info};
 
+use crate::shutdown::is_shutting_down;
+
 pub mod batch_type;
 pub mod index_packing;
 pub mod min_map;
@@ -51,7 +53,7 @@ where
                 Ok(Err(e)) => {
                     error!("Task failed: {e:?}");
 
-                    if cli_batteries::is_shutting_down() {
+                    if is_shutting_down() {
                         std::process::abort();
                     }
 
@@ -60,7 +62,7 @@ where
                 Err(e) => {
                     error!("Task panicked: {e:?}");
 
-                    if cli_batteries::is_shutting_down() {
+                    if is_shutting_down() {
                         std::process::abort();
                     }
 

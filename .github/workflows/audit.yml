@@ -28,4 +28,7 @@ jobs:
       - uses: rustsec/audit-check@v1.4.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # False positive from cargo audit.
+          # Stems from excluded optional dependency sqlx-mysql.
+          # https://github.com/rustsec/rustsec/issues/1119
           ignore: "RUSTSEC-2023-0071"

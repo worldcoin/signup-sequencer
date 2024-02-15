@@ -115,6 +115,7 @@ mod tests {
     fn test_example_env() {
         dotenv::from_path("example.env").ok();
         let args = Args { config: None };
-        load_config(&args).unwrap();
+        let config = load_config(&args).unwrap();
+        println!("{:#?}", config);
     }
 }

@@ -246,7 +246,7 @@ pub mod default {
     use super::MetricsConfig;
 
     pub fn service_name() -> String {
-        "signup-sequencer".to_string()
+        "signup_sequencer".to_string()
     }
 
     pub fn metrics() -> Option<MetricsConfig> {

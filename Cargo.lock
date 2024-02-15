@@ -1909,6 +1909,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0688c2a7f92e427f44895cd63841bff7b29f8d7a1648b9e7e07a4a365b2e1257"
 
 [[package]]
+name = "dotenv"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
+
+[[package]]
 name = "dotenvy"
 version = "0.15.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5474,6 +5480,7 @@ dependencies = [
  "chrono",
  "clap 4.4.18",
  "config",
+ "dotenv",
  "ethers",
  "ethers-solc",
  "eyre",
@@ -6016,7 +6023,7 @@ checksum = "69758bda2e78f098e4ccb393021a0963bb3442eac05f135c30f61b7370bbafae"
 [[package]]
 name = "telemetry-batteries"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/telemetry-batteries.git?rev=545e96d#545e96ddb84e4325578531d1858a88edba3e91e2"
+source = "git+https://github.com/worldcoin/telemetry-batteries.git?rev=c3c6921#c3c692148d5e5619413e7f588300d692bbef10b6"
 dependencies = [
  "chrono",
  "dirs",

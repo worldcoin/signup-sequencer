@@ -10,10 +10,11 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use signup_sequencer::app::App;
-use signup_sequencer::config::{Config, ServiceConfig};
+use signup_sequencer::config::{Config, MetricsConfig, ServiceConfig};
 use signup_sequencer::server;
 use signup_sequencer::shutdown::watch_shutdown_signals;
 use signup_sequencer::task_monitor::TaskMonitor;
+use telemetry_batteries::metrics::prometheus::PrometheusBattery;
 use telemetry_batteries::metrics::statsd::StatsdBattery;
 use telemetry_batteries::tracing::datadog::DatadogBattery;
 use telemetry_batteries::tracing::stdout::StdoutBattery;
@@ -67,21 +68,31 @@ fn load_config(args: &Args) -> anyhow::Result<Config> {
     }
 
     let settings = settings
-        .add_source(config::Environment::with_prefix("SEQ").separator("__"))
+        .add_source(
+            config::Environment::with_prefix("SEQ")
+                .separator("__")
+                .try_parsing(true),
+        )
         .build()?;
 
     Ok(settings.try_deserialize::<Config>()?)
 }
 
 fn init_telemetry(service: &ServiceConfig) -> anyhow::Result<TracingShutdownHandle> {
-    if let Some(ref statsd) = service.statsd {
-        StatsdBattery::init(
-            &statsd.metrics_host,
-            statsd.metrics_port,
-            statsd.metrics_queue_size,
-            statsd.metrics_buffer_size,
-            Some(&statsd.metrics_prefix),
-        )?;
+    match service.metrics.clone() {
+        Some(MetricsConfig::Prometheus(prometheus)) => {
+            PrometheusBattery::init(Some(prometheus))?;
+        }
+        Some(MetricsConfig::Statsd(statsd)) => {
+            StatsdBattery::init(
+                &statsd.metrics_host,
+                statsd.metrics_port,
+                statsd.metrics_queue_size,
+                statsd.metrics_buffer_size,
+                Some(&statsd.metrics_prefix),
+            )?;
+        }
+        _ => {}
     }
 
     if let Some(ref datadog) = service.datadog {
@@ -93,5 +104,18 @@ fn init_telemetry(service: &ServiceConfig) -> anyhow::Result<TracingShutdownHand
         ))
     } else {
         Ok(StdoutBattery::init())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_example_env() {
+        dotenv::from_path("example.env").ok();
+        let args = Args { config: None };
+        let config = load_config(&args).unwrap();
+        println!("{:#?}", config);
     }
 }

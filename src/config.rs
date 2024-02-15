@@ -5,6 +5,7 @@ use std::time::Duration;
 use ethers::types::{Address, H160};
 use semaphore::Field;
 use serde::{Deserialize, Serialize};
+use telemetry_batteries::metrics::prometheus::PrometheusExporterConfig;
 
 use crate::prover::ProverConfig;
 use crate::utils::secret::SecretUrl;
@@ -212,7 +213,15 @@ pub struct ServiceConfig {
     #[serde(default = "default::service_name")]
     pub service_name: String,
     pub datadog:      Option<DatadogConfig>,
-    pub statsd:       Option<StatsdConfig>,
+    #[serde(default = "default::metrics")]
+    pub metrics:      Option<MetricsConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MetricsConfig {
+    Prometheus(PrometheusExporterConfig),
+    Statsd(StatsdConfig),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,8 +241,20 @@ pub struct StatsdConfig {
 pub mod default {
     use std::time::Duration;
 
+    use telemetry_batteries::metrics::prometheus::PrometheusExporterConfig;
+
+    use super::MetricsConfig;
+
     pub fn service_name() -> String {
-        "signup-sequencer".to_string()
+        "signup_sequencer".to_string()
+    }
+
+    pub fn metrics() -> Option<MetricsConfig> {
+        Some(MetricsConfig::Prometheus(
+            PrometheusExporterConfig::HttpListener {
+                listen_address: "0.0.0.0:9998".parse().unwrap(),
+            },
+        ))
     }
 
     pub fn oz_api_url() -> String {
@@ -405,19 +426,14 @@ mod tests {
         [service.datadog]
         traces_endpoint = "http://localhost:8126"
 
-        [service.statsd]
-        metrics_host = "localhost"
-        metrics_port = 8125
-        metrics_queue_size = 100
-        metrics_buffer_size = 100
-        metrics_prefix = "signup_sequencer"
+        [service.metrics.prometheus.http_listener]
+        listen_address = "0.0.0.0:9998"
     "#};
 
     #[test]
     fn full_toml_round_trip() {
         let config: Config = toml::from_str(FULL_TOML).unwrap();
         let serialized = toml::to_string_pretty(&config).unwrap();
-
         similar_asserts::assert_eq!(serialized.trim(), FULL_TOML.trim());
     }
 }

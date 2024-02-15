@@ -540,6 +540,10 @@ criteria = "safe-to-deploy"
 version = "0.3.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.dotenv]]
+version = "0.15.0"
+criteria = "safe-to-run"
+
 [[exemptions.dotenvy]]
 version = "0.15.7"
 criteria = "safe-to-deploy"

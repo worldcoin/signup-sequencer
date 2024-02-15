@@ -29,7 +29,7 @@ axum-server = "0.4.4"
 bytes = "1.4.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "4.0", features = ["derive"] }
-telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "545e96d" }
+telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "c3c6921" }
 config = "0.13.4"
 ethers = { version = "2.0.10", features = ["ws", "ipc", "openssl", "abigen"] }
 ethers-solc = "2.0.10"
@@ -81,6 +81,7 @@ url = { version = "2.2", features = ["serde"] }
 zeroize = "1.6.0"
 
 [dev-dependencies]
+dotenv = "0.15.0"
 hex = "0.4.3"
 maplit = "1.0.2"
 micro-oz = { path = "crates/micro-oz" }

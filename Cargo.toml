@@ -81,6 +81,7 @@ url = { version = "2.2", features = ["serde"] }
 zeroize = "1.6.0"
 
 [dev-dependencies]
+dotenv = "0.15.0"
 hex = "0.4.3"
 maplit = "1.0.2"
 micro-oz = { path = "crates/micro-oz" }

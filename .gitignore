@@ -3,6 +3,7 @@
 commitments.json
 .*
 
+!.gitignore
 !.github
 !.editorconfig
 !.dockerignore

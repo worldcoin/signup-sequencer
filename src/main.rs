@@ -68,7 +68,11 @@ fn load_config(args: &Args) -> anyhow::Result<Config> {
     }
 
     let settings = settings
-        .add_source(config::Environment::with_prefix("SEQ").separator("__"))
+        .add_source(
+            config::Environment::with_prefix("SEQ")
+                .separator("__")
+                .try_parsing(true),
+        )
         .build()?;
 
     Ok(settings.try_deserialize::<Config>()?)
@@ -100,5 +104,17 @@ fn init_telemetry(service: &ServiceConfig) -> anyhow::Result<TracingShutdownHand
         ))
     } else {
         Ok(StdoutBattery::init())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_example_env() {
+        dotenv::from_path("example.env").ok();
+        let args = Args { config: None };
+        load_config(&args).unwrap();
     }
 }

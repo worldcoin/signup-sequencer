@@ -1,11 +1,9 @@
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::Context;
 use chrono::Utc;
 use tokio::sync::Notify;
-use tokio::time::MissedTickBehavior;
 use tracing::info;
 
 use crate::app::App;
@@ -19,15 +17,10 @@ pub async fn delete_identities(app: Arc<App>, wake_up_notify: Arc<Notify>) -> an
     let batch_deletion_timeout = chrono::Duration::from_std(app.config.app.batch_deletion_timeout)
         .context("Invalid batch deletion timeout duration")?;
 
-    let mut interval = tokio::time::interval(Duration::from_secs(5));
-    interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-
     loop {
-        // first tick returns immediately
-        interval.tick().await;
-
         let deletions = app.database.get_deletions().await?;
         if deletions.is_empty() {
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             continue;
         }
 
@@ -67,6 +60,8 @@ pub async fn delete_identities(app: Arc<App>, wake_up_notify: Arc<Notify>) -> an
             // Remove the previous commitments from the deletions table
             app.database.remove_deletions(&previous_commitments).await?;
             wake_up_notify.notify_one();
+        } else {
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         }
     }
 }

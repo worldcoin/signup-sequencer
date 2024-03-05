@@ -5,10 +5,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::{Query, State};
+use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{middleware, Json, Router};
 use error::Error;
-use hyper::StatusCode;
+use hyper::header::CONTENT_TYPE;
+use hyper::{Body, StatusCode};
+use prometheus::{Encoder, TextEncoder};
 use tracing::info;
 
 use crate::app::App;
@@ -132,6 +135,23 @@ async fn health() -> Result<(), Error> {
     Ok(())
 }
 
+async fn metrics() -> Result<Response<Body>, Error> {
+    let encoder = TextEncoder::new();
+
+    let metric_families = prometheus::gather();
+    let mut buffer = vec![];
+    encoder
+        .encode(&metric_families, &mut buffer)
+        .map_err(|e| Error::Other(e.into()))?;
+
+    let response = Response::builder()
+        .status(200)
+        .header(CONTENT_TYPE, encoder.format_type())
+        .body(Body::from(buffer))?;
+
+    Ok(response)
+}
+
 /// # Errors
 ///
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
@@ -169,6 +189,7 @@ pub async fn bind_from_listener(
         .route("/listBatchSizes", get(list_batch_sizes))
         // Health check, return 200 OK
         .route("/health", get(health))
+        .route("/metrics", get(metrics))
         .layer(middleware::from_fn(
             custom_middleware::api_metrics_layer::middleware,
         ))

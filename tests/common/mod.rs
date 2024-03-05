@@ -618,9 +618,32 @@ pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, Socket
 
     info!("Checking app health");
     check_health(&local_addr).await?;
+
+    info!("Checking metrics");
+    check_metrics(&local_addr).await?;
+
     info!("App ready");
 
     Ok((app, local_addr))
+}
+
+pub async fn check_metrics(socket_addr: &SocketAddr) -> anyhow::Result<()> {
+    let uri = format!("http://{}", socket_addr);
+    let client = Client::new();
+    let req = Request::builder()
+        .method("GET")
+        .uri(uri.to_owned() + "/metrics")
+        .body(Body::empty())
+        .expect("Failed to create metrics hyper::Body");
+    let response = client
+        .request(req)
+        .await
+        .context("Failed to execute metrics request.")?;
+    if !response.status().is_success() {
+        anyhow::bail!("Metrics endpoint failed");
+    }
+
+    Ok(())
 }
 
 pub async fn check_health(socket_addr: &SocketAddr) -> anyhow::Result<()> {

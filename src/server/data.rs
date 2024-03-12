@@ -8,15 +8,15 @@ use crate::identity_tree::{
 };
 use crate::prover::{ProverConfig, ProverType};
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct InclusionProofResponse(pub InclusionProof);
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ListBatchSizesResponse(pub Vec<ProverConfig>);
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct VerifySemaphoreProofResponse(pub RootItem);
 
@@ -61,7 +61,7 @@ pub enum IdentityHistoryEntryStatus {
     Bridged,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct InsertCommitmentRequest {
@@ -92,7 +92,7 @@ pub struct RemoveBatchSizeRequest {
     pub prover_type: ProverType,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct InclusionProofRequest {
@@ -125,7 +125,7 @@ pub struct VerifySemaphoreProofQuery {
     pub max_root_age_seconds: Option<i64>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct DeletionRequest {
@@ -133,7 +133,7 @@ pub struct DeletionRequest {
     pub identity_commitment: Hash,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct RecoveryRequest {

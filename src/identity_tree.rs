@@ -6,7 +6,7 @@ use semaphore::lazy_merkle_tree::{Derived, LazyMerkleTree};
 use semaphore::merkle_tree::Hasher;
 use semaphore::poseidon_tree::{PoseidonHash, Proof};
 use semaphore::{lazy_merkle_tree, Field};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::prelude::FromRow;
 use tracing::{info, warn};
 
@@ -40,7 +40,7 @@ pub struct TreeItem {
     pub leaf_index: usize,
 }
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct RootItem {
     pub root:                Field,
@@ -50,7 +50,7 @@ pub struct RootItem {
     pub mined_valid_as_of:   Option<chrono::DateTime<Utc>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProof {
     pub status:  Status,

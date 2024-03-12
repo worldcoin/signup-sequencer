@@ -47,7 +47,6 @@ oz-api = { path = "crates/oz-api" }
 # We need upstream PR#465 to fix #272.
 prometheus = "0.13.3"
 reqwest = { version = "0.11.18", features = ["json"] }
-# ruint has broken semver, specify exact version.
 ruint = { version = "=1.11.1", features = ["primitive-types", "sqlx"] }
 semaphore = { git = "https://github.com/worldcoin/semaphore-rs", branch = "main", features = [
     "depth_30",

@@ -100,6 +100,8 @@ async fn delete_identities(
             // Remove the previous commitments from the deletions table
             database.remove_deletions(previous_commitments).await?;
             wake_up_notify.notify_one();
+        } else {
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         }
     }
 }

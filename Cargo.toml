@@ -24,6 +24,7 @@ mimalloc = ["cli-batteries/mimalloc"]
 
 [dependencies]
 anyhow = { version = "1.0.68" }
+async-recursion = "1.1.0"
 async-stream = "0.3.3"
 async-trait = "0.1.64"
 axum = "0.6.4"

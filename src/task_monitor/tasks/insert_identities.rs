@@ -88,6 +88,8 @@ async fn insert_identities(
         }
     }
 
+    let _guard = pending_insertions_mutex.lock().await;
+
     let next_db_index = database.get_next_leaf_index().await?;
     let next_leaf = latest_tree.next_leaf();
 
@@ -106,8 +108,6 @@ async fn insert_identities(
     );
 
     let items = data.into_iter().zip(filtered_identities);
-
-    let _guard = pending_insertions_mutex.lock().await;
 
     for ((root, _proof, leaf_index), identity) in items {
         database

@@ -84,6 +84,8 @@ async fn delete_identities(
                 .map(|d| (d.leaf_index, d.commitment))
                 .unzip();
 
+            let _guard = pending_insertions_mutex.lock().await;
+
             // Delete the commitments at the target leaf indices in the latest tree,
             // generating the proof for each update
             let data = latest_tree.delete_many(&leaf_indices);
@@ -93,8 +95,6 @@ async fn delete_identities(
                 leaf_indices.len(),
                 "Length mismatch when appending identities to tree"
             );
-
-            let _guard = pending_insertions_mutex.lock().await;
 
             // Insert the new items into pending identities
             let items = data.into_iter().zip(leaf_indices);

@@ -4,7 +4,7 @@ use std::time::Duration;
 use clap::Parser;
 use once_cell::sync::Lazy;
 use prometheus::{linear_buckets, register_gauge, register_histogram, Gauge, Histogram};
-use tokio::sync::{broadcast, mpsc, Mutex, Notify, RwLock};
+use tokio::sync::{broadcast, mpsc, Notify, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{info, instrument, warn};
 
@@ -197,8 +197,6 @@ impl TaskMonitor {
         // in the database
         wake_up_notify.notify_one();
 
-        let pending_insertion_mutex = Arc::new(Mutex::new(()));
-
         let mut handles = Vec::new();
 
         // Finalize identities task
@@ -254,7 +252,6 @@ impl TaskMonitor {
             self.database.clone(),
             self.tree_state.get_latest_tree(),
             wake_up_notify.clone(),
-            pending_insertion_mutex.clone(),
         );
 
         let insert_identities_handle = crate::utils::spawn_monitored_with_backoff(
@@ -272,7 +269,6 @@ impl TaskMonitor {
             self.batch_deletion_timeout_seconds,
             self.min_batch_deletion_size,
             wake_up_notify,
-            pending_insertion_mutex,
         );
 
         let delete_identities_handle = crate::utils::spawn_monitored_with_backoff(

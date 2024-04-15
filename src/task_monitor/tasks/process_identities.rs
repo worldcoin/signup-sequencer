@@ -14,9 +14,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
 use crate::ethereum::write::TransactionId;
-use crate::identity_tree::{
-    AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
-};
+use crate::identity_tree::{AppliedTreeUpdate, Hash, Intermediate, TreeVersion};
 use crate::prover::identity::Identity;
 use crate::prover::{Prover, ReadOnlyProver};
 use crate::task_monitor::TaskMonitor;
@@ -110,7 +108,7 @@ async fn process_identities(
                 // If the timer has fired we want to insert whatever
                 // identities we have, even if it's not many. This ensures
                 // a minimum quality of service for API users.
-                let next_update = batching_tree.peek_next_updates(1);
+                let next_update = batching_tree.peek_next_updates(1).await;
                 if next_update.is_empty() {
                     continue;
                 }
@@ -121,7 +119,7 @@ async fn process_identities(
                     identity_manager.max_insertion_batch_size().await
                 };
 
-                let updates = batching_tree.peek_next_updates(batch_size);
+                let updates = batching_tree.peek_next_updates(batch_size).await;
 
                 commit_identities(
                     database,
@@ -154,7 +152,7 @@ async fn process_identities(
                 let should_process_anyway =
                     timeout_secs.abs_diff(diff_secs_u64) <= DEBOUNCE_THRESHOLD_SECS;
 
-                let next_update = batching_tree.peek_next_updates(1);
+                let next_update = batching_tree.peek_next_updates(1).await;
                 if next_update.is_empty() {
                     continue;
                 }
@@ -166,7 +164,7 @@ async fn process_identities(
                 };
 
                 // We have _at most_ one complete batch here.
-                let updates = batching_tree.peek_next_updates(batch_size);
+                let updates = batching_tree.peek_next_updates(batch_size).await;
 
 
                 // If insertion, check if we have enough identities to insert or if the insertion interval has elapsed
@@ -312,7 +310,7 @@ pub async fn insert_identities(
     // Grab the initial conditions before the updates are applied to the tree.
 
     let start_index = updates[0].update.leaf_index;
-    let pre_root: U256 = batching_tree.get_root().into();
+    let pre_root: U256 = batching_tree.get_root().await.into();
     let mut commitments: Vec<U256> = updates
         .iter()
         .map(|update| update.update.element.into())
@@ -442,7 +440,7 @@ pub async fn insert_identities(
     );
 
     // Update the batching tree only after submitting the identities to the chain
-    batching_tree.apply_updates_up_to(post_root.into());
+    batching_tree.apply_updates_up_to(post_root.into()).await;
 
     info!(start_index, ?pre_root, ?post_root, "Tree updated");
 
@@ -468,15 +466,16 @@ pub async fn delete_identities(
     debug!("Starting identity commit for {} identities.", updates.len());
 
     // Grab the initial conditions before the updates are applied to the tree.
-    let pre_root: U256 = batching_tree.get_root().into();
+    let pre_root: U256 = batching_tree.get_root().await.into();
 
     let mut deletion_indices = updates
         .iter()
         .map(|f| f.update.leaf_index as u32)
         .collect::<Vec<u32>>();
 
-    let commitments =
-        batching_tree.commitments_by_indices(deletion_indices.iter().map(|x| *x as usize));
+    let commitments = batching_tree
+        .commitments_by_indices(deletion_indices.iter().map(|x| *x as usize))
+        .await;
     let mut commitments: Vec<U256> = commitments.into_iter().map(U256::from).collect();
 
     let latest_tree_from_updates = updates
@@ -589,7 +588,7 @@ pub async fn delete_identities(
     );
 
     // Update the batching tree only after submitting the identities to the chain
-    batching_tree.apply_updates_up_to(post_root.into());
+    batching_tree.apply_updates_up_to(post_root.into()).await;
 
     info!(?pre_root, ?post_root, "Tree updated");
 

@@ -1,5 +1,5 @@
 use std::cmp::min;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::Arc;
 
 use chrono::Utc;
 use semaphore::lazy_merkle_tree::{Derived, LazyMerkleTree};
@@ -7,6 +7,7 @@ use semaphore::merkle_tree::Hasher;
 use semaphore::poseidon_tree::{PoseidonHash, Proof};
 use semaphore::{lazy_merkle_tree, Field};
 use serde::Serialize;
+use tokio::sync::{Mutex, MutexGuard};
 use tracing::{info, warn};
 
 mod status;
@@ -94,7 +95,7 @@ impl AllowedTreeVersionMarker for lazy_merkle_tree::Derived {
 /// Underlying data structure for a tree version. It holds the tree itself, the
 /// next leaf (only used in the latest tree), a pointer to the next version (if
 /// exists) and the metadata specified by the version marker.
-struct TreeVersionData<V: AllowedTreeVersionMarker> {
+pub struct TreeVersionData<V: AllowedTreeVersionMarker> {
     tree:      PoseidonTree<V>,
     next_leaf: usize,
     next:      Option<TreeVersion<AnyDerived>>,
@@ -102,7 +103,8 @@ struct TreeVersionData<V: AllowedTreeVersionMarker> {
 }
 
 /// Basic operations that should be available for all tree versions.
-trait BasicTreeOps {
+#[async_trait::async_trait]
+pub trait BasicTreeOps {
     /// Updates the tree with the given element at the given leaf index.
     fn update(&mut self, leaf_index: usize, element: Hash);
 
@@ -111,7 +113,7 @@ trait BasicTreeOps {
     /// Notifies the tree that it was changed and can perform garbage
     /// collection. This is version-specific and it is up to the implementer to
     /// decide how to handle this signal.
-    fn garbage_collect(&mut self);
+    async fn garbage_collect(&mut self);
 }
 
 impl<V> TreeVersionData<V>
@@ -137,12 +139,12 @@ where
 
     /// Returns _up to_ `maximum_update_count` contiguous deletion or insertion
     /// updates that are to be applied to the tree.
-    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
+    async fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
         let Some(next) = self.next.as_ref() else {
             return Vec::new();
         };
 
-        let next = next.get_data();
+        let next = next.get_data().await;
 
         let first_is_zero = match next.metadata.diff.first() {
             Some(first) => first.update.element == Hash::ZERO,
@@ -169,7 +171,7 @@ where
             .collect()
     }
 
-    fn apply_updates_up_to(&mut self, root: Hash) -> usize {
+    async fn apply_updates_up_to(&mut self, root: Hash) -> usize {
         let Some(next) = self.next.clone() else {
             return 0;
         };
@@ -177,7 +179,7 @@ where
         let num_updates;
         {
             // Acquire the exclusive write lock on the next version.
-            let mut next = next.get_data();
+            let mut next = next.get_data().await;
 
             let index_of_root = next
                 .metadata
@@ -197,12 +199,13 @@ where
             self.apply_diffs(applied_updates);
         }
 
-        self.garbage_collect();
+        self.garbage_collect().await;
 
         num_updates
     }
 }
 
+#[async_trait::async_trait]
 impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
     fn update(&mut self, leaf_index: usize, element: Hash) {
         take_mut::take(&mut self.tree, |tree| {
@@ -229,13 +232,13 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
     /// Warning: this will attempt to acquire lock for all transitive successors
     /// of this tree, and therefore no version locks acquired through
     /// `TreeVersion#get_data()` may be held at the time of calling this.
-    fn garbage_collect(&mut self) {
+    async fn garbage_collect(&mut self) {
         if self.metadata.count_since_last_flatten >= self.metadata.flatten_threshold {
             info!("Flattening threshold reached, rebuilding tree versions");
             self.metadata.count_since_last_flatten = 0;
             let next = &self.next;
             if let Some(next) = next {
-                next.get_data().rebuild_on(self.tree.derived());
+                next.get_data().await.rebuild_on(self.tree.derived()).await;
             }
             info!("Tree versions rebuilt");
         }
@@ -243,7 +246,8 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
 }
 
 impl TreeVersionData<lazy_merkle_tree::Derived> {
-    fn rebuild_on(&mut self, mut tree: PoseidonTree<lazy_merkle_tree::Derived>) {
+    #[async_recursion::async_recursion]
+    async fn rebuild_on(&mut self, mut tree: PoseidonTree<lazy_merkle_tree::Derived>) {
         for update in &mut self.metadata.diff {
             tree = tree.update(update.update.leaf_index, &update.update.element);
             update.result = tree.clone();
@@ -251,11 +255,12 @@ impl TreeVersionData<lazy_merkle_tree::Derived> {
         self.tree = tree;
         let next = &self.next;
         if let Some(next) = next {
-            next.get_data().rebuild_on(self.tree.clone());
+            next.get_data().await.rebuild_on(self.tree.clone()).await;
         }
     }
 }
 
+#[async_trait::async_trait]
 impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Derived> {
     fn update(&mut self, leaf_index: usize, element: Hash) {
         let updated_tree = self.tree.update(leaf_index, &element);
@@ -288,7 +293,7 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Derived> {
         }
     }
 
-    fn garbage_collect(&mut self) {}
+    async fn garbage_collect(&mut self) {}
 }
 
 /// The marker trait for linear ordering of tree versions. It also defines the
@@ -362,36 +367,20 @@ impl<V: Version<TreeVersion = lazy_merkle_tree::Derived>> TreeVersion<V> {
     }
 }
 
-/// The public-facing API for reading from a tree version. It is implemented for
-/// all versions. This being a trait allows us to hide some of the
-/// implementation details.
-pub trait TreeVersionReadOps {
-    /// Returns the current tree root.
-    fn get_root(&self) -> Hash;
-    /// Returns the next free leaf.
-    fn next_leaf(&self) -> usize;
-    /// Returns the given leaf value, the root of the tree and the proof
-    fn get_leaf_and_proof(&self, leaf: usize) -> (Hash, Hash, Proof);
-    /// Returns the merkle proof and element at the given leaf.
-    fn get_proof(&self, leaf: usize) -> (Hash, Proof);
-    /// Gets the leaf value at a given index.
-    fn get_leaf(&self, leaf: usize) -> Hash;
-}
-
-impl<V: Version> TreeVersionReadOps for TreeVersion<V>
+impl<V: Version> TreeVersion<V>
 where
     TreeVersionData<V::TreeVersion>: BasicTreeOps,
 {
-    fn get_root(&self) -> Hash {
-        self.get_data().get_root()
+    pub async fn get_root(&self) -> Hash {
+        self.get_data().await.get_root()
     }
 
-    fn next_leaf(&self) -> usize {
-        self.get_data().next_leaf
+    pub async fn next_leaf(&self) -> usize {
+        self.get_data().await.next_leaf
     }
 
-    fn get_leaf_and_proof(&self, leaf: usize) -> (Hash, Hash, Proof) {
-        let tree = self.get_data();
+    pub async fn get_leaf_and_proof(&self, leaf: usize) -> (Hash, Hash, Proof) {
+        let tree = self.get_data().await;
 
         let (root, proof) = tree.get_proof(leaf);
         let leaf = tree.get_leaf(leaf);
@@ -399,38 +388,41 @@ where
         (leaf, root, proof)
     }
 
-    fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
-        let tree = self.get_data();
+    pub async fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
+        let tree = self.get_data().await;
         tree.get_proof(leaf)
     }
 
-    fn get_leaf(&self, leaf: usize) -> Hash {
-        let tree = self.get_data();
+    pub async fn get_leaf(&self, leaf: usize) -> Hash {
+        let tree = self.get_data().await;
         tree.get_leaf(leaf)
     }
 }
 
 impl<V: Version> TreeVersion<V> {
-    fn get_data(&self) -> MutexGuard<TreeVersionData<V::TreeVersion>> {
-        self.0.lock().expect("no lock poisoning")
+    pub async fn get_data(&self) -> MutexGuard<TreeVersionData<V::TreeVersion>> {
+        self.0.lock().await
     }
 }
 
-impl TreeVersion<Latest> {
+impl TreeVersionData<lazy_merkle_tree::Derived> {
+    pub fn next_leaf(&self) -> usize {
+        self.next_leaf
+    }
+
     /// Appends many identities to the tree, returns a list with the root, proof
     /// of inclusion and leaf index
     #[must_use]
-    pub fn append_many(&self, identities: &[Hash]) -> Vec<(Hash, Proof, usize)> {
-        let mut data = self.get_data();
-        let next_leaf = data.next_leaf;
+    pub fn append_many(&mut self, identities: &[Hash]) -> Vec<(Hash, Proof, usize)> {
+        let next_leaf = self.next_leaf;
 
         let mut output = Vec::with_capacity(identities.len());
 
         for (idx, identity) in identities.iter().enumerate() {
             let leaf_index = next_leaf + idx;
 
-            data.update(leaf_index, *identity);
-            let (root, proof) = data.get_proof(leaf_index);
+            self.update(leaf_index, *identity);
+            let (root, proof) = self.get_proof(leaf_index);
 
             output.push((root, proof, leaf_index));
         }
@@ -441,14 +433,12 @@ impl TreeVersion<Latest> {
     /// Deletes many identities from the tree, returns a list with the root
     /// and proof of inclusion
     #[must_use]
-    pub fn delete_many(&self, leaf_indices: &[usize]) -> Vec<(Hash, Proof)> {
-        let mut data = self.get_data();
-
+    pub fn delete_many(&mut self, leaf_indices: &[usize]) -> Vec<(Hash, Proof)> {
         let mut output = Vec::with_capacity(leaf_indices.len());
 
         for leaf_index in leaf_indices {
-            data.update(*leaf_index, Hash::ZERO);
-            let (root, proof) = data.get_proof(*leaf_index);
+            self.update(*leaf_index, Hash::ZERO);
+            let (root, proof) = self.get_proof(*leaf_index);
 
             output.push((root, proof));
         }
@@ -461,8 +451,11 @@ impl<T> TreeVersion<T>
 where
     T: Version,
 {
-    pub fn commitments_by_indices(&self, indices: impl IntoIterator<Item = usize>) -> Vec<Hash> {
-        let tree = self.get_data();
+    pub async fn commitments_by_indices(
+        &self,
+        indices: impl IntoIterator<Item = usize>,
+    ) -> Vec<Hash> {
+        let tree = self.get_data().await;
 
         let mut commitments = vec![];
 
@@ -481,17 +474,20 @@ pub trait TreeWithNextVersion {
     fn apply_updates_up_to(&self, root: Hash) -> usize;
 }
 
-impl<V> TreeWithNextVersion for TreeVersion<V>
+impl<V> TreeVersion<V>
 where
     V: HasNextVersion,
     TreeVersionData<<V as Version>::TreeVersion>: BasicTreeOps,
 {
-    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
-        self.get_data().peek_next_updates(maximum_update_count)
+    pub async fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
+        self.get_data()
+            .await
+            .peek_next_updates(maximum_update_count)
+            .await
     }
 
-    fn apply_updates_up_to(&self, root: Hash) -> usize {
-        self.get_data().apply_updates_up_to(root)
+    pub async fn apply_updates_up_to(&self, root: Hash) -> usize {
+        self.get_data().await.apply_updates_up_to(root).await
     }
 }
 
@@ -540,11 +536,11 @@ impl TreeState {
     }
 
     #[must_use]
-    pub fn get_proof_for(&self, item: &TreeItem) -> (Field, InclusionProof) {
+    pub async fn get_proof_for(&self, item: &TreeItem) -> (Field, InclusionProof) {
         let (leaf, root, proof) = match item.status {
-            ProcessedStatus::Pending => self.latest.get_leaf_and_proof(item.leaf_index),
-            ProcessedStatus::Processed => self.processed.get_leaf_and_proof(item.leaf_index),
-            ProcessedStatus::Mined => self.mined.get_leaf_and_proof(item.leaf_index),
+            ProcessedStatus::Pending => self.latest.get_leaf_and_proof(item.leaf_index).await,
+            ProcessedStatus::Processed => self.processed.get_leaf_and_proof(item.leaf_index).await,
+            ProcessedStatus::Mined => self.mined.get_leaf_and_proof(item.leaf_index).await,
         };
 
         let proof = InclusionProof {
@@ -707,22 +703,22 @@ impl<P: Version> DerivedTreeBuilder<P> {
 
     /// Seals this version and returns a builder for the next version.
     #[must_use]
-    pub fn seal_and_continue(
+    pub async fn seal_and_continue(
         self,
     ) -> (TreeVersion<Intermediate>, DerivedTreeBuilder<Intermediate>) {
         let next_tree = self.current.tree.clone();
         let next_leaf = self.current.next_leaf;
         let sealed = TreeVersion(Arc::new(Mutex::new(self.current)));
         let next = Self::new(next_tree, next_leaf, sealed.clone());
-        self.prev.get_data().next = Some(sealed.as_derived());
+        self.prev.get_data().await.next = Some(sealed.as_derived());
         (sealed, next)
     }
 
     /// Seals this version and finishes the building process.
     #[must_use]
-    pub fn seal(self) -> TreeVersion<Latest> {
+    pub async fn seal(self) -> TreeVersion<Latest> {
         let sealed = TreeVersion(Arc::new(Mutex::new(self.current)));
-        self.prev.get_data().next = Some(sealed.as_derived());
+        self.prev.get_data().await.next = Some(sealed.as_derived());
         sealed
     }
 }
@@ -730,10 +726,10 @@ impl<P: Version> DerivedTreeBuilder<P> {
 #[cfg(test)]
 mod tests {
 
-    use super::{CanonicalTreeBuilder, Hash, TreeWithNextVersion};
+    use super::{CanonicalTreeBuilder, Hash};
 
-    #[test]
-    fn test_peek_next_updates() {
+    #[tokio::test]
+    async fn test_peek_next_updates() {
         let temp_dir = tempfile::tempdir().unwrap();
 
         let (canonical_tree, processed_builder) = CanonicalTreeBuilder::new(
@@ -745,8 +741,8 @@ mod tests {
             temp_dir.path().join("testfile").to_str().unwrap(),
         )
         .seal();
-        let processed_tree = processed_builder.seal();
-        let insertion_updates = processed_tree.append_many(&vec![
+        let processed_tree = processed_builder.seal().await;
+        let insertion_updates = processed_tree.get_data().await.append_many(&vec![
             Hash::from(1),
             Hash::from(2),
             Hash::from(3),
@@ -756,26 +752,28 @@ mod tests {
             Hash::from(7),
         ]);
 
-        let _deletion_updates = processed_tree.delete_many(&[0, 1, 2]);
+        let _deletion_updates = processed_tree.get_data().await.delete_many(&[0, 1, 2]);
 
-        let next_updates = canonical_tree.peek_next_updates(10);
+        let next_updates = canonical_tree.peek_next_updates(10).await;
         assert_eq!(next_updates.len(), 7);
 
-        canonical_tree.apply_updates_up_to(
-            insertion_updates
-                .last()
-                .expect("Could not get insertion updates")
-                .0,
-        );
+        canonical_tree
+            .apply_updates_up_to(
+                insertion_updates
+                    .last()
+                    .expect("Could not get insertion updates")
+                    .0,
+            )
+            .await;
 
-        let _ = processed_tree.append_many(&[
+        let _ = processed_tree.get_data().await.append_many(&[
             Hash::from(5),
             Hash::from(6),
             Hash::from(7),
             Hash::from(8),
         ]);
 
-        let next_updates = canonical_tree.peek_next_updates(10);
+        let next_updates = canonical_tree.peek_next_updates(10).await;
 
         assert_eq!(next_updates.len(), 3);
     }

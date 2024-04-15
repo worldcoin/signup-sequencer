@@ -1,19 +1,18 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 use tokio::time::sleep;
 use tracing::instrument;
 
 use crate::database::types::UnprocessedCommitment;
 use crate::database::Database;
-use crate::identity_tree::{Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
+use crate::identity_tree::{Latest, TreeVersion, UnprocessedStatus};
 
 pub struct InsertIdentities {
-    database:                 Arc<Database>,
-    latest_tree:              TreeVersion<Latest>,
-    wake_up_notify:           Arc<Notify>,
-    pending_insertions_mutex: Arc<Mutex<()>>,
+    database:       Arc<Database>,
+    latest_tree:    TreeVersion<Latest>,
+    wake_up_notify: Arc<Notify>,
 }
 
 impl InsertIdentities {
@@ -21,24 +20,16 @@ impl InsertIdentities {
         database: Arc<Database>,
         latest_tree: TreeVersion<Latest>,
         wake_up_notify: Arc<Notify>,
-        pending_insertions_mutex: Arc<Mutex<()>>,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
             latest_tree,
             wake_up_notify,
-            pending_insertions_mutex,
         })
     }
 
     pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
-        insert_identities_loop(
-            &self.database,
-            &self.latest_tree,
-            &self.wake_up_notify,
-            &self.pending_insertions_mutex,
-        )
-        .await
+        insert_identities_loop(&self.database, &self.latest_tree, &self.wake_up_notify).await
     }
 }
 
@@ -46,7 +37,6 @@ async fn insert_identities_loop(
     database: &Database,
     latest_tree: &TreeVersion<Latest>,
     wake_up_notify: &Notify,
-    pending_insertions_mutex: &Mutex<()>,
 ) -> anyhow::Result<()> {
     loop {
         // get commits from database
@@ -58,7 +48,7 @@ async fn insert_identities_loop(
             continue;
         }
 
-        insert_identities(database, latest_tree, unprocessed, pending_insertions_mutex).await?;
+        insert_identities(database, latest_tree, unprocessed).await?;
         // Notify the identity processing task, that there are new identities
         wake_up_notify.notify_one();
     }
@@ -69,7 +59,6 @@ async fn insert_identities(
     database: &Database,
     latest_tree: &TreeVersion<Latest>,
     identities: Vec<UnprocessedCommitment>,
-    pending_insertions_mutex: &Mutex<()>,
 ) -> anyhow::Result<()> {
     // Filter out any identities that are already in the `identities` table
     let mut filtered_identities = vec![];
@@ -88,8 +77,9 @@ async fn insert_identities(
         }
     }
 
+    let mut latest_tree_guard = latest_tree.get_data().await;
     let next_db_index = database.get_next_leaf_index().await?;
-    let next_leaf = latest_tree.next_leaf();
+    let next_leaf = latest_tree_guard.next_leaf();
 
     assert_eq!(
         next_leaf, next_db_index,
@@ -97,7 +87,7 @@ async fn insert_identities(
          {next_db_index}"
     );
 
-    let data = latest_tree.append_many(&filtered_identities);
+    let data = latest_tree_guard.append_many(&filtered_identities);
 
     assert_eq!(
         data.len(),
@@ -106,8 +96,6 @@ async fn insert_identities(
     );
 
     let items = data.into_iter().zip(filtered_identities);
-
-    let _guard = pending_insertions_mutex.lock().await;
 
     for ((root, _proof, leaf_index), identity) in items {
         database

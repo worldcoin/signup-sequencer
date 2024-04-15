@@ -14,7 +14,7 @@ use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangeKind, Tre
 use crate::contracts::scanner::BlockScanner;
 use crate::contracts::{IdentityManager, SharedIdentityManager};
 use crate::database::Database;
-use crate::identity_tree::{Canonical, Intermediate, TreeVersion, TreeWithNextVersion};
+use crate::identity_tree::{Canonical, Intermediate, TreeVersion};
 use crate::task_monitor::TaskMonitor;
 
 pub struct FinalizeRoots {
@@ -206,7 +206,7 @@ async fn finalize_mainnet_roots(
             .await?;
         }
 
-        let updates_count = processed_tree.apply_updates_up_to(post_root.into());
+        let updates_count = processed_tree.apply_updates_up_to(post_root.into()).await;
 
         info!(updates_count, ?pre_root, ?post_root, "Mined tree updated");
 
@@ -232,7 +232,7 @@ async fn finalize_secondary_roots(
         }
 
         database.mark_root_as_mined(&root.into()).await?;
-        finalized_tree.apply_updates_up_to(root.into());
+        finalized_tree.apply_updates_up_to(root.into()).await;
 
         info!(?root, "Root finalized");
     }
@@ -310,7 +310,9 @@ async fn update_eligible_recoveries(
         .await
         .context("Could not fetch deletion indices from tx")?;
 
-    let commitments = processed_tree.commitments_by_indices(commitments.iter().copied());
+    let commitments = processed_tree
+        .commitments_by_indices(commitments.iter().copied())
+        .await;
     let commitments: Vec<U256> = commitments
         .into_iter()
         .map(std::convert::Into::into)

@@ -14,7 +14,7 @@ use crate::database::{self, Database};
 use crate::ethereum::{self, Ethereum};
 use crate::identity_tree::{
     CanonicalTreeBuilder, Hash, InclusionProof, ProcessedStatus, RootItem, Status, TreeState,
-    TreeUpdate, TreeVersionReadOps, UnprocessedStatus,
+    TreeUpdate, UnprocessedStatus,
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::{self, ProverConfiguration, ProverType, Provers};
@@ -150,7 +150,7 @@ impl App {
         .await?;
         info!("Tree state initialization took: {:?}", timer.elapsed());
 
-        let tree_root = tree_state.get_processed_tree().get_root();
+        let tree_root = tree_state.get_processed_tree().get_root().await;
 
         if tree_root != root_hash {
             warn!(
@@ -323,12 +323,12 @@ impl App {
             .await?
         {
             Some(root) => {
-                if !mined.get_root().eq(&root) {
+                if !mined.get_root().await.eq(&root) {
                     return Ok(None);
                 }
             }
             None => {
-                if !mined.get_root().eq(&initial_root_hash) {
+                if !mined.get_root().await.eq(&initial_root_hash) {
                     return Ok(None);
                 }
             }
@@ -342,15 +342,15 @@ impl App {
             processed_builder.update(&processed_item);
         }
 
-        let (processed, batching_builder) = processed_builder.seal_and_continue();
-        let (batching, mut latest_builder) = batching_builder.seal_and_continue();
+        let (processed, batching_builder) = processed_builder.seal_and_continue().await;
+        let (batching, mut latest_builder) = batching_builder.seal_and_continue().await;
         let pending_items = database
             .get_commitments_by_status(ProcessedStatus::Pending)
             .await?;
         for update in pending_items {
             latest_builder.update(&update);
         }
-        let latest = latest_builder.seal();
+        let latest = latest_builder.seal().await;
         Ok(Some(TreeState::new(mined, processed, batching, latest)))
     }
 
@@ -398,8 +398,8 @@ impl App {
             processed_builder.update(&processed_item);
         }
 
-        let (processed, batching_builder) = processed_builder.seal_and_continue();
-        let (batching, mut latest_builder) = batching_builder.seal_and_continue();
+        let (processed, batching_builder) = processed_builder.seal_and_continue().await;
+        let (batching, mut latest_builder) = batching_builder.seal_and_continue().await;
 
         let pending_items = database
             .get_commitments_by_status(ProcessedStatus::Pending)
@@ -408,7 +408,7 @@ impl App {
             latest_builder.update(&update);
         }
 
-        let latest = latest_builder.seal();
+        let latest = latest_builder.seal().await;
 
         Ok(TreeState::new(mined, processed, batching, latest))
     }
@@ -486,7 +486,7 @@ impl App {
             .leaf_index;
 
         // Check if the id has already been deleted
-        if self.tree_state.get_latest_tree().get_leaf(leaf_index) == Uint::ZERO {
+        if self.tree_state.get_latest_tree().get_leaf(leaf_index).await == Uint::ZERO {
             return Err(ServerError::IdentityAlreadyDeleted);
         }
 
@@ -590,7 +590,11 @@ impl App {
                 // should be set to Batched
                 IdentityHistoryEntryStatus::Pending => {
                     if let Some(leaf_index) = entry.leaf_index {
-                        if self.tree_state.get_batching_tree().get_leaf(leaf_index)
+                        if self
+                            .tree_state
+                            .get_batching_tree()
+                            .get_leaf(leaf_index)
+                            .await
                             == entry.commitment
                         {
                             status = IdentityHistoryEntryStatus::Batched;
@@ -724,7 +728,7 @@ impl App {
             .await?
             .ok_or(ServerError::IdentityCommitmentNotFound)?;
 
-        let (leaf, proof) = self.tree_state.get_proof_for(&item);
+        let (leaf, proof) = self.tree_state.get_proof_for(&item).await;
 
         if leaf != *commitment {
             return Err(ServerError::InvalidCommitment);
@@ -748,7 +752,7 @@ impl App {
 
         if let Some(max_root_age_seconds) = query.max_root_age_seconds {
             let max_root_age = Duration::seconds(max_root_age_seconds);
-            self.validate_root_age(max_root_age, &root_state)?;
+            self.validate_root_age(max_root_age, &root_state).await?;
         }
 
         let checked = verify_proof(
@@ -770,15 +774,15 @@ impl App {
         }
     }
 
-    fn validate_root_age(
+    async fn validate_root_age(
         &self,
         max_root_age: Duration,
         root_state: &RootItem,
     ) -> Result<(), ServerError> {
-        let latest_root = self.tree_state.get_latest_tree().get_root();
-        let batching_root = self.tree_state.get_batching_tree().get_root();
-        let processed_root = self.tree_state.get_processed_tree().get_root();
-        let mined_root = self.tree_state.get_mined_tree().get_root();
+        let latest_root = self.tree_state.get_latest_tree().get_root().await;
+        let batching_root = self.tree_state.get_batching_tree().get_root().await;
+        let processed_root = self.tree_state.get_processed_tree().get_root().await;
+        let mined_root = self.tree_state.get_mined_tree().get_root().await;
 
         let root = root_state.root;
 

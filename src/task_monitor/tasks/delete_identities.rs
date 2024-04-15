@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use chrono::Utc;
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
 use tracing::info;
 
 use crate::database::types::DeletionEntry;
@@ -10,11 +10,12 @@ use crate::database::Database;
 use crate::identity_tree::{Hash, Latest, TreeVersion};
 
 pub struct DeleteIdentities {
-    database:                Arc<Database>,
-    latest_tree:             TreeVersion<Latest>,
-    deletion_time_interval:  i64,
-    min_deletion_batch_size: usize,
-    wake_up_notify:          Arc<Notify>,
+    database:                 Arc<Database>,
+    latest_tree:              TreeVersion<Latest>,
+    deletion_time_interval:   i64,
+    min_deletion_batch_size:  usize,
+    wake_up_notify:           Arc<Notify>,
+    pending_insertions_mutex: Arc<Mutex<()>>,
 }
 
 impl DeleteIdentities {
@@ -24,6 +25,7 @@ impl DeleteIdentities {
         deletion_time_interval: i64,
         min_deletion_batch_size: usize,
         wake_up_notify: Arc<Notify>,
+        pending_insertions_mutex: Arc<Mutex<()>>,
     ) -> Arc<Self> {
         Arc::new(Self {
             database,
@@ -31,6 +33,7 @@ impl DeleteIdentities {
             deletion_time_interval,
             min_deletion_batch_size,
             wake_up_notify,
+            pending_insertions_mutex,
         })
     }
 
@@ -41,6 +44,7 @@ impl DeleteIdentities {
             self.deletion_time_interval,
             self.min_deletion_batch_size,
             self.wake_up_notify.clone(),
+            &self.pending_insertions_mutex,
         )
         .await
     }
@@ -52,6 +56,7 @@ async fn delete_identities(
     deletion_time_interval: i64,
     min_deletion_batch_size: usize,
     wake_up_notify: Arc<Notify>,
+    pending_insertions_mutex: &Mutex<()>,
 ) -> anyhow::Result<()> {
     info!("Starting deletion processor.");
 
@@ -88,6 +93,8 @@ async fn delete_identities(
                 leaf_indices.len(),
                 "Length mismatch when appending identities to tree"
             );
+
+            let _guard = pending_insertions_mutex.lock().await;
 
             // Insert the new items into pending identities
             let items = data.into_iter().zip(leaf_indices);

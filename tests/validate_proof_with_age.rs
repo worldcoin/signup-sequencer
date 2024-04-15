@@ -1,6 +1,7 @@
 mod common;
 
 use std::time::Instant;
+use testcontainers::clients::Cli;
 
 use common::prelude::*;
 
@@ -20,8 +21,9 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
     #[allow(clippy::cast_possible_truncation)]
     let batch_size = 3;
 
+    let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _deletion_prover_map, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8).await?;
+        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8, &docker).await?;
 
     let prover_mock = &insertion_prover_map[&batch_size];
 

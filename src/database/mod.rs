@@ -860,9 +860,10 @@ mod test {
     use anyhow::Context;
     use chrono::{Days, Utc};
     use ethers::types::U256;
-    use postgres_docker_utils::DockerContainerGuard;
+    use postgres_docker_utils::DockerContainer;
     use ruint::Uint;
     use semaphore::Field;
+    use testcontainers::clients::Cli;
 
     use super::Database;
     use crate::config::DatabaseConfig;
@@ -891,21 +892,32 @@ mod test {
         chrono::Duration::milliseconds(x.num_milliseconds().abs())
     }
 
-    // TODO: we should probably consolidate all tests that propagate errors to
-    // TODO: either use anyhow or eyre
-    async fn setup_db() -> anyhow::Result<(Database, DockerContainerGuard)> {
-        let db_container = postgres_docker_utils::setup().await?;
-        let db_socket_addr = db_container.address();
-        let url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
+    struct DBSetuper {
+        docker: Cli,
+    }
 
-        let db = Database::new(&DatabaseConfig {
-            database:        SecretUrl::from_str(&url)?,
-            migrate:         true,
-            max_connections: 1,
-        })
-        .await?;
+    fn get_db_setuper() -> DBSetuper {
+        DBSetuper {
+            docker: Cli::default(),
+        }
+    }
 
-        Ok((db, db_container))
+    impl DBSetuper {
+        // TODO: we should probably consolidate all tests that propagate errors to
+        // TODO: either use anyhow or eyre
+        async fn setup_db<'a>(&'a self) -> anyhow::Result<(Database, DockerContainer<'a>)> {
+            let db_container = postgres_docker_utils::setup(&self.docker).await?;
+            let url = format!("postgres://postgres:postgres@{}/database", db_container.address());
+
+            let db = Database::new(&DatabaseConfig {
+                database: SecretUrl::from_str(&url)?,
+                migrate: true,
+                max_connections: 1,
+            })
+                .await?;
+
+            Ok((db, db_container))
+        }
     }
 
     fn mock_roots(n: usize) -> Vec<Field> {
@@ -944,7 +956,8 @@ mod test {
 
     #[tokio::test]
     async fn insert_identity() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let dec = "1234500000000000000";
         let commit_hash: Hash = U256::from_dec_str(dec)
             .expect("cant convert to u256")
@@ -978,7 +991,8 @@ mod test {
 
     #[tokio::test]
     async fn insert_and_delete_identity() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let zero: Hash = U256::zero().into();
         let zero_root: Hash = U256::from_dec_str("6789")?.into();
@@ -1020,7 +1034,8 @@ mod test {
 
     #[tokio::test]
     async fn test_insert_prover_configuration() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let mock_prover_configuration_0 = ProverConfig {
             batch_size:  100,
@@ -1062,7 +1077,8 @@ mod test {
 
     #[tokio::test]
     async fn test_insert_provers() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let mock_provers = mock_provers();
 
         db.insert_provers(mock_provers.clone()).await?;
@@ -1075,7 +1091,8 @@ mod test {
 
     #[tokio::test]
     async fn test_remove_prover() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let mock_provers = mock_provers();
 
         db.insert_provers(mock_provers.clone()).await?;
@@ -1092,7 +1109,8 @@ mod test {
 
     #[tokio::test]
     async fn test_insert_new_recovery() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let existing_commitment: Uint<256, 4> = Uint::from(1);
         let new_commitment: Uint<256, 4> = Uint::from(2);
@@ -1111,7 +1129,8 @@ mod test {
 
     #[tokio::test]
     async fn test_insert_new_deletion() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let existing_commitment: Uint<256, 4> = Uint::from(1);
 
         db.insert_new_deletion(0, &existing_commitment).await?;
@@ -1126,7 +1145,8 @@ mod test {
 
     #[tokio::test]
     async fn test_get_eligible_unprocessed_commitments() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let commitment_0: Uint<256, 4> = Uint::from(1);
         let eligibility_timestamp_0 = Utc::now();
 
@@ -1158,7 +1178,8 @@ mod test {
 
     #[tokio::test]
     async fn test_get_unprocessed_commitments() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         // Insert new identity with a valid eligibility timestamp
         let commitment_0: Uint<256, 4> = Uint::from(1);
@@ -1191,7 +1212,8 @@ mod test {
 
     #[tokio::test]
     async fn test_identity_is_queued_for_deletion() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let existing_commitment: Uint<256, 4> = Uint::from(1);
 
         db.insert_new_deletion(0, &existing_commitment).await?;
@@ -1206,7 +1228,8 @@ mod test {
 
     #[tokio::test]
     async fn test_update_eligibility_timestamp() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let dec = "1234500000000000000";
         let commit_hash: Hash = U256::from_dec_str(dec)
             .expect("cant convert to u256")
@@ -1247,7 +1270,8 @@ mod test {
 
     #[tokio::test]
     async fn test_update_insertion_timestamp() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let insertion_timestamp = Utc::now();
 
@@ -1263,7 +1287,8 @@ mod test {
 
     #[tokio::test]
     async fn test_insert_deletion() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let identities = mock_identities(3);
 
         db.insert_new_deletion(0, &identities[0]).await?;
@@ -1279,7 +1304,8 @@ mod test {
 
     #[tokio::test]
     async fn test_insert_recovery() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let old_identities = mock_identities(3);
         let new_identities = mock_identities(3);
@@ -1296,7 +1322,8 @@ mod test {
 
     #[tokio::test]
     async fn test_delete_recoveries() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let old_identities = mock_identities(3);
         let new_identities = mock_identities(3);
@@ -1318,7 +1345,8 @@ mod test {
 
     #[tokio::test]
     async fn get_last_leaf_index() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let identities = mock_identities(1);
         let roots = mock_roots(1);
@@ -1338,7 +1366,8 @@ mod test {
 
     #[tokio::test]
     async fn mark_all_as_pending_marks_all() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let identities = mock_identities(5);
         let roots = mock_roots(5);
@@ -1367,7 +1396,8 @@ mod test {
 
     #[tokio::test]
     async fn mark_root_as_processed_marks_previous_roots() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let identities = mock_identities(5);
         let roots = mock_roots(5);
@@ -1409,7 +1439,8 @@ mod test {
 
     #[tokio::test]
     async fn mark_root_as_mined_marks_previous_roots() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let identities = mock_identities(5);
         let roots = mock_roots(5);
@@ -1451,7 +1482,8 @@ mod test {
 
     #[tokio::test]
     async fn mark_root_as_mined_interaction_with_mark_root_as_processed() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let num_identities = 6;
 
@@ -1494,7 +1526,8 @@ mod test {
 
     #[tokio::test]
     async fn mark_root_as_processed_marks_next_roots() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let identities = mock_identities(5);
         let roots = mock_roots(5);
@@ -1537,7 +1570,8 @@ mod test {
 
     #[tokio::test]
     async fn root_history_timing() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let identities = mock_identities(5);
         let roots = mock_roots(5);
@@ -1594,7 +1628,8 @@ mod test {
 
     #[tokio::test]
     async fn get_commitments_by_status() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let identities = mock_identities(5);
 
@@ -1632,7 +1667,8 @@ mod test {
 
     #[tokio::test]
     async fn get_commitments_by_status_results_are_in_id_order() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let identities = mock_identities(5);
 
@@ -1686,7 +1722,8 @@ mod test {
 
     #[tokio::test]
     async fn test_root_invalidation() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let identities = mock_identities(5);
         let roots = mock_roots(5);
@@ -1762,7 +1799,8 @@ mod test {
 
     #[tokio::test]
     async fn check_identity_existence() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let identities = mock_identities(2);
         let roots = mock_roots(1);
@@ -1790,7 +1828,8 @@ mod test {
 
     #[tokio::test]
     async fn test_remove_deletions() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         let identities = mock_identities(4);
 
@@ -1821,7 +1860,8 @@ mod test {
 
     #[tokio::test]
     async fn test_latest_deletion_root() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
 
         // Update with initial timestamp
         let initial_timestamp = chrono::Utc::now();
@@ -1848,7 +1888,8 @@ mod test {
 
     #[tokio::test]
     async fn test_history_unprocessed_identities() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let identities = mock_identities(2);
 
         let now = Utc::now();
@@ -1886,7 +1927,8 @@ mod test {
 
     #[tokio::test]
     async fn test_history_unprocessed_deletion_identities() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let identities = mock_identities(2);
         let roots = mock_roots(2);
 
@@ -1918,7 +1960,8 @@ mod test {
 
     #[tokio::test]
     async fn test_history_processed_deletion_identities() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let identities = mock_identities(2);
         let roots = mock_roots(2);
 
@@ -1948,7 +1991,8 @@ mod test {
 
     #[tokio::test]
     async fn test_history_processed_identity() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let identities = mock_identities(2);
         let roots = mock_roots(2);
 
@@ -1983,7 +2027,8 @@ mod test {
 
     #[tokio::test]
     async fn can_insert_same_root_multiple_times() -> anyhow::Result<()> {
-        let (db, _db_container) = setup_db().await?;
+        let db_setuper = get_db_setuper();
+        let (db, _db_container) = db_setuper.setup_db().await?;
         let identities = mock_identities(2);
         let roots = mock_roots(2);
 

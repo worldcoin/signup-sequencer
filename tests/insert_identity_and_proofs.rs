@@ -1,6 +1,7 @@
 mod common;
 
 use common::prelude::*;
+use testcontainers::clients::Cli;
 
 const IDLE_TIME: u64 = 7;
 
@@ -15,8 +16,9 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
+    let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8).await?;
+        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8, &docker).await?;
 
     let prover_mock = &insertion_prover_map[&batch_size];
 

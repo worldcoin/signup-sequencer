@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use common::prelude::*;
 use hyper::Uri;
+use testcontainers::clients::Cli;
 
 use crate::common::{test_add_batch_size, test_remove_batch_size};
 
@@ -21,11 +22,13 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
+    let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
         initial_root,
         &[first_batch_size, second_batch_size],
         &[],
         DEFAULT_TREE_DEPTH as u8,
+        &docker,
     )
     .await?;
 

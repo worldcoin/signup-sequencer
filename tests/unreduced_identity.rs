@@ -1,5 +1,6 @@
 mod common;
 use common::prelude::*;
+use testcontainers::clients::Cli;
 
 #[tokio::test]
 async fn test_unreduced_identity() -> anyhow::Result<()> {
@@ -9,8 +10,9 @@ async fn test_unreduced_identity() -> anyhow::Result<()> {
     let initial_root: U256 = ref_tree.root().into();
     let batch_size: usize = 3;
 
+    let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8).await?;
+        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8, &docker).await?;
     let prover_mock = &insertion_prover_map[&batch_size];
     prover_mock.set_availability(false).await;
 

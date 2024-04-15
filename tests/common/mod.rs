@@ -28,7 +28,7 @@ pub mod prelude {
     pub use hyper::client::HttpConnector;
     pub use hyper::{Body, Client, Request};
     pub use once_cell::sync::Lazy;
-    pub use postgres_docker_utils::DockerContainerGuard;
+    pub use postgres_docker_utils::DockerContainer;
     pub use semaphore::identity::Identity;
     pub use semaphore::merkle_tree::{self, Branch};
     pub use semaphore::poseidon_tree::{PoseidonHash, PoseidonTree};
@@ -74,6 +74,7 @@ use std::sync::Arc;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use hyper::StatusCode;
+use testcontainers::clients::Cli;
 use signup_sequencer::identity_tree::{Status, TreeState, TreeVersionReadOps};
 use signup_sequencer::task_monitor::TaskMonitor;
 use tracing::trace;
@@ -675,14 +676,15 @@ struct CompiledContract {
     bytecode: Bytecode,
 }
 
-pub async fn spawn_deps(
+pub async fn spawn_deps<'a, 'b, 'c>(
     initial_root: U256,
-    insertion_batch_sizes: &[usize],
-    deletion_batch_sizes: &[usize],
+    insertion_batch_sizes: &'b [usize],
+    deletion_batch_sizes: &'c [usize],
     tree_depth: u8,
+    docker: &'a Cli,
 ) -> anyhow::Result<(
     MockChain,
-    DockerContainerGuard,
+    DockerContainer<'a>,
     HashMap<usize, ProverService>,
     HashMap<usize, ProverService>,
     micro_oz::ServerHandle,
@@ -694,7 +696,7 @@ pub async fn spawn_deps(
         tree_depth,
     );
 
-    let db_container = spawn_db();
+    let db_container = spawn_db(docker);
 
     let insertion_prover_futures = FuturesUnordered::new();
     for batch_size in insertion_batch_sizes {
@@ -744,8 +746,8 @@ pub async fn spawn_deps(
     ))
 }
 
-async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {
-    let db_container = postgres_docker_utils::setup().await.unwrap();
+async fn spawn_db<'a>(docker: &'a Cli) -> anyhow::Result<DockerContainer<'a>> {
+    let db_container = postgres_docker_utils::setup(docker).await.unwrap();
 
     Ok(db_container)
 }

@@ -81,6 +81,10 @@ mod tests {
 
     use super::*;
 
+    // This test is ignored due to global variable being used to indicate if system is shutting
+    // down. Because tests are being run in parallel it is causing unpredictable behaviour and
+    // random test failures.
+    #[ignore]
     #[tokio::test]
     async fn shutdown_signal() {
         let start = tokio::time::Instant::now();

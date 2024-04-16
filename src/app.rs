@@ -142,6 +142,7 @@ impl App {
         Ok::<(), anyhow::Error>(())
     }
 
+    #[instrument(skip(self))]
     async fn restore_or_initialize_tree(
         &self,
         initial_root_hash: Hash,
@@ -299,14 +300,22 @@ impl App {
         };
 
         tracing::info!("Creating mined tree");
-        let mined_builder = CanonicalTreeBuilder::new(
-            self.identity_manager.tree_depth(),
-            self.config.tree.dense_tree_prefix_depth,
-            self.config.tree.tree_gc_threshold,
-            initial_leaf_value,
-            &initial_leaves,
-            &self.config.tree.cache_file,
-        );
+        let tree_depth = self.identity_manager.tree_depth();
+        let dense_tree_prefix_depth = self.config.tree.dense_tree_prefix_depth;
+        let tree_gc_threshold = self.config.tree.tree_gc_threshold;
+        let cache_file = self.config.tree.cache_file.clone();
+
+        let mined_builder = tokio::task::spawn_blocking(move || {
+            CanonicalTreeBuilder::new(
+                tree_depth,
+                dense_tree_prefix_depth,
+                tree_gc_threshold,
+                initial_leaf_value,
+                &initial_leaves,
+                &cache_file,
+            )
+        })
+        .await?;
 
         let (mined, mut processed_builder) = mined_builder.seal();
 

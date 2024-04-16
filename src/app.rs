@@ -277,8 +277,11 @@ impl App {
             .ok_or(ServerError::TreeStateUninitialized)?)
     }
 
+    #[instrument(skip_all)]
     async fn initialize_tree(&self, mined_items: Vec<TreeUpdate>) -> anyhow::Result<TreeState> {
         // Flatten the updates for initial leaves
+        tracing::info!("Deduplicating mined items");
+
         let mined_items = dedup_tree_updates(mined_items);
         let initial_leaf_value = self.identity_manager.initial_leaf_value();
 
@@ -295,6 +298,7 @@ impl App {
             leaves
         };
 
+        tracing::info!("Creating mined tree");
         let mined_builder = CanonicalTreeBuilder::new(
             self.identity_manager.tree_depth(),
             self.config.tree.dense_tree_prefix_depth,
@@ -311,6 +315,7 @@ impl App {
             .get_commitments_by_status(ProcessedStatus::Processed)
             .await?;
 
+        tracing::info!("Updating processed tree");
         for processed_item in processed_items {
             processed_builder.update(&processed_item);
         }
@@ -322,6 +327,8 @@ impl App {
             .database
             .get_commitments_by_status(ProcessedStatus::Pending)
             .await?;
+
+        tracing::info!("Updating latest tree");
         for update in pending_items {
             latest_builder.update(&update);
         }

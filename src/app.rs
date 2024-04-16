@@ -142,6 +142,7 @@ impl App {
         Ok::<(), anyhow::Error>(())
     }
 
+    #[instrument(skip(self))]
     async fn restore_or_initialize_tree(
         &self,
         initial_root_hash: Hash,
@@ -277,8 +278,11 @@ impl App {
             .ok_or(ServerError::TreeStateUninitialized)?)
     }
 
+    #[instrument(skip_all)]
     async fn initialize_tree(&self, mined_items: Vec<TreeUpdate>) -> anyhow::Result<TreeState> {
         // Flatten the updates for initial leaves
+        tracing::info!("Deduplicating mined items");
+
         let mined_items = dedup_tree_updates(mined_items);
         let initial_leaf_value = self.identity_manager.initial_leaf_value();
 
@@ -295,14 +299,23 @@ impl App {
             leaves
         };
 
-        let mined_builder = CanonicalTreeBuilder::new(
-            self.identity_manager.tree_depth(),
-            self.config.tree.dense_tree_prefix_depth,
-            self.config.tree.tree_gc_threshold,
-            initial_leaf_value,
-            &initial_leaves,
-            &self.config.tree.cache_file,
-        );
+        tracing::info!("Creating mined tree");
+        let tree_depth = self.identity_manager.tree_depth();
+        let dense_tree_prefix_depth = self.config.tree.dense_tree_prefix_depth;
+        let tree_gc_threshold = self.config.tree.tree_gc_threshold;
+        let cache_file = self.config.tree.cache_file.clone();
+
+        let mined_builder = tokio::task::spawn_blocking(move || {
+            CanonicalTreeBuilder::new(
+                tree_depth,
+                dense_tree_prefix_depth,
+                tree_gc_threshold,
+                initial_leaf_value,
+                &initial_leaves,
+                &cache_file,
+            )
+        })
+        .await?;
 
         let (mined, mut processed_builder) = mined_builder.seal();
 
@@ -311,6 +324,7 @@ impl App {
             .get_commitments_by_status(ProcessedStatus::Processed)
             .await?;
 
+        tracing::info!("Updating processed tree");
         for processed_item in processed_items {
             processed_builder.update(&processed_item);
         }
@@ -322,6 +336,8 @@ impl App {
             .database
             .get_commitments_by_status(ProcessedStatus::Pending)
             .await?;
+
+        tracing::info!("Updating latest tree");
         for update in pending_items {
             latest_builder.update(&update);
         }

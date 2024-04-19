@@ -2,7 +2,6 @@ mod common;
 
 use common::prelude::*;
 use hyper::StatusCode;
-use testcontainers::clients::Cli;
 use signup_sequencer::server::data::{
     IdentityHistoryEntryStatus, IdentityHistoryRequest, IdentityHistoryResponse,
 };

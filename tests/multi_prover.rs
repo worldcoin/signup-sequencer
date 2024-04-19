@@ -1,6 +1,5 @@
 mod common;
 
-use testcontainers::clients::Cli;
 use common::prelude::*;
 
 /// Tests that the app can keep running even if the prover returns 500s

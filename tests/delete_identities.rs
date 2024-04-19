@@ -2,7 +2,6 @@
 
 mod common;
 
-use testcontainers::clients::Cli;
 use common::prelude::*;
 
 use crate::common::test_delete_identity;

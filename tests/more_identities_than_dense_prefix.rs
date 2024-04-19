@@ -1,7 +1,6 @@
 mod common;
 
 use common::prelude::*;
-use testcontainers::clients::Cli;
 
 const IDLE_TIME: u64 = 12;
 

@@ -74,31 +74,3 @@ async fn signal_shutdown() -> Result<()> {
     info!("Ctrl-C received, shutting down");
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use tokio::time::{sleep, Duration};
-
-    use super::*;
-
-    // This test is ignored due to global variable being used to indicate if system is shutting
-    // down. Because tests are being run in parallel it is causing unpredictable behaviour and
-    // random test failures.
-    #[ignore]
-    #[tokio::test]
-    async fn shutdown_signal() {
-        let start = tokio::time::Instant::now();
-
-        tokio::spawn(async {
-            sleep(Duration::from_millis(100)).await;
-            shutdown();
-        });
-
-        await_shutdown().await;
-
-        let elapsed = start.elapsed();
-
-        assert!(elapsed > Duration::from_millis(100));
-        assert!(elapsed < Duration::from_millis(200));
-    }
-}

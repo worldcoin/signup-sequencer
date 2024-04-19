@@ -1,6 +1,6 @@
-use common::prelude::*;
-
 mod common;
+
+use common::prelude::*;
 
 #[tokio::test]
 async fn tree_restore_empty() -> anyhow::Result<()> {
@@ -13,8 +13,15 @@ async fn tree_restore_empty() -> anyhow::Result<()> {
     let ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8).await?;
+    let docker = Cli::default();
+    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
+        initial_root,
+        &[batch_size],
+        &[],
+        DEFAULT_TREE_DEPTH as u8,
+        &docker,
+    )
+    .await?;
 
     let prover_mock = &insertion_prover_map[&batch_size];
 

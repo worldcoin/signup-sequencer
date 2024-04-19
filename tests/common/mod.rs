@@ -45,6 +45,7 @@ pub mod prelude {
     pub use signup_sequencer::prover::ProverType;
     pub use signup_sequencer::server;
     pub use signup_sequencer::shutdown::{reset_shutdown, shutdown};
+    pub use testcontainers::clients::Cli;
     pub use tokio::spawn;
     pub use tokio::task::JoinHandle;
     pub use tracing::{error, info, instrument};
@@ -74,9 +75,9 @@ use std::sync::Arc;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use hyper::StatusCode;
-use testcontainers::clients::Cli;
 use signup_sequencer::identity_tree::{Status, TreeState, TreeVersionReadOps};
 use signup_sequencer::task_monitor::TaskMonitor;
+use testcontainers::clients::Cli;
 use tracing::trace;
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};

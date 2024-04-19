@@ -2,7 +2,6 @@
 
 mod common;
 
-use testcontainers::clients::Cli;
 use common::prelude::*;
 use signup_sequencer::identity_tree::{ProcessedStatus, UnprocessedStatus};
 

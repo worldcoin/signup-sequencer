@@ -2,7 +2,6 @@ mod common;
 
 use common::prelude::*;
 use hyper::StatusCode;
-use testcontainers::clients::Cli;
 
 /// Tests that the app rejects payloads which are too large or are not valid
 /// UTF-8 strings
@@ -17,8 +16,14 @@ async fn malformed_payload() -> anyhow::Result<()> {
     let batch_size: usize = 3;
 
     let docker = Cli::default();
-    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8, &docker).await?;
+    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
+        initial_root,
+        &[batch_size],
+        &[],
+        DEFAULT_TREE_DEPTH as u8,
+        &docker,
+    )
+    .await?;
 
     let prover_mock = &insertion_prover_map[&batch_size];
 

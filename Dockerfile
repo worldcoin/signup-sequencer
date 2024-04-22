@@ -9,7 +9,7 @@ COPY . .
 
 # Install dependencies
 RUN apt-get update && \
-    apt-get install -y curl build-essential libssl-dev texinfo libcap2-bin pkg-config
+    apt-get install -y git curl build-essential libssl-dev texinfo libcap2-bin pkg-config
 
 # TODO: Use a specific version of rustup
 # Install rustup

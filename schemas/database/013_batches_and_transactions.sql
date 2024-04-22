@@ -7,7 +7,7 @@ CREATE TABLE batches
     prev_root   BYTEA UNIQUE,
     created_at  TIMESTAMPTZ     NOT NULL,
     batch_type  batch_type_enum NOT NULL,
-    commitments BYTEA           NOT NULL,
+    commitments BYTEA[]         NOT NULL,
 
     FOREIGN KEY (prev_root) REFERENCES batches (next_root)
 );

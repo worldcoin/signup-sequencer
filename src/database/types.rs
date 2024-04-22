@@ -95,13 +95,9 @@ impl Encode<'_, Postgres> for Commitments {
 
 impl Decode<'_, Postgres> for Commitments {
     fn decode(value: <Postgres as HasValueRef<'_>>::ValueRef) -> Result<Self, BoxDynError> {
-        let value = <&[u8] as Decode<Postgres>>::decode(value)?;
+        let value = <Vec<[u8; 32]> as Decode<Postgres>>::decode(value)?;
 
-        let res = value
-            .chunks_exact(32)
-            .map(|s| s.try_into().unwrap())
-            .map(|v: [u8; 32]| Hash::from_be_bytes(v))
-            .collect();
+        let res = value.iter().map(|v| Hash::from_be_bytes(*v)).collect();
 
         Ok(Commitments(res))
     }
@@ -109,10 +105,10 @@ impl Decode<'_, Postgres> for Commitments {
 
 impl Type<Postgres> for Commitments {
     fn type_info() -> <Postgres as sqlx::Database>::TypeInfo {
-        <&[u8] as Type<Postgres>>::type_info()
+        <&Vec<&[u8]> as Type<Postgres>>::type_info()
     }
 
     fn compatible(ty: &<Postgres as sqlx::Database>::TypeInfo) -> bool {
-        <&[u8] as Type<Postgres>>::compatible(ty)
+        <&Vec<&[u8]> as Type<Postgres>>::compatible(ty)
     }
 }

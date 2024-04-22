@@ -11,9 +11,9 @@ use std::ops::Deref;
 use anyhow::{anyhow, Context, Error as ErrReport};
 use chrono::{DateTime, Utc};
 use ruint::aliases::U256;
-use sqlx::{Executor, Pool, Postgres, Row};
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
+use sqlx::{Executor, Pool, Postgres, Row};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
@@ -931,14 +931,13 @@ mod test {
     use semaphore::Field;
     use testcontainers::clients::Cli;
 
+    use super::Database;
     use crate::config::DatabaseConfig;
-    use crate::database::DatabaseExt as _;
     use crate::database::types::{BatchType, Commitments};
+    use crate::database::DatabaseExt as _;
     use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
     use crate::prover::{ProverConfig, ProverType};
     use crate::utils::secret::SecretUrl;
-
-    use super::Database;
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {

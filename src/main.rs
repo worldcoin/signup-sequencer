@@ -39,6 +39,8 @@ async fn sequencer_app(args: Args) -> anyhow::Result<()> {
 
     watch_shutdown_signals();
 
+    tracing::info!(?config, "Starting the app");
+
     let server_config = config.server.clone();
 
     // Create App struct

@@ -2175,7 +2175,7 @@ mod test {
 
         assert_eq!(next_batch.prev_root.unwrap(), roots[0]);
         assert_eq!(next_batch.next_root, roots[1]);
-        assert_eq!(next_batch.commitments, Commitments(identities2));
+        assert_eq!(next_batch.commitments, identities2.into());
 
         let next_batch = db.get_next_batch(&roots[1]).await?;
 

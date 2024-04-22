@@ -11,14 +11,15 @@ use std::ops::Deref;
 use anyhow::{anyhow, Context, Error as ErrReport};
 use chrono::{DateTime, Utc};
 use ruint::aliases::U256;
+use sqlx::{Executor, Pool, Postgres, Row};
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
-use sqlx::{Executor, Pool, Postgres, Row};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
 use self::types::{CommitmentHistoryEntry, DeletionEntry, LatestDeletionEntry, RecoveryEntry};
 use crate::config::DatabaseConfig;
+use crate::database::types::{BatchEntry, BatchType, Commitments};
 use crate::identity_tree::{
     Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate, UnprocessedStatus,
 };
@@ -821,8 +822,8 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
     async fn identity_exists(self, commitment: Hash) -> Result<bool, Error> {
         Ok(sqlx::query(
             r#"
-            select 
-            EXISTS (select commitment from unprocessed_identities where commitment = $1) OR 
+            select
+            EXISTS (select commitment from unprocessed_identities where commitment = $1) OR
             EXISTS (select commitment from identities where commitment = $1);
             "#,
         )
@@ -839,6 +840,71 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
                 .bind(commitment);
         let row_unprocessed = self.fetch_one(query_queued_deletion).await?;
         Ok(row_unprocessed.get::<bool, _>(0))
+    }
+
+    async fn insert_new_batch_head(
+        self,
+        next_root: &Hash,
+        batch_type: BatchType,
+        commitments: &Commitments,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO batches(
+                next_root,
+                prev_root,
+                created_at,
+                batch_type,
+                commitments
+            ) VALUES ($1, NULL, CURRENT_TIMESTAMP, $2, $3)
+            "#,
+        )
+        .bind(next_root)
+        .bind(batch_type)
+        .bind(commitments);
+
+        self.execute(query).await?;
+        Ok(())
+    }
+
+    async fn insert_new_batch(
+        self,
+        next_root: &Hash,
+        prev_root: &Hash,
+        batch_type: BatchType,
+        commitments: &Commitments,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO batches(
+                next_root,
+                prev_root,
+                created_at,
+                batch_type,
+                commitments
+            ) VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4)
+            "#,
+        )
+        .bind(next_root)
+        .bind(prev_root)
+        .bind(batch_type)
+        .bind(commitments);
+
+        self.execute(query).await?;
+        Ok(())
+    }
+
+    async fn get_next_batch(self, prev_root: &Hash) -> Result<Option<BatchEntry>, Error> {
+        let res = sqlx::query_as::<_, BatchEntry>(
+            r#"
+            SELECT * FROM batches WHERE prev_root = $1
+            "#,
+        )
+        .bind(prev_root)
+        .fetch_optional(self)
+        .await?;
+
+        Ok(res)
     }
 }
 
@@ -865,12 +931,14 @@ mod test {
     use semaphore::Field;
     use testcontainers::clients::Cli;
 
-    use super::Database;
     use crate::config::DatabaseConfig;
     use crate::database::DatabaseExt as _;
+    use crate::database::types::{BatchType, Commitments};
     use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
     use crate::prover::{ProverConfig, ProverType};
     use crate::utils::secret::SecretUrl;
+
+    use super::Database;
 
     macro_rules! assert_same_time {
         ($a:expr, $b:expr, $diff:expr) => {
@@ -2035,6 +2103,84 @@ mod test {
             .context("Missing root")?;
 
         assert_eq!(root_state.status, ProcessedStatus::Pending);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_insert_batch() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let identities = mock_identities(10);
+        let identities1: Vec<Field> = identities
+            .iter()
+            .skip(0)
+            .take(4)
+            .map(|v| v.clone())
+            .collect();
+        let identities2: Vec<Field> = identities
+            .iter()
+            .skip(4)
+            .take(6)
+            .map(|v| v.clone())
+            .collect();
+        let roots = mock_roots(2);
+
+        db.insert_new_batch_head(&roots[0], BatchType::Insertion, &Commitments(identities1))
+            .await?;
+        db.insert_new_batch(
+            &roots[1],
+            &roots[0],
+            BatchType::Insertion,
+            &Commitments(identities2),
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_next_batch() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let identities = mock_identities(10);
+        let identities1: Vec<Field> = identities
+            .iter()
+            .skip(0)
+            .take(4)
+            .map(|v| v.clone())
+            .collect();
+        let identities2: Vec<Field> = identities
+            .iter()
+            .skip(4)
+            .take(6)
+            .map(|v| v.clone())
+            .collect();
+        let roots = mock_roots(2);
+
+        db.insert_new_batch_head(&roots[0], BatchType::Insertion, &Commitments(identities1))
+            .await?;
+        db.insert_new_batch(
+            &roots[1],
+            &roots[0],
+            BatchType::Insertion,
+            &Commitments(identities2.clone()),
+        )
+        .await?;
+
+        let next_batch = db.get_next_batch(&roots[0]).await?;
+
+        assert!(next_batch.is_some());
+
+        let next_batch = next_batch.unwrap();
+
+        assert_eq!(next_batch.prev_root.unwrap(), roots[0]);
+        assert_eq!(next_batch.next_root, roots[1]);
+        assert_eq!(next_batch.commitments, Commitments(identities2));
+
+        let next_batch = db.get_next_batch(&roots[1]).await?;
+
+        assert!(next_batch.is_none());
 
         Ok(())
     }

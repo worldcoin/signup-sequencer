@@ -7,7 +7,7 @@ use tokio::sync::{Mutex, Notify};
 use tracing::info;
 
 use crate::app::App;
-use crate::database::types::DeletionEntry;
+use crate::database::types::{Commitments, DeletionEntry};
 use crate::database::DatabaseExt;
 use crate::identity_tree::Hash;
 
@@ -64,7 +64,9 @@ pub async fn delete_identities(
             }
 
             // Remove the previous commitments from the deletions table
-            app.database.remove_deletions(&previous_commitments).await?;
+            app.database
+                .remove_deletions(&Commitments(previous_commitments))
+                .await?;
             wake_up_notify.notify_one();
         } else {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;

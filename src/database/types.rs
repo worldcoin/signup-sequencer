@@ -112,3 +112,9 @@ impl Type<Postgres> for Commitments {
         <&Vec<&[u8]> as Type<Postgres>>::compatible(ty)
     }
 }
+
+impl From<Vec<Hash>> for Commitments {
+    fn from(value: Vec<Hash>) -> Self {
+        Commitments(value)
+    }
+}

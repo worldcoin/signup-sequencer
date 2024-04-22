@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::Utc;
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
 use tracing::info;
 
 use crate::app::App;
@@ -11,7 +11,11 @@ use crate::database::types::DeletionEntry;
 use crate::database::DatabaseExt;
 use crate::identity_tree::Hash;
 
-pub async fn delete_identities(app: Arc<App>, wake_up_notify: Arc<Notify>) -> anyhow::Result<()> {
+pub async fn delete_identities(
+    app: Arc<App>,
+    pending_insertions_mutex: Arc<Mutex<()>>,
+    wake_up_notify: Arc<Notify>,
+) -> anyhow::Result<()> {
     info!("Starting deletion processor.");
 
     let batch_deletion_timeout = chrono::Duration::from_std(app.config.app.batch_deletion_timeout)
@@ -38,6 +42,8 @@ pub async fn delete_identities(app: Arc<App>, wake_up_notify: Arc<Notify>) -> an
                 .iter()
                 .map(|d| (d.leaf_index, d.commitment))
                 .unzip();
+
+            let _guard = pending_insertions_mutex.lock().await;
 
             // Delete the commitments at the target leaf indices in the latest tree,
             // generating the proof for each update

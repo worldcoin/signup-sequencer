@@ -2,7 +2,7 @@ use std::process::Command;
 
 fn main() {
     let output = Command::new("git")
-        .args(&["describe", "--tags", "--always"])
+        .args(["describe", "--tags", "--always"])
         .output()
         .expect("Failed to execute git command");
 

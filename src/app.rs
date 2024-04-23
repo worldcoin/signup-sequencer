@@ -325,9 +325,14 @@ impl App {
             .await?;
 
         tracing::info!("Updating processed tree");
-        for processed_item in processed_items {
-            processed_builder.update(&processed_item);
-        }
+        let processed_builder = tokio::task::spawn_blocking(move || {
+            for processed_item in processed_items {
+                processed_builder.update(&processed_item);
+            }
+
+            processed_builder
+        })
+        .await?;
 
         let (processed, batching_builder) = processed_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
@@ -338,9 +343,14 @@ impl App {
             .await?;
 
         tracing::info!("Updating latest tree");
-        for update in pending_items {
-            latest_builder.update(&update);
-        }
+        let latest_builder = tokio::task::spawn_blocking(move || {
+            for update in pending_items {
+                latest_builder.update(&update);
+            }
+
+            latest_builder
+        })
+        .await?;
 
         let latest = latest_builder.seal();
 

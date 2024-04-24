@@ -37,6 +37,6 @@ LABEL prometheus.io/port="9998"
 LABEL prometheus.io/path="/metrics"
 
 # Copy the sequencer binary
-COPY --from=build-env --chown=0:10001 --chmod=010 /src/target/release/signup-sequencer /bin/signup-sequencer
+COPY --from=build-env --chown=0:10001 --chmod=454 /src/target/release/signup-sequencer /bin/signup-sequencer
 
 ENTRYPOINT [ "/bin/signup-sequencer" ]

@@ -101,6 +101,7 @@ panic = "abort"
 overflow-checks = true
 lto = "thin"
 strip = true
+debug = true
 
 [profile.dev]
 panic = "abort"

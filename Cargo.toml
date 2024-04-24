@@ -100,7 +100,7 @@ tracing-test = "0.2"
 panic = "abort"
 overflow-checks = true
 lto = "thin"
-strip = true
+debug = true
 
 [profile.dev]
 panic = "abort"

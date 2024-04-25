@@ -66,12 +66,12 @@ async fn unavailable_prover() -> anyhow::Result<()> {
 
     // Wait for a while - this should let the processing thread panic or fail at
     // least once
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    tokio::time::sleep(Duration::from_secs(10)).await;
 
     // Make prover available again
     prover_mock.set_availability(true).await;
     // and wait until the processing thread spins up again
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    tokio::time::sleep(Duration::from_secs(10)).await;
 
     info!("Prover has been reenabled");
 

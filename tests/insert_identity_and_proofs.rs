@@ -1,6 +1,6 @@
-mod common;
-
 use common::prelude::*;
+
+mod common;
 
 const IDLE_TIME: u64 = 7;
 
@@ -105,7 +105,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         1,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[1], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
+            .expect("Failed to parse Hash from test leaf 1"),
         false,
     )
     .await;
@@ -115,7 +115,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         2,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[2], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
+            .expect("Failed to parse Hash from test leaf 2"),
         false,
     )
     .await;
@@ -135,7 +135,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         3,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[3], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
+            .expect("Failed to parse Hash from test leaf 3"),
         false,
     )
     .await;
@@ -145,7 +145,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         4,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[4], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
+            .expect("Failed to parse Hash from test leaf 4"),
         false,
     )
     .await;
@@ -181,7 +181,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         4,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[4], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
+            .expect("Failed to parse Hash from test leaf 4"),
         false,
     )
     .await;
@@ -218,7 +218,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         4,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[4], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
+            .expect("Failed to parse Hash from test leaf 4"),
         false,
     )
     .await;

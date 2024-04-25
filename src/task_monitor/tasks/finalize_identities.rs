@@ -7,16 +7,18 @@ use chrono::Utc;
 use ethers::abi::RawLog;
 use ethers::contract::EthEvent;
 use ethers::providers::Middleware;
-use ethers::types::{Address, Log, Topic, U256, ValueOrArray};
+use ethers::types::{Address, Log, Topic, ValueOrArray, U256};
 use tracing::{info, instrument};
 
 use crate::app::App;
-use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangedFilter, TreeChangeKind};
-use crate::contracts::IdentityManager;
+use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangeKind, TreeChangedFilter};
 use crate::contracts::scanner::BlockScanner;
-use crate::database::{Database, DatabaseExt as _};
+use crate::contracts::IdentityManager;
 use crate::database::types::Commitments;
-use crate::identity_tree::{Canonical, Intermediate, TreeVersion, TreeWithNextVersion};
+use crate::database::{Database, DatabaseExt as _};
+use crate::identity_tree::{
+    Canonical, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
+};
 use crate::task_monitor::TaskMonitor;
 
 pub async fn finalize_roots(app: Arc<App>) -> anyhow::Result<()> {
@@ -124,6 +126,7 @@ async fn finalize_mainnet_roots(
     max_epoch_duration: Duration,
 ) -> Result<(), anyhow::Error> {
     for log in logs {
+        println!("[zzz] log = {:?}", log);
         let Some(event) = raw_log_to_tree_changed(log) else {
             continue;
         };
@@ -157,6 +160,14 @@ async fn finalize_mainnet_roots(
             .await?;
         }
 
+        println!(
+            "[zzz] pre_root = {:?}, post_root = {:?}",
+            pre_root, post_root
+        );
+        println!(
+            "[zzz] processed_tree.root() = {:?}",
+            processed_tree.get_root()
+        );
         let updates_count = processed_tree.apply_updates_up_to(post_root.into());
 
         info!(updates_count, ?pre_root, ?post_root, "Mined tree updated");

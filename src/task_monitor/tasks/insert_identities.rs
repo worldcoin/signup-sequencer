@@ -6,7 +6,7 @@ use tokio::time::sleep;
 use tracing::instrument;
 
 use crate::app::App;
-use crate::database::types::UnprocessedCommitment;
+use crate::database::types::{BatchType, Commitments, LeafIndexes, UnprocessedCommitment};
 use crate::database::{Database, DatabaseExt};
 use crate::identity_tree::{Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
 
@@ -15,11 +15,15 @@ pub async fn insert_identities(
     pending_insertions_mutex: Arc<Mutex<()>>,
     wake_up_notify: Arc<Notify>,
 ) -> anyhow::Result<()> {
+    ensure_batch_chain_initialized(&app).await?;
+
+    let batch_size = app.identity_manager.max_insertion_batch_size().await;
+
     loop {
         // get commits from database
         let unprocessed = app
             .database
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
+            .get_eligible_unprocessed_commitments(UnprocessedStatus::New, batch_size)
             .await?;
         if unprocessed.is_empty() {
             sleep(Duration::from_secs(5)).await;
@@ -33,9 +37,26 @@ pub async fn insert_identities(
             &pending_insertions_mutex,
         )
         .await?;
+
         // Notify the identity processing task, that there are new identities
         wake_up_notify.notify_one();
     }
+}
+
+async fn ensure_batch_chain_initialized(app: &Arc<App>) -> anyhow::Result<()> {
+    let batch_head = app.database.get_batch_head().await?;
+    if batch_head.is_none() {
+        println!("[zzz] batch head not found, trying to add");
+        app.database
+            .insert_new_batch_head(
+                &app.tree_state()?.latest_tree().get_root(),
+                BatchType::Insertion,
+                &Commitments(vec![]),
+                &LeafIndexes(vec![]),
+            )
+            .await?;
+    }
+    Ok(())
 }
 
 #[instrument(level = "info", skip_all)]
@@ -66,6 +87,7 @@ async fn insert_identities_batch(
 
     let next_db_index = database.get_next_leaf_index().await?;
     let next_leaf = latest_tree.next_leaf();
+    let prev_root = latest_tree.get_root();
 
     assert_eq!(
         next_leaf, next_db_index,
@@ -73,7 +95,18 @@ async fn insert_identities_batch(
          {next_db_index}"
     );
 
-    let data = latest_tree.append_many(&filtered_identities);
+    let (data, _) = latest_tree.append_many_as_derived(&filtered_identities);
+    let next_root = data
+        .last()
+        .map(|(root, ..)| root.clone())
+        .expect("should be created at least one");
+
+    println!("[zzz] inserting");
+    println!(
+        "[zzz] prev_root: {:?}, next_root: {:?}",
+        prev_root, next_root
+    );
+    println!("[zzz] latest_tree.get_root(): {:?}", latest_tree.get_root());
 
     assert_eq!(
         data.len(),
@@ -81,15 +114,34 @@ async fn insert_identities_batch(
         "Length mismatch when appending identities to tree"
     );
 
-    let items = data.into_iter().zip(filtered_identities);
+    let items: Vec<_> = data.into_iter().zip(filtered_identities.clone()).collect();
 
-    for ((root, _proof, leaf_index), identity) in items {
-        database
-            .insert_pending_identity(leaf_index, &identity, &root)
+    let mut tx = database.pool.begin().await?;
+
+    for ((root, _proof, leaf_index), identity) in items.iter() {
+        tx.insert_pending_identity(*leaf_index, identity, root)
             .await?;
 
-        database.remove_unprocessed_identity(&identity).await?;
+        tx.remove_unprocessed_identity(identity).await?;
     }
+
+    tx.insert_new_batch(
+        &next_root,
+        &prev_root,
+        BatchType::Insertion,
+        &Commitments(items.iter().map(|(_, commitment)| *commitment).collect()),
+        &LeafIndexes(
+            items
+                .iter()
+                .map(|((_, _, leaf_index), _)| *leaf_index)
+                .collect(),
+        ),
+    )
+    .await?;
+
+    tx.commit().await?;
+
+    // _ = latest_tree.append_many(&filtered_identities);
 
     Ok(())
 }

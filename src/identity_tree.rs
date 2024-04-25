@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use chrono::Utc;
@@ -10,12 +11,12 @@ use serde::Serialize;
 use sqlx::prelude::FromRow;
 use tracing::{info, warn};
 
+pub use self::status::{ProcessedStatus, Status, UnknownStatus, UnprocessedStatus};
+
 mod status;
 
 pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
 pub type Hash = <PoseidonHash as Hasher>::Hash;
-
-pub use self::status::{ProcessedStatus, Status, UnknownStatus, UnprocessedStatus};
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, FromRow)]
 pub struct TreeUpdate {
@@ -458,6 +459,69 @@ impl TreeVersion<Latest> {
 
         output
     }
+
+    pub fn get_depth(&self) -> usize {
+        let data = self.get_data();
+        data.tree.depth()
+    }
+
+    #[must_use]
+    pub fn append_many_as_derived(
+        &self,
+        identities: &[Hash],
+    ) -> (Vec<(Hash, Proof, usize)>, LazyMerkleTree<PoseidonHash>) {
+        let data = self.get_data();
+        let mut tree_copy = data.tree.clone();
+        let next_leaf = data.next_leaf;
+
+        let mut output = Vec::with_capacity(identities.len());
+
+        for (idx, identity) in identities.iter().enumerate() {
+            let leaf_index = next_leaf + idx;
+
+            println!(
+                "[zzz] root = {:?}, leaf_index = {:?}",
+                tree_copy.root(),
+                leaf_index
+            );
+
+            println!("[zzz] updating");
+            tree_copy = tree_copy.update(leaf_index, identity);
+            println!("[zzz] updating - done");
+
+            println!(
+                "[zzz] root = {:?}, leaf_index = {:?}",
+                tree_copy.root(),
+                leaf_index
+            );
+
+            let root = tree_copy.root();
+            let proof = tree_copy.proof(leaf_index);
+
+            output.push((root, proof, leaf_index));
+        }
+
+        (output, tree_copy)
+    }
+
+    #[must_use]
+    pub fn delete_many_as_derived(&self, leaf_indices: &[usize]) -> Vec<(Hash, Proof)> {
+        let data = self.get_data();
+        let mut tree_copy = data.tree.clone();
+        let next_leaf = data.next_leaf;
+
+        let mut output = Vec::with_capacity(leaf_indices.len());
+
+        for leaf_index in leaf_indices {
+            tree_copy = tree_copy.update(*leaf_index, (&Hash::ZERO).into());
+            let root = tree_copy.root();
+            let proof = tree_copy.proof(*leaf_index);
+
+            output.push((root, proof));
+        }
+
+        output
+    }
 }
 
 impl<T> TreeVersion<T>
@@ -502,7 +566,6 @@ where
 pub struct TreeState {
     mined:     TreeVersion<Canonical>,
     processed: TreeVersion<Intermediate>,
-    batching:  TreeVersion<Intermediate>,
     latest:    TreeVersion<Latest>,
 }
 
@@ -511,13 +574,11 @@ impl TreeState {
     pub const fn new(
         mined: TreeVersion<Canonical>,
         processed: TreeVersion<Intermediate>,
-        batching: TreeVersion<Intermediate>,
         latest: TreeVersion<Latest>,
     ) -> Self {
         Self {
             mined,
             processed,
-            batching,
             latest,
         }
     }
@@ -547,15 +608,6 @@ impl TreeState {
 
     pub fn processed_tree(&self) -> &TreeVersion<Intermediate> {
         &self.processed
-    }
-
-    #[must_use]
-    pub fn get_batching_tree(&self) -> TreeVersion<Intermediate> {
-        self.batching.clone()
-    }
-
-    pub fn batching_tree(&self) -> &TreeVersion<Intermediate> {
-        &self.batching
     }
 
     #[must_use]
@@ -749,7 +801,6 @@ impl<P: Version> DerivedTreeBuilder<P> {
 
 #[cfg(test)]
 mod tests {
-
     use super::{CanonicalTreeBuilder, Hash, TreeWithNextVersion};
 
     #[test]

@@ -63,7 +63,7 @@ async fn recover_identities() -> anyhow::Result<()> {
         .add_prover(mock_deletion_prover)
         .build()?;
 
-    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(insertion_batch_size * 3);
     let identities_ref: Vec<Field> = test_identities
@@ -172,7 +172,7 @@ async fn recover_identities() -> anyhow::Result<()> {
 
     // Shutdown the app properly for the final time
     shutdown();
-    app.await.unwrap();
+    app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

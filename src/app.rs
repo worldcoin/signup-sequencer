@@ -174,7 +174,7 @@ impl App {
     }
 
     pub fn get_leftover_leaves_and_update_index(
-        index: &mut usize,
+        index: &mut Option<usize>,
         dense_prefix_depth: usize,
         mined_items: &[TreeUpdate],
     ) -> Vec<ruint::Uint<256, 4>> {
@@ -184,15 +184,16 @@ impl App {
             let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
             // if the last index is greater then dense_prefix_depth, 1 << dense_prefix_depth
             // should be the last index in restored tree
-            *index = std::cmp::min(max_leaf, (1 << dense_prefix_depth) - 1);
+            let last_index = std::cmp::min(max_leaf, (1 << dense_prefix_depth) - 1);
+            *index = Some(last_index);
 
-            if max_leaf - *index == 0 {
+            if max_leaf - last_index == 0 {
                 return vec![];
             }
 
-            let mut leaves = Vec::with_capacity(max_leaf - *index);
+            let mut leaves = Vec::with_capacity(max_leaf - last_index);
 
-            let leftover = &mined_items[(*index + 1)..];
+            let leftover = &mined_items[(last_index + 1)..];
 
             for item in leftover {
                 leaves.push(item.element);
@@ -211,7 +212,7 @@ impl App {
     ) -> anyhow::Result<Option<TreeState>> {
         let mined_items = dedup_tree_updates(mined_items);
 
-        let mut last_mined_index_in_dense: usize = 0;
+        let mut last_mined_index_in_dense: Option<usize> = None;
         let leftover_items = Self::get_leftover_leaves_and_update_index(
             &mut last_mined_index_in_dense,
             self.config.tree.dense_tree_prefix_depth,
@@ -815,10 +816,27 @@ mod test {
         let less_identities_count = 2usize.pow(dense_prefix_depth.try_into().unwrap()) - 2;
         let more_identities_count = 2usize.pow(dense_prefix_depth.try_into().unwrap()) + 2;
 
+        // test if empty case is handled correctly (it means no last mined index as no
+        // indecies at all)
+        let identities: Vec<TreeUpdate> = vec![];
+
+        let mut last_mined_index_in_dense: Option<usize> = None;
+        let leaves = App::get_leftover_leaves_and_update_index(
+            &mut last_mined_index_in_dense,
+            dense_prefix_depth,
+            &identities,
+        );
+
+        // check if the index is correct
+        assert_eq!(last_mined_index_in_dense, None);
+
+        // since there are no identities at all the leaves should be 0
+        assert_eq!(leaves.len(), 0);
+
         // first test with less then dense prefix
         let identities = generate_test_identities_with_index(less_identities_count);
 
-        let mut last_mined_index_in_dense: usize = 0;
+        last_mined_index_in_dense = None;
 
         let leaves = App::get_leftover_leaves_and_update_index(
             &mut last_mined_index_in_dense,
@@ -827,7 +845,7 @@ mod test {
         );
 
         // check if the index is correct
-        assert_eq!(last_mined_index_in_dense, identities.len());
+        assert_eq!(last_mined_index_in_dense, Some(identities.len()));
         // since there are less identities then dense prefix, the leavs should be empty
         // vector
         assert!(leaves.is_empty());
@@ -837,7 +855,7 @@ mod test {
         // this should generate 2^dense_prefix + 2
         let identities = generate_test_identities_with_index(more_identities_count);
 
-        last_mined_index_in_dense = 0;
+        last_mined_index_in_dense = None;
         let leaves = App::get_leftover_leaves_and_update_index(
             &mut last_mined_index_in_dense,
             dense_prefix_depth,
@@ -845,7 +863,10 @@ mod test {
         );
 
         // check if the index is correct
-        assert_eq!(last_mined_index_in_dense, (1 << dense_prefix_depth) - 1);
+        assert_eq!(
+            last_mined_index_in_dense,
+            Some((1 << dense_prefix_depth) - 1)
+        );
 
         // since there are more identities then dense prefix, the leavs should be 2
         assert_eq!(leaves.len(), 2);

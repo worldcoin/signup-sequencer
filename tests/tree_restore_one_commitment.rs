@@ -1,29 +1,29 @@
-mod common;
-
 use common::prelude::*;
 
-/// Tests that the app can keep running even if the prover returns 500s
-/// and that it will eventually succeed if the prover becomes available again.
+mod common;
+
+const IDLE_TIME: u64 = 7;
+
 #[tokio::test]
-async fn unavailable_prover() -> anyhow::Result<()> {
+async fn tree_restore_one_comittment() -> anyhow::Result<()> {
+    // Initialize logging for the test.
     init_tracing_subscriber();
-    info!("Starting unavailable prover test");
+    info!("Starting integration test");
+
+    let batch_size: usize = 1;
 
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
-
-    let batch_size: usize = 3;
 
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
         spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8).await?;
 
     let prover_mock = &insertion_prover_map[&batch_size];
 
-    prover_mock.set_availability(false).await;
-
     let db_socket_addr = db_container.address();
     let db_url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
 
+    // temp dir will be deleted on drop call
     let temp_dir = tempfile::tempdir()?;
     info!(
         "temp dir created at: {:?}",
@@ -40,9 +40,11 @@ async fn unavailable_prover() -> anyhow::Result<()> {
         .add_prover(prover_mock)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (app, app_handle, local_addr) = spawn_app(config.clone())
+        .await
+        .expect("Failed to spawn app.");
 
-    let test_identities = generate_test_identities(batch_size * 2);
+    let test_identities = generate_test_identities(1);
     let identities_ref: Vec<Field> = test_identities
         .iter()
         .map(|i| Hash::from_str_radix(i, 16).unwrap())
@@ -51,30 +53,32 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
 
-    // Insert enough identities to trigger an batch to be sent to the blockchain
-    // based on the current batch size of 3.
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 0).await;
-    test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 1).await;
-    test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 2).await;
 
-    // Wait for a while - this should let the processing thread panic or fail at
-    // least once
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
-    // Make prover available again
-    prover_mock.set_availability(true).await;
-    // and wait until the processing thread spins up again
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    let tree_state = app.tree_state()?.clone();
 
-    info!("Prover has been reenabled");
+    assert_eq!(tree_state.latest_tree().next_leaf(), 1);
 
-    // Test that the identities have been inserted and processed
-    test_inclusion_proof(&uri, &client, 0, &ref_tree, &identities_ref[0], false).await;
-    test_inclusion_proof(&uri, &client, 1, &ref_tree, &identities_ref[1], false).await;
-    test_inclusion_proof(&uri, &client, 2, &ref_tree, &identities_ref[2], false).await;
-
+    // Shutdown the app and reset the mock shutdown, allowing us to test the
+    // behaviour with saved data.
+    info!("Stopping the app for testing purposes");
     shutdown();
-    app_handle.await?;
+    app_handle.await.unwrap();
+    reset_shutdown();
+
+    let (app, app_handle, _) = spawn_app(config.clone())
+        .await
+        .expect("Failed to spawn app.");
+
+    let restored_tree_state = app.tree_state()?.clone();
+
+    test_same_tree_states(&tree_state, &restored_tree_state).await?;
+
+    // Shutdown the app properly for the final time
+    shutdown();
+    app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

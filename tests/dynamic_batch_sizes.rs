@@ -52,7 +52,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         .add_prover(first_prover)
         .build()?;
 
-    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(first_batch_size * 5);
     let identities_ref: Vec<Field> = test_identities
@@ -238,7 +238,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
 
     // Shutdown the app properly for the final time
     shutdown();
-    app.await.unwrap();
+    app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

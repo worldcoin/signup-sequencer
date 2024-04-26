@@ -49,7 +49,7 @@ async fn multi_prover() -> anyhow::Result<()> {
         .build()?;
 
     tracing::info!("Spawning app");
-    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(batch_size_3 + batch_size_10);
 
@@ -107,7 +107,7 @@ async fn multi_prover() -> anyhow::Result<()> {
     }
 
     shutdown();
-    app.await?;
+    app_handle.await?;
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

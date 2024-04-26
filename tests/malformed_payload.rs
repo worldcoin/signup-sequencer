@@ -39,7 +39,7 @@ async fn malformed_payload() -> anyhow::Result<()> {
         .add_prover(prover_mock)
         .build()?;
 
-    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
@@ -73,7 +73,7 @@ async fn malformed_payload() -> anyhow::Result<()> {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     shutdown();
-    app.await?;
+    app_handle.await?;
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

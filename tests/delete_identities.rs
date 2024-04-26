@@ -52,7 +52,7 @@ async fn delete_identities() -> anyhow::Result<()> {
         .add_prover(mock_deletion_prover)
         .build()?;
 
-    let (app, local_addr) = spawn_app(config.clone())
+    let (_, app_handle, local_addr) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
 
@@ -117,11 +117,11 @@ async fn delete_identities() -> anyhow::Result<()> {
     // behaviour with saved data.
     info!("Stopping the app for testing purposes");
     shutdown();
-    app.await.unwrap();
+    app_handle.await.unwrap();
     reset_shutdown();
 
     // Test loading the state from a file when the on-chain contract has the state.
-    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
 
     // Ensure that identities have been deleted
@@ -155,7 +155,7 @@ async fn delete_identities() -> anyhow::Result<()> {
 
     // Shutdown the app properly for the final time
     shutdown();
-    app.await.unwrap();
+    app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

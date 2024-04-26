@@ -45,7 +45,7 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
         .add_prover(prover_mock)
         .build()?;
 
-    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
@@ -143,7 +143,7 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
 
     // Shutdown the app properly for the final time
     shutdown();
-    app.await.unwrap();
+    app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

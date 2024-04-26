@@ -19,7 +19,8 @@ use tracing::{error, info, instrument, warn};
 
 use self::types::{CommitmentHistoryEntry, DeletionEntry, LatestDeletionEntry, RecoveryEntry};
 use crate::config::DatabaseConfig;
-use crate::database::types::{BatchEntry, BatchType, Commitments};
+use crate::database::types::{BatchEntry, BatchType, Commitments, LeafIndexes, TransactionEntry};
+use crate::ethereum::write::TransactionId;
 use crate::identity_tree::{
     Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate, UnprocessedStatus,
 };
@@ -680,16 +681,10 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
         )
     }
 
-    async fn delete_recoveries<I: IntoIterator<Item = T>, T: Into<U256>>(
+    async fn delete_recoveries(
         self,
-        prev_commits: I,
+        prev_commits: &Commitments,
     ) -> Result<Vec<RecoveryEntry>, Error> {
-        // TODO: upstream PgHasArrayType impl to ruint
-        let prev_commits = prev_commits
-            .into_iter()
-            .map(|c| c.into().to_be_bytes())
-            .collect::<Vec<[u8; 32]>>();
-
         let res = sqlx::query_as::<_, RecoveryEntry>(
             r#"
             DELETE
@@ -698,7 +693,7 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
             RETURNING *
             "#,
         )
-        .bind(&prev_commits)
+        .bind(prev_commits)
         .fetch_all(self)
         .await?;
 
@@ -741,12 +736,7 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
     }
 
     /// Remove a list of entries from the deletions table
-    async fn remove_deletions(self, commitments: &[Hash]) -> Result<(), Error> {
-        let commitments = commitments
-            .iter()
-            .map(|c| c.to_be_bytes())
-            .collect::<Vec<[u8; 32]>>();
-
+    async fn remove_deletions(self, commitments: &Commitments) -> Result<(), Error> {
         sqlx::query("DELETE FROM deletions WHERE commitment = Any($1)")
             .bind(commitments)
             .execute(self)
@@ -758,6 +748,7 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
     async fn get_eligible_unprocessed_commitments(
         self,
         status: UnprocessedStatus,
+        limit: usize,
     ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
         let query = sqlx::query(
             r#"
@@ -767,7 +758,8 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
             "#,
         )
         .bind(<&str>::from(status))
-        .bind(MAX_UNPROCESSED_FETCH_COUNT);
+        .bind(limit as i64);
+        // .bind(MAX_UNPROCESSED_FETCH_COUNT); // todo(piotrh): clean
 
         let result = self.fetch_all(query).await?;
 
@@ -847,7 +839,10 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
         next_root: &Hash,
         batch_type: BatchType,
         commitments: &Commitments,
+        leaf_indexes: &LeafIndexes,
     ) -> Result<(), Error> {
+        println!("[zzz] none {:?}", next_root);
+
         let query = sqlx::query(
             r#"
             INSERT INTO batches(
@@ -855,13 +850,15 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
                 prev_root,
                 created_at,
                 batch_type,
-                commitments
-            ) VALUES ($1, NULL, CURRENT_TIMESTAMP, $2, $3)
+                commitments,
+                leaf_indexes
+            ) VALUES ($1, NULL, CURRENT_TIMESTAMP, $2, $3, $4)
             "#,
         )
         .bind(next_root)
         .bind(batch_type)
-        .bind(commitments);
+        .bind(commitments)
+        .bind(leaf_indexes);
 
         self.execute(query).await?;
         Ok(())
@@ -873,7 +870,10 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
         prev_root: &Hash,
         batch_type: BatchType,
         commitments: &Commitments,
+        leaf_indexes: &LeafIndexes,
     ) -> Result<(), Error> {
+        println!("[zzz] {:?} {:?}", prev_root, next_root);
+
         let query = sqlx::query(
             r#"
             INSERT INTO batches(
@@ -881,26 +881,88 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
                 prev_root,
                 created_at,
                 batch_type,
-                commitments
-            ) VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4)
+                commitments,
+                leaf_indexes
+            ) VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5)
             "#,
         )
         .bind(next_root)
         .bind(prev_root)
         .bind(batch_type)
-        .bind(commitments);
+        .bind(commitments)
+        .bind(leaf_indexes);
 
         self.execute(query).await?;
         Ok(())
     }
 
     async fn get_next_batch(self, prev_root: &Hash) -> Result<Option<BatchEntry>, Error> {
+        println!("[zzz] get_next_batch({:?}", prev_root);
         let res = sqlx::query_as::<_, BatchEntry>(
             r#"
             SELECT * FROM batches WHERE prev_root = $1
             "#,
         )
         .bind(prev_root)
+        .fetch_optional(self)
+        .await?;
+
+        Ok(res)
+    }
+
+    async fn get_batch_head(self) -> Result<Option<BatchEntry>, Error> {
+        let res = sqlx::query_as::<_, BatchEntry>(
+            r#"
+            SELECT * FROM batches WHERE prev_root IS NULL
+            "#,
+        )
+        .fetch_optional(self)
+        .await?;
+
+        Ok(res)
+    }
+
+    async fn is_root_in_batch_chain(self, root: &Hash) -> Result<bool, Error> {
+        println!("[zzz] is_root_in_batch_chain({:?}", root);
+        let query = sqlx::query(
+            r#"SELECT exists(SELECT 1 FROM batches where prev_root = $1 OR next_root = $1)"#,
+        )
+        .bind(root);
+        let row_unprocessed = self.fetch_one(query).await?;
+        Ok(row_unprocessed.get::<bool, _>(0))
+    }
+
+    async fn insert_new_transaction(
+        self,
+        transaction_id: &String,
+        batch_next_root: &Hash,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO transactions(
+                transaction_id,
+                batch_next_root,
+                created_at
+            ) VALUES ($1, $2, CURRENT_TIMESTAMP)
+            "#,
+        )
+        .bind(transaction_id)
+        .bind(batch_next_root);
+
+        self.execute(query).await?;
+        Ok(())
+    }
+
+    async fn get_transaction_for_batch(
+        self,
+        next_root: &Hash,
+    ) -> Result<Option<TransactionEntry>, Error> {
+        let res = sqlx::query_as::<_, TransactionEntry>(
+            r#"
+            SELECT * FROM transactions WHERE batch_next_root = $1
+            "#,
+        )
+        .bind(next_root)
         .fetch_optional(self)
         .await?;
 
@@ -933,7 +995,7 @@ mod test {
 
     use super::Database;
     use crate::config::DatabaseConfig;
-    use crate::database::types::{BatchType, Commitments};
+    use crate::database::types::{BatchType, Commitments, LeafIndexes};
     use crate::database::DatabaseExt as _;
     use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
     use crate::prover::{ProverConfig, ProverType};
@@ -1036,7 +1098,7 @@ mod test {
         assert_eq!(commit.0, UnprocessedStatus::New);
 
         let identity_count = db
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
+            .get_eligible_unprocessed_commitments(UnprocessedStatus::New, 100)
             .await?
             .len();
 
@@ -1220,7 +1282,7 @@ mod test {
             .await?;
 
         let unprocessed_commitments = db
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
+            .get_eligible_unprocessed_commitments(UnprocessedStatus::New, 100)
             .await?;
 
         assert_eq!(unprocessed_commitments.len(), 1);
@@ -1254,7 +1316,7 @@ mod test {
             .await?;
 
         let unprocessed_commitments = db
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
+            .get_eligible_unprocessed_commitments(UnprocessedStatus::New, 100)
             .await?;
 
         // Assert unprocessed commitments against expected values
@@ -1299,12 +1361,12 @@ mod test {
             .await?;
 
         let commitments = db
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
+            .get_eligible_unprocessed_commitments(UnprocessedStatus::New, 100)
             .await?;
         assert_eq!(commitments.len(), 1);
 
         let eligible_commitments = db
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
+            .get_eligible_unprocessed_commitments(UnprocessedStatus::New, 100)
             .await?;
         assert_eq!(eligible_commitments.len(), 1);
 
@@ -1319,7 +1381,7 @@ mod test {
             .await?;
 
         let eligible_commitments = db
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
+            .get_eligible_unprocessed_commitments(UnprocessedStatus::New, 100)
             .await?;
         assert_eq!(eligible_commitments.len(), 1);
 
@@ -1391,7 +1453,7 @@ mod test {
         }
 
         let deleted_recoveries = db
-            .delete_recoveries(old_identities[0..2].iter().cloned())
+            .delete_recoveries(&Commitments(old_identities[0..2].to_vec()))
             .await?;
         assert_eq!(deleted_recoveries.len(), 2);
 
@@ -1908,7 +1970,8 @@ mod test {
             .context("Inserting new identity")?;
 
         // Remove identities 0 to 2
-        db.remove_deletions(&identities[0..=2]).await?;
+        db.remove_deletions(&Commitments(identities[0..=2].to_vec()))
+            .await?;
         let deletions = db.get_deletions().await?;
 
         assert_eq!(deletions.len(), 1);
@@ -2117,21 +2180,29 @@ mod test {
             .take(4)
             .map(|v| v.clone())
             .collect();
+        let leaf_indexes_1 = (0..4).collect();
         let identities2: Vec<Field> = identities
             .iter()
             .skip(4)
             .take(6)
             .map(|v| v.clone())
             .collect();
+        let leaf_indexes_2 = (4..10).collect();
         let roots = mock_roots(2);
 
-        db.insert_new_batch_head(&roots[0], BatchType::Insertion, &Commitments(identities1))
-            .await?;
+        db.insert_new_batch_head(
+            &roots[0],
+            BatchType::Insertion,
+            &Commitments(identities1),
+            &LeafIndexes(leaf_indexes_1),
+        )
+        .await?;
         db.insert_new_batch(
             &roots[1],
             &roots[0],
             BatchType::Insertion,
             &Commitments(identities2),
+            &LeafIndexes(leaf_indexes_2),
         )
         .await?;
 
@@ -2149,21 +2220,29 @@ mod test {
             .take(4)
             .map(|v| v.clone())
             .collect();
+        let leaf_indexes_1 = (0..4).collect();
         let identities2: Vec<Field> = identities
             .iter()
             .skip(4)
             .take(6)
             .map(|v| v.clone())
             .collect();
+        let leaf_indexes_2 = (4..10).collect();
         let roots = mock_roots(2);
 
-        db.insert_new_batch_head(&roots[0], BatchType::Insertion, &Commitments(identities1))
-            .await?;
+        db.insert_new_batch_head(
+            &roots[0],
+            BatchType::Insertion,
+            &Commitments(identities1),
+            &LeafIndexes(leaf_indexes_1),
+        )
+        .await?;
         db.insert_new_batch(
             &roots[1],
             &roots[0],
             BatchType::Insertion,
             &Commitments(identities2.clone()),
+            &LeafIndexes(leaf_indexes_2),
         )
         .await?;
 
@@ -2180,6 +2259,62 @@ mod test {
         let next_batch = db.get_next_batch(&roots[1]).await?;
 
         assert!(next_batch.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_batch_head() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let identities: Vec<Field> = Vec::default();
+        let leaf_indexes = Vec::default();
+        let roots = mock_roots(1);
+
+        let batch_head = db.get_batch_head().await?;
+
+        assert!(batch_head.is_none());
+
+        db.insert_new_batch_head(
+            &roots[0],
+            BatchType::Insertion,
+            &Commitments(identities.clone()),
+            &LeafIndexes(leaf_indexes.clone()),
+        )
+        .await?;
+
+        let batch_head = db.get_batch_head().await?;
+
+        assert!(batch_head.is_some());
+        let batch_head = batch_head.unwrap();
+
+        assert_eq!(batch_head.prev_root, None);
+        assert_eq!(batch_head.next_root, roots[0]);
+        assert_eq!(batch_head.commitments, identities.into());
+        assert_eq!(batch_head.leaf_indexes, leaf_indexes.into());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_insert_transaction() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let identities = mock_identities(5);
+        let leaf_indexes_1 = (0..5).collect();
+        let roots = mock_roots(1);
+        let transaction_id = String::from("173bcbfd-e1d9-40e2-ba10-fc1dfbf742c9");
+
+        db.insert_new_batch_head(
+            &roots[0],
+            BatchType::Insertion,
+            &Commitments(identities),
+            &LeafIndexes(leaf_indexes_1),
+        )
+        .await?;
+
+        db.insert_new_transaction(&transaction_id, &roots[0])
+            .await?;
 
         Ok(())
     }

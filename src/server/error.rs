@@ -79,11 +79,10 @@ impl Error {
 
         let status_code = match self {
             InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
-            InvalidPath => StatusCode::NOT_FOUND,
+            InvalidPath | IdentityCommitmentNotFound => StatusCode::NOT_FOUND,
             InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             IndexOutOfBounds
             | RootTooOld
-            | IdentityCommitmentNotFound
             | InvalidCommitment
             | DuplicateCommitment
             | InvalidSerialization(_) => StatusCode::BAD_REQUEST,
@@ -100,12 +99,11 @@ impl Error {
     fn to_status_code(&self) -> StatusCode {
         match self {
             Self::InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
-            Self::InvalidPath => StatusCode::NOT_FOUND,
+            Self::InvalidPath | Self::IdentityCommitmentNotFound => StatusCode::NOT_FOUND,
             Self::InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            Self::IndexOutOfBounds
-            | Self::IdentityCommitmentNotFound
-            | Self::InvalidCommitment
-            | Self::InvalidSerialization(_) => StatusCode::BAD_REQUEST,
+            Self::IndexOutOfBounds | Self::InvalidCommitment | Self::InvalidSerialization(_) => {
+                StatusCode::BAD_REQUEST
+            }
             Self::IdentityAlreadyDeleted
             | Self::IdentityQueuedForDeletion
             | Self::DuplicateCommitment => StatusCode::CONFLICT,

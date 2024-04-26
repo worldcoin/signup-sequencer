@@ -50,6 +50,15 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let (_, app_handle, local_addr) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
+    let (_, app2_handle, local_addr2) = spawn_app(config.clone())
+        .await
+        .expect("Failed to spawn app2.");
+    let (_, app3_handle, local_addr3) = spawn_app(config.clone())
+        .await
+        .expect("Failed to spawn app2.");
+    let (_, app4_handle, local_addr4) = spawn_app(config.clone())
+        .await
+        .expect("Failed to spawn app2.");
 
     let test_identities = generate_test_identities(batch_size * 3);
     let identities_ref: Vec<Field> = test_identities
@@ -58,7 +67,12 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         .collect();
 
     let uri = "http://".to_owned() + &local_addr.to_string();
+    let uri2 = "http://".to_owned() + &local_addr2.to_string();
+    let uri3 = "http://".to_owned() + &local_addr3.to_string();
+    let uri4 = "http://".to_owned() + &local_addr4.to_string();
     let client = Client::new();
+
+    tokio::time::sleep(Duration::from_secs(20)).await;
 
     // Check that we can get inclusion proofs for things that already exist in the
     // database and on chain.
@@ -84,13 +98,13 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     // Insert enough identities to trigger an batch to be sent to the blockchain
     // based on the current batch size of 3.
     test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 0).await;
-    test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 1).await;
-    test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, 2).await;
+    test_insert_identity(&uri2, &client, &mut ref_tree, &identities_ref, 1).await;
+    test_insert_identity(&uri3, &client, &mut ref_tree, &identities_ref, 2).await;
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
     // Check that we can get their inclusion proofs back.
     test_inclusion_proof(
-        &uri,
+        &uri4,
         &client,
         0,
         &ref_tree,
@@ -100,7 +114,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     )
     .await;
     test_inclusion_proof(
-        &uri,
+        &uri4,
         &client,
         1,
         &ref_tree,
@@ -110,7 +124,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     )
     .await;
     test_inclusion_proof(
-        &uri,
+        &uri4,
         &client,
         2,
         &ref_tree,
@@ -155,6 +169,9 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     info!("Stopping the app for testing purposes");
     shutdown();
     app_handle.await.unwrap();
+    app2_handle.await.unwrap();
+    app3_handle.await.unwrap();
+    app4_handle.await.unwrap();
     reset_shutdown();
 
     // Test loading the state from a file when the on-chain contract has the state.

@@ -841,8 +841,6 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
         commitments: &Commitments,
         leaf_indexes: &LeafIndexes,
     ) -> Result<(), Error> {
-        println!("[zzz] none {:?}", next_root);
-
         let query = sqlx::query(
             r#"
             INSERT INTO batches(
@@ -872,8 +870,6 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
         commitments: &Commitments,
         leaf_indexes: &LeafIndexes,
     ) -> Result<(), Error> {
-        println!("[zzz] {:?} {:?}", prev_root, next_root);
-
         let query = sqlx::query(
             r#"
             INSERT INTO batches(
@@ -897,7 +893,6 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
     }
 
     async fn get_next_batch(self, prev_root: &Hash) -> Result<Option<BatchEntry>, Error> {
-        println!("[zzz] get_next_batch({:?}", prev_root);
         let res = sqlx::query_as::<_, BatchEntry>(
             r#"
             SELECT * FROM batches WHERE prev_root = $1
@@ -923,7 +918,6 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
     }
 
     async fn is_root_in_batch_chain(self, root: &Hash) -> Result<bool, Error> {
-        println!("[zzz] is_root_in_batch_chain({:?}", root);
         let query = sqlx::query(
             r#"SELECT exists(SELECT 1 FROM batches where prev_root = $1 OR next_root = $1)"#,
         )

@@ -126,7 +126,6 @@ async fn finalize_mainnet_roots(
     max_epoch_duration: Duration,
 ) -> Result<(), anyhow::Error> {
     for log in logs {
-        println!("[zzz] log = {:?}", log);
         let Some(event) = raw_log_to_tree_changed(log) else {
             continue;
         };
@@ -160,14 +159,6 @@ async fn finalize_mainnet_roots(
             .await?;
         }
 
-        println!(
-            "[zzz] pre_root = {:?}, post_root = {:?}",
-            pre_root, post_root
-        );
-        println!(
-            "[zzz] processed_tree.root() = {:?}",
-            processed_tree.get_root()
-        );
         let updates_count = processed_tree.apply_updates_up_to(post_root.into());
 
         info!(updates_count, ?pre_root, ?post_root, "Mined tree updated");

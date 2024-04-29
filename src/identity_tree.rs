@@ -478,23 +478,7 @@ impl TreeVersion<Latest> {
 
         for (idx, identity) in identities.iter().enumerate() {
             let leaf_index = next_leaf + idx;
-
-            println!(
-                "[zzz] root = {:?}, leaf_index = {:?}",
-                tree_copy.root(),
-                leaf_index
-            );
-
-            println!("[zzz] updating");
             tree_copy = tree_copy.update(leaf_index, identity);
-            println!("[zzz] updating - done");
-
-            println!(
-                "[zzz] root = {:?}, leaf_index = {:?}",
-                tree_copy.root(),
-                leaf_index
-            );
-
             let root = tree_copy.root();
             let proof = tree_copy.proof(leaf_index);
 
@@ -508,7 +492,6 @@ impl TreeVersion<Latest> {
     pub fn delete_many_as_derived(&self, leaf_indices: &[usize]) -> Vec<(Hash, Proof)> {
         let data = self.get_data();
         let mut tree_copy = data.tree.clone();
-        let next_leaf = data.next_leaf;
 
         let mut output = Vec::with_capacity(leaf_indices.len());
 

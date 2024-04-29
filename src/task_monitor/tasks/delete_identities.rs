@@ -11,6 +11,9 @@ use crate::database::types::{BatchType, Commitments, DeletionEntry, LeafIndexes}
 use crate::database::DatabaseExt;
 use crate::identity_tree::{Hash, TreeVersionReadOps};
 
+// todo(piotrh): ensure deletes runs from time to time
+// todo(piotrh): ensure things are batched properly to save $$$ when executed
+// on, add check timeour chain
 pub async fn delete_identities(
     app: Arc<App>,
     pending_insertions_mutex: Arc<Mutex<()>>,

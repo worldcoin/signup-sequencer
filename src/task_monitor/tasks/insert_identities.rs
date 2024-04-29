@@ -10,6 +10,8 @@ use crate::database::types::{BatchType, Commitments, LeafIndexes, UnprocessedCom
 use crate::database::{Database, DatabaseExt};
 use crate::identity_tree::{Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
 
+// todo(piotrh): ensure things are batched properly to save $$$ when executed
+// on, add check timeour chain
 pub async fn insert_identities(
     app: Arc<App>,
     pending_insertions_mutex: Arc<Mutex<()>>,
@@ -46,7 +48,6 @@ pub async fn insert_identities(
 async fn ensure_batch_chain_initialized(app: &Arc<App>) -> anyhow::Result<()> {
     let batch_head = app.database.get_batch_head().await?;
     if batch_head.is_none() {
-        println!("[zzz] batch head not found, trying to add");
         app.database
             .insert_new_batch_head(
                 &app.tree_state()?.latest_tree().get_root(),
@@ -101,13 +102,6 @@ async fn insert_identities_batch(
         .map(|(root, ..)| root.clone())
         .expect("should be created at least one");
 
-    println!("[zzz] inserting");
-    println!(
-        "[zzz] prev_root: {:?}, next_root: {:?}",
-        prev_root, next_root
-    );
-    println!("[zzz] latest_tree.get_root(): {:?}", latest_tree.get_root());
-
     assert_eq!(
         data.len(),
         filtered_identities.len(),
@@ -141,6 +135,7 @@ async fn insert_identities_batch(
 
     tx.commit().await?;
 
+    // todo(piotrh): ensure if we can or not do it here
     // _ = latest_tree.append_many(&filtered_identities);
 
     Ok(())

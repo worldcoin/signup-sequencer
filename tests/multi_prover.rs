@@ -17,11 +17,13 @@ async fn multi_prover() -> anyhow::Result<()> {
     let batch_size_3: usize = 3;
     let batch_size_10: usize = 10;
 
+    let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
         initial_root,
         &[batch_size_3, batch_size_10],
         &[],
         DEFAULT_TREE_DEPTH as u8,
+        &docker,
     )
     .await?;
 

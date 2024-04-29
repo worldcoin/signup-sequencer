@@ -15,8 +15,15 @@ async fn malformed_payload() -> anyhow::Result<()> {
 
     let batch_size: usize = 3;
 
-    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8).await?;
+    let docker = Cli::default();
+    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
+        initial_root,
+        &[batch_size],
+        &[],
+        DEFAULT_TREE_DEPTH as u8,
+        &docker,
+    )
+    .await?;
 
     let prover_mock = &insertion_prover_map[&batch_size];
 

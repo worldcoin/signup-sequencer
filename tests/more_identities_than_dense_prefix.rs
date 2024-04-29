@@ -27,8 +27,9 @@ async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(tree_depth + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
+    let docker = Cli::default();
     let (mock_chain, db_container, prover_map, _deletion_prover_map, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], tree_depth as u8).await?;
+        spawn_deps(initial_root, &[batch_size], &[], tree_depth as u8, &docker).await?;
 
     let prover_mock = &prover_map[&batch_size];
 

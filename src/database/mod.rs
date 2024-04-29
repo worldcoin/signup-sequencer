@@ -1017,7 +1017,7 @@ mod test {
 
     // TODO: we should probably consolidate all tests that propagate errors to
     // TODO: either use anyhow or eyre
-    async fn setup_db<'a>(docker: &'a Cli) -> anyhow::Result<(Database, DockerContainer)> {
+    async fn setup_db(docker: &Cli) -> anyhow::Result<(Database, DockerContainer)> {
         let db_container = postgres_docker_utils::setup(docker).await?;
         let url = format!(
             "postgres://postgres:postgres@{}/database",
@@ -2168,12 +2168,7 @@ mod test {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let identities = mock_identities(10);
-        let identities1: Vec<Field> = identities
-            .iter()
-            .skip(0)
-            .take(4)
-            .map(|v| v.clone())
-            .collect();
+        let identities1: Vec<Field> = identities.iter().take(4).map(|v| v.clone()).collect();
         let leaf_indexes_1 = (0..4).collect();
         let identities2: Vec<Field> = identities
             .iter()
@@ -2208,12 +2203,7 @@ mod test {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let identities = mock_identities(10);
-        let identities1: Vec<Field> = identities
-            .iter()
-            .skip(0)
-            .take(4)
-            .map(|v| v.clone())
-            .collect();
+        let identities1: Vec<Field> = identities.iter().take(4).map(|v| v.clone()).collect();
         let leaf_indexes_1 = (0..4).collect();
         let identities2: Vec<Field> = identities
             .iter()

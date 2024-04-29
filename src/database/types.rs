@@ -1,10 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{Decode, Encode, Postgres, Type};
 use sqlx::database::{HasArguments, HasValueRef};
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::prelude::FromRow;
+use sqlx::{Decode, Encode, Postgres, Type};
 
 use crate::identity_tree::{Hash, Status, UnprocessedStatus};
 

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 mod common;
 
 use common::prelude::*;

@@ -31,6 +31,8 @@ use crate::utils::index_packing::pack_indices;
 
 /// The endpoint used for proving operations.
 const MTB_PROVE_ENDPOINT: &str = "prove";
+/// Endpoint used to expose metrics, also used as a health check.
+const MTB_METRICS_ENDPOINT: &str = "metrics";
 
 static TOTAL_PROVING_TIME: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
@@ -298,6 +300,18 @@ impl Prover {
 
     pub fn url(&self) -> String {
         self.target_url.to_string()
+    }
+
+    pub async fn health_check(&self) -> anyhow::Result<()> {
+        let request = self
+            .client
+            .get(self.target_url.join(MTB_METRICS_ENDPOINT)?)
+            .build()?;
+
+        let response = self.client.execute(request).await?;
+
+        response.error_for_status()?;
+        Ok(())
     }
 }
 

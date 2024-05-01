@@ -118,11 +118,33 @@ impl IdentityManager {
     }
 
     pub async fn max_insertion_batch_size(&self) -> usize {
-        self.insertion_prover_map.read().await.max_batch_size()
+        let max_batch_size = self
+            .insertion_prover_map
+            .read()
+            .await
+            .max_available_batch_size()
+            .await;
+
+        if max_batch_size == 0 {
+            tracing::error!("No available insertion provers");
+        }
+
+        max_batch_size
     }
 
     pub async fn max_deletion_batch_size(&self) -> usize {
-        self.deletion_prover_map.read().await.max_batch_size()
+        let max_batch_size = self
+            .deletion_prover_map
+            .read()
+            .await
+            .max_available_batch_size()
+            .await;
+
+        if max_batch_size == 0 {
+            tracing::error!("No available insertion provers");
+        }
+
+        max_batch_size
     }
 
     #[must_use]

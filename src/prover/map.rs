@@ -39,6 +39,16 @@ impl ProverMap {
         self.map.max_key().unwrap_or(0)
     }
 
+    pub async fn max_available_batch_size(&self) -> usize {
+        // Iterate through the provers, starting from the largest batch size and check
+        // if they are available.
+        for (batch_size, prover) in self.map.iter().rev() {
+            if let Ok(_) = prover.health_check().await {
+                return *batch_size;
+            }
+        }
+    }
+
     pub fn batch_size_exists(&self, batch_size: usize) -> bool {
         self.map.key_exists(batch_size)
     }

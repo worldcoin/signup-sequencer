@@ -42,11 +42,15 @@ impl ProverMap {
     pub async fn max_available_batch_size(&self) -> usize {
         // Iterate through the provers, starting from the largest batch size and check
         // if they are available.
-        for (batch_size, prover) in self.map.iter().rev() {
+        let mut max_batch_size = 0;
+        for (batch_size, prover) in self.map.iter() {
+            // TODO: continue if batch size < min fallback size
             if let Ok(_) = prover.health_check().await {
-                return *batch_size;
+                max_batch_size = *batch_size;
             }
         }
+
+        max_batch_size
     }
 
     pub fn batch_size_exists(&self, batch_size: usize) -> bool {

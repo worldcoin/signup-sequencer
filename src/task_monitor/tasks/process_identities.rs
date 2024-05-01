@@ -116,9 +116,9 @@ async fn process_identities(
                 }
 
                 let batch_size = if next_update[0].update.element == Hash::ZERO {
-                    identity_manager.max_deletion_batch_size().await
+                    identity_manager.max_deletion_batch_size().await?
                 }else{
-                    identity_manager.max_insertion_batch_size().await
+                    identity_manager.max_insertion_batch_size().await?
                 };
 
                 let updates = batching_tree.peek_next_updates(batch_size);
@@ -160,9 +160,9 @@ async fn process_identities(
                 }
 
                 let (batch_size, insertion) = if next_update[0].update.element == Hash::ZERO {
-                 (identity_manager.max_deletion_batch_size().await, false)
+                 (identity_manager.max_deletion_batch_size().await?, false)
                 }else{
-                   (identity_manager.max_insertion_batch_size().await, true)
+                   (identity_manager.max_insertion_batch_size().await?, true)
                 };
 
                 // We have _at most_ one complete batch here.

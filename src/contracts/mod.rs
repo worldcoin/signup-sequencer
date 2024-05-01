@@ -147,12 +147,20 @@ impl IdentityManager {
         self.tree_depth
     }
 
-    pub async fn max_insertion_batch_size(&self) -> usize {
-        self.insertion_prover_map.read().await.max_batch_size()
+    pub async fn max_insertion_batch_size(&self) -> anyhow::Result<usize> {
+        self.insertion_prover_map
+            .read()
+            .await
+            .max_available_batch_size()
+            .await
     }
 
-    pub async fn max_deletion_batch_size(&self) -> usize {
-        self.deletion_prover_map.read().await.max_batch_size()
+    pub async fn max_deletion_batch_size(&self) -> anyhow::Result<usize> {
+        self.deletion_prover_map
+            .read()
+            .await
+            .max_available_batch_size()
+            .await
     }
 
     #[must_use]

@@ -71,6 +71,18 @@ impl ProverMap<Prover> {
             })
             .collect()
     }
+
+    pub async fn max_available_batch_size(&self) -> anyhow::Result<usize> {
+        // Iterate through the provers, starting from the largest batch size and check
+        // if they are available.
+        for (batch_size, prover) in self.map.iter().rev() {
+            if let Ok(_) = prover.health_check().await {
+                return Ok(*batch_size);
+            }
+        }
+
+        anyhow::bail!("No available prover")
+    }
 }
 
 impl<P> From<BTreeMap<usize, P>> for ProverMap<P> {

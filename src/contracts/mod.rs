@@ -261,6 +261,10 @@ impl IdentityManager {
             .tx;
 
         self.ethereum
+            .simulate_transaction(&register_identities_transaction)
+            .await?;
+
+        self.ethereum
             .send_transaction(register_identities_transaction, true)
             .await
             .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
@@ -277,7 +281,7 @@ impl IdentityManager {
     ) -> anyhow::Result<TransactionId> {
         let proof_points_array: [U256; 8] = deletion_proof.into();
 
-        let register_identities_transaction = self
+        let delete_identities_transaction = self
             .abi
             .delete_identities(
                 proof_points_array,
@@ -288,7 +292,11 @@ impl IdentityManager {
             .tx;
 
         self.ethereum
-            .send_transaction(register_identities_transaction, true)
+            .simulate_transaction(&delete_identities_transaction)
+            .await?;
+
+        self.ethereum
+            .send_transaction(delete_identities_transaction, true)
             .await
             .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
     }

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use ethers::providers::Middleware;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::Address;
 pub use read::ReadProvider;
@@ -71,6 +72,11 @@ impl Ethereum {
         tx: TypedTransaction,
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
+        if let Err(err) = self.read_provider.call(&tx, None).await {
+            tracing::error!("Error simulating transaction: {:?}", err);
+            return Err(TxError::Simulate(anyhow::Error::new(err)));
+        }
+
         self.write_provider.send_transaction(tx, only_once).await
     }
 

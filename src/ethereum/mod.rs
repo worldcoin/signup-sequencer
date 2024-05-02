@@ -72,12 +72,6 @@ impl Ethereum {
         tx: TypedTransaction,
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
-        tracing::info!(?tx, "Simulating transaction");
-        if let Err(err) = self.read_provider.call(&tx, None).await {
-            tracing::error!("Error simulating transaction: {:?}", err);
-            return Err(TxError::Simulate(anyhow::Error::new(err)));
-        }
-
         tracing::info!(?tx, "Sending transaction");
         self.write_provider.send_transaction(tx, only_once).await
     }

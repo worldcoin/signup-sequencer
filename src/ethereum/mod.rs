@@ -72,16 +72,12 @@ impl Ethereum {
         tx: TypedTransaction,
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
-        self.write_provider.send_transaction(tx, only_once).await
-    }
-
-    pub async fn simulate_transaction(&self, tx: &TypedTransaction) -> Result<(), TxError> {
         if let Err(err) = self.read_provider.call(&tx, None).await {
             tracing::error!("Error simulating transaction: {:?}", err);
             return Err(TxError::Simulate(anyhow::Error::new(err)));
         }
 
-        Ok(())
+        self.write_provider.send_transaction(tx, only_once).await
     }
 
     pub async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {

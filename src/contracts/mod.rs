@@ -261,10 +261,6 @@ impl IdentityManager {
             .tx;
 
         self.ethereum
-            .simulate_transaction(&register_identities_transaction)
-            .await?;
-
-        self.ethereum
             .send_transaction(register_identities_transaction, true)
             .await
             .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
@@ -290,10 +286,6 @@ impl IdentityManager {
                 post_root,
             )
             .tx;
-
-        self.ethereum
-            .simulate_transaction(&delete_identities_transaction)
-            .await?;
 
         self.ethereum
             .send_transaction(delete_identities_transaction, true)

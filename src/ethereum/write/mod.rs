@@ -35,9 +35,6 @@ pub enum TxError {
     #[error("Error sending transaction: {0}")]
     Send(anyhow::Error),
 
-    #[error("Error simulating transaction: {0}")]
-    Simulate(anyhow::Error),
-
     #[error("Timeout while waiting for confirmations")]
     ConfirmationTimeout,
 

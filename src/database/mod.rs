@@ -821,8 +821,8 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
     async fn identity_exists(self, commitment: Hash) -> Result<bool, Error> {
         Ok(sqlx::query(
             r#"
-            select 
-            EXISTS (select commitment from unprocessed_identities where commitment = $1) OR 
+            select
+            EXISTS (select commitment from unprocessed_identities where commitment = $1) OR
             EXISTS (select commitment from identities where commitment = $1);
             "#,
         )
@@ -894,7 +894,7 @@ mod test {
 
     // TODO: we should probably consolidate all tests that propagate errors to
     // TODO: either use anyhow or eyre
-    async fn setup_db<'a>(docker: &'a Cli) -> anyhow::Result<(Database, DockerContainer)> {
+    async fn setup_db(docker: &Cli) -> anyhow::Result<(Database, DockerContainer)> {
         let db_container = postgres_docker_utils::setup(docker).await?;
         let url = format!(
             "postgres://postgres:postgres@{}/database",

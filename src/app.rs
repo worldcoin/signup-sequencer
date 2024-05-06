@@ -259,8 +259,7 @@ impl App {
             processed_builder.update(&processed_item);
         }
 
-        let (processed, batching_builder) = processed_builder.seal_and_continue();
-        let (batching, mut latest_builder) = batching_builder.seal_and_continue();
+        let (processed, mut latest_builder) = processed_builder.seal_and_continue();
         let pending_items = self
             .database
             .get_commitments_by_status(ProcessedStatus::Pending)
@@ -269,7 +268,7 @@ impl App {
             latest_builder.update(&update);
         }
         let latest = latest_builder.seal();
-        Ok(Some(TreeState::new(mined, processed, batching, latest)))
+        Ok(Some(TreeState::new(mined, processed, latest)))
     }
 
     pub fn tree_state(&self) -> anyhow::Result<&TreeState> {
@@ -335,8 +334,7 @@ impl App {
         })
         .await?;
 
-        let (processed, batching_builder) = processed_builder.seal_and_continue();
-        let (batching, mut latest_builder) = batching_builder.seal_and_continue();
+        let (processed, mut latest_builder) = processed_builder.seal_and_continue();
 
         let pending_items = self
             .database
@@ -355,7 +353,7 @@ impl App {
 
         let latest = latest_builder.seal();
 
-        Ok(TreeState::new(mined, processed, batching, latest))
+        Ok(TreeState::new(mined, processed, latest))
     }
 
     /// Queues an insert into the merkle tree.
@@ -542,13 +540,15 @@ impl App {
                 // A pending identity can be present in the batching tree and therefore status
                 // should be set to Batched
                 IdentityHistoryEntryStatus::Pending => {
-                    if let Some(leaf_index) = entry.leaf_index {
-                        if self.tree_state()?.get_batching_tree().get_leaf(leaf_index)
-                            == entry.commitment
-                        {
-                            status = IdentityHistoryEntryStatus::Batched;
-                        }
-                    }
+                    // todo(piotrh): what to do with it?
+                    // if let Some(leaf_index) = entry.leaf_index {
+                    //     if self.tree_state()?.get_batching_tree().get_leaf(leaf_index)
+                    //         == entry.commitment
+                    //     {
+                    //         status = IdentityHistoryEntryStatus::Batched;
+                    //     }
+                    // }
+                    ()
                 }
                 IdentityHistoryEntryStatus::Buffered if entry.held_back => {
                     status = IdentityHistoryEntryStatus::Queued;
@@ -732,7 +732,6 @@ impl App {
     ) -> Result<(), ServerError> {
         let tree_state = self.tree_state()?;
         let latest_root = tree_state.get_latest_tree().get_root();
-        let batching_root = tree_state.get_batching_tree().get_root();
         let processed_root = tree_state.get_processed_tree().get_root();
         let mined_root = tree_state.get_mined_tree().get_root();
 
@@ -742,7 +741,7 @@ impl App {
 
         match root_state.status {
             // Pending status implies the batching or latest tree
-            ProcessedStatus::Pending if latest_root == root || batching_root == root => {
+            ProcessedStatus::Pending if latest_root == root => {
                 tracing::warn!("Root is pending - skipping");
                 return Ok(());
             }

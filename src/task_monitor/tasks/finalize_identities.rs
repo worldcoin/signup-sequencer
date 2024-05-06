@@ -14,8 +14,11 @@ use crate::app::App;
 use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangeKind, TreeChangedFilter};
 use crate::contracts::scanner::BlockScanner;
 use crate::contracts::IdentityManager;
+use crate::database::types::Commitments;
 use crate::database::{Database, DatabaseExt as _};
-use crate::identity_tree::{Canonical, Intermediate, TreeVersion, TreeWithNextVersion};
+use crate::identity_tree::{
+    Canonical, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
+};
 use crate::task_monitor::TaskMonitor;
 
 pub async fn finalize_roots(app: Arc<App>) -> anyhow::Result<()> {
@@ -259,10 +262,6 @@ async fn update_eligible_recoveries(
         .context("Could not fetch deletion indices from tx")?;
 
     let commitments = processed_tree.commitments_by_indices(commitments.iter().copied());
-    let commitments: Vec<U256> = commitments
-        .into_iter()
-        .map(std::convert::Into::into)
-        .collect();
 
     // Fetch the root history expiry time on chain
     let root_history_expiry = identity_manager.root_history_expiry().await?;
@@ -282,7 +281,7 @@ async fn update_eligible_recoveries(
     // Check if any deleted commitments correspond with entries in the
     // recoveries table and insert the new commitment into the unprocessed
     // identities table with the proper eligibility timestamp
-    let deleted_recoveries = tx.delete_recoveries(commitments).await?;
+    let deleted_recoveries = tx.delete_recoveries(&Commitments(commitments)).await?;
 
     // For each deletion, if there is a corresponding recovery, insert a new
     // identity with the specified eligibility timestamp

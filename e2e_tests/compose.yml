@@ -1,0 +1,206 @@
+version: "3"
+services:
+  chain:
+    container_name: chain
+    image: ghcr.io/foundry-rs/foundry
+    platform: linux/amd64
+    ports:
+      - "8545:8545"
+    command: [ "anvil --host 0.0.0.0 --chain-id 31337 --block-time 30 --base-fee 0 --gas-limit 0 --gas-price 0 --fork-url https://eth-sepolia.g.alchemy.com/v2/Hkj3vTy6ee49NbI4Imhe6r5mRM1vkR10@5091094" ]
+  tx-sitter-db:
+    container_name: tx-sitter-db
+    image: postgres:latest
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=tx-sitter
+    ports:
+      - "5460:5432"
+    volumes:
+      - tx_sitter_db_data:/var/lib/postgresql/data
+  sequencer-db:
+    container_name: sequencer-db
+    image: postgres:latest
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=sequencer
+    ports:
+      - "5461:5432"
+    volumes:
+      - sequencer_db_data:/var/lib/postgresql/data
+  tx-sitter:
+    container_name: tx-sitter
+    image: tx-sitter-monolith
+    depends_on:
+      - tx-sitter-db
+      - chain
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - TX_SITTER__SERVICE__ESCALATION_INTERVAL=3s
+      - TX_SITTER__DATABASE__KIND=connection_string
+      - TX_SITTER__DATABASE__CONNECTION_STRING=postgres://postgres:postgres@tx-sitter-db:5432/tx-sitter?sslmode=disable
+      - TX_SITTER__KEYS__KIND=local
+      - TX_SITTER__SERVICE__PREDEFINED__NETWORK__CHAIN_ID=31337
+      - TX_SITTER__SERVICE__PREDEFINED__NETWORK__NAME=Anvil
+      - TX_SITTER__SERVICE__PREDEFINED__NETWORK__HTTP_RPC=http://chain:8545
+      - TX_SITTER__SERVICE__PREDEFINED__NETWORK__WS_RPC=ws://chain:8545
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__ID=1b908a34-5dc1-4d2d-a146-5eb46e975830
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__NAME=Relayer
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__CHAIN_ID=31337
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__KEY_ID=d10607662a85424f02a33fb1e6d095bd0ac7154396ff09762e41f82ff2233aaa
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__API_KEY=G5CKNF3BTS2hRl60bpdYMNPqXvXsP-QZd2lrtmgctsnllwU9D3Z4D8gOt04M0QNH
+      - TX_SITTER__SERVER__HOST=0.0.0.0:3000
+      - TX_SITTER__SERVER__DISABLE_AUTH=true
+      - RUST_LOG=info
+  semaphore-insertion:
+    container_name: semaphore-insertion
+    image: semaphore-mtb
+    hostname: semaphore-insertion
+    restart: always
+    command: [ "start", "--keys-file", "/mtb/keys", "--prover-address", "0.0.0.0:3001", "--mode", "insertion" ]
+    volumes:
+      - ./keys/insertion_b10t30.ps:/mtb/keys
+    environment:
+      BATCH_TIMEOUT_SECONDS: 1
+  semaphore-deletion:
+    container_name: semaphore-deletion
+    image: semaphore-mtb
+    hostname: semaphore-deletion
+    restart: always
+    command: [ "start", "--keys-file", "/mtb/keys", "--prover-address", "0.0.0.0:3001", "--mode", "deletion" ]
+    volumes:
+      - ./keys/deletion_b10t30.ps:/mtb/keys
+    environment:
+      BATCH_DELETION_TIMEOUT_SECONDS: 1
+  signup-sequencer-0:
+    container_name: signup-sequencer-0
+    image: signup-sequencer
+    build:
+      context: ./../
+      args:
+        BUILD_DEV: 1
+    depends_on:
+      - sequencer-db
+      - chain
+      - semaphore-insertion
+      - semaphore-deletion
+    restart: always
+    ports:
+      - "9080:8080"
+    environment:
+      - SEQ__TREE__TREE_DEPTH=30
+      - SEQ__TREE__DENSE_TREE_PREFIX_DEPTH=22
+      - SEQ__TREE__TREE_GC_THRESHOLD=10000000
+      - SEQ__TREE__CACHE_FILE=./cache_file
+      - SEQ__SERVER__ADDRESS=0.0.0.0:8080
+      - SEQ__NETWORK__IDENTITY_MANAGER_ADDRESS=0x48483748eb0446A16cAE79141D0688e3F624Cb73
+      - SEQ__RELAYER__KIND=tx_sitter
+      - SEQ__RELAYER__TX_SITTER_URL=http://tx-sitter:3000/1/api/G5CKNF3BTS2hRl60bpdYMNPqXvXsP-QZd2lrtmgctsnllwU9D3Z4D8gOt04M0QNH
+      - SEQ__RELAYER__TX_SITTER_ADDRESS=0x1d7ffed610cc4cdC097ecDc835Ae5FEE93C9e3Da
+      - SEQ__RELAYER__TX_SITTER_GAS_LIMIT=2000000
+      - SEQ__PROVIDERS__PRIMARY_NETWORK_PROVIDER=http://chain:8545
+      - 'SEQ__APP__PROVERS_URLS=[{"url": "http://semaphore-insertion:3001", "prover_type": "insertion", "batch_size": 10,"timeout_s": 30}, {"url": "http://semaphore-deletion:3001", "prover_type": "deletion", "batch_size": 10,"timeout_s": 30}]'
+      - SEQ__DATABASE__DATABASE=postgres://postgres:postgres@sequencer-db:5432/sequencer?sslmode=disable
+      - SEQ__APP__BATCH_INSERTION_TIMEOUT=30s
+      - SEQ__APP__BATCH_DELETION_TIMEOUT_SECONDS=1s
+  signup-sequencer-1:
+    container_name: signup-sequencer-1
+    image: signup-sequencer
+    build:
+      context: ./../
+      args:
+        BUILD_DEV: 1
+    depends_on:
+      - sequencer-db
+      - chain
+      - semaphore-insertion
+      - semaphore-deletion
+    restart: always
+    ports:
+      - "9081:8080"
+    environment:
+      - SEQ__TREE__TREE_DEPTH=30
+      - SEQ__TREE__DENSE_TREE_PREFIX_DEPTH=22
+      - SEQ__TREE__TREE_GC_THRESHOLD=10000000
+      - SEQ__TREE__CACHE_FILE=./cache_file
+      - SEQ__SERVER__ADDRESS=0.0.0.0:8080
+      - SEQ__NETWORK__IDENTITY_MANAGER_ADDRESS=0x48483748eb0446A16cAE79141D0688e3F624Cb73
+      - SEQ__RELAYER__KIND=tx_sitter
+      - SEQ__RELAYER__TX_SITTER_URL=http://tx-sitter:3000/1/api/G5CKNF3BTS2hRl60bpdYMNPqXvXsP-QZd2lrtmgctsnllwU9D3Z4D8gOt04M0QNH
+      - SEQ__RELAYER__TX_SITTER_ADDRESS=0x1d7ffed610cc4cdC097ecDc835Ae5FEE93C9e3Da
+      - SEQ__RELAYER__TX_SITTER_GAS_LIMIT=2000000
+      - SEQ__PROVIDERS__PRIMARY_NETWORK_PROVIDER=http://chain:8545
+      - 'SEQ__APP__PROVERS_URLS=[{"url": "http://semaphore-insertion:3001", "prover_type": "insertion", "batch_size": 10,"timeout_s": 30}, {"url": "http://semaphore-deletion:3001", "prover_type": "deletion", "batch_size": 10,"timeout_s": 30}]'
+      - SEQ__DATABASE__DATABASE=postgres://postgres:postgres@sequencer-db:5432/sequencer?sslmode=disable
+      - SEQ__APP__BATCH_INSERTION_TIMEOUT=30s
+      - SEQ__APP__BATCH_DELETION_TIMEOUT_SECONDS=1s
+  signup-sequencer-2:
+    container_name: signup-sequencer-2
+    image: signup-sequencer
+    build:
+      context: ./../
+      args:
+        BUILD_DEV: 1
+    depends_on:
+      - sequencer-db
+      - chain
+      - semaphore-insertion
+      - semaphore-deletion
+    restart: always
+    ports:
+      - "9082:8080"
+    environment:
+      - SEQ__TREE__TREE_DEPTH=30
+      - SEQ__TREE__DENSE_TREE_PREFIX_DEPTH=22
+      - SEQ__TREE__TREE_GC_THRESHOLD=10000000
+      - SEQ__TREE__CACHE_FILE=./cache_file
+      - SEQ__SERVER__ADDRESS=0.0.0.0:8080
+      - SEQ__NETWORK__IDENTITY_MANAGER_ADDRESS=0x48483748eb0446A16cAE79141D0688e3F624Cb73
+      - SEQ__RELAYER__KIND=tx_sitter
+      - SEQ__RELAYER__TX_SITTER_URL=http://tx-sitter:3000/1/api/G5CKNF3BTS2hRl60bpdYMNPqXvXsP-QZd2lrtmgctsnllwU9D3Z4D8gOt04M0QNH
+      - SEQ__RELAYER__TX_SITTER_ADDRESS=0x1d7ffed610cc4cdC097ecDc835Ae5FEE93C9e3Da
+      - SEQ__RELAYER__TX_SITTER_GAS_LIMIT=2000000
+      - SEQ__PROVIDERS__PRIMARY_NETWORK_PROVIDER=http://chain:8545
+      - 'SEQ__APP__PROVERS_URLS=[{"url": "http://semaphore-insertion:3001", "prover_type": "insertion", "batch_size": 10,"timeout_s": 30}, {"url": "http://semaphore-deletion:3001", "prover_type": "deletion", "batch_size": 10,"timeout_s": 30}]'
+      - SEQ__DATABASE__DATABASE=postgres://postgres:postgres@sequencer-db:5432/sequencer?sslmode=disable
+      - SEQ__APP__BATCH_INSERTION_TIMEOUT=30s
+      - SEQ__APP__BATCH_DELETION_TIMEOUT_SECONDS=1s
+  signup-sequencer-3:
+    container_name: signup-sequencer-3
+    image: signup-sequencer
+    build:
+      context: ./../
+      args:
+        BUILD_DEV: 1
+    depends_on:
+      - sequencer-db
+      - chain
+      - semaphore-insertion
+      - semaphore-deletion
+    restart: always
+    ports:
+      - "9083:8080"
+    environment:
+      - SEQ__TREE__TREE_DEPTH=30
+      - SEQ__TREE__DENSE_TREE_PREFIX_DEPTH=22
+      - SEQ__TREE__TREE_GC_THRESHOLD=10000000
+      - SEQ__TREE__CACHE_FILE=./cache_file
+      - SEQ__SERVER__ADDRESS=0.0.0.0:8080
+      - SEQ__NETWORK__IDENTITY_MANAGER_ADDRESS=0x48483748eb0446A16cAE79141D0688e3F624Cb73
+      - SEQ__RELAYER__KIND=tx_sitter
+      - SEQ__RELAYER__TX_SITTER_URL=http://tx-sitter:3000/1/api/G5CKNF3BTS2hRl60bpdYMNPqXvXsP-QZd2lrtmgctsnllwU9D3Z4D8gOt04M0QNH
+      - SEQ__RELAYER__TX_SITTER_ADDRESS=0x1d7ffed610cc4cdC097ecDc835Ae5FEE93C9e3Da
+      - SEQ__RELAYER__TX_SITTER_GAS_LIMIT=2000000
+      - SEQ__PROVIDERS__PRIMARY_NETWORK_PROVIDER=http://chain:8545
+      - 'SEQ__APP__PROVERS_URLS=[{"url": "http://semaphore-insertion:3001", "prover_type": "insertion", "batch_size": 10,"timeout_s": 30}, {"url": "http://semaphore-deletion:3001", "prover_type": "deletion", "batch_size": 10,"timeout_s": 30}]'
+      - SEQ__DATABASE__DATABASE=postgres://postgres:postgres@sequencer-db:5432/sequencer?sslmode=disable
+      - SEQ__APP__BATCH_INSERTION_TIMEOUT=30s
+      - SEQ__APP__BATCH_DELETION_TIMEOUT_SECONDS=1s
+volumes:
+  tx_sitter_db_data:
+    driver: local
+  sequencer_db_data:
+    driver: local

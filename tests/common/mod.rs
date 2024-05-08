@@ -747,7 +747,7 @@ pub async fn spawn_deps<'a, 'b, 'c>(
     ))
 }
 
-async fn spawn_db<'a>(docker: &'a Cli) -> anyhow::Result<DockerContainer<'a>> {
+async fn spawn_db(docker: &Cli) -> anyhow::Result<DockerContainer<'_>> {
     let db_container = postgres_docker_utils::setup(docker).await.unwrap();
 
     Ok(db_container)

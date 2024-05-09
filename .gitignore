@@ -8,3 +8,6 @@ commitments.json
 !.editorconfig
 !.dockerignore
 !.cargo
+
+e2e_tests/docker-compose/keys/*
+!e2e_tests/docker-compose/keys/.keep

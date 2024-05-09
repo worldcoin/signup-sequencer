@@ -1,0 +1,162 @@
+services:
+  chain:
+    image: ghcr.io/foundry-rs/foundry
+    hostname: chain
+    platform: linux/amd64
+    ports:
+      - ${CHAIN_PORT:-8545}:8545
+    command: [ "anvil --host 0.0.0.0 --chain-id 31337 --block-time 30 --base-fee 0 --gas-limit 0 --gas-price 0 --fork-url https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}@5091094" ]
+  tx-sitter-db:
+    image: postgres:latest
+    hostname: tx-sitter-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=tx-sitter
+    ports:
+      - ${TX_SITTER_DB_PORT:-5460}:5432
+    volumes:
+      - tx_sitter_db_data:/var/lib/postgresql/data
+  sequencer-db:
+    image: postgres:latest
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=sequencer
+    ports:
+      - ${SEQUENCER_DB_PORT:-5461}:5432
+    volumes:
+      - sequencer_db_data:/var/lib/postgresql/data
+  tx-sitter:
+    image: ghcr.io/worldcoin/tx-sitter-monolith:latest
+    hostname: tx-sitter
+    depends_on:
+      - tx-sitter-db
+      - chain
+    restart: always
+    ports:
+      - ${TX_SITTER_PORT:-3000}:3000
+    environment:
+      - RUST_LOG=info
+      - TX_SITTER__SERVICE__ESCALATION_INTERVAL=3s
+      - TX_SITTER__DATABASE__KIND=connection_string
+      - TX_SITTER__DATABASE__CONNECTION_STRING=postgres://postgres:postgres@tx-sitter-db:5432/tx-sitter?sslmode=disable
+      - TX_SITTER__KEYS__KIND=local
+      - TX_SITTER__SERVICE__PREDEFINED__NETWORK__CHAIN_ID=31337
+      - TX_SITTER__SERVICE__PREDEFINED__NETWORK__NAME=Anvil
+      - TX_SITTER__SERVICE__PREDEFINED__NETWORK__HTTP_RPC=http://chain:8545
+      - TX_SITTER__SERVICE__PREDEFINED__NETWORK__WS_RPC=ws://chain:8545
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__ID=1b908a34-5dc1-4d2d-a146-5eb46e975830
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__NAME=Relayer
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__CHAIN_ID=31337
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__KEY_ID=d10607662a85424f02a33fb1e6d095bd0ac7154396ff09762e41f82ff2233aaa
+      - TX_SITTER__SERVICE__PREDEFINED__RELAYER__API_KEY=G5CKNF3BTS2hRl60bpdYMNPqXvXsP-QZd2lrtmgctsnllwU9D3Z4D8gOt04M0QNH
+      - TX_SITTER__SERVER__HOST=0.0.0.0:3000
+      - TX_SITTER__SERVER__DISABLE_AUTH=true
+  semaphore-keys-init-insertion:
+    image: curlimages/curl:latest
+    user: "0:0"
+    volumes:
+      - ./keys:/keys
+    entrypoint: /bin/sh
+    restart: on-failure
+    command:
+      - "-c"
+      - >
+        if [ ! -f "/keys/insertion_b10t30.ps" ]; then
+          curl "https://semaphore-mtb-trusted-setup-ceremony.s3.amazonaws.com/insertion_b10/insertion_b10t30.ps" -o /keys/insertion_b10t30.ps &&
+          chown -f $(stat -c "%u:%g" /keys/.keep) /keys/insertion_b10t30.ps;
+        fi
+  semaphore-keys-init-deletion:
+    image: curlimages/curl:latest
+    user: "0:0"
+    volumes:
+      - ./keys:/keys
+    entrypoint: /bin/sh
+    restart: on-failure
+    command:
+      - "-c"
+      - >
+        if [ ! -f "/keys/deletion_b10t30.ps" ]; then
+          curl "https://semaphore-mtb-trusted-setup-ceremony.s3.amazonaws.com/deletion_b10/deletion_b10t30.ps" -o /keys/deletion_b10t30.ps &&
+          chown -f $(stat -c "%u:%g" /keys/.keep) /keys/deletion_b10t30.ps;
+        fi
+  semaphore-insertion:
+    image: ghcr.io/worldcoin/semaphore-mtb:latest
+    hostname: semaphore-insertion
+    restart: always
+    ports:
+      - ${SEMAPHORE_INSERTION_PORT:-3001}:3001
+    command: [ "start", "--keys-file", "/mtb/keys/insertion_b10t30.ps", "--prover-address", "0.0.0.0:3001", "--mode", "insertion" ]
+    volumes:
+      - ./keys:/mtb/keys
+    environment:
+      BATCH_TIMEOUT_SECONDS: 1
+    depends_on:
+      semaphore-keys-init-insertion:
+        condition: service_completed_successfully
+  semaphore-deletion:
+    image: ghcr.io/worldcoin/semaphore-mtb:latest
+    hostname: semaphore-deletion
+    restart: always
+    ports:
+      - ${SEMAPHORE_DELETION_PORT:-3002}:3001
+    command: [ "start", "--keys-file", "/mtb/keys/deletion_b10t30.ps", "--prover-address", "0.0.0.0:3001", "--mode", "deletion" ]
+    volumes:
+      - ./keys:/mtb/keys
+    environment:
+      BATCH_DELETION_TIMEOUT_SECONDS: 1
+    depends_on:
+      semaphore-keys-init-deletion:
+        condition: service_completed_successfully
+  signup-sequencer-balancer:
+    image: haproxy:3.0.0
+    hostname: signup-sequencer-balancer
+    restart: always
+    profiles: [ e2e-ha ]
+    ports:
+      - ${SIGNUP_SEQUENCER_BALANCER_PORT:-8080}:8080
+    volumes:
+      - ./haproxy:/usr/local/etc/haproxy
+    depends_on:
+      - signup-sequencer-0
+  signup-sequencer-0: &signup-sequencer-def
+    image: signup-sequencer
+    hostname: signup-sequencer-0
+    profiles: [ e2e-ha ]
+    build:
+      context: ./../../
+    depends_on:
+      - sequencer-db
+      - chain
+      - semaphore-insertion
+      - semaphore-deletion
+      - tx-sitter
+    restart: always
+    ports:
+      - ${SIGNUP_SEQUENCER_0_PORT:-9080}:8080
+    volumes:
+      - ./signup_sequencer/config.toml:/config.toml
+    command: [ "/config.toml" ]
+    environment:
+      - RUST_LOG=debug
+#  signup-sequencer-1:
+#    <<: *signup-sequencer-def
+#    hostname: signup-sequencer-1
+#    ports:
+#      - ${SIGNUP_SEQUENCER_0_PORT:-9081}:8080
+#  signup-sequencer-2:
+#    <<: *signup-sequencer-def
+#    hostname: signup-sequencer-2
+#    ports:
+#      - ${SIGNUP_SEQUENCER_0_PORT:-9082}:8080
+#  signup-sequencer-3:
+#    <<: *signup-sequencer-def
+#    hostname: signup-sequencer-3
+#    ports:
+#      - ${SIGNUP_SEQUENCER_0_PORT:-9083}:8080
+volumes:
+  tx_sitter_db_data:
+    driver: local
+  sequencer_db_data:
+    driver: local

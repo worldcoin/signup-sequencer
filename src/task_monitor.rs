@@ -130,14 +130,37 @@ impl TaskMonitor {
         );
         handles.push(finalize_identities_handle);
 
-        // Process identities
+        let base_next_batch_notify = Arc::new(Notify::new());
+
+        // Create batches
         let app = self.app.clone();
+        let next_batch_notify = base_next_batch_notify.clone();
+        let wake_up_notify = base_wake_up_notify.clone();
+
+        let create_batches = move || {
+            tasks::create_batches::create_batches(
+                app.clone(),
+                next_batch_notify.clone(),
+                wake_up_notify.clone(),
+            )
+        };
+        let create_batches_handle = crate::utils::spawn_monitored_with_backoff(
+            create_batches,
+            shutdown_sender.clone(),
+            PROCESS_IDENTITIES_BACKOFF,
+        );
+        handles.push(create_batches_handle);
+
+        // Process batches
+        let app = self.app.clone();
+        let next_batch_notify = base_next_batch_notify.clone();
         let wake_up_notify = base_wake_up_notify.clone();
 
         let process_identities = move || {
-            tasks::process_identities::process_identities(
+            tasks::process_batches::process_batches(
                 app.clone(),
                 monitored_txs_sender.clone(),
+                next_batch_notify.clone(),
                 wake_up_notify.clone(),
             )
         };

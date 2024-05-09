@@ -19,9 +19,11 @@ use tracing::{error, info, instrument, warn};
 
 use self::types::{CommitmentHistoryEntry, DeletionEntry, LatestDeletionEntry, RecoveryEntry};
 use crate::config::DatabaseConfig;
+use crate::database::types::{BatchEntry, BatchEntryData, BatchType, TransactionEntry};
 use crate::identity_tree::{
     Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate, UnprocessedStatus,
 };
+use crate::prover::identity::Identity;
 use crate::prover::{ProverConfig, ProverType};
 
 pub mod types;
@@ -840,6 +842,241 @@ pub trait DatabaseExt<'a>: Executor<'a, Database = Postgres> {
         let row_unprocessed = self.fetch_one(query_queued_deletion).await?;
         Ok(row_unprocessed.get::<bool, _>(0))
     }
+
+    async fn insert_new_batch_head(self, next_root: &Hash) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO batches(
+                id,
+                next_root,
+                prev_root,
+                created_at,
+                batch_type,
+                data
+            ) VALUES (DEFAULT, $1, NULL, CURRENT_TIMESTAMP, $2, $3)
+            "#,
+        )
+        .bind(next_root)
+        .bind(BatchType::Insertion)
+        .bind(sqlx::types::Json::from(BatchEntryData {
+            identities: vec![],
+            indexes:    vec![],
+        }));
+
+        self.execute(query).await?;
+        Ok(())
+    }
+
+    async fn insert_new_batch(
+        self,
+        next_root: &Hash,
+        prev_root: &Hash,
+        batch_type: BatchType,
+        identities: &[Identity],
+        indexes: &[usize],
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO batches(
+                id,
+                next_root,
+                prev_root,
+                created_at,
+                batch_type,
+                data
+            ) VALUES (DEFAULT, $1, $2, CURRENT_TIMESTAMP, $3, $4)
+            "#,
+        )
+        .bind(next_root)
+        .bind(prev_root)
+        .bind(batch_type)
+        .bind(sqlx::types::Json::from(BatchEntryData {
+            identities: identities.to_vec(),
+            indexes:    indexes.to_vec(),
+        }));
+
+        self.execute(query).await?;
+        Ok(())
+    }
+
+    async fn get_next_batch(self, prev_root: &Hash) -> Result<Option<BatchEntry>, Error> {
+        let res = sqlx::query_as::<_, BatchEntry>(
+            r#"
+            SELECT
+                id,
+                next_root,
+                prev_root,
+                created_at,
+                batch_type,
+                data
+            FROM batches WHERE prev_root = $1
+            LIMIT 1
+            "#,
+        )
+        .bind(prev_root)
+        .fetch_optional(self)
+        .await?;
+
+        Ok(res)
+    }
+
+    async fn get_latest_batch(self) -> Result<Option<BatchEntry>, Error> {
+        let res = sqlx::query_as::<_, BatchEntry>(
+            r#"
+            SELECT
+                id,
+                next_root,
+                prev_root,
+                created_at,
+                batch_type,
+                data
+            FROM batches
+            ORDER BY id DESC
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(self)
+        .await?;
+
+        Ok(res)
+    }
+
+    async fn get_latest_batch_with_transaction(self) -> Result<Option<BatchEntry>, Error> {
+        let res = sqlx::query_as::<_, BatchEntry>(
+            r#"
+            SELECT
+                batches.id,
+                batches.next_root,
+                batches.prev_root,
+                batches.created_at,
+                batches.batch_type,
+                batches.data
+            FROM batches
+            LEFT JOIN transactions ON batches.next_root = transactions.batch_next_root
+            WHERE transactions.batch_next_root IS NOT NULL AND batches.prev_root IS NOT NULL
+            ORDER BY batches.id DESC
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(self)
+        .await?;
+
+        Ok(res)
+    }
+
+    async fn get_next_batch_without_transaction(self) -> Result<Option<BatchEntry>, Error> {
+        let res = sqlx::query_as::<_, BatchEntry>(
+            r#"
+            SELECT
+                batches.id,
+                batches.next_root,
+                batches.prev_root,
+                batches.created_at,
+                batches.batch_type,
+                batches.data
+            FROM batches
+            LEFT JOIN transactions ON batches.next_root = transactions.batch_next_root
+            WHERE transactions.batch_next_root IS NULL AND batches.prev_root IS NOT NULL
+            ORDER BY batches.id ASC
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(self)
+        .await?;
+
+        Ok(res)
+    }
+
+    async fn get_batch_head(self) -> Result<Option<BatchEntry>, Error> {
+        let res = sqlx::query_as::<_, BatchEntry>(
+            r#"
+            SELECT
+                id,
+                next_root,
+                prev_root,
+                created_at,
+                batch_type,
+                data
+            FROM batches WHERE prev_root IS NULL
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(self)
+        .await?;
+
+        Ok(res)
+    }
+
+    async fn get_all_batches_after(self, id: i64) -> Result<Vec<BatchEntry>, Error> {
+        let res = sqlx::query_as::<_, BatchEntry>(
+            r#"
+            SELECT
+                id,
+                next_root,
+                prev_root,
+                created_at,
+                batch_type,
+                data
+            FROM batches WHERE id >= $1 ORDER BY id ASC
+            "#,
+        )
+        .bind(id)
+        .fetch_all(self)
+        .await?;
+
+        Ok(res)
+    }
+
+    async fn root_in_batch_chain(self, root: &Hash) -> Result<bool, Error> {
+        let query = sqlx::query(
+            r#"SELECT exists(SELECT 1 FROM batches where prev_root = $1 OR next_root = $1)"#,
+        )
+        .bind(root);
+        let row_unprocessed = self.fetch_one(query).await?;
+        Ok(row_unprocessed.get::<bool, _>(0))
+    }
+
+    async fn insert_new_transaction(
+        self,
+        transaction_id: &String,
+        batch_next_root: &Hash,
+    ) -> Result<(), Error> {
+        let query = sqlx::query(
+            r#"
+            INSERT INTO transactions(
+                transaction_id,
+                batch_next_root,
+                created_at
+            ) VALUES ($1, $2, CURRENT_TIMESTAMP)
+            "#,
+        )
+        .bind(transaction_id)
+        .bind(batch_next_root);
+
+        self.execute(query).await?;
+        Ok(())
+    }
+
+    async fn get_transaction_for_batch(
+        self,
+        next_root: &Hash,
+    ) -> Result<Option<TransactionEntry>, Error> {
+        let res = sqlx::query_as::<_, TransactionEntry>(
+            r#"
+            SELECT
+                transaction_id,
+                batch_next_root,
+                created_at
+            FROM transactions WHERE batch_next_root = $1
+            LIMIT 1
+            "#,
+        )
+        .bind(next_root)
+        .fetch_optional(self)
+        .await?;
+
+        Ok(res)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -867,8 +1104,10 @@ mod test {
 
     use super::Database;
     use crate::config::DatabaseConfig;
+    use crate::database::types::BatchType;
     use crate::database::DatabaseExt as _;
     use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
+    use crate::prover::identity::Identity;
     use crate::prover::{ProverConfig, ProverType};
     use crate::utils::secret::SecretUrl;
 
@@ -2035,6 +2274,168 @@ mod test {
             .context("Missing root")?;
 
         assert_eq!(root_state.status, ProcessedStatus::Pending);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_insert_batch() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let identities: Vec<_> = mock_identities(10)
+            .iter()
+            .map(|commitment| {
+                Identity::new(
+                    (*commitment).into(),
+                    mock_roots(10).iter().map(|root| (*root).into()).collect(),
+                )
+            })
+            .collect();
+        let roots = mock_roots(2);
+
+        db.insert_new_batch_head(&roots[0]).await?;
+        db.insert_new_batch(&roots[1], &roots[0], BatchType::Insertion, &identities, &[
+            0,
+        ])
+        .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_next_batch() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let identities: Vec<_> = mock_identities(10)
+            .iter()
+            .map(|commitment| {
+                Identity::new(
+                    (*commitment).into(),
+                    mock_roots(10).iter().map(|root| (*root).into()).collect(),
+                )
+            })
+            .collect();
+        let indexes = vec![0];
+        let roots = mock_roots(2);
+
+        db.insert_new_batch_head(&roots[0]).await?;
+        db.insert_new_batch(
+            &roots[1],
+            &roots[0],
+            BatchType::Insertion,
+            &identities,
+            &indexes,
+        )
+        .await?;
+
+        let next_batch = db.get_next_batch(&roots[0]).await?;
+
+        assert!(next_batch.is_some());
+
+        let next_batch = next_batch.unwrap();
+
+        assert_eq!(next_batch.prev_root.unwrap(), roots[0]);
+        assert_eq!(next_batch.next_root, roots[1]);
+        assert_eq!(next_batch.data.0.identities, identities);
+        assert_eq!(next_batch.data.0.indexes, indexes);
+
+        let next_batch = db.get_next_batch(&roots[1]).await?;
+
+        assert!(next_batch.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_next_batch_without_transaction() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let identities: Vec<_> = mock_identities(10)
+            .iter()
+            .map(|commitment| {
+                Identity::new(
+                    (*commitment).into(),
+                    mock_roots(10).iter().map(|root| (*root).into()).collect(),
+                )
+            })
+            .collect();
+        let indexes = vec![0];
+        let roots = mock_roots(2);
+        let transaction_id = String::from("173bcbfd-e1d9-40e2-ba10-fc1dfbf742c9");
+
+        db.insert_new_batch_head(&roots[0]).await?;
+        db.insert_new_batch(
+            &roots[1],
+            &roots[0],
+            BatchType::Insertion,
+            &identities,
+            &indexes,
+        )
+        .await?;
+
+        let next_batch = db.get_next_batch_without_transaction().await?;
+
+        assert!(next_batch.is_some());
+
+        let next_batch = next_batch.unwrap();
+
+        assert_eq!(next_batch.prev_root.unwrap(), roots[0]);
+        assert_eq!(next_batch.next_root, roots[1]);
+        assert_eq!(next_batch.data.0.identities, identities);
+        assert_eq!(next_batch.data.0.indexes, indexes);
+
+        db.insert_new_transaction(&transaction_id, &roots[1])
+            .await?;
+
+        let next_batch = db.get_next_batch_without_transaction().await?;
+
+        assert!(next_batch.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_batch_head() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let roots = mock_roots(1);
+
+        let batch_head = db.get_batch_head().await?;
+
+        assert!(batch_head.is_none());
+
+        db.insert_new_batch_head(&roots[0]).await?;
+
+        let batch_head = db.get_batch_head().await?;
+
+        assert!(batch_head.is_some());
+        let batch_head = batch_head.unwrap();
+
+        assert_eq!(batch_head.prev_root, None);
+        assert_eq!(batch_head.next_root, roots[0]);
+        assert!(
+            batch_head.data.0.identities.is_empty(),
+            "Should have empty identities."
+        );
+        assert!(
+            batch_head.data.0.indexes.is_empty(),
+            "Should have empty indexes."
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_insert_transaction() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let roots = mock_roots(1);
+        let transaction_id = String::from("173bcbfd-e1d9-40e2-ba10-fc1dfbf742c9");
+
+        db.insert_new_batch_head(&roots[0]).await?;
+
+        db.insert_new_transaction(&transaction_id, &roots[0])
+            .await?;
 
         Ok(())
     }

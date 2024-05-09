@@ -15,7 +15,7 @@ use crate::database::{Database, DatabaseExt as _};
 use crate::ethereum::Ethereum;
 use crate::identity_tree::{
     CanonicalTreeBuilder, Hash, InclusionProof, ProcessedStatus, RootItem, Status, TreeState,
-    TreeUpdate, TreeVersionReadOps, UnprocessedStatus,
+    TreeUpdate, TreeVersionReadOps, TreeWithNextVersion, UnprocessedStatus,
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::{ProverConfig, ProverType};
@@ -261,6 +261,9 @@ impl App {
 
         let (processed, batching_builder) = processed_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
+
+        // We are duplicating updates here for some commitments that were batched but
+        // this is an idempotent operation
         let pending_items = self
             .database
             .get_commitments_by_status(ProcessedStatus::Pending)
@@ -269,6 +272,15 @@ impl App {
             latest_builder.update(&update);
         }
         let latest = latest_builder.seal();
+
+        let batch = self.database.get_latest_batch().await?;
+        if let Some(batch) = batch {
+            if batching.get_root() != batch.next_root {
+                batching.apply_updates_up_to(batch.next_root);
+            }
+            assert_eq!(batching.get_root(), batch.next_root);
+        }
+
         Ok(Some(TreeState::new(mined, processed, batching, latest)))
     }
 
@@ -354,6 +366,14 @@ impl App {
         .await?;
 
         let latest = latest_builder.seal();
+
+        let batch = self.database.get_latest_batch().await?;
+        if let Some(batch) = batch {
+            if batching.get_root() != batch.next_root {
+                batching.apply_updates_up_to(batch.next_root);
+            }
+            assert_eq!(batching.get_root(), batch.next_root);
+        }
 
         Ok(TreeState::new(mined, processed, batching, latest))
     }

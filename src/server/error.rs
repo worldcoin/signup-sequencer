@@ -72,30 +72,6 @@ pub enum Error {
 }
 
 impl Error {
-    #[allow(clippy::enum_glob_use)]
-    #[must_use]
-    pub fn to_response(&self) -> hyper::Response<Body> {
-        use Error::*;
-
-        let status_code = match self {
-            InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
-            InvalidPath | IdentityCommitmentNotFound => StatusCode::NOT_FOUND,
-            InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            IndexOutOfBounds
-            | RootTooOld
-            | InvalidCommitment
-            | DuplicateCommitment
-            | InvalidSerialization(_) => StatusCode::BAD_REQUEST,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-        hyper::Response::builder()
-            .status(status_code)
-            .body(hyper::Body::from(self.to_string()))
-            .expect("Failed to convert error string into hyper::Body")
-    }
-}
-
-impl Error {
     fn to_status_code(&self) -> StatusCode {
         match self {
             Self::InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,

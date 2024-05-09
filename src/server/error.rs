@@ -1,6 +1,6 @@
 use anyhow::Error as EyreError;
 use axum::response::IntoResponse;
-use hyper::{Body, StatusCode};
+use hyper::{StatusCode};
 use thiserror::Error;
 
 use crate::database;

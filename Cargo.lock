@@ -6097,7 +6097,7 @@ checksum = "69758bda2e78f098e4ccb393021a0963bb3442eac05f135c30f61b7370bbafae"
 [[package]]
 name = "telemetry-batteries"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/telemetry-batteries.git?rev=c3c6921#c3c692148d5e5619413e7f588300d692bbef10b6"
+source = "git+https://github.com/worldcoin/telemetry-batteries.git?rev=802a4f39f358e077b11c8429b4c65f3e45b85959#802a4f39f358e077b11c8429b4c65f3e45b85959"
 dependencies = [
  "chrono",
  "dirs",
@@ -6109,6 +6109,8 @@ dependencies = [
  "opentelemetry-datadog",
  "opentelemetry-http",
  "opentelemetry_sdk",
+ "rand",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror",

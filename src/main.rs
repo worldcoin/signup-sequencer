@@ -35,7 +35,7 @@ async fn main() -> eyre::Result<()> {
 async fn sequencer_app(args: Args) -> anyhow::Result<()> {
     let config = load_config(&args)?;
 
-    let _ = init_telemetry(&config.service)?;
+    let _tracing_shutdown_handle = init_telemetry(&config.service)?;
 
     watch_shutdown_signals();
 

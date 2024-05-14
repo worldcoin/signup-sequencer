@@ -15,6 +15,7 @@ pub mod tasks;
 const TREE_INIT_BACKOFF: Duration = Duration::from_secs(5);
 const PROCESS_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const FINALIZE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
+const QUEUE_MONITOR_BACKOFF: Duration = Duration::from_secs(5);
 const INSERT_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const DELETE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 
@@ -129,6 +130,16 @@ impl TaskMonitor {
             FINALIZE_IDENTITIES_BACKOFF,
         );
         handles.push(finalize_identities_handle);
+
+        // Report length of the queue of identities
+        let app = self.app.clone();
+        let queue_monitor = move || tasks::monitor_queue::monitor_queue(app.clone());
+        let queue_monitor_handle = crate::utils::spawn_monitored_with_backoff(
+            queue_monitor,
+            shutdown_sender.clone(),
+            QUEUE_MONITOR_BACKOFF,
+        );
+        handles.push(queue_monitor_handle);
 
         // Process identities
         let app = self.app.clone();

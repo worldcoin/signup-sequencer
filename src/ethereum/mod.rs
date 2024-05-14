@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use ethers::providers::Middleware;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::Address;
 pub use read::ReadProvider;

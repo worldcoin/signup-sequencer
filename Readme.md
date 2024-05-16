@@ -63,7 +63,7 @@ docker pull postgres
 
 ### Local Node
 
-You'll need to run a local node like geth. Start up a new chain and take note of the dev addresses. You can follow instructions [here](https://book.getfoundry.sh/anvil/).
+You'll need to run a local node like geth or [ganache](https://archive.trufflesuite.com/ganache/). Start up a new chain and take note of the dev addresses. You can follow instructions [here](https://book.getfoundry.sh/anvil/).
 
 ### Worldcoin id contracts
 

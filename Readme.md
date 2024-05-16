@@ -90,6 +90,14 @@ you will have a generated a keys file that is used by semaphore-mtb. If your dep
 docker run --rm -ti -p 5432:5432 -e POSTGRES_PASSWORD=password postgres
 ```
 
+### TX sitter
+
+TX sitter is a service providing API for signup-sequencer to submit transactions on blockchain.
+
+Clone [tx-sitter-monolith](https://github.com/worldcoin/tx-sitter-monolith) and follow build instructions
+
+### Signup-sequencer
+
 Now you are ready to start up sequencer service!
 
 ```shell

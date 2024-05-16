@@ -98,11 +98,48 @@ Clone [tx-sitter-monolith](https://github.com/worldcoin/tx-sitter-monolith) and 
 
 ### Signup-sequencer
 
-Now you are ready to start up sequencer service!
+Now you need to create a `config.toml` file for signup-sequencer:
+
+```toml
+[app]
+provers_urls ='[]'
+
+[tree]
+
+[network]
+# Address of WorldIDIdentityManager contract on blockchain.
+# If you are using anvil the default address should work.
+identity_manager_address = "0x48483748eb0446A16cAE79141D0688e3F624Cb73"
+
+[providers]
+# Blockchain API URL (anvil or geth)
+primary_network_provider = "http://localhost:8545"
+
+[relayer]
+kind = "tx_sitter"
+# URL of TX-sitter API + API token
+tx_sitter_url = "http://localhost:3000/1/api/G5CKNF3BTS2hRl60bpdYMNPqXvXsP-QZd2lrtmgctsnllwU9D3Z4D8gOt04M0QNH"
+tx_sitter_address = "0x1d7ffed610cc4cdC097ecDc835Ae5FEE93C9e3Da"
+tx_sitter_gas_limit = 2000000
+
+[database]
+database = "postgres://postgres:password@localhost:5432/sequencer?sslmode=disable"
+
+[server]
+# Port to run signup-sequencer API on
+address = "0.0.0.0:8080"
+```
+
+The daemon will try to create temporary files in `/data`. If your machine does not have it you could create it:
 
 ```shell
-TREE_DEPTH=*your tree depth (eg. 16)* cargo run -- --batch-size *batch size for semaphore-mtb (eg. 3)* --batch-timeout-seconds 10 --database postgres://postgres:password@0.0.0.0:5432 --identity-manager-address *address from worldcoin id contracts identity manager*
---signing-key *private key you used to deploy smart contracts*
+mkdir signup_sequencer_data
+sudo ln -sf `pwd`/signup_sequencer_data /data
+```
+
+And then run the daemon:
+```shell
+cargo run config.toml
 ```
 
 ## Tests

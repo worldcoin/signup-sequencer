@@ -78,7 +78,7 @@ Semaphore-mtb is a service for batch processing of Merkle tree updates.
 Clone [semaphore-mtb](https://github.com/worldcoin/semaphore-mtb) and execute `go build .` (you will need a golang compiler)
 
 Go build will create an executable named gnark-mbu. If you went through the contracts-deployer,
-you will have a generated a keys file that is used by semaphore-mtb. If your deplyment contains more than one pover, then you must run this command for each one and configure them to listen on different ports.
+you will have a generated a keys file that is used by semaphore-mtb. If your deplyment contains more than one prover, then you must run this command for each one and configure them to listen on different ports.
 
 ```shell
 ./gnark-mbu start --keys-file path/to/contracts-deployer/<DEPLOYMENT_NAME>/.cache/keys/<KEY_NAME> --mode <insertion/deletion>

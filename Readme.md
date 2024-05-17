@@ -46,12 +46,12 @@ Sequencer has 6 API routes.
 
 ### (Local development)
 
-Install Protobuf compiler
+Install pre-requisites on the dev machine
 
-| Os            | Command                                     |
-| ------------- | ------------------------------------------- |
-| MacOs         | `brew install protobuf`                     |
-| Ubuntu/Debian | `sudo apt-get install -y protobuf-compiler` |
+| Os            | Command                                                |
+|---------------|--------------------------------------------------------|
+| MacOs         | `brew install protobuf pkg-config`                     |
+| Ubuntu/Debian | `sudo apt-get install -y protobuf-compiler pkg-config` |
 
 Install [Docker](https://docs.docker.com/get-docker/) - Docker is used to setup the database for testing
 

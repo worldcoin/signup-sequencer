@@ -14,7 +14,8 @@ use crate::app::App;
 use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangeKind, TreeChangedFilter};
 use crate::contracts::scanner::BlockScanner;
 use crate::contracts::IdentityManager;
-use crate::database::{Database, DatabaseExt as _};
+use crate::database::query::DatabaseQuery as _;
+use crate::database::Database;
 use crate::identity_tree::{Canonical, Intermediate, TreeVersion, TreeWithNextVersion};
 use crate::task_monitor::TaskMonitor;
 

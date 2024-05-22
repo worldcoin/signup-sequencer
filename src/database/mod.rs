@@ -8,6 +8,7 @@ use std::cmp::Ordering;
 use std::ops::Deref;
 
 use anyhow::{anyhow, Context, Error as ErrReport};
+use futures::Future;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
 use sqlx::{Executor, Pool, Postgres, Row};
@@ -25,6 +26,8 @@ pub mod types;
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 
+static TX_RETRY_LIMIT: u32 = 10;
+
 pub struct Database {
     pub pool: Pool<Postgres>,
 }
@@ -40,6 +43,37 @@ impl Deref for Database {
 impl<'a, T> DatabaseQuery<'a> for T where T: Executor<'a, Database = Postgres> {}
 
 impl Database {
+    /// Retries a transaction until it succeeds
+    /// Note: Only errors originating from `Transaction::commit` are retried
+    /// Errors originating from the transaction function are not retried
+    pub async fn retry_tx<S, F, O, E>(&self, f: S) -> Result<O, E>
+    where
+        F: Future<Output = Result<O, E>>,
+        S: Fn(&mut sqlx::PgConnection) -> F + Send + Sync,
+        E: From<sqlx::Error>,
+    {
+        let mut res;
+        let mut counter = 0;
+        loop {
+            let mut tx = self.pool.begin().await?;
+            res = f(&mut tx).await;
+            if res.is_err() {
+                tx.rollback().await?;
+                return res;
+            }
+            match tx.commit().await {
+                Err(e) => {
+                    counter += 1;
+                    if counter > TX_RETRY_LIMIT {
+                        return Err(e.into());
+                    }
+                }
+                Ok(_) => break,
+            }
+        }
+        res
+    }
+
     #[instrument(skip_all)]
     pub async fn new(config: &DatabaseConfig) -> Result<Self, ErrReport> {
         info!(url = %&config.database, "Connecting to database");
@@ -163,7 +197,7 @@ mod test {
 
     use super::Database;
     use crate::config::DatabaseConfig;
-    use crate::database::DatabaseQuery as _;
+    use crate::database::query::DatabaseQuery;
     use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
     use crate::prover::{ProverConfig, ProverType};
     use crate::utils::secret::SecretUrl;
@@ -237,6 +271,16 @@ mod test {
 
             assert_eq!(root.status, expected_state,);
         }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_retry() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        db.retry_tx(|tx| async { tx.mark_all_as_pending().await })
+            .await?;
 
         Ok(())
     }

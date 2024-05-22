@@ -25,12 +25,12 @@ impl Database {
         // TODO: Can I get rid of line `AND    status <> $2
         let update_previous_roots = sqlx::query(
             r#"
-            UPDATE identities
-            SET    status = $2, mined_at = CURRENT_TIMESTAMP
-            WHERE  id <= $1
-            AND    status <> $2
-            AND    status <> $3;
-            "#,
+                UPDATE identities
+                SET    status = $2, mined_at = CURRENT_TIMESTAMP
+                WHERE  id <= $1
+                AND    status <> $2
+                AND    status <> $3;
+                "#,
         )
         .bind(root_id)
         .bind(<&str>::from(ProcessedStatus::Processed))
@@ -38,10 +38,10 @@ impl Database {
 
         let update_next_roots = sqlx::query(
             r#"
-            UPDATE identities
-            SET    status = $2, mined_at = NULL
-            WHERE  id > $1
-            "#,
+                UPDATE identities
+                SET    status = $2, mined_at = NULL
+                WHERE  id > $1
+                "#,
         )
         .bind(root_id)
         .bind(<&str>::from(ProcessedStatus::Pending));
@@ -74,11 +74,11 @@ impl Database {
 
         let update_previous_roots = sqlx::query(
             r#"
-            UPDATE identities
-            SET    status = $2
-            WHERE  id <= $1
-            AND    status <> $2
-            "#,
+                UPDATE identities
+                SET    status = $2
+                WHERE  id <= $1
+                AND    status <> $2
+                "#,
         )
         .bind(root_id)
         .bind(<&str>::from(mined_status));
@@ -96,10 +96,10 @@ impl Database {
     ) -> Result<Vec<CommitmentHistoryEntry>, Error> {
         let unprocessed = sqlx::query(
             r#"
-            SELECT commitment, status, eligibility
-            FROM unprocessed_identities
-            WHERE commitment = $1
-        "#,
+                SELECT commitment, status, eligibility
+                FROM unprocessed_identities
+                WHERE commitment = $1
+                "#,
         )
         .bind(commitment);
 
@@ -129,10 +129,10 @@ impl Database {
 
         let identity_deletions = sqlx::query(
             r#"
-            SELECT commitment
-            FROM deletions
-            WHERE leaf_index = $1
-            "#,
+                SELECT commitment
+                FROM deletions
+                WHERE leaf_index = $1
+                "#,
         )
         .bind(leaf_index.leaf_index as i64);
 
@@ -149,11 +149,11 @@ impl Database {
 
         let processed_updates = sqlx::query(
             r#"
-            SELECT commitment, status
-            FROM identities
-            WHERE leaf_index = $1
-            ORDER BY id ASC
-            "#,
+                SELECT commitment, status
+                FROM identities
+                WHERE leaf_index = $1
+                ORDER BY id ASC
+                "#,
         )
         .bind(leaf_index.leaf_index as i64);
 

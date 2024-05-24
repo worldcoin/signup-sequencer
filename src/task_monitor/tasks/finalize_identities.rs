@@ -16,7 +16,6 @@ use crate::contracts::scanner::BlockScanner;
 use crate::contracts::IdentityManager;
 use crate::database::{Database, DatabaseExt as _};
 use crate::identity_tree::{Canonical, Intermediate, TreeVersion, TreeWithNextVersion};
-use crate::task_monitor::TaskMonitor;
 
 pub async fn finalize_roots(app: Arc<App>) -> anyhow::Result<()> {
     let mainnet_abi = app.identity_manager.abi();
@@ -159,8 +158,6 @@ async fn finalize_mainnet_roots(
         let updates_count = processed_tree.apply_updates_up_to(post_root.into());
 
         info!(updates_count, ?pre_root, ?post_root, "Mined tree updated");
-
-        TaskMonitor::log_identities_queues(database).await?;
     }
 
     Ok(())

@@ -30,7 +30,6 @@ pub const TX_RETRY_LIMIT: u32 = 10;
 /// }).await;
 macro_rules! retry_tx {
     ($pool:expr, $tx:ident, $expression:expr) => {
-        // use sqlx::Executor as _;
         async {
             let mut res;
             let mut counter = 0;
@@ -44,8 +43,14 @@ macro_rules! retry_tx {
                 match $tx.commit().await {
                     Err(e) => {
                         counter += 1;
-                        if counter > crate::utils::TX_RETRY_LIMIT {
+                        let limit = crate::utils::TX_RETRY_LIMIT;
+                        if counter > limit {
                             return Err(e.into());
+                        } else {
+                            tracing::warn!(
+                                "db transaction commit failed ({counter}/{limit}): {:?}",
+                                e
+                            );
                         }
                     }
                     Ok(_) => break,

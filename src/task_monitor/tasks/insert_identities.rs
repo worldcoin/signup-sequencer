@@ -6,8 +6,9 @@ use tokio::time::sleep;
 use tracing::instrument;
 
 use crate::app::App;
+use crate::database::query::DatabaseQuery as _;
 use crate::database::types::UnprocessedCommitment;
-use crate::database::{Database, DatabaseExt};
+use crate::database::Database;
 use crate::identity_tree::{Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
 
 pub async fn insert_identities(

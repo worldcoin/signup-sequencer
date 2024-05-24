@@ -7,8 +7,8 @@ use tokio::sync::{Mutex, Notify};
 use tracing::info;
 
 use crate::app::App;
+use crate::database::query::DatabaseQuery;
 use crate::database::types::DeletionEntry;
-use crate::database::DatabaseExt;
 use crate::identity_tree::Hash;
 
 pub async fn delete_identities(

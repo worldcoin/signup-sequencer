@@ -8,13 +8,59 @@ use tokio::task::JoinHandle;
 use tracing::{error, info};
 
 use crate::shutdown::is_shutting_down;
-
 pub mod batch_type;
 pub mod index_packing;
 pub mod min_map;
 pub mod secret;
 pub mod serde_utils;
 pub mod tree_updates;
+
+pub const TX_RETRY_LIMIT: u32 = 10;
+
+/// Retries a transaction a certain number of times
+/// Only errors originating from `Transaction::commit` are retried
+/// Errors originating from the transaction function `$expression` are not
+/// retried and are instead immediately rolled back.
+///
+/// # Example
+/// ```ignore
+/// let res = retry_tx!(db, tx, {
+///     tx.execute("SELECT * FROM table").await?;
+///     Ok(tx.execute("SELECT * FROM other").await?)
+/// }).await;
+macro_rules! retry_tx {
+    ($pool:expr, $tx:ident, $expression:expr) => {
+        async {
+            let mut res;
+            let mut counter = 0;
+            loop {
+                let mut $tx = $pool.begin().await?;
+                res = async { $expression }.await;
+                if res.is_err() {
+                    $tx.rollback().await?;
+                    return res;
+                }
+                match $tx.commit().await {
+                    Err(e) => {
+                        counter += 1;
+                        let limit = crate::utils::TX_RETRY_LIMIT;
+                        if counter > limit {
+                            return Err(e.into());
+                        } else {
+                            tracing::warn!(
+                                "db transaction commit failed ({counter}/{limit}): {:?}",
+                                e
+                            );
+                        }
+                    }
+                    Ok(_) => break,
+                }
+            }
+            res
+        }
+    };
+}
+pub(crate) use retry_tx;
 
 pub fn spawn_monitored_with_backoff<S, F>(
     future_spawner: S,

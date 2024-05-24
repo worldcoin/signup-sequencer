@@ -18,6 +18,7 @@ use crate::database::query::DatabaseQuery as _;
 use crate::database::Database;
 use crate::identity_tree::{Canonical, Intermediate, TreeVersion, TreeWithNextVersion};
 use crate::task_monitor::TaskMonitor;
+use crate::utils::retry_tx;
 
 pub async fn finalize_roots(app: Arc<App>) -> anyhow::Result<()> {
     let mainnet_abi = app.identity_manager.abi();
@@ -139,7 +140,9 @@ async fn finalize_mainnet_roots(
             continue;
         }
 
-        database.mark_root_as_processed(&post_root.into()).await?;
+        database
+            .mark_root_as_processed_tx(&post_root.into())
+            .await?;
 
         info!(?pre_root, ?post_root, ?kind, "Batch mined");
 
@@ -182,7 +185,7 @@ async fn finalize_secondary_roots(
             continue;
         }
 
-        database.mark_root_as_mined(&root.into()).await?;
+        database.mark_root_as_mined_tx(&root.into()).await?;
         finalized_tree.apply_updates_up_to(root.into());
 
         info!(?root, "Root finalized");
@@ -253,46 +256,45 @@ async fn update_eligible_recoveries(
     log: &Log,
     max_epoch_duration: Duration,
 ) -> anyhow::Result<()> {
-    let tx_hash = log.transaction_hash.context("Missing tx hash")?;
-    let commitments = identity_manager
-        .fetch_deletion_indices_from_tx(tx_hash)
-        .await
-        .context("Could not fetch deletion indices from tx")?;
+    retry_tx!(database.pool, tx, {
+        let tx_hash = log.transaction_hash.context("Missing tx hash")?;
+        let commitments = identity_manager
+            .fetch_deletion_indices_from_tx(tx_hash)
+            .await
+            .context("Could not fetch deletion indices from tx")?;
 
-    let commitments = processed_tree.commitments_by_indices(commitments.iter().copied());
-    let commitments: Vec<U256> = commitments
-        .into_iter()
-        .map(std::convert::Into::into)
-        .collect();
+        let commitments = processed_tree.commitments_by_indices(commitments.iter().copied());
+        let commitments: Vec<U256> = commitments
+            .into_iter()
+            .map(std::convert::Into::into)
+            .collect();
 
-    // Fetch the root history expiry time on chain
-    let root_history_expiry = identity_manager.root_history_expiry().await?;
+        // Fetch the root history expiry time on chain
+        let root_history_expiry = identity_manager.root_history_expiry().await?;
 
-    // Use the root history expiry to calcuate the eligibility timestamp for the new
-    // insertion
-    let root_history_expiry_duration =
-        chrono::Duration::seconds(root_history_expiry.as_u64() as i64);
-    let max_epoch_duration = chrono::Duration::from_std(max_epoch_duration)?;
+        // Use the root history expiry to calcuate the eligibility timestamp for the new
+        // insertion
+        let root_history_expiry_duration =
+            chrono::Duration::seconds(root_history_expiry.as_u64() as i64);
+        let max_epoch_duration = chrono::Duration::from_std(max_epoch_duration)?;
 
-    let delay = root_history_expiry_duration + max_epoch_duration;
+        let delay = root_history_expiry_duration + max_epoch_duration;
 
-    let eligibility_timestamp = Utc::now() + delay;
+        let eligibility_timestamp = Utc::now() + delay;
 
-    let mut tx = database.begin().await?;
+        // Check if any deleted commitments correspond with entries in the
+        // recoveries table and insert the new commitment into the unprocessed
+        // identities table with the proper eligibility timestamp
+        let deleted_recoveries = tx.delete_recoveries(commitments).await?;
 
-    // Check if any deleted commitments correspond with entries in the
-    // recoveries table and insert the new commitment into the unprocessed
-    // identities table with the proper eligibility timestamp
-    let deleted_recoveries = tx.delete_recoveries(commitments).await?;
+        // For each deletion, if there is a corresponding recovery, insert a new
+        // identity with the specified eligibility timestamp
+        for recovery in deleted_recoveries {
+            tx.insert_new_identity(recovery.new_commitment, eligibility_timestamp)
+                .await?;
+        }
 
-    // For each deletion, if there is a corresponding recovery, insert a new
-    // identity with the specified eligibility timestamp
-    for recovery in deleted_recoveries {
-        tx.insert_new_identity(recovery.new_commitment, eligibility_timestamp)
-            .await?;
-    }
-
-    tx.commit().await?;
-
-    Ok(())
+        Ok(())
+    })
+    .await
 }

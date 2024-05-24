@@ -26,6 +26,7 @@ use crate::server::data::{
     VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
 };
 use crate::server::error::Error as ServerError;
+use crate::utils::retry_tx;
 use crate::utils::tree_updates::dedup_tree_updates;
 
 pub struct App {
@@ -112,7 +113,7 @@ impl App {
         if root_hash != initial_root_hash {
             // Note that we don't have a way of queuing a root here for finalization.
             // so it's going to stay as "processed" until the next root is mined.
-            self.database.mark_root_as_processed(&root_hash).await?;
+            self.database.mark_root_as_processed_tx(&root_hash).await?;
         } else {
             // Db is either empty or we're restarting with a new contract/chain
             // so we should mark everything as pending
@@ -402,10 +403,11 @@ impl App {
         Ok(())
     }
 
-    pub async fn delete_identity(&self, commitment: &Hash) -> Result<(), ServerError> {
-        let mut tx = self.database.begin().await?;
-        self.delete_identity_tx(&mut tx, commitment).await?;
-        tx.commit().await?;
+    pub async fn delete_identity_tx(&self, commitment: &Hash) -> Result<(), ServerError> {
+        retry_tx!(self.database.pool, tx, {
+            self.delete_identity(&mut tx, commitment).await
+        })
+        .await?;
         Ok(())
     }
 
@@ -416,7 +418,7 @@ impl App {
     /// Will return `Err` if identity is already queued, not in the tree, or the
     /// queue malfunctions.
     #[instrument(level = "debug", skip(self, tx))]
-    pub async fn delete_identity_tx(
+    pub async fn delete_identity(
         &self,
         tx: &mut Transaction<'_, Postgres>,
         commitment: &Hash,
@@ -478,46 +480,44 @@ impl App {
         existing_commitment: &Hash,
         new_commitment: &Hash,
     ) -> Result<(), ServerError> {
-        if *new_commitment == self.identity_manager.initial_leaf_value() {
-            warn!(
-                ?new_commitment,
-                "Attempt to insert initial leaf in recovery."
-            );
-            return Err(ServerError::InvalidCommitment);
-        }
+        retry_tx!(self.database.pool, tx, {
+            if *new_commitment == self.identity_manager.initial_leaf_value() {
+                warn!(
+                    ?new_commitment,
+                    "Attempt to insert initial leaf in recovery."
+                );
+                return Err(ServerError::InvalidCommitment);
+            }
 
-        if !self.identity_manager.has_insertion_provers().await {
-            warn!(
-                ?new_commitment,
-                "Identity Manager has no provers. Add provers with /addBatchSize request."
-            );
-            return Err(ServerError::NoProversOnIdInsert);
-        }
+            if !self.identity_manager.has_insertion_provers().await {
+                warn!(
+                    ?new_commitment,
+                    "Identity Manager has no provers. Add provers with /addBatchSize request."
+                );
+                return Err(ServerError::NoProversOnIdInsert);
+            }
 
-        if !self.identity_is_reduced(*new_commitment) {
-            warn!(
-                ?new_commitment,
-                "The new identity commitment is not reduced."
-            );
-            return Err(ServerError::UnreducedCommitment);
-        }
+            if !self.identity_is_reduced(*new_commitment) {
+                warn!(
+                    ?new_commitment,
+                    "The new identity commitment is not reduced."
+                );
+                return Err(ServerError::UnreducedCommitment);
+            }
 
-        let mut tx = self.database.begin().await?;
+            if tx.identity_exists(*new_commitment).await? {
+                return Err(ServerError::DuplicateCommitment);
+            }
 
-        if tx.identity_exists(*new_commitment).await? {
-            return Err(ServerError::DuplicateCommitment);
-        }
+            // Delete the existing id and insert the commitments into the recovery table
+            self.delete_identity(&mut tx, existing_commitment).await?;
 
-        // Delete the existing id and insert the commitments into the recovery table
-        self.delete_identity_tx(&mut tx, existing_commitment)
-            .await?;
+            tx.insert_new_recovery(existing_commitment, new_commitment)
+                .await?;
 
-        tx.insert_new_recovery(existing_commitment, new_commitment)
-            .await?;
-
-        tx.commit().await?;
-
-        Ok(())
+            Ok(())
+        })
+        .await
     }
 
     pub async fn identity_history(

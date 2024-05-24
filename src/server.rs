@@ -87,7 +87,7 @@ async fn delete_identity(
     State(app): State<Arc<App>>,
     Json(req): Json<DeletionRequest>,
 ) -> Result<(), Error> {
-    app.delete_identity(&req.identity_commitment).await?;
+    app.delete_identity_tx(&req.identity_commitment).await?;
     Ok(())
 }
 

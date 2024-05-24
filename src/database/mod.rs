@@ -8,7 +8,6 @@ use std::cmp::Ordering;
 use std::ops::Deref;
 
 use anyhow::{anyhow, Context, Error as ErrReport};
-use futures::Future;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
 use sqlx::{Executor, Pool, Postgres, Row};
@@ -26,8 +25,6 @@ pub mod types;
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 
-static TX_RETRY_LIMIT: u32 = 10;
-
 pub struct Database {
     pub pool: Pool<Postgres>,
 }
@@ -43,37 +40,6 @@ impl Deref for Database {
 impl<'a, T> DatabaseQuery<'a> for T where T: Executor<'a, Database = Postgres> {}
 
 impl Database {
-    /// Retries a transaction until it succeeds
-    /// Note: Only errors originating from `Transaction::commit` are retried
-    /// Errors originating from the transaction function are not retried
-    pub async fn retry_tx<S, F, O, E>(&self, f: S) -> Result<O, E>
-    where
-        F: Future<Output = Result<O, E>>,
-        S: Fn(&mut sqlx::PgConnection) -> F + Send + Sync,
-        E: From<sqlx::Error>,
-    {
-        let mut res;
-        let mut counter = 0;
-        loop {
-            let mut tx = self.pool.begin().await?;
-            res = f(&mut tx).await;
-            if res.is_err() {
-                tx.rollback().await?;
-                return res;
-            }
-            match tx.commit().await {
-                Err(e) => {
-                    counter += 1;
-                    if counter > TX_RETRY_LIMIT {
-                        return Err(e.into());
-                    }
-                }
-                Ok(_) => break,
-            }
-        }
-        res
-    }
-
     #[instrument(skip_all)]
     pub async fn new(config: &DatabaseConfig) -> Result<Self, ErrReport> {
         info!(url = %&config.database, "Connecting to database");
@@ -271,16 +237,6 @@ mod test {
 
             assert_eq!(root.status, expected_state,);
         }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_retry() -> anyhow::Result<()> {
-        let docker = Cli::default();
-        let (db, _db_container) = setup_db(&docker).await?;
-        db.retry_tx(|tx| async { tx.mark_all_as_pending().await })
-            .await?;
 
         Ok(())
     }
@@ -709,7 +665,7 @@ mod test {
                 .context("Inserting identity")?;
         }
 
-        db.mark_root_as_processed(&roots[2]).await?;
+        db.mark_root_as_processed_tx(&roots[2]).await?;
 
         db.mark_all_as_pending().await?;
 
@@ -739,7 +695,7 @@ mod test {
                 .context("Inserting identity")?;
         }
 
-        db.mark_root_as_processed(&roots[2]).await?;
+        db.mark_root_as_processed_tx(&roots[2]).await?;
 
         for root in roots.iter().take(3) {
             let root = db
@@ -782,7 +738,7 @@ mod test {
                 .context("Inserting identity")?;
         }
 
-        db.mark_root_as_mined(&roots[2]).await?;
+        db.mark_root_as_mined_tx(&roots[2]).await?;
 
         for root in roots.iter().take(3) {
             let root = db
@@ -828,27 +784,27 @@ mod test {
         }
 
         println!("Marking roots up to 2nd as processed");
-        db.mark_root_as_processed(&roots[2]).await?;
+        db.mark_root_as_processed_tx(&roots[2]).await?;
 
         assert_roots_are(&db, &roots[..3], ProcessedStatus::Processed).await?;
         assert_roots_are(&db, &roots[3..], ProcessedStatus::Pending).await?;
 
         println!("Marking roots up to 1st as mined");
-        db.mark_root_as_mined(&roots[1]).await?;
+        db.mark_root_as_mined_tx(&roots[1]).await?;
 
         assert_roots_are(&db, &roots[..2], ProcessedStatus::Mined).await?;
         assert_roots_are(&db, &[roots[2]], ProcessedStatus::Processed).await?;
         assert_roots_are(&db, &roots[3..], ProcessedStatus::Pending).await?;
 
         println!("Marking roots up to 4th as processed");
-        db.mark_root_as_processed(&roots[4]).await?;
+        db.mark_root_as_processed_tx(&roots[4]).await?;
 
         assert_roots_are(&db, &roots[..2], ProcessedStatus::Mined).await?;
         assert_roots_are(&db, &roots[2..5], ProcessedStatus::Processed).await?;
         assert_roots_are(&db, &roots[5..], ProcessedStatus::Pending).await?;
 
         println!("Marking all roots as mined");
-        db.mark_root_as_mined(&roots[num_identities - 1]).await?;
+        db.mark_root_as_mined_tx(&roots[num_identities - 1]).await?;
 
         assert_roots_are(&db, &roots, ProcessedStatus::Mined).await?;
 
@@ -870,10 +826,10 @@ mod test {
         }
 
         // root[2] is somehow erroneously marked as mined
-        db.mark_root_as_processed(&roots[2]).await?;
+        db.mark_root_as_processed_tx(&roots[2]).await?;
 
         // Later we correctly mark the previous root as mined
-        db.mark_root_as_processed(&roots[1]).await?;
+        db.mark_root_as_processed_tx(&roots[1]).await?;
 
         for root in roots.iter().take(2) {
             let root = db
@@ -931,7 +887,7 @@ mod test {
             "Root has not yet been mined"
         );
 
-        db.mark_root_as_processed(&roots[0]).await?;
+        db.mark_root_as_processed_tx(&roots[0]).await?;
 
         let root = db
             .get_root_state(&roots[0])
@@ -972,7 +928,7 @@ mod test {
                 .context("Inserting identity")?;
         }
 
-        db.mark_root_as_processed(&roots[2]).await?;
+        db.mark_root_as_processed_tx(&roots[2]).await?;
 
         let mined_tree_updates = db
             .get_commitments_by_status(ProcessedStatus::Processed)
@@ -1101,7 +1057,7 @@ mod test {
         db.insert_pending_identity(3, &identities[3], &roots[3])
             .await?;
 
-        db.mark_root_as_processed(&roots[0])
+        db.mark_root_as_processed_tx(&roots[0])
             .await
             .context("Marking root as mined")?;
 
@@ -1265,7 +1221,7 @@ mod test {
 
         db.insert_pending_identity(0, &identities[0], &roots[0])
             .await?;
-        db.mark_root_as_mined(&roots[0]).await?;
+        db.mark_root_as_mined_tx(&roots[0]).await?;
 
         db.insert_new_deletion(0, &identities[0]).await?;
 
@@ -1301,7 +1257,7 @@ mod test {
         db.insert_pending_identity(0, &Hash::ZERO, &roots[1])
             .await?;
 
-        db.mark_root_as_mined(&roots[1]).await?;
+        db.mark_root_as_mined_tx(&roots[1]).await?;
 
         let history = db.get_identity_history_entries(&identities[0]).await?;
 
@@ -1342,7 +1298,7 @@ mod test {
         assert_eq!(history[0].leaf_index, Some(0));
         assert!(!history[0].held_back, "Identity should not be held back");
 
-        db.mark_root_as_mined(&roots[0]).await?;
+        db.mark_root_as_mined_tx(&roots[0]).await?;
 
         let history = db.get_identity_history_entries(&identities[0]).await?;
 

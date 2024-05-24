@@ -63,7 +63,7 @@ docker pull postgres
 
 ### Local Node
 
-You'll need to run a local node like geth. Start up a new chain and take note of the dev addresses. You can follow instructions [here](https://book.getfoundry.sh/anvil/).
+You'll need to run a local node like geth or [ganache](https://archive.trufflesuite.com/ganache/). Start up a new chain and take note of the dev addresses. You can follow instructions [here](https://book.getfoundry.sh/anvil/).
 
 ### Worldcoin id contracts
 
@@ -89,6 +89,14 @@ you will have a generated a keys file that is used by semaphore-mtb. If your dep
 ```shell
 docker run --rm -ti -p 5432:5432 -e POSTGRES_PASSWORD=password postgres
 ```
+
+### TX sitter
+
+TX sitter is a service providing API for signup-sequencer to submit transactions on blockchain.
+
+Clone [tx-sitter-monolith](https://github.com/worldcoin/tx-sitter-monolith) and follow build instructions
+
+### Signup-sequencer
 
 Now you are ready to start up sequencer service!
 

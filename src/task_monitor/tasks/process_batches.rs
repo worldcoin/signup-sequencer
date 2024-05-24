@@ -23,6 +23,9 @@ pub async fn process_batches(
     tracing::info!("Awaiting for a clean slate");
     app.identity_manager.await_clean_slate().await?;
 
+    // This is a tricky way to know that we are not changing data during tree
+    // initialization process.
+    _ = app.tree_state()?;
     tracing::info!("Starting identity processor.");
 
     // We start a timer and force it to perform one initial tick to avoid an
@@ -33,15 +36,15 @@ pub async fn process_batches(
         // We wait either for a timer tick or a full batch
         select! {
             _ = timer.tick() => {
-                tracing::info!("Identity batch insertion woken due to timeout");
+                tracing::info!("Identity processor woken due to timeout");
             }
 
             () = next_batch_notify.notified() => {
-                tracing::trace!("Identity batch insertion woken due to next batch creation");
+                tracing::trace!("Identity processor woken due to next batch creation");
             },
 
             () = wake_up_notify.notified() => {
-                tracing::trace!("Identity batch insertion woken due to request");
+                tracing::trace!("Identity processor woken due to request");
             },
         }
 

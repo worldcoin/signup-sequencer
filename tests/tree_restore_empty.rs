@@ -1,19 +1,17 @@
 mod common;
 
 use common::prelude::*;
-use hyper::StatusCode;
 
-/// Tests that the app rejects payloads which are too large or are not valid
-/// UTF-8 strings
 #[tokio::test]
-async fn malformed_payload() -> anyhow::Result<()> {
+async fn tree_restore_empty() -> anyhow::Result<()> {
+    // Initialize logging for the test.
     init_tracing_subscriber();
-    info!("Starting malformed payload test");
+    info!("Starting integration test");
+
+    let batch_size: usize = 3;
 
     let ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
-
-    let batch_size: usize = 3;
 
     let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
@@ -30,6 +28,7 @@ async fn malformed_payload() -> anyhow::Result<()> {
     let db_socket_addr = db_container.address();
     let db_url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
 
+    // temp dir will be deleted on drop call
     let temp_dir = tempfile::tempdir()?;
     info!(
         "temp dir created at: {:?}",
@@ -46,41 +45,32 @@ async fn malformed_payload() -> anyhow::Result<()> {
         .add_prover(prover_mock)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (app, app_handle, _) = spawn_app(config.clone())
+        .await
+        .expect("Failed to spawn app.");
 
-    let uri = "http://".to_owned() + &local_addr.to_string();
-    let client = Client::new();
+    let tree_state = app.tree_state()?.clone();
 
-    // 20 MiB zero bytes
-    let body = vec![0u8; 1024 * 1024 * 20];
+    assert_eq!(tree_state.latest_tree().next_leaf(), 0);
 
-    let too_large_payload = Request::builder()
-        .method("POST")
-        .uri(format!("{uri}/insertIdentity"))
-        .header("Content-Type", "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let response = client.request(too_large_payload).await?;
-
-    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
-
-    // A KiB of 0xffs is not a valid UTF-8 string
-    let body = vec![0xffu8; 1024];
-
-    let invalid_payload = Request::builder()
-        .method("POST")
-        .uri(format!("{uri}/insertIdentity"))
-        .header("Content-Type", "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let response = client.request(invalid_payload).await?;
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-
+    // Shutdown the app and reset the mock shutdown, allowing us to test the
+    // behaviour with saved data.
+    info!("Stopping the app for testing purposes");
     shutdown();
-    app_handle.await?;
+    app_handle.await.unwrap();
+    reset_shutdown();
+
+    let (app, app_handle, _) = spawn_app(config.clone())
+        .await
+        .expect("Failed to spawn app.");
+
+    let restored_tree_state = app.tree_state()?.clone();
+
+    test_same_tree_states(&tree_state, &restored_tree_state).await?;
+
+    // Shutdown the app properly for the final time
+    shutdown();
+    app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

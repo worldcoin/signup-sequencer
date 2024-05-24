@@ -9,7 +9,7 @@ COPY . .
 
 # Install dependencies
 RUN apt-get update && \
-    apt-get install -y curl build-essential libssl-dev texinfo libcap2-bin pkg-config
+    apt-get install -y git curl build-essential libssl-dev texinfo libcap2-bin pkg-config
 
 # TODO: Use a specific version of rustup
 # Install rustup
@@ -24,10 +24,7 @@ ENV CARGO_HOME="/root/.cargo"
 RUN rustup component add cargo
 
 # Build the sequencer
-RUN cargo build --release --features mimalloc
-
-# Make sure it runs
-RUN /src/target/release/signup-sequencer --version
+RUN cargo build --release
 
 # cc variant because we need libgcc and others
 FROM gcr.io/distroless/cc-debian12:nonroot
@@ -40,6 +37,6 @@ LABEL prometheus.io/port="9998"
 LABEL prometheus.io/path="/metrics"
 
 # Copy the sequencer binary
-COPY --from=build-env --chown=0:10001 --chmod=010 /src/target/release/signup-sequencer /bin/signup-sequencer
+COPY --from=build-env --chown=0:10001 --chmod=454 /src/target/release/signup-sequencer /bin/signup-sequencer
 
 ENTRYPOINT [ "/bin/signup-sequencer" ]

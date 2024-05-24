@@ -20,8 +20,16 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
     #[allow(clippy::cast_possible_truncation)]
     let batch_size = 3;
 
+    let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _deletion_prover_map, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8).await?;
+        spawn_deps(
+            initial_root,
+            &[batch_size],
+            &[],
+            DEFAULT_TREE_DEPTH as u8,
+            &docker,
+        )
+        .await?;
 
     let prover_mock = &insertion_prover_map[&batch_size];
 
@@ -45,7 +53,7 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
         .add_prover(prover_mock)
         .build()?;
 
-    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
@@ -143,7 +151,7 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
 
     // Shutdown the app properly for the final time
     shutdown();
-    app.await.unwrap();
+    app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

@@ -13,7 +13,6 @@ pub mod prelude {
 
     pub use anyhow::Context;
     pub use clap::Parser;
-    pub use cli_batteries::{reset_shutdown, shutdown};
     pub use ethers::abi::{AbiEncode, Address};
     pub use ethers::core::abi::Abi;
     pub use ethers::core::k256::ecdsa::SigningKey;
@@ -29,7 +28,7 @@ pub mod prelude {
     pub use hyper::client::HttpConnector;
     pub use hyper::{Body, Client, Request};
     pub use once_cell::sync::Lazy;
-    pub use postgres_docker_utils::DockerContainerGuard;
+    pub use postgres_docker_utils::DockerContainer;
     pub use semaphore::identity::Identity;
     pub use semaphore::merkle_tree::{self, Branch};
     pub use semaphore::poseidon_tree::{PoseidonHash, PoseidonTree};
@@ -42,9 +41,11 @@ pub mod prelude {
         AppConfig, Config, DatabaseConfig, OzDefenderConfig, ProvidersConfig, RelayerConfig,
         ServerConfig, TreeConfig, TxSitterConfig,
     };
-    pub use signup_sequencer::identity_tree::Hash;
+    pub use signup_sequencer::identity_tree::{Hash, TreeVersionReadOps};
     pub use signup_sequencer::prover::ProverType;
     pub use signup_sequencer::server;
+    pub use signup_sequencer::shutdown::{reset_shutdown, shutdown};
+    pub use testcontainers::clients::Cli;
     pub use tokio::spawn;
     pub use tokio::task::JoinHandle;
     pub use tracing::{error, info, instrument};
@@ -63,21 +64,25 @@ pub mod prelude {
         spawn_mock_insertion_prover, test_inclusion_proof, test_insert_identity, test_verify_proof,
         test_verify_proof_on_chain,
     };
+    pub use crate::common::test_same_tree_states;
 }
 
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use hyper::StatusCode;
-use signup_sequencer::identity_tree::Status;
+use signup_sequencer::identity_tree::{Status, TreeState, TreeVersionReadOps};
 use signup_sequencer::task_monitor::TaskMonitor;
+use testcontainers::clients::Cli;
 use tracing::trace;
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
+use crate::server::error::Error as ServerError;
 
 const NUM_ATTEMPTS_FOR_INCLUSION_PROOF: usize = 20;
 
@@ -589,7 +594,7 @@ fn construct_verify_proof_body(
 }
 
 #[instrument(skip_all)]
-pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, SocketAddr)> {
+pub async fn spawn_app(config: Config) -> anyhow::Result<(Arc<App>, JoinHandle<()>, SocketAddr)> {
     let server_config = config.server.clone();
     let app = App::new(config).await.expect("Failed to create App");
 
@@ -606,10 +611,11 @@ pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, Socket
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
 
-    let app = spawn({
+    let app_clone = app.clone();
+    let app_handle = spawn({
         async move {
             info!("App thread starting");
-            server::bind_from_listener(app, Duration::from_secs(30), listener)
+            server::bind_from_listener(app_clone, Duration::from_secs(30), listener)
                 .await
                 .expect("Failed to bind address");
             info!("App thread stopping");
@@ -618,9 +624,32 @@ pub async fn spawn_app(config: Config) -> anyhow::Result<(JoinHandle<()>, Socket
 
     info!("Checking app health");
     check_health(&local_addr).await?;
+
+    info!("Checking metrics");
+    check_metrics(&local_addr).await?;
+
     info!("App ready");
 
-    Ok((app, local_addr))
+    Ok((app, app_handle, local_addr))
+}
+
+pub async fn check_metrics(socket_addr: &SocketAddr) -> anyhow::Result<()> {
+    let uri = format!("http://{}", socket_addr);
+    let client = Client::new();
+    let req = Request::builder()
+        .method("GET")
+        .uri(uri.to_owned() + "/metrics")
+        .body(Body::empty())
+        .expect("Failed to create metrics hyper::Body");
+    let response = client
+        .request(req)
+        .await
+        .context("Failed to execute metrics request.")?;
+    if !response.status().is_success() {
+        anyhow::bail!("Metrics endpoint failed");
+    }
+
+    Ok(())
 }
 
 pub async fn check_health(socket_addr: &SocketAddr) -> anyhow::Result<()> {
@@ -648,14 +677,15 @@ struct CompiledContract {
     bytecode: Bytecode,
 }
 
-pub async fn spawn_deps(
+pub async fn spawn_deps<'a, 'b, 'c>(
     initial_root: U256,
-    insertion_batch_sizes: &[usize],
-    deletion_batch_sizes: &[usize],
+    insertion_batch_sizes: &'b [usize],
+    deletion_batch_sizes: &'c [usize],
     tree_depth: u8,
+    docker: &'a Cli,
 ) -> anyhow::Result<(
     MockChain,
-    DockerContainerGuard,
+    DockerContainer<'a>,
     HashMap<usize, ProverService>,
     HashMap<usize, ProverService>,
     micro_oz::ServerHandle,
@@ -667,7 +697,7 @@ pub async fn spawn_deps(
         tree_depth,
     );
 
-    let db_container = spawn_db();
+    let db_container = spawn_db(docker);
 
     let insertion_prover_futures = FuturesUnordered::new();
     for batch_size in insertion_batch_sizes {
@@ -717,8 +747,8 @@ pub async fn spawn_deps(
     ))
 }
 
-async fn spawn_db() -> anyhow::Result<DockerContainerGuard> {
-    let db_container = postgres_docker_utils::setup().await.unwrap();
+async fn spawn_db(docker: &Cli) -> anyhow::Result<DockerContainer<'_>> {
+    let db_container = postgres_docker_utils::setup(docker).await.unwrap();
 
     Ok(db_container)
 }
@@ -815,4 +845,39 @@ pub fn generate_test_identities(identity_count: usize) -> Vec<String> {
     }
 
     identities
+}
+
+#[instrument(skip_all)]
+pub async fn test_same_tree_states(
+    tree_state1: &TreeState,
+    tree_state2: &TreeState,
+) -> anyhow::Result<()> {
+    assert_eq!(
+        tree_state1.processed_tree().next_leaf(),
+        tree_state2.processed_tree().next_leaf()
+    );
+    assert_eq!(
+        tree_state1.processed_tree().get_root(),
+        tree_state2.processed_tree().get_root()
+    );
+
+    assert_eq!(
+        tree_state1.mined_tree().next_leaf(),
+        tree_state2.mined_tree().next_leaf()
+    );
+    assert_eq!(
+        tree_state1.mined_tree().get_root(),
+        tree_state2.mined_tree().get_root()
+    );
+
+    assert_eq!(
+        tree_state1.latest_tree().next_leaf(),
+        tree_state2.latest_tree().next_leaf()
+    );
+    assert_eq!(
+        tree_state1.latest_tree().get_root(),
+        tree_state2.latest_tree().get_root()
+    );
+
+    Ok(())
 }

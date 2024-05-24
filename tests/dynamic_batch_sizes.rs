@@ -21,11 +21,13 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
+    let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
         initial_root,
         &[first_batch_size, second_batch_size],
         &[],
         DEFAULT_TREE_DEPTH as u8,
+        &docker,
     )
     .await?;
 
@@ -52,7 +54,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         .add_prover(first_prover)
         .build()?;
 
-    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(first_batch_size * 5);
     let identities_ref: Vec<Field> = test_identities
@@ -238,7 +240,7 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
 
     // Shutdown the app properly for the final time
     shutdown();
-    app.await.unwrap();
+    app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

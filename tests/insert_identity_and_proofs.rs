@@ -15,8 +15,15 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
-    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8).await?;
+    let docker = Cli::default();
+    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
+        initial_root,
+        &[batch_size],
+        &[],
+        DEFAULT_TREE_DEPTH as u8,
+        &docker,
+    )
+    .await?;
 
     let prover_mock = &insertion_prover_map[&batch_size];
 
@@ -40,7 +47,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
         .add_prover(prover_mock)
         .build()?;
 
-    let (app, local_addr) = spawn_app(config.clone())
+    let (_, app_handle, local_addr) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
 
@@ -147,11 +154,11 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     // behaviour with saved data.
     info!("Stopping the app for testing purposes");
     shutdown();
-    app.await.unwrap();
+    app_handle.await.unwrap();
     reset_shutdown();
 
     // Test loading the state from a file when the on-chain contract has the state.
-    let (app, local_addr) = spawn_app(config.clone())
+    let (_, app_handle, local_addr) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
@@ -183,12 +190,12 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
     // behaviour with the saved tree.
     info!("Stopping the app for testing purposes");
     shutdown();
-    app.await.unwrap();
+    app_handle.await.unwrap();
     reset_shutdown();
 
     // Test loading the state from the saved tree when the on-chain contract has the
     // state.
-    let (app, local_addr) = spawn_app(config.clone())
+    let (_, app_handle, local_addr) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
@@ -218,7 +225,7 @@ async fn insert_identity_and_proofs() -> anyhow::Result<()> {
 
     // Shutdown the app properly for the final time
     shutdown();
-    app.await.unwrap();
+    app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

@@ -9,8 +9,15 @@ async fn test_unreduced_identity() -> anyhow::Result<()> {
     let initial_root: U256 = ref_tree.root().into();
     let batch_size: usize = 3;
 
-    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
-        spawn_deps(initial_root, &[batch_size], &[], DEFAULT_TREE_DEPTH as u8).await?;
+    let docker = Cli::default();
+    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
+        initial_root,
+        &[batch_size],
+        &[],
+        DEFAULT_TREE_DEPTH as u8,
+        &docker,
+    )
+    .await?;
     let prover_mock = &insertion_prover_map[&batch_size];
     prover_mock.set_availability(false).await;
 
@@ -33,7 +40,7 @@ async fn test_unreduced_identity() -> anyhow::Result<()> {
         .add_prover(prover_mock)
         .build()?;
 
-    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
@@ -87,7 +94,7 @@ async fn test_unreduced_identity() -> anyhow::Result<()> {
     );
 
     shutdown();
-    app.await?;
+    app_handle.await?;
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

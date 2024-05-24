@@ -6,6 +6,7 @@ use axum::response::Response;
 use bytes::Bytes;
 use hyper::body::HttpBody;
 use hyper::{Body, Method};
+use telemetry_batteries::tracing::{trace_from_headers, trace_to_headers};
 use tracing::{error, info, info_span, warn, Instrument};
 
 // 1 MiB
@@ -26,7 +27,7 @@ where
         let span = info_span!("request", ?uri_path, ?request_method, ?request_query);
 
         async {
-            cli_batteries::trace_from_headers(&parts.headers);
+            trace_from_headers(&parts.headers);
 
             info!(
                 uri_path,
@@ -48,7 +49,7 @@ where
             )
             .await?;
 
-            cli_batteries::trace_to_headers(response.headers_mut());
+            trace_to_headers(response.headers_mut());
 
             Ok(response)
         }
@@ -60,7 +61,7 @@ where
         let span = info_span!("request", ?uri_path, ?request_method, ?request_query, ?body);
 
         async {
-            cli_batteries::trace_from_headers(&parts.headers);
+            trace_from_headers(&parts.headers);
 
             info!(
                 ?uri_path,
@@ -83,7 +84,7 @@ where
             )
             .await?;
 
-            cli_batteries::trace_to_headers(response.headers_mut());
+            trace_to_headers(response.headers_mut());
 
             Ok(response)
         }

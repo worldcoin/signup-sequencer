@@ -15,6 +15,7 @@ pub mod tasks;
 const TREE_INIT_BACKOFF: Duration = Duration::from_secs(5);
 const PROCESS_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const FINALIZE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
+const QUEUE_MONITOR_BACKOFF: Duration = Duration::from_secs(5);
 const INSERT_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const DELETE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 
@@ -130,9 +131,20 @@ impl TaskMonitor {
         );
         handles.push(finalize_identities_handle);
 
+        // Report length of the queue of identities
+        let app = self.app.clone();
+        let queue_monitor = move || tasks::monitor_queue::monitor_queue(app.clone());
+        let queue_monitor_handle = crate::utils::spawn_monitored_with_backoff(
+            queue_monitor,
+            shutdown_sender.clone(),
+            QUEUE_MONITOR_BACKOFF,
+        );
+        handles.push(queue_monitor_handle);
+
         // Process identities
         let app = self.app.clone();
         let wake_up_notify = base_wake_up_notify.clone();
+
         let process_identities = move || {
             tasks::process_identities::process_identities(
                 app.clone(),
@@ -158,12 +170,20 @@ impl TaskMonitor {
         );
         handles.push(monitor_txs_handle);
 
+        let pending_insertion_mutex = Arc::new(Mutex::new(()));
+
         // Insert identities
         let app = self.app.clone();
         let wake_up_notify = base_wake_up_notify.clone();
+        let insertion_mutex = pending_insertion_mutex.clone();
         let insert_identities = move || {
-            self::tasks::insert_identities::insert_identities(app.clone(), wake_up_notify.clone())
+            self::tasks::insert_identities::insert_identities(
+                app.clone(),
+                insertion_mutex.clone(),
+                wake_up_notify.clone(),
+            )
         };
+
         let insert_identities_handle = crate::utils::spawn_monitored_with_backoff(
             insert_identities,
             shutdown_sender.clone(),
@@ -175,8 +195,13 @@ impl TaskMonitor {
         let app = self.app.clone();
         let wake_up_notify = base_wake_up_notify.clone();
         let delete_identities = move || {
-            self::tasks::delete_identities::delete_identities(app.clone(), wake_up_notify.clone())
+            self::tasks::delete_identities::delete_identities(
+                app.clone(),
+                pending_insertion_mutex.clone(),
+                wake_up_notify.clone(),
+            )
         };
+
         let delete_identities_handle = crate::utils::spawn_monitored_with_backoff(
             delete_identities,
             shutdown_sender.clone(),

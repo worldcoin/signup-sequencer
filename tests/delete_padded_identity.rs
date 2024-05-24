@@ -20,12 +20,14 @@ async fn delete_padded_identity() -> anyhow::Result<()> {
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
+    let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, deletion_prover_map, micro_oz) =
         spawn_deps(
             initial_root,
             &[insertion_batch_size],
             &[deletion_batch_size],
             DEFAULT_TREE_DEPTH as u8,
+            &docker,
         )
         .await?;
 
@@ -52,7 +54,7 @@ async fn delete_padded_identity() -> anyhow::Result<()> {
         .add_prover(mock_deletion_prover)
         .build()?;
 
-    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(insertion_batch_size * 3);
     let identities_ref: Vec<Field> = test_identities
@@ -135,7 +137,7 @@ async fn delete_padded_identity() -> anyhow::Result<()> {
 
     // Shutdown the app properly for the final time
     shutdown();
-    app.await.unwrap();
+    app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

@@ -1,7 +1,12 @@
-fn main() {
-    cli_batteries::build_rs().expect("Failed to setup build environment");
+use std::process::Command;
 
-    println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=schemas");
-    println!("cargo:rerun-if-changed=sol");
+fn main() {
+    let output = Command::new("git")
+        .args(["describe", "--tags", "--always"])
+        .output()
+        .expect("Failed to execute git command");
+
+    let git_description = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    println!("cargo:rustc-env=GIT_VERSION={}", git_description);
 }

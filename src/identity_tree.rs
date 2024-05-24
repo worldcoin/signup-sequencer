@@ -637,7 +637,7 @@ impl CanonicalTreeBuilder {
         tree_depth: usize,
         dense_prefix_depth: usize,
         initial_leaf: &Field,
-        last_index: usize,
+        last_index: Option<usize>,
         leftover_items: &[ruint::Uint<256, 4>],
         flattening_threshold: usize,
         mmap_file_path: &str,
@@ -660,16 +660,17 @@ impl CanonicalTreeBuilder {
             flatten_threshold:        flattening_threshold,
             count_since_last_flatten: 0,
         };
+        let next_leaf = last_index.map(|v| v + 1).unwrap_or(0);
         let mut builder = Self(TreeVersionData {
             tree,
-            next_leaf: last_index + 1,
+            next_leaf,
             metadata,
             next: None,
         });
 
         for (index, leaf) in leftover_items.iter().enumerate() {
             builder.update(&TreeUpdate {
-                leaf_index: index + last_index + 1,
+                leaf_index: next_leaf + index,
                 element:    *leaf,
             });
         }

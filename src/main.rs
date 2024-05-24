@@ -9,11 +9,14 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use cli_batteries::{run, version};
 use signup_sequencer::app::App;
-use signup_sequencer::config::Config;
+use signup_sequencer::config::{Config, ServiceConfig};
 use signup_sequencer::server;
+use signup_sequencer::shutdown::watch_shutdown_signals;
 use signup_sequencer::task_monitor::TaskMonitor;
+use telemetry_batteries::tracing::datadog::DatadogBattery;
+use telemetry_batteries::tracing::stdout::StdoutBattery;
+use telemetry_batteries::tracing::TracingShutdownHandle;
 
 #[derive(Debug, Clone, Parser)]
 struct Args {
@@ -21,24 +24,24 @@ struct Args {
     config: Option<PathBuf>,
 }
 
-async fn app(args: Args) -> eyre::Result<()> {
+#[tokio::main]
+async fn main() -> eyre::Result<()> {
+    let args = Args::parse();
     sequencer_app(args)
         .await
         .map_err(|e| eyre::eyre!("{:?}", e))
 }
 
 async fn sequencer_app(args: Args) -> anyhow::Result<()> {
-    let mut settings = config::Config::builder();
+    let config = load_config(&args)?;
 
-    if let Some(path) = args.config {
-        settings = settings.add_source(config::File::from(path).required(true));
-    }
+    let _tracing_shutdown_handle = init_telemetry(&config.service)?;
 
-    let settings = settings
-        .add_source(config::Environment::with_prefix("SEQ").separator("__"))
-        .build()?;
+    watch_shutdown_signals();
 
-    let config = settings.try_deserialize::<Config>()?;
+    let version = env!("GIT_VERSION");
+
+    tracing::info!(?config, version, "Starting the app");
 
     let server_config = config.server.clone();
 
@@ -59,6 +62,46 @@ async fn sequencer_app(args: Args) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn main() {
-    run(version!(semaphore, ethers), app);
+fn load_config(args: &Args) -> anyhow::Result<Config> {
+    let mut settings = config::Config::builder();
+
+    if let Some(ref path) = args.config {
+        settings = settings.add_source(config::File::from(path.clone()).required(true));
+    }
+
+    let settings = settings
+        .add_source(
+            config::Environment::with_prefix("SEQ")
+                .separator("__")
+                .try_parsing(true),
+        )
+        .build()?;
+
+    Ok(settings.try_deserialize::<Config>()?)
+}
+
+fn init_telemetry(service: &ServiceConfig) -> anyhow::Result<TracingShutdownHandle> {
+    if let Some(ref datadog) = service.datadog {
+        Ok(DatadogBattery::init(
+            datadog.traces_endpoint.as_deref(),
+            &service.service_name,
+            None,
+            true,
+        ))
+    } else {
+        Ok(StdoutBattery::init())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_example_env() {
+        dotenv::from_path("example.env").ok();
+        let args = Args { config: None };
+        let config = load_config(&args).unwrap();
+        println!("{:#?}", config);
+    }
 }

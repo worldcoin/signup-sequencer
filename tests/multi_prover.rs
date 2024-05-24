@@ -17,11 +17,13 @@ async fn multi_prover() -> anyhow::Result<()> {
     let batch_size_3: usize = 3;
     let batch_size_10: usize = 10;
 
+    let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
         initial_root,
         &[batch_size_3, batch_size_10],
         &[],
         DEFAULT_TREE_DEPTH as u8,
+        &docker,
     )
     .await?;
 
@@ -49,7 +51,7 @@ async fn multi_prover() -> anyhow::Result<()> {
         .build()?;
 
     tracing::info!("Spawning app");
-    let (app, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(batch_size_3 + batch_size_10);
 
@@ -107,7 +109,7 @@ async fn multi_prover() -> anyhow::Result<()> {
     }
 
     shutdown();
-    app.await?;
+    app_handle.await?;
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }

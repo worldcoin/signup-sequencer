@@ -1,6 +1,6 @@
 use anyhow::Error as EyreError;
 use axum::response::IntoResponse;
-use hyper::{Body, StatusCode};
+use hyper::StatusCode;
 use thiserror::Error;
 
 use crate::database;
@@ -72,40 +72,14 @@ pub enum Error {
 }
 
 impl Error {
-    #[allow(clippy::enum_glob_use)]
-    #[must_use]
-    pub fn to_response(&self) -> hyper::Response<Body> {
-        use Error::*;
-
-        let status_code = match self {
-            InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
-            InvalidPath => StatusCode::NOT_FOUND,
-            InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            IndexOutOfBounds
-            | RootTooOld
-            | IdentityCommitmentNotFound
-            | InvalidCommitment
-            | DuplicateCommitment
-            | InvalidSerialization(_) => StatusCode::BAD_REQUEST,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-        hyper::Response::builder()
-            .status(status_code)
-            .body(hyper::Body::from(self.to_string()))
-            .expect("Failed to convert error string into hyper::Body")
-    }
-}
-
-impl Error {
     fn to_status_code(&self) -> StatusCode {
         match self {
             Self::InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
-            Self::InvalidPath => StatusCode::NOT_FOUND,
+            Self::InvalidPath | Self::IdentityCommitmentNotFound => StatusCode::NOT_FOUND,
             Self::InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            Self::IndexOutOfBounds
-            | Self::IdentityCommitmentNotFound
-            | Self::InvalidCommitment
-            | Self::InvalidSerialization(_) => StatusCode::BAD_REQUEST,
+            Self::IndexOutOfBounds | Self::InvalidCommitment | Self::InvalidSerialization(_) => {
+                StatusCode::BAD_REQUEST
+            }
             Self::IdentityAlreadyDeleted
             | Self::IdentityQueuedForDeletion
             | Self::DuplicateCommitment => StatusCode::CONFLICT,

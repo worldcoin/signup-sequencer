@@ -953,6 +953,59 @@ mod test {
     }
 
     #[tokio::test]
+    async fn get_commitments_by_status_with_pagination() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+
+        let num_of_test_identities = 100;
+
+        let identities = mock_identities(num_of_test_identities);
+
+        let roots = mock_roots(num_of_test_identities);
+
+        for i in 0..num_of_test_identities {
+            db.insert_pending_identity(i, &identities[i], &roots[i])
+                .await
+                .context("Inserting identity")?;
+        }
+
+        let page_size: usize = 10;
+        let offset: usize = 2 * page_size;
+
+        let pending_tree_updates = db
+            .get_commitments_by_status_with_pagination(
+                ProcessedStatus::Pending,
+                page_size as i64,
+                offset as i64,
+            )
+            .await?;
+
+        assert_eq!(pending_tree_updates.len(), 10);
+        for i in 0..page_size {
+            assert_eq!(pending_tree_updates[i].element, identities[i + offset]);
+            assert_eq!(pending_tree_updates[i].leaf_index, i + offset);
+        }
+
+        let offset: usize = 6 * page_size;
+
+        let pending_tree_updates = db
+            .get_commitments_by_status_with_pagination(
+                ProcessedStatus::Pending,
+                page_size as i64,
+                offset as i64,
+            )
+            .await?;
+
+        assert_eq!(pending_tree_updates.len(), 10);
+        for i in 0..page_size {
+            assert_eq!(pending_tree_updates[i].element, identities[i + offset]);
+            assert_eq!(pending_tree_updates[i].leaf_index, i + offset);
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn get_commitments_by_status_results_are_in_id_order() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;

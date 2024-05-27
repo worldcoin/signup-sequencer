@@ -122,19 +122,25 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         Ok(Some(TreeItem { status, leaf_index }))
     }
 
-    async fn get_commitments_by_status(
+    async fn get_commitments_by_status_with_pagination(
         self,
         status: ProcessedStatus,
+        limit: i64,
+        offset: i64,
     ) -> Result<Vec<TreeUpdate>, Error> {
         Ok(sqlx::query_as::<_, TreeUpdate>(
             r#"
             SELECT leaf_index, commitment as element
             FROM identities
             WHERE status = $1
-            ORDER BY id ASC;
+            ORDER BY id ASC
+            LIMIT $2
+            OFFSET $3;
             "#,
         )
         .bind(<&str>::from(status))
+        .bind(limit)
+        .bind(offset)
         .fetch_all(self)
         .await?)
     }

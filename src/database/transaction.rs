@@ -5,8 +5,10 @@ use tracing::instrument;
 use crate::database::query::DatabaseQuery;
 use crate::database::types::CommitmentHistoryEntry;
 use crate::database::{Database, Error};
-use crate::identity_tree::{Hash, ProcessedStatus, UnprocessedStatus};
+use crate::identity_tree::{Hash, ProcessedStatus, TreeUpdate, UnprocessedStatus};
 use crate::utils::retry_tx;
+
+const MAX_IDENTITIES_FETCH_BATCH_SIZE: i64 = 20_000;
 
 /// impl block for database transactions
 impl Database {
@@ -172,5 +174,35 @@ impl Database {
             .concat()
             .into_iter()
             .collect())
+    }
+
+    pub async fn get_commitments_by_status(
+        &self,
+        status: ProcessedStatus,
+    ) -> Result<Vec<TreeUpdate>, Error> {
+        let mut res: Vec<TreeUpdate> = Default::default();
+
+        let mut page = 0;
+        loop {
+            let offset = page * MAX_IDENTITIES_FETCH_BATCH_SIZE;
+
+            let mut batch_res = self
+                .pool
+                .get_commitments_by_status_with_pagination(
+                    status,
+                    MAX_IDENTITIES_FETCH_BATCH_SIZE,
+                    offset,
+                )
+                .await?;
+
+            if batch_res.is_empty() {
+                break;
+            }
+
+            res.append(&mut batch_res);
+            page += 1;
+        }
+
+        Ok(res)
     }
 }

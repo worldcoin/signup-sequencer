@@ -266,8 +266,6 @@ impl App {
         let (processed, batching_builder) = processed_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
 
-        // We are duplicating updates here for some commitments that were batched but
-        // this is an idempotent operation
         let pending_items = self
             .database
             .get_commitments_by_status(ProcessedStatus::Pending)

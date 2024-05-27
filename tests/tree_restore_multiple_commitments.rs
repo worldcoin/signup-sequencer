@@ -5,7 +5,7 @@ use common::prelude::*;
 const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
-async fn tree_restore_multiple_comittments() -> anyhow::Result<()> {
+async fn tree_restore_multiple_commitments() -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");

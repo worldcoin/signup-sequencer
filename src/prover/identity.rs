@@ -1,8 +1,9 @@
 use ethers::types::U256;
+use serde::{Deserialize, Serialize};
 
 /// A representation of an identity insertion into the merkle tree as used for
 /// the prover endpoint.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Identity {
     /// The identity commitment value that is inserted into the merkle tree.
     pub commitment: U256,

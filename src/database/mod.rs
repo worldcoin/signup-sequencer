@@ -17,6 +17,8 @@ use tracing::{error, info, instrument, warn};
 use crate::config::DatabaseConfig;
 use crate::database::query::DatabaseQuery;
 use crate::identity_tree::Hash;
+use crate::prover::identity::Identity;
+use crate::prover::{ProverConfig, ProverType};
 
 pub mod query;
 pub mod transaction;
@@ -164,7 +166,9 @@ mod test {
     use super::Database;
     use crate::config::DatabaseConfig;
     use crate::database::query::DatabaseQuery;
+    use crate::database::types::BatchType;
     use crate::identity_tree::{Hash, ProcessedStatus, Status, UnprocessedStatus};
+    use crate::prover::identity::Identity;
     use crate::prover::{ProverConfig, ProverType};
     use crate::utils::secret::SecretUrl;
 
@@ -1331,6 +1335,168 @@ mod test {
             .context("Missing root")?;
 
         assert_eq!(root_state.status, ProcessedStatus::Pending);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_insert_batch() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let identities: Vec<_> = mock_identities(10)
+            .iter()
+            .map(|commitment| {
+                Identity::new(
+                    (*commitment).into(),
+                    mock_roots(10).iter().map(|root| (*root).into()).collect(),
+                )
+            })
+            .collect();
+        let roots = mock_roots(2);
+
+        db.insert_new_batch_head(&roots[0]).await?;
+        db.insert_new_batch(&roots[1], &roots[0], BatchType::Insertion, &identities, &[
+            0,
+        ])
+        .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_next_batch() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let identities: Vec<_> = mock_identities(10)
+            .iter()
+            .map(|commitment| {
+                Identity::new(
+                    (*commitment).into(),
+                    mock_roots(10).iter().map(|root| (*root).into()).collect(),
+                )
+            })
+            .collect();
+        let indexes = vec![0];
+        let roots = mock_roots(2);
+
+        db.insert_new_batch_head(&roots[0]).await?;
+        db.insert_new_batch(
+            &roots[1],
+            &roots[0],
+            BatchType::Insertion,
+            &identities,
+            &indexes,
+        )
+        .await?;
+
+        let next_batch = db.get_next_batch(&roots[0]).await?;
+
+        assert!(next_batch.is_some());
+
+        let next_batch = next_batch.unwrap();
+
+        assert_eq!(next_batch.prev_root.unwrap(), roots[0]);
+        assert_eq!(next_batch.next_root, roots[1]);
+        assert_eq!(next_batch.data.0.identities, identities);
+        assert_eq!(next_batch.data.0.indexes, indexes);
+
+        let next_batch = db.get_next_batch(&roots[1]).await?;
+
+        assert!(next_batch.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_next_batch_without_transaction() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let identities: Vec<_> = mock_identities(10)
+            .iter()
+            .map(|commitment| {
+                Identity::new(
+                    (*commitment).into(),
+                    mock_roots(10).iter().map(|root| (*root).into()).collect(),
+                )
+            })
+            .collect();
+        let indexes = vec![0];
+        let roots = mock_roots(2);
+        let transaction_id = String::from("173bcbfd-e1d9-40e2-ba10-fc1dfbf742c9");
+
+        db.insert_new_batch_head(&roots[0]).await?;
+        db.insert_new_batch(
+            &roots[1],
+            &roots[0],
+            BatchType::Insertion,
+            &identities,
+            &indexes,
+        )
+        .await?;
+
+        let next_batch = db.get_next_batch_without_transaction().await?;
+
+        assert!(next_batch.is_some());
+
+        let next_batch = next_batch.unwrap();
+
+        assert_eq!(next_batch.prev_root.unwrap(), roots[0]);
+        assert_eq!(next_batch.next_root, roots[1]);
+        assert_eq!(next_batch.data.0.identities, identities);
+        assert_eq!(next_batch.data.0.indexes, indexes);
+
+        db.insert_new_transaction(&transaction_id, &roots[1])
+            .await?;
+
+        let next_batch = db.get_next_batch_without_transaction().await?;
+
+        assert!(next_batch.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_batch_head() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let roots = mock_roots(1);
+
+        let batch_head = db.get_batch_head().await?;
+
+        assert!(batch_head.is_none());
+
+        db.insert_new_batch_head(&roots[0]).await?;
+
+        let batch_head = db.get_batch_head().await?;
+
+        assert!(batch_head.is_some());
+        let batch_head = batch_head.unwrap();
+
+        assert_eq!(batch_head.prev_root, None);
+        assert_eq!(batch_head.next_root, roots[0]);
+        assert!(
+            batch_head.data.0.identities.is_empty(),
+            "Should have empty identities."
+        );
+        assert!(
+            batch_head.data.0.indexes.is_empty(),
+            "Should have empty indexes."
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_insert_transaction() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let roots = mock_roots(1);
+        let transaction_id = String::from("173bcbfd-e1d9-40e2-ba10-fc1dfbf742c9");
+
+        db.insert_new_batch_head(&roots[0]).await?;
+
+        db.insert_new_transaction(&transaction_id, &roots[0])
+            .await?;
 
         Ok(())
     }

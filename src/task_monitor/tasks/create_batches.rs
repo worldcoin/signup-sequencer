@@ -13,7 +13,8 @@ use tracing::instrument;
 use crate::app::App;
 use crate::contracts::IdentityManager;
 use crate::database;
-use crate::database::{Database, DatabaseQuery as _};
+use crate::database::query::DatabaseQuery as _;
+use crate::database::Database;
 use crate::identity_tree::{
     AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };

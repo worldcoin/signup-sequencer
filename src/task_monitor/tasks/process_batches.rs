@@ -8,8 +8,8 @@ use tracing::instrument;
 
 use crate::app::App;
 use crate::contracts::IdentityManager;
+use crate::database::query::DatabaseQuery as _;
 use crate::database::types::{BatchEntry, BatchType};
-use crate::database::DatabaseExt as _;
 use crate::ethereum::write::TransactionId;
 use crate::prover::Prover;
 use crate::utils::index_packing::pack_indices;

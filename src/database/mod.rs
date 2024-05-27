@@ -17,8 +17,6 @@ use tracing::{error, info, instrument, warn};
 use crate::config::DatabaseConfig;
 use crate::database::query::DatabaseQuery;
 use crate::identity_tree::Hash;
-use crate::prover::identity::Identity;
-use crate::prover::{ProverConfig, ProverType};
 
 pub mod query;
 pub mod transaction;

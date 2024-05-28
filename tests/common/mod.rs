@@ -64,6 +64,7 @@ pub mod prelude {
         spawn_mock_insertion_prover, test_inclusion_proof, test_insert_identity, test_verify_proof,
         test_verify_proof_on_chain,
     };
+    pub use crate::common::chain_mock::spawn_mock_chain;
     pub use crate::common::test_same_tree_states;
 }
 
@@ -747,7 +748,7 @@ pub async fn spawn_deps<'a, 'b, 'c>(
     ))
 }
 
-async fn spawn_db(docker: &Cli) -> anyhow::Result<DockerContainer<'_>> {
+async fn spawn_db(docker: &Cli) -> anyhow::Result<DockerContainer> {
     let db_container = postgres_docker_utils::setup(docker).await.unwrap();
 
     Ok(db_container)

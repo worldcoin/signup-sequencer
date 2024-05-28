@@ -16,7 +16,7 @@ use crate::database::Database;
 use crate::ethereum::Ethereum;
 use crate::identity_tree::{
     CanonicalTreeBuilder, Hash, InclusionProof, ProcessedStatus, RootItem, Status, TreeState,
-    TreeUpdate, TreeVersionReadOps, UnprocessedStatus,
+    TreeUpdate, TreeVersionReadOps, TreeWithNextVersion, UnprocessedStatus,
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::{ProverConfig, ProverType};
@@ -114,10 +114,12 @@ impl App {
             // Note that we don't have a way of queuing a root here for finalization.
             // so it's going to stay as "processed" until the next root is mined.
             self.database.mark_root_as_processed_tx(&root_hash).await?;
+            self.database.delete_batches_after_root(&root_hash).await?;
         } else {
             // Db is either empty or we're restarting with a new contract/chain
             // so we should mark everything as pending
             self.database.mark_all_as_pending().await?;
+            self.database.delete_all_batches().await?;
         }
 
         let timer = Instant::now();
@@ -263,6 +265,7 @@ impl App {
 
         let (processed, batching_builder) = processed_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
+
         let pending_items = self
             .database
             .get_commitments_by_status(ProcessedStatus::Pending)
@@ -271,6 +274,15 @@ impl App {
             latest_builder.update(&update);
         }
         let latest = latest_builder.seal();
+
+        let batch = self.database.get_latest_batch().await?;
+        if let Some(batch) = batch {
+            if batching.get_root() != batch.next_root {
+                batching.apply_updates_up_to(batch.next_root);
+            }
+            assert_eq!(batching.get_root(), batch.next_root);
+        }
+
         Ok(Some(TreeState::new(mined, processed, batching, latest)))
     }
 
@@ -356,6 +368,14 @@ impl App {
         .await?;
 
         let latest = latest_builder.seal();
+
+        let batch = self.database.get_latest_batch().await?;
+        if let Some(batch) = batch {
+            if batching.get_root() != batch.next_root {
+                batching.apply_updates_up_to(batch.next_root);
+            }
+            assert_eq!(batching.get_root(), batch.next_root);
+        }
 
         Ok(TreeState::new(mined, processed, batching, latest))
     }

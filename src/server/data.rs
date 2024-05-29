@@ -20,47 +20,6 @@ pub struct ListBatchSizesResponse(pub Vec<ProverConfig>);
 #[serde(transparent)]
 pub struct VerifySemaphoreProofResponse(pub RootItem);
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct IdentityHistoryResponse {
-    pub history: Vec<IdentityHistoryEntry>,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct IdentityHistoryEntry {
-    pub kind:   IdentityHistoryEntryKind,
-    pub status: IdentityHistoryEntryStatus,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub enum IdentityHistoryEntryKind {
-    Insertion,
-    Deletion,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub enum IdentityHistoryEntryStatus {
-    // Present in the unprocessed identities or deletions table
-    Buffered,
-    // Present in the unprocessed identities table but not eligible for processing
-    Queued,
-    // Present in the pending tree (not mined on chain yet)
-    Pending,
-    // Present in the batching tree (transaction sent but not confirmed yet)
-    Batched,
-    // Present in the processed tree (mined on chain)
-    Mined,
-    // Present in the batching tree (mined on chain)
-    Bridged,
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
@@ -96,13 +55,6 @@ pub struct RemoveBatchSizeRequest {
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct InclusionProofRequest {
-    pub identity_commitment: Hash,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct IdentityHistoryRequest {
     pub identity_commitment: Hash,
 }
 
@@ -205,18 +157,6 @@ impl ToResponseCode for VerifySemaphoreProofResponse {
     }
 }
 
-impl IdentityHistoryEntryKind {
-    #[must_use]
-    pub fn is_insertion(&self) -> bool {
-        matches!(self, IdentityHistoryEntryKind::Insertion)
-    }
-
-    #[must_use]
-    pub fn is_deletion(&self) -> bool {
-        matches!(self, IdentityHistoryEntryKind::Deletion)
-    }
-}
-
 pub trait ToResponseCode {
     fn to_response_code(&self) -> StatusCode;
 }
@@ -224,28 +164,5 @@ pub trait ToResponseCode {
 impl ToResponseCode for () {
     fn to_response_code(&self) -> StatusCode {
         StatusCode::OK
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn identity_history_entry_status_ordering() {
-        let expected = vec![
-            IdentityHistoryEntryStatus::Buffered,
-            IdentityHistoryEntryStatus::Queued,
-            IdentityHistoryEntryStatus::Pending,
-            IdentityHistoryEntryStatus::Batched,
-            IdentityHistoryEntryStatus::Mined,
-            IdentityHistoryEntryStatus::Bridged,
-        ];
-
-        let mut statuses = expected.clone();
-
-        statuses.sort();
-
-        assert_eq!(expected, statuses);
     }
 }

@@ -22,10 +22,10 @@ mod custom_middleware;
 pub mod data;
 
 use self::data::{
-    AddBatchSizeRequest, DeletionRequest, IdentityHistoryRequest, IdentityHistoryResponse,
-    InclusionProofRequest, InclusionProofResponse, InsertCommitmentRequest, ListBatchSizesResponse,
-    RecoveryRequest, RemoveBatchSizeRequest, ToResponseCode, VerifySemaphoreProofQuery,
-    VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
+    AddBatchSizeRequest, DeletionRequest, InclusionProofRequest, InclusionProofResponse,
+    InsertCommitmentRequest, ListBatchSizesResponse, RecoveryRequest, RemoveBatchSizeRequest,
+    ToResponseCode, VerifySemaphoreProofQuery, VerifySemaphoreProofRequest,
+    VerifySemaphoreProofResponse,
 };
 
 async fn inclusion_proof(
@@ -104,15 +104,6 @@ async fn recover_identity(
     Ok(())
 }
 
-async fn identity_history(
-    State(app): State<Arc<App>>,
-    Json(req): Json<IdentityHistoryRequest>,
-) -> Result<Json<IdentityHistoryResponse>, Error> {
-    let history = app.identity_history(&req.identity_commitment).await?;
-
-    Ok(Json(IdentityHistoryResponse { history }))
-}
-
 async fn remove_batch_size(
     State(app): State<Arc<App>>,
     Json(req): Json<RemoveBatchSizeRequest>,
@@ -182,7 +173,6 @@ pub async fn bind_from_listener(
         .route("/insertIdentity", post(insert_identity))
         .route("/deleteIdentity", post(delete_identity))
         .route("/recoverIdentity", post(recover_identity))
-        .route("/identityHistory", post(identity_history))
         // Operate on batch sizes
         .route("/addBatchSize", post(add_batch_size))
         .route("/removeBatchSize", post(remove_batch_size))

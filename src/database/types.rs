@@ -6,7 +6,7 @@ use sqlx::error::BoxDynError;
 use sqlx::prelude::FromRow;
 use sqlx::{Decode, Encode, Postgres, Type};
 
-use crate::identity_tree::{Hash, Status, UnprocessedStatus};
+use crate::identity_tree::{Hash, UnprocessedStatus};
 use crate::prover::identity::Identity;
 
 pub struct UnprocessedCommitment {
@@ -32,16 +32,6 @@ pub struct LatestDeletionEntry {
 pub struct DeletionEntry {
     pub leaf_index: usize,
     pub commitment: Hash,
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct CommitmentHistoryEntry {
-    pub commitment: Hash,
-    pub leaf_index: Option<usize>,
-    // Only applies to buffered entries
-    // set to true if the eligibility timestamp is in the future
-    pub held_back:  bool,
-    pub status:     Status,
 }
 
 #[derive(Debug, Copy, Clone, sqlx::Type, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]

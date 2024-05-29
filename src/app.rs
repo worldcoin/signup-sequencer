@@ -15,13 +15,12 @@ use crate::database::query::DatabaseQuery as _;
 use crate::database::Database;
 use crate::ethereum::Ethereum;
 use crate::identity_tree::{
-    CanonicalTreeBuilder, Hash, InclusionProof, ProcessedStatus, RootItem, Status, TreeState,
-    TreeUpdate, TreeVersionReadOps, TreeWithNextVersion, UnprocessedStatus,
+    CanonicalTreeBuilder, Hash, InclusionProof, ProcessedStatus, RootItem, TreeState, TreeUpdate,
+    TreeVersionReadOps, TreeWithNextVersion,
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::{ProverConfig, ProverType};
 use crate::server::data::{
-    IdentityHistoryEntry, IdentityHistoryEntryKind, IdentityHistoryEntryStatus,
     InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofQuery,
     VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
 };
@@ -538,55 +537,6 @@ impl App {
             Ok(())
         })
         .await
-    }
-
-    pub async fn identity_history(
-        &self,
-        commitment: &Hash,
-    ) -> Result<Vec<IdentityHistoryEntry>, ServerError> {
-        let entries = self
-            .database
-            .get_identity_history_entries(commitment)
-            .await?;
-
-        let mut history = vec![];
-
-        for entry in entries {
-            let mut status = match entry.status {
-                Status::Processed(ProcessedStatus::Pending) => IdentityHistoryEntryStatus::Pending,
-                Status::Processed(ProcessedStatus::Processed) => IdentityHistoryEntryStatus::Mined,
-                Status::Processed(ProcessedStatus::Mined) => IdentityHistoryEntryStatus::Bridged,
-                Status::Unprocessed(UnprocessedStatus::New) => IdentityHistoryEntryStatus::Buffered,
-            };
-
-            match status {
-                // A pending identity can be present in the batching tree and therefore status
-                // should be set to Batched
-                IdentityHistoryEntryStatus::Pending => {
-                    if let Some(leaf_index) = entry.leaf_index {
-                        if self.tree_state()?.get_batching_tree().get_leaf(leaf_index)
-                            == entry.commitment
-                        {
-                            status = IdentityHistoryEntryStatus::Batched;
-                        }
-                    }
-                }
-                IdentityHistoryEntryStatus::Buffered if entry.held_back => {
-                    status = IdentityHistoryEntryStatus::Queued;
-                }
-                _ => (),
-            }
-
-            let kind = if entry.commitment == Uint::ZERO {
-                IdentityHistoryEntryKind::Deletion
-            } else {
-                IdentityHistoryEntryKind::Insertion
-            };
-
-            history.push(IdentityHistoryEntry { kind, status });
-        }
-
-        Ok(history)
     }
 
     fn merge_env_provers(

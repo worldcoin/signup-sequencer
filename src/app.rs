@@ -12,6 +12,9 @@ use crate::contracts::IdentityManager;
 use crate::database::query::DatabaseQuery as _;
 use crate::database::Database;
 use crate::ethereum::Ethereum;
+use crate::identity::transaction_manager::{
+    IdentityTransactionManager, OnChainIdentityTransactionManager,
+};
 use crate::identity::validator::IdentityValidator;
 use crate::identity_tree::initializer::TreeInitializer;
 use crate::identity_tree::{
@@ -27,10 +30,11 @@ use crate::server::error::Error as ServerError;
 use crate::utils::retry_tx;
 
 pub struct App {
-    pub database:         Arc<Database>,
-    pub identity_manager: Arc<IdentityManager>,
-    tree_state:           OnceLock<TreeState>,
-    pub config:           Config,
+    pub database:            Arc<Database>,
+    pub identity_manager:    Arc<IdentityManager>,
+    pub transaction_manager: Arc<dyn IdentityTransactionManager>,
+    tree_state:              OnceLock<TreeState>,
+    pub config:              Config,
 
     pub identity_validator: IdentityValidator,
 }
@@ -71,11 +75,19 @@ impl App {
             .await?,
         );
 
+        let transaction_manager = Arc::new(OnChainIdentityTransactionManager::new(
+            ethereum.clone(),
+            config.clone(),
+            database.clone(),
+            identity_manager.clone(),
+        )?);
+
         let identity_validator = Default::default();
 
         let app = Arc::new(Self {
             database,
             identity_manager,
+            transaction_manager,
             tree_state: OnceLock::new(),
             config,
             identity_validator,
@@ -90,6 +102,7 @@ impl App {
         let tree_state = TreeInitializer::new(
             self.database.clone(),
             self.identity_manager.clone(),
+            self.transaction_manager.clone(),
             self.config.tree.clone(),
         )
         .run()

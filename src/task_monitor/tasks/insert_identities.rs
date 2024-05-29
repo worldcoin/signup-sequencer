@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::{Mutex, Notify};
-use tokio::time::sleep;
-use tracing::instrument;
+use tokio::time;
+use tracing::{info, instrument};
 
 use crate::app::App;
 use crate::database::query::DatabaseQuery as _;
@@ -16,14 +16,20 @@ pub async fn insert_identities(
     pending_insertions_mutex: Arc<Mutex<()>>,
     wake_up_notify: Arc<Notify>,
 ) -> anyhow::Result<()> {
+    info!("Starting insertion processor task.");
+
+    let mut timer = time::interval(Duration::from_secs(5));
+
     loop {
+        _ = timer.tick().await;
+        info!("Insertion processor woken due to timeout.");
+
         // get commits from database
         let unprocessed = app
             .database
             .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
             .await?;
         if unprocessed.is_empty() {
-            sleep(Duration::from_secs(5)).await;
             continue;
         }
 
@@ -34,6 +40,7 @@ pub async fn insert_identities(
             &pending_insertions_mutex,
         )
         .await?;
+
         // Notify the identity processing task, that there are new identities
         wake_up_notify.notify_one();
     }

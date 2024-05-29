@@ -8,6 +8,7 @@ use crate::config::TreeConfig;
 use crate::contracts::IdentityManager;
 use crate::database::query::DatabaseQuery;
 use crate::database::Database;
+use crate::identity::transaction_manager::IdentityTransactionManager;
 use crate::identity_tree::{
     CanonicalTreeBuilder, Hash, ProcessedStatus, TreeState, TreeUpdate, TreeVersionReadOps,
     TreeWithNextVersion,
@@ -15,20 +16,23 @@ use crate::identity_tree::{
 use crate::utils::tree_updates::dedup_tree_updates;
 
 pub struct TreeInitializer {
-    pub database:         Arc<Database>,
-    pub identity_manager: Arc<IdentityManager>,
-    pub config:           TreeConfig,
+    pub database:            Arc<Database>,
+    pub identity_manager:    Arc<IdentityManager>,
+    pub transaction_manager: Arc<dyn IdentityTransactionManager>,
+    pub config:              TreeConfig,
 }
 
 impl TreeInitializer {
     pub fn new(
         database: Arc<Database>,
         identity_manager: Arc<IdentityManager>,
+        transaction_manager: Arc<dyn IdentityTransactionManager>,
         config: TreeConfig,
     ) -> Self {
         Self {
             database,
             identity_manager,
+            transaction_manager,
             config,
         }
     }
@@ -37,7 +41,7 @@ impl TreeInitializer {
     /// Attempts to call this method more than once will result in a panic.
     pub async fn run(self) -> anyhow::Result<TreeState> {
         // Await for all pending transactions
-        self.identity_manager.await_clean_slate().await?;
+        self.transaction_manager.await_clean_slate().await?;
 
         // Prefetch latest root & mark it as mined
         let root_hash = self.identity_manager.latest_root().await?;

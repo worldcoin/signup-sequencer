@@ -13,7 +13,9 @@ pub async fn monitor_txs(
 
     while let Some(tx) = monitored_txs_receiver.recv().await {
         assert!(
-            (app.identity_manager.mine_transaction(tx.clone()).await?),
+            (app.transaction_manager
+                .mine_transaction(tx.clone().into())
+                .await?),
             "Failed to mine transaction: {}",
             tx
         );

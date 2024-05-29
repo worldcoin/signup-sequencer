@@ -1,11 +1,9 @@
-use chrono::{DateTime, Utc};
-use sqlx::{Executor, Row};
+use sqlx::Executor;
 use tracing::instrument;
 
 use crate::database::query::DatabaseQuery;
-use crate::database::types::CommitmentHistoryEntry;
 use crate::database::{Database, Error};
-use crate::identity_tree::{Hash, ProcessedStatus, UnprocessedStatus};
+use crate::identity_tree::{Hash, ProcessedStatus};
 use crate::utils::retry_tx;
 
 /// impl block for database transactions
@@ -85,92 +83,5 @@ impl Database {
             Ok(())
         })
         .await
-    }
-
-    pub async fn get_identity_history_entries(
-        &self,
-        commitment: &Hash,
-    ) -> Result<Vec<CommitmentHistoryEntry>, Error> {
-        let unprocessed = sqlx::query(
-            r#"
-                SELECT commitment, status, eligibility
-                FROM unprocessed_identities
-                WHERE commitment = $1
-                "#,
-        )
-        .bind(commitment);
-
-        let rows = self.pool.fetch_all(unprocessed).await?;
-        let unprocessed_updates = rows
-            .into_iter()
-            .map(|row| {
-                let eligibility_timestamp: DateTime<Utc> = row.get(2);
-                let held_back = Utc::now() < eligibility_timestamp;
-
-                CommitmentHistoryEntry {
-                    leaf_index: None,
-                    commitment: row.get::<Hash, _>(0),
-                    held_back,
-                    status: row
-                        .get::<&str, _>(1)
-                        .parse()
-                        .expect("Failed to parse unprocessed status"),
-                }
-            })
-            .collect::<Vec<CommitmentHistoryEntry>>();
-
-        let leaf_index = self.get_identity_leaf_index(commitment).await?;
-        let Some(leaf_index) = leaf_index else {
-            return Ok(unprocessed_updates);
-        };
-
-        let identity_deletions = sqlx::query(
-            r#"
-                SELECT commitment
-                FROM deletions
-                WHERE leaf_index = $1
-                "#,
-        )
-        .bind(leaf_index.leaf_index as i64);
-
-        let rows = self.pool.fetch_all(identity_deletions).await?;
-        let deletions = rows
-            .into_iter()
-            .map(|_row| CommitmentHistoryEntry {
-                leaf_index: Some(leaf_index.leaf_index),
-                commitment: Hash::ZERO,
-                held_back:  false,
-                status:     UnprocessedStatus::New.into(),
-            })
-            .collect::<Vec<CommitmentHistoryEntry>>();
-
-        let processed_updates = sqlx::query(
-            r#"
-                SELECT commitment, status
-                FROM identities
-                WHERE leaf_index = $1
-                ORDER BY id ASC
-                "#,
-        )
-        .bind(leaf_index.leaf_index as i64);
-
-        let rows = self.pool.fetch_all(processed_updates).await?;
-        let processed_updates: Vec<CommitmentHistoryEntry> = rows
-            .into_iter()
-            .map(|row| CommitmentHistoryEntry {
-                leaf_index: Some(leaf_index.leaf_index),
-                commitment: row.get::<Hash, _>(0),
-                held_back:  false,
-                status:     row
-                    .get::<&str, _>(1)
-                    .parse()
-                    .expect("Status is unreadable, database is corrupt"),
-            })
-            .collect();
-
-        Ok([processed_updates, unprocessed_updates, deletions]
-            .concat()
-            .into_iter()
-            .collect())
     }
 }

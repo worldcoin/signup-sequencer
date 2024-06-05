@@ -2,8 +2,6 @@
 pub mod abi;
 pub mod scanner;
 
-use std::sync::Arc;
-
 use anyhow::{anyhow, Context};
 use ethers::providers::Middleware;
 use ethers::types::{H256, U256};
@@ -470,6 +468,3 @@ impl IdentityManager {
         self.deletion_prover_map.read().await.len() > 0
     }
 }
-
-/// A type for an identity manager object that can be sent across threads.
-pub type SharedIdentityManager = Arc<IdentityManager>;

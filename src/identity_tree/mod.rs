@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::prelude::FromRow;
 use tracing::{info, warn};
 
+pub mod initializer;
 mod status;
 
 pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;

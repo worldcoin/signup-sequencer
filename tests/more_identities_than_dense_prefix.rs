@@ -5,7 +5,16 @@ use common::prelude::*;
 const IDLE_TIME: u64 = 12;
 
 #[tokio::test]
-async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
+async fn more_identities_than_dense_prefix_onchain() -> anyhow::Result<()> {
+    more_identities_than_dense_prefix(false).await
+}
+
+#[tokio::test]
+async fn more_identities_than_dense_prefix_offchain() -> anyhow::Result<()> {
+    more_identities_than_dense_prefix(true).await
+}
+
+async fn more_identities_than_dense_prefix(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -53,9 +62,10 @@ async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)
+        .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config.clone())
+    let (_, app_handle, local_addr, shutdown) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
 
@@ -97,12 +107,11 @@ async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
     // Shutdown the app and reset the mock shutdown, allowing us to test the
     // behaviour with saved data.
     info!("Stopping the app for testing purposes");
-    shutdown();
+    shutdown.shutdown();
     app_handle.await.unwrap();
-    reset_shutdown();
 
     // Test loading the state from a file when the on-chain contract has the state.
-    let (_, app_handle, local_addr) = spawn_app(config.clone())
+    let (_, app_handle, local_addr, shutdown) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
@@ -130,12 +139,11 @@ async fn more_identities_than_dense_prefix() -> anyhow::Result<()> {
     .await;
 
     // Shutdown the app properly for the final time
-    shutdown();
+    shutdown.shutdown();
     app_handle.await.unwrap();
     for (_, prover) in prover_map.into_iter() {
         prover.stop();
     }
-    reset_shutdown();
 
     Ok(())
 }

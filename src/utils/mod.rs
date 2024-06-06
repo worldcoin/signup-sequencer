@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::sync::Arc;
 use std::time::Duration;
 
 use futures::FutureExt;
@@ -7,7 +8,8 @@ use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tracing::{error, info};
 
-use crate::shutdown::is_shutting_down;
+use crate::shutdown::Shutdown;
+
 pub mod batch_type;
 pub mod index_packing;
 pub mod min_map;
@@ -66,6 +68,7 @@ pub fn spawn_monitored_with_backoff<S, F>(
     future_spawner: S,
     shutdown_sender: broadcast::Sender<()>,
     backoff_duration: Duration,
+    shutdown: Arc<Shutdown>,
 ) -> JoinHandle<()>
 where
     F: Future<Output = anyhow::Result<()>> + Send + 'static,
@@ -99,8 +102,8 @@ where
                 Ok(Err(e)) => {
                     error!("Task failed: {e:?}");
 
-                    if is_shutting_down() {
-                        std::process::abort();
+                    if shutdown.is_shutting_down() {
+                        return;
                     }
 
                     tokio::time::sleep(backoff_duration).await;
@@ -108,8 +111,8 @@ where
                 Err(e) => {
                     error!("Task panicked: {e:?}");
 
-                    if is_shutting_down() {
-                        std::process::abort();
+                    if shutdown.is_shutting_down() {
+                        return;
                     }
 
                     tokio::time::sleep(backoff_duration).await;
@@ -133,7 +136,7 @@ mod tests {
 
         let can_finish = Arc::new(AtomicBool::new(false));
         let triggered_error = Arc::new(AtomicBool::new(false));
-
+        let shutdown = Arc::new(Shutdown::new());
         let handle = {
             let can_finish = can_finish.clone();
             let triggered_error = triggered_error.clone();
@@ -160,6 +163,7 @@ mod tests {
                 },
                 shutdown_sender,
                 Duration::from_secs_f32(0.2),
+                shutdown,
             )
         };
 

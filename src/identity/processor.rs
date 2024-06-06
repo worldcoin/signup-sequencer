@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::Context;
@@ -20,7 +20,9 @@ use crate::database::query::DatabaseQuery;
 use crate::database::types::{BatchEntry, BatchType};
 use crate::database::Database;
 use crate::ethereum::{Ethereum, ReadProvider};
-use crate::identity_tree::{Canonical, Intermediate, TreeVersion, TreeWithNextVersion};
+use crate::identity_tree::{Canonical, Hash, Intermediate, TreeVersion, TreeWithNextVersion};
+use crate::prover::repository::ProverRepository;
+use crate::prover::validator::ProofValidator;
 use crate::prover::Prover;
 use crate::utils::index_packing::pack_indices;
 use crate::utils::retry_tx;
@@ -28,19 +30,19 @@ use crate::utils::retry_tx;
 pub type TransactionId = String;
 
 #[async_trait]
-pub trait IdentityTransactionManager: Send + Sync + 'static {
+pub trait IdentityProcessor: Send + Sync + 'static {
     async fn commit_identities(&self, batch: &BatchEntry) -> anyhow::Result<TransactionId>;
-    async fn produce_transaction_finalizer(
-        &self,
-    ) -> anyhow::Result<Box<dyn IdentityTransactionFinalizer>>;
+    async fn produce_transaction_finalizer(&self) -> anyhow::Result<Box<dyn IdentityFinalizer>>;
 
     async fn await_clean_slate(&self) -> anyhow::Result<()>;
 
     async fn mine_transaction(&self, transaction_id: TransactionId) -> anyhow::Result<bool>;
+
+    async fn tree_init_correction(&self, initial_root_hash: &Hash) -> anyhow::Result<()>;
 }
 
 #[async_trait]
-pub trait IdentityTransactionFinalizer: Send + Sync + 'static {
+pub trait IdentityFinalizer: Send + Sync + 'static {
     async fn finalize_identities(
         &mut self,
         processed_tree: &TreeVersion<Intermediate>,
@@ -48,19 +50,21 @@ pub trait IdentityTransactionFinalizer: Send + Sync + 'static {
     ) -> anyhow::Result<()>;
 }
 
-pub struct OnChainIdentityTransactionManager {
-    ethereum:         Ethereum,
-    config:           Config,
-    database:         Arc<Database>,
-    identity_manager: Arc<IdentityManager>,
+pub struct OnChainIdentityProcessor {
+    ethereum:          Ethereum,
+    config:            Config,
+    database:          Arc<Database>,
+    identity_manager:  Arc<IdentityManager>,
+    prover_repository: Arc<ProverRepository>,
+    proof_validator:   Arc<ProofValidator>,
 }
 
 #[async_trait]
-impl IdentityTransactionManager for OnChainIdentityTransactionManager {
+impl IdentityProcessor for OnChainIdentityProcessor {
     async fn commit_identities(&self, batch: &BatchEntry) -> anyhow::Result<TransactionId> {
         if batch.batch_type == BatchType::Insertion {
             let prover = self
-                .identity_manager
+                .prover_repository
                 .get_suitable_insertion_prover(batch.data.0.identities.len())
                 .await?;
 
@@ -73,7 +77,7 @@ impl IdentityTransactionManager for OnChainIdentityTransactionManager {
             self.insert_identities(&prover, batch).await
         } else {
             let prover = self
-                .identity_manager
+                .prover_repository
                 .get_suitable_deletion_prover(batch.data.0.identities.len())
                 .await?;
 
@@ -87,9 +91,7 @@ impl IdentityTransactionManager for OnChainIdentityTransactionManager {
         }
     }
 
-    async fn produce_transaction_finalizer(
-        &self,
-    ) -> anyhow::Result<Box<dyn IdentityTransactionFinalizer>> {
+    async fn produce_transaction_finalizer(&self) -> anyhow::Result<Box<dyn IdentityFinalizer>> {
         let mainnet_abi = self.identity_manager.abi();
         let secondary_abis = self.identity_manager.secondary_abis();
 
@@ -106,7 +108,7 @@ impl IdentityTransactionManager for OnChainIdentityTransactionManager {
 
         let mainnet_address = mainnet_abi.address();
 
-        Ok(Box::new(OnChainIdentityTransactionFinalizer {
+        Ok(Box::new(OnChainIdentityFinalizer {
             config: self.config.clone(),
             database: self.database.clone(),
             identity_manager: self.identity_manager.clone(),
@@ -135,20 +137,47 @@ impl IdentityTransactionManager for OnChainIdentityTransactionManager {
 
         Ok(result)
     }
+
+    async fn tree_init_correction(&self, initial_root_hash: &Hash) -> anyhow::Result<()> {
+        // Prefetch latest root & mark it as mined
+        let root_hash = self.identity_manager.latest_root().await?;
+        let root_hash = root_hash.into();
+
+        // We don't store the initial root in the database, so we have to skip this step
+        // if the contract root hash is equal to initial root hash
+        if root_hash != *initial_root_hash {
+            // Note that we don't have a way of queuing a root here for
+            // finalization. so it's going to stay as "processed"
+            // until the next root is mined. self.database.
+            self.database.mark_root_as_processed_tx(&root_hash).await?;
+            self.database.delete_batches_after_root(&root_hash).await?;
+        } else {
+            // Db is either empty or we're restarting with a new contract/chain
+            // so we should mark everything as pending
+            self.database.mark_all_as_pending().await?;
+            self.database.delete_all_batches().await?;
+        }
+
+        Ok(())
+    }
 }
 
-impl OnChainIdentityTransactionManager {
+impl OnChainIdentityProcessor {
     pub fn new(
         ethereum: Ethereum,
         config: Config,
         database: Arc<Database>,
         identity_manager: Arc<IdentityManager>,
+        prover_repository: Arc<ProverRepository>,
+        proof_validator: Arc<ProofValidator>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             ethereum,
             config,
             database,
             identity_manager,
+            prover_repository,
+            proof_validator,
         })
     }
 
@@ -181,14 +210,14 @@ impl OnChainIdentityTransactionManager {
         prover: &Prover,
         batch: &BatchEntry,
     ) -> anyhow::Result<TransactionId> {
-        self.identity_manager
+        self.proof_validator
             .validate_merkle_proofs(&batch.data.0.identities)?;
         let start_index = *batch.data.0.indexes.first().expect("Should exist.");
         let pre_root: U256 = batch.prev_root.expect("Should exist.").into();
         let post_root: U256 = batch.next_root.into();
 
         // We prepare the proof before reserving a slot in the pending identities
-        let proof = IdentityManager::prepare_insertion_proof(
+        let proof = crate::prover::proof::prepare_insertion_proof(
             prover,
             start_index,
             pre_root,
@@ -238,14 +267,14 @@ impl OnChainIdentityTransactionManager {
         prover: &Prover,
         batch: &BatchEntry,
     ) -> anyhow::Result<TransactionId> {
-        self.identity_manager
+        self.proof_validator
             .validate_merkle_proofs(&batch.data.0.identities)?;
         let pre_root: U256 = batch.prev_root.expect("Should exist.").into();
         let post_root: U256 = batch.next_root.into();
         let deletion_indices: Vec<_> = batch.data.0.indexes.iter().map(|&v| v as u32).collect();
 
         // We prepare the proof before reserving a slot in the pending identities
-        let proof = IdentityManager::prepare_deletion_proof(
+        let proof = crate::prover::proof::prepare_deletion_proof(
             prover,
             pre_root,
             deletion_indices.clone(),
@@ -287,7 +316,7 @@ impl OnChainIdentityTransactionManager {
     }
 }
 
-pub struct OnChainIdentityTransactionFinalizer {
+pub struct OnChainIdentityFinalizer {
     mainnet_scanner:    BlockScanner<Arc<ReadProvider>>,
     mainnet_address:    Address,
     secondary_scanners: HashMap<Address, BlockScanner<Arc<ReadProvider>>>,
@@ -298,7 +327,7 @@ pub struct OnChainIdentityTransactionFinalizer {
 }
 
 #[async_trait]
-impl IdentityTransactionFinalizer for OnChainIdentityTransactionFinalizer {
+impl IdentityFinalizer for OnChainIdentityFinalizer {
     async fn finalize_identities(
         &mut self,
         processed_tree: &TreeVersion<Intermediate>,
@@ -322,7 +351,7 @@ impl IdentityTransactionFinalizer for OnChainIdentityTransactionFinalizer {
     }
 }
 
-impl OnChainIdentityTransactionFinalizer {
+impl OnChainIdentityFinalizer {
     async fn fetch_mainnet_logs(&mut self) -> anyhow::Result<Vec<Log>>
     where
         <ReadProvider as Middleware>::Error: 'static,
@@ -507,6 +536,120 @@ impl OnChainIdentityTransactionFinalizer {
             let delay = root_history_expiry_duration + max_epoch_duration;
 
             let eligibility_timestamp = Utc::now() + delay;
+
+            // Check if any deleted commitments correspond with entries in the
+            // recoveries table and insert the new commitment into the unprocessed
+            // identities table with the proper eligibility timestamp
+            let deleted_recoveries = tx.delete_recoveries(commitments).await?;
+
+            // For each deletion, if there is a corresponding recovery, insert a new
+            // identity with the specified eligibility timestamp
+            for recovery in deleted_recoveries {
+                tx.insert_new_identity(recovery.new_commitment, eligibility_timestamp)
+                    .await?;
+            }
+
+            Ok(())
+        })
+        .await
+    }
+}
+
+pub struct OffChainIdentityProcessor {
+    finalizer: Arc<OffChainIdentityFinalizer>,
+}
+
+#[async_trait]
+impl IdentityProcessor for OffChainIdentityProcessor {
+    async fn commit_identities(&self, batch: &BatchEntry) -> anyhow::Result<TransactionId> {
+        self.finalizer.add_batch(batch.clone());
+        Ok(batch.id.to_string())
+    }
+
+    async fn produce_transaction_finalizer(&self) -> anyhow::Result<Box<dyn IdentityFinalizer>> {
+        Ok(Box::new(self.finalizer.clone()))
+    }
+
+    async fn await_clean_slate(&self) -> anyhow::Result<()> {
+        // For off chain mode we don't need to wait as transactions are instantly done
+        Ok(())
+    }
+
+    async fn mine_transaction(&self, _transaction_id: TransactionId) -> anyhow::Result<bool> {
+        // For off chain mode we don't mine transactions, so we treat all of them as
+        // mined
+        Ok(true)
+    }
+
+    async fn tree_init_correction(&self, _initial_root_hash: &Hash) -> anyhow::Result<()> {
+        // For off chain mode we don't correct tree at all
+        Ok(())
+    }
+}
+
+impl OffChainIdentityProcessor {
+    pub fn new(database: Arc<Database>) -> Self {
+        OffChainIdentityProcessor {
+            finalizer: Arc::new(OffChainIdentityFinalizer {
+                committed_batches: Arc::new(Mutex::new(Default::default())),
+                database,
+            }),
+        }
+    }
+}
+
+pub struct OffChainIdentityFinalizer {
+    committed_batches: Arc<Mutex<Vec<BatchEntry>>>,
+    database:          Arc<Database>,
+}
+
+#[async_trait]
+impl IdentityFinalizer for Arc<OffChainIdentityFinalizer> {
+    async fn finalize_identities(
+        &mut self,
+        processed_tree: &TreeVersion<Intermediate>,
+        mined_tree: &TreeVersion<Canonical>,
+    ) -> anyhow::Result<()> {
+        let batches = {
+            let mut committed_batches = self.committed_batches.lock().unwrap();
+            let copied = committed_batches.clone();
+            committed_batches.clear();
+            copied
+        };
+
+        for batch in batches.iter() {
+            if batch.batch_type == BatchType::Deletion {
+                self.update_eligible_recoveries(batch).await?;
+            }
+
+            // With current flow it is required to mark root as processed first as this is
+            // how required mined_at field is set
+            self.database
+                .mark_root_as_processed_tx(&batch.next_root)
+                .await?;
+            self.database
+                .mark_root_as_mined_tx(&batch.next_root)
+                .await?;
+            processed_tree.apply_updates_up_to(batch.next_root);
+            mined_tree.apply_updates_up_to(batch.next_root);
+        }
+
+        Ok(())
+    }
+}
+
+impl OffChainIdentityFinalizer {
+    fn add_batch(&self, batch_entry: BatchEntry) {
+        let mut committed_batches = self.committed_batches.lock().unwrap();
+
+        committed_batches.push(batch_entry);
+    }
+
+    async fn update_eligible_recoveries(&self, batch: &BatchEntry) -> anyhow::Result<()> {
+        retry_tx!(self.database.pool, tx, {
+            let commitments: Vec<U256> =
+                batch.data.identities.iter().map(|v| v.commitment).collect();
+            let eligibility_timestamp = Utc::now();
 
             // Check if any deleted commitments correspond with entries in the
             // recoveries table and insert the new commitment into the unprocessed

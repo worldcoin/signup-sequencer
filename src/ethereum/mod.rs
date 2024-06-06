@@ -9,7 +9,7 @@ pub use write::TxError;
 
 use self::write_provider::WriteProvider;
 use crate::config::Config;
-use crate::identity::transaction_manager::TransactionId;
+use crate::identity::processor::TransactionId;
 
 pub mod read;
 pub mod write;

@@ -11,7 +11,6 @@ use tokio::{select, time};
 use tracing::instrument;
 
 use crate::app::App;
-use crate::contracts::IdentityManager;
 use crate::database;
 use crate::database::query::DatabaseQuery as _;
 use crate::database::Database;
@@ -19,7 +18,7 @@ use crate::identity_tree::{
     AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
 use crate::prover::identity::Identity;
-use crate::prover::Prover;
+use crate::prover::repository::ProverRepository;
 use crate::task_monitor::TaskMonitor;
 use crate::utils::batch_type::BatchType;
 
@@ -33,7 +32,7 @@ pub async fn create_batches(
     wake_up_notify: Arc<Notify>,
 ) -> anyhow::Result<()> {
     tracing::info!("Awaiting for a clean slate");
-    app.transaction_manager.await_clean_slate().await?;
+    app.identity_processor.await_clean_slate().await?;
 
     tracing::info!("Starting batch creator.");
     ensure_batch_chain_initialized(&app).await?;
@@ -74,9 +73,9 @@ pub async fn create_batches(
         };
 
         let batch_size = if batch_type.is_deletion() {
-            app.identity_manager.max_deletion_batch_size().await
+            app.prover_repository.max_deletion_batch_size().await
         } else {
-            app.identity_manager.max_insertion_batch_size().await
+            app.prover_repository.max_insertion_batch_size().await
         };
 
         let updates = app
@@ -93,7 +92,7 @@ pub async fn create_batches(
         if batch_type.is_deletion() {
             commit_identities(
                 &app.database,
-                &app.identity_manager,
+                &app.prover_repository,
                 app.tree_state()?.batching_tree(),
                 &next_batch_notify,
                 &updates,
@@ -115,7 +114,7 @@ pub async fn create_batches(
             if updates.len() >= batch_size || batch_time_elapsed {
                 commit_identities(
                     &app.database,
-                    &app.identity_manager,
+                    &app.prover_repository,
                     app.tree_state()?.batching_tree(),
                     &next_batch_notify,
                     &updates,
@@ -151,7 +150,7 @@ pub async fn create_batches(
                 if next_batch_is_deletion {
                     commit_identities(
                         &app.database,
-                        &app.identity_manager,
+                        &app.prover_repository,
                         app.tree_state()?.batching_tree(),
                         &next_batch_notify,
                         &updates,
@@ -187,7 +186,7 @@ async fn ensure_batch_chain_initialized(app: &Arc<App>) -> anyhow::Result<()> {
 
 async fn commit_identities(
     database: &Database,
-    identity_manager: &IdentityManager,
+    prover_repository: &Arc<ProverRepository>,
     batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
     updates: &[AppliedTreeUpdate],
@@ -200,29 +199,35 @@ async fn commit_identities(
         .element
         != Hash::ZERO
     {
-        let prover = identity_manager
-            .get_suitable_insertion_prover(updates.len())
+        let batch_size = prover_repository
+            .get_suitable_insertion_batch_size(updates.len())
             .await?;
 
-        tracing::info!(
-            num_updates = updates.len(),
-            batch_size = prover.batch_size(),
-            "Insertion batch",
-        );
+        tracing::info!(num_updates = updates.len(), batch_size, "Insertion batch",);
 
-        insert_identities(database, batching_tree, next_batch_notify, updates, &prover).await
+        insert_identities(
+            database,
+            batching_tree,
+            next_batch_notify,
+            updates,
+            batch_size,
+        )
+        .await
     } else {
-        let prover = identity_manager
-            .get_suitable_deletion_prover(updates.len())
+        let batch_size = prover_repository
+            .get_suitable_deletion_batch_size(updates.len())
             .await?;
 
-        tracing::info!(
-            num_updates = updates.len(),
-            batch_size = prover.batch_size(),
-            "Deletion batch"
-        );
+        tracing::info!(num_updates = updates.len(), batch_size, "Deletion batch");
 
-        delete_identities(database, batching_tree, next_batch_notify, updates, &prover).await
+        delete_identities(
+            database,
+            batching_tree,
+            next_batch_notify,
+            updates,
+            batch_size,
+        )
+        .await
     }
 }
 
@@ -232,7 +237,7 @@ pub async fn insert_identities(
     batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
     updates: &[AppliedTreeUpdate],
-    prover: &Prover,
+    batch_size: usize,
 ) -> anyhow::Result<()> {
     assert_updates_are_consecutive(updates);
 
@@ -266,8 +271,6 @@ pub async fn insert_identities(
         merkle_proofs.len(),
         "Number of identities does not match the number of merkle proofs."
     );
-
-    let batch_size = prover.batch_size();
 
     // The verifier and prover can only work with a given batch size, so we need to
     // ensure that our batches match that size. We do this by padding with
@@ -370,7 +373,7 @@ pub async fn delete_identities(
     batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
     updates: &[AppliedTreeUpdate],
-    prover: &Prover,
+    batch_size: usize,
 ) -> anyhow::Result<()> {
     // Grab the initial conditions before the updates are applied to the tree.
     let pre_root = batching_tree.get_root();
@@ -407,8 +410,6 @@ pub async fn delete_identities(
         merkle_proofs.len(),
         "Number of identities does not match the number of merkle proofs."
     );
-
-    let batch_size = prover.batch_size();
 
     // The verifier and prover can only work with a given batch size, so we need to
     // ensure that our batches match that size. We do this by padding deletion

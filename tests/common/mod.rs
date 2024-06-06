@@ -44,7 +44,7 @@ pub mod prelude {
     pub use signup_sequencer::identity_tree::{Hash, TreeVersionReadOps};
     pub use signup_sequencer::prover::ProverType;
     pub use signup_sequencer::server;
-    pub use signup_sequencer::shutdown::{reset_shutdown, shutdown};
+    pub use signup_sequencer::shutdown::Shutdown;
     pub use testcontainers::clients::Cli;
     pub use tokio::spawn;
     pub use tokio::task::JoinHandle;
@@ -651,11 +651,15 @@ fn construct_verify_proof_body(
 }
 
 #[instrument(skip_all)]
-pub async fn spawn_app(config: Config) -> anyhow::Result<(Arc<App>, JoinHandle<()>, SocketAddr)> {
+#[allow(clippy::type_complexity)]
+pub async fn spawn_app(
+    config: Config,
+) -> anyhow::Result<(Arc<App>, JoinHandle<()>, SocketAddr, Arc<Shutdown>)> {
     let server_config = config.server.clone();
     let app = App::new(config).await.expect("Failed to create App");
+    let shutdown = Arc::new(Shutdown::new());
 
-    let task_monitor = TaskMonitor::new(app.clone());
+    let task_monitor = TaskMonitor::new(app.clone(), shutdown.clone());
     task_monitor.start().await;
 
     let listener = TcpListener::bind(server_config.address).expect("Failed to bind random port");
@@ -669,12 +673,18 @@ pub async fn spawn_app(config: Config) -> anyhow::Result<(Arc<App>, JoinHandle<(
     }
 
     let app_clone = app.clone();
+    let shutdown_clone = shutdown.clone();
     let app_handle = spawn({
         async move {
             info!("App thread starting");
-            server::bind_from_listener(app_clone, Duration::from_secs(30), listener)
-                .await
-                .expect("Failed to bind address");
+            server::bind_from_listener(
+                app_clone,
+                Duration::from_secs(30),
+                listener,
+                shutdown_clone,
+            )
+            .await
+            .expect("Failed to bind address");
             info!("App thread stopping");
         }
     });
@@ -687,7 +697,7 @@ pub async fn spawn_app(config: Config) -> anyhow::Result<(Arc<App>, JoinHandle<(
 
     info!("App ready");
 
-    Ok((app, app_handle, local_addr))
+    Ok((app, app_handle, local_addr, shutdown))
 }
 
 pub async fn check_metrics(socket_addr: &SocketAddr) -> anyhow::Result<()> {

@@ -13,7 +13,7 @@ use super::error::Error;
 use super::inner::{Inner, TransactionResult};
 use crate::config::OzDefenderConfig;
 use crate::ethereum::TxError;
-use crate::identity::transaction_manager::TransactionId;
+use crate::identity::processor::TransactionId;
 
 static TX_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!("eth_tx_count", "The transaction count by bytes4.", &[

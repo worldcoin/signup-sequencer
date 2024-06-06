@@ -12,15 +12,17 @@ use crate::utils::serde_utils::JsonStrWrapper;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    pub app:       AppConfig,
-    pub tree:      TreeConfig,
-    pub network:   NetworkConfig,
-    pub providers: ProvidersConfig,
-    pub relayer:   RelayerConfig,
-    pub database:  DatabaseConfig,
-    pub server:    ServerConfig,
+    pub app:           AppConfig,
+    pub tree:          TreeConfig,
+    pub network:       NetworkConfig,
+    pub providers:     ProvidersConfig,
+    pub relayer:       RelayerConfig,
+    pub database:      DatabaseConfig,
+    pub server:        ServerConfig,
     #[serde(default)]
-    pub service:   ServiceConfig,
+    pub service:       ServiceConfig,
+    #[serde(default)]
+    pub offchain_mode: OffchainModeConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -219,6 +221,12 @@ pub struct DatadogConfig {
     pub traces_endpoint: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OffchainModeConfig {
+    #[serde(default = "default::offchain_mode_enabled")]
+    pub enabled: bool,
+}
+
 pub mod default {
     use std::time::Duration;
 
@@ -311,6 +319,12 @@ pub mod default {
             "0000000000000000000000000000000000000000000000000000000000000000"
         ))
     }
+
+    pub fn offchain_mode_enabled() -> bool {
+        // todo(piotrh)
+        // false
+        true
+    }
 }
 
 #[cfg(test)]
@@ -339,6 +353,9 @@ mod tests {
 
         [server]
         address = "0.0.0.0:3001"
+
+        [offchain_mode]
+        enabled = false
     "#};
 
     #[test]
@@ -394,6 +411,9 @@ mod tests {
 
         [service.datadog]
         traces_endpoint = "http://localhost:8126"
+
+        [offchain_mode]
+        enabled = false
     "#};
 
     #[test]

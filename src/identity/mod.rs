@@ -1,2 +1,2 @@
-pub mod transaction_manager;
+pub mod processor;
 pub mod validator;

@@ -7,12 +7,13 @@
 )]
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use clap::Parser;
 use signup_sequencer::app::App;
 use signup_sequencer::config::{Config, ServiceConfig};
 use signup_sequencer::server;
-use signup_sequencer::shutdown::watch_shutdown_signals;
+use signup_sequencer::shutdown::{watch_shutdown_signals, Shutdown};
 use signup_sequencer::task_monitor::TaskMonitor;
 use telemetry_batteries::tracing::datadog::DatadogBattery;
 use telemetry_batteries::tracing::stdout::StdoutBattery;
@@ -37,7 +38,9 @@ async fn sequencer_app(args: Args) -> anyhow::Result<()> {
 
     let _tracing_shutdown_handle = init_telemetry(&config.service)?;
 
-    watch_shutdown_signals();
+    let shutdown = Arc::new(Shutdown::new());
+
+    watch_shutdown_signals(shutdown.clone());
 
     let version = env!("GIT_VERSION");
 
@@ -48,13 +51,13 @@ async fn sequencer_app(args: Args) -> anyhow::Result<()> {
     // Create App struct
     let app = App::new(config).await?;
 
-    let task_monitor = TaskMonitor::new(app.clone());
+    let task_monitor = TaskMonitor::new(app.clone(), shutdown.clone());
 
     // Process to push new identities to Ethereum
     task_monitor.start().await;
 
     // Start server (will stop on shutdown signal)
-    server::run(app, server_config).await?;
+    server::run(app, server_config, shutdown.clone()).await?;
 
     tracing::info!("Stopping the app");
     task_monitor.shutdown().await?;

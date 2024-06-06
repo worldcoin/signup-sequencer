@@ -4,7 +4,7 @@ use crate::app::App;
 
 pub async fn finalize_roots(app: Arc<App>) -> anyhow::Result<()> {
     let mut transaction_finalizer = app
-        .transaction_manager
+        .identity_processor
         .produce_transaction_finalizer()
         .await?;
 

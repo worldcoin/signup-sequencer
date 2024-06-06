@@ -2,10 +2,19 @@ mod common;
 
 use common::prelude::*;
 
+#[tokio::test]
+async fn multi_prover_onchain() -> anyhow::Result<()> {
+    multi_prover(false).await
+}
+
+#[tokio::test]
+async fn multi_prover_offchain() -> anyhow::Result<()> {
+    multi_prover(true).await
+}
+
 /// Tests that the app can keep running even if the prover returns 500s
 /// and that it will eventually succeed if the prover becomes available again.
-#[tokio::test]
-async fn multi_prover() -> anyhow::Result<()> {
+async fn multi_prover(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     init_tracing_subscriber();
     info!("Starting multi prover test");
 
@@ -48,10 +57,12 @@ async fn multi_prover() -> anyhow::Result<()> {
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock_batch_size_3)
         .add_prover(prover_mock_batch_size_10)
+        .offchain_mode(offchain_mode_enabled)
         .build()?;
 
     tracing::info!("Spawning app");
-    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr, shutdown) =
+        spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(batch_size_3 + batch_size_10);
 
@@ -108,12 +119,11 @@ async fn multi_prover() -> anyhow::Result<()> {
         .await;
     }
 
-    shutdown();
+    shutdown.shutdown();
     app_handle.await?;
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }
-    reset_shutdown();
 
     Ok(())
 }

@@ -9,7 +9,16 @@ use crate::common::test_delete_identity;
 const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
-async fn delete_padded_identity() -> anyhow::Result<()> {
+async fn delete_padded_identity_onchain() -> anyhow::Result<()> {
+    delete_padded_identity(false).await
+}
+
+#[tokio::test]
+async fn delete_padded_identity_offchain() -> anyhow::Result<()> {
+    delete_padded_identity(true).await
+}
+
+async fn delete_padded_identity(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -52,9 +61,11 @@ async fn delete_padded_identity() -> anyhow::Result<()> {
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(mock_insertion_prover)
         .add_prover(mock_deletion_prover)
+        .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr, shutdown) =
+        spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(insertion_batch_size * 3);
     let identities_ref: Vec<Field> = test_identities
@@ -136,7 +147,7 @@ async fn delete_padded_identity() -> anyhow::Result<()> {
     test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 12, true).await;
 
     // Shutdown the app properly for the final time
-    shutdown();
+    shutdown.shutdown();
     app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
@@ -144,7 +155,6 @@ async fn delete_padded_identity() -> anyhow::Result<()> {
     for (_, prover) in deletion_prover_map.into_iter() {
         prover.stop();
     }
-    reset_shutdown();
 
     Ok(())
 }

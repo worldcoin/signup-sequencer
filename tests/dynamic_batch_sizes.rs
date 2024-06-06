@@ -10,7 +10,16 @@ use crate::common::{test_add_batch_size, test_remove_batch_size};
 const IDLE_TIME: u64 = 10;
 
 #[tokio::test]
-async fn dynamic_batch_sizes() -> anyhow::Result<()> {
+async fn dynamic_batch_sizes_onchain() -> anyhow::Result<()> {
+    dynamic_batch_sizes(false).await
+}
+
+#[tokio::test]
+async fn dynamic_batch_sizes_offchain() -> anyhow::Result<()> {
+    dynamic_batch_sizes(true).await
+}
+
+async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -52,9 +61,11 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         // We initially spawn the sequencer with only the first prover
         .add_prover(first_prover)
+        .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr, shutdown) =
+        spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(first_batch_size * 5);
     let identities_ref: Vec<Field> = test_identities
@@ -239,12 +250,11 @@ async fn dynamic_batch_sizes() -> anyhow::Result<()> {
     .await;
 
     // Shutdown the app properly for the final time
-    shutdown();
+    shutdown.shutdown();
     app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }
-    reset_shutdown();
 
     Ok(())
 }

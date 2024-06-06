@@ -10,7 +10,7 @@ use tx_sitter_client::TxSitterClient;
 use super::inner::{Inner, TransactionResult};
 use crate::config::TxSitterConfig;
 use crate::ethereum::TxError;
-use crate::identity::transaction_manager::TransactionId;
+use crate::identity::processor::TransactionId;
 
 const MINING_TIMEOUT: Duration = Duration::from_secs(60);
 

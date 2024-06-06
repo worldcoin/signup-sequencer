@@ -7,7 +7,16 @@ use common::prelude::*;
 use crate::common::test_verify_proof_with_age;
 
 #[tokio::test]
-async fn validate_proof_with_age() -> anyhow::Result<()> {
+async fn validate_proof_with_age_onchain() -> anyhow::Result<()> {
+    validate_proof_with_age(false).await
+}
+
+#[tokio::test]
+async fn validate_proof_with_age_offchain() -> anyhow::Result<()> {
+    validate_proof_with_age(true).await
+}
+
+async fn validate_proof_with_age(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -51,9 +60,11 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)
+        .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr, shutdown) =
+        spawn_app(config).await.expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
@@ -150,12 +161,11 @@ async fn validate_proof_with_age() -> anyhow::Result<()> {
     .await;
 
     // Shutdown the app properly for the final time
-    shutdown();
+    shutdown.shutdown();
     app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }
-    reset_shutdown();
 
     Ok(())
 }

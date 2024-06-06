@@ -6,7 +6,7 @@ use tokio::{select, time};
 
 use crate::app::App;
 use crate::database::query::DatabaseQuery as _;
-use crate::identity::transaction_manager::TransactionId;
+use crate::identity::processor::TransactionId;
 
 pub async fn process_batches(
     app: Arc<App>,
@@ -15,7 +15,7 @@ pub async fn process_batches(
     wake_up_notify: Arc<Notify>,
 ) -> anyhow::Result<()> {
     tracing::info!("Awaiting for a clean slate");
-    app.transaction_manager.await_clean_slate().await?;
+    app.identity_processor.await_clean_slate().await?;
 
     // This is a tricky way to know that we are not changing data during tree
     // initialization process.
@@ -46,7 +46,7 @@ pub async fn process_batches(
         };
 
         let tx_id = app
-            .transaction_manager
+            .identity_processor
             .commit_identities(&next_batch)
             .await?;
 

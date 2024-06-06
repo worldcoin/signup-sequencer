@@ -3,7 +3,16 @@ mod common;
 use common::prelude::*;
 
 #[tokio::test]
-async fn tree_restore_empty() -> anyhow::Result<()> {
+async fn tree_restore_empty_onchain() -> anyhow::Result<()> {
+    tree_restore_empty(false).await
+}
+
+#[tokio::test]
+async fn tree_restore_empty_offchain() -> anyhow::Result<()> {
+    tree_restore_empty(true).await
+}
+
+async fn tree_restore_empty(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -43,9 +52,10 @@ async fn tree_restore_empty() -> anyhow::Result<()> {
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)
+        .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (app, app_handle, _) = spawn_app(config.clone())
+    let (app, app_handle, _, shutdown) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
 
@@ -56,11 +66,10 @@ async fn tree_restore_empty() -> anyhow::Result<()> {
     // Shutdown the app and reset the mock shutdown, allowing us to test the
     // behaviour with saved data.
     info!("Stopping the app for testing purposes");
-    shutdown();
+    shutdown.shutdown();
     app_handle.await.unwrap();
-    reset_shutdown();
 
-    let (app, app_handle, _) = spawn_app(config.clone())
+    let (app, app_handle, _, shutdown) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
 
@@ -69,12 +78,11 @@ async fn tree_restore_empty() -> anyhow::Result<()> {
     test_same_tree_states(&tree_state, &restored_tree_state).await?;
 
     // Shutdown the app properly for the final time
-    shutdown();
+    shutdown.shutdown();
     app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }
-    reset_shutdown();
 
     Ok(())
 }

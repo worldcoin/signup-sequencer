@@ -6,7 +6,7 @@ use tokio::{select, time};
 
 use crate::app::App;
 use crate::database::query::DatabaseQuery as _;
-use crate::ethereum::write::TransactionId;
+use crate::identity::transaction_manager::TransactionId;
 
 pub async fn process_batches(
     app: Arc<App>,
@@ -50,7 +50,7 @@ pub async fn process_batches(
             .commit_identities(&next_batch)
             .await?;
 
-        monitored_txs_sender.send(tx_id.clone().into()).await?;
+        monitored_txs_sender.send(tx_id.clone()).await?;
 
         app.database
             .insert_new_transaction(&tx_id, &next_batch.next_root)

@@ -9,9 +9,9 @@ use tracing::{info, warn};
 use self::inner::Inner;
 use self::openzeppelin::OzRelay;
 use self::tx_sitter::TxSitter;
-use super::write::TransactionId;
 use super::{ReadProvider, TxError};
 use crate::config::RelayerConfig;
+use crate::identity::transaction_manager::TransactionId;
 
 mod error;
 mod inner;

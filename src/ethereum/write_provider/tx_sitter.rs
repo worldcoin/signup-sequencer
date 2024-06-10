@@ -9,8 +9,8 @@ use tx_sitter_client::TxSitterClient;
 
 use super::inner::{Inner, TransactionResult};
 use crate::config::TxSitterConfig;
-use crate::ethereum::write::TransactionId;
 use crate::ethereum::TxError;
+use crate::identity::transaction_manager::TransactionId;
 
 const MINING_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -32,7 +32,7 @@ impl TxSitter {
         tx_id: TransactionId,
     ) -> Result<TransactionResult, TxError> {
         loop {
-            let tx = self.client.get_tx(&tx_id.0).await.map_err(TxError::Send)?;
+            let tx = self.client.get_tx(&tx_id).await.map_err(TxError::Send)?;
 
             if tx.status == TxStatus::Mined || tx.status == TxStatus::Finalized {
                 return Ok(TransactionResult {
@@ -81,7 +81,7 @@ impl Inner for TxSitter {
             .await
             .map_err(TxError::Send)?;
 
-        Ok(TransactionId(tx.tx_id))
+        Ok(tx.tx_id)
     }
 
     async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
@@ -100,7 +100,7 @@ impl Inner for TxSitter {
         let mut txs = vec![];
 
         for tx in unsent_txs.into_iter().chain(pending_txs) {
-            txs.push(TransactionId(tx.tx_id));
+            txs.push(tx.tx_id);
         }
 
         Ok(txs)

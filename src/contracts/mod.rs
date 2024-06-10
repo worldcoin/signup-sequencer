@@ -11,8 +11,8 @@ use tracing::{error, info, instrument, warn};
 
 use self::abi::{BridgedWorldId, DeleteIdentitiesCall, WorldId};
 use crate::config::Config;
-use crate::ethereum::write::TransactionId;
 use crate::ethereum::{Ethereum, ReadProvider};
+use crate::identity::transaction_manager::TransactionId;
 use crate::prover::identity::Identity;
 use crate::prover::{Proof, Prover, ProverConfig, ProverMap, ProverType};
 use crate::server::error::Error as ServerError;

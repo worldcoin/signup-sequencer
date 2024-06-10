@@ -27,18 +27,6 @@ use crate::utils::retry_tx;
 
 pub type TransactionId = String;
 
-impl From<TransactionId> for crate::ethereum::write::TransactionId {
-    fn from(value: TransactionId) -> Self {
-        crate::ethereum::write::TransactionId(value)
-    }
-}
-
-impl From<crate::ethereum::write::TransactionId> for TransactionId {
-    fn from(value: crate::ethereum::write::TransactionId) -> Self {
-        value.0
-    }
-}
-
 #[async_trait]
 pub trait IdentityTransactionManager: Send + Sync + 'static {
     async fn commit_identities(&self, batch: &BatchEntry) -> anyhow::Result<TransactionId>;
@@ -97,7 +85,6 @@ impl IdentityTransactionManager for OnChainIdentityTransactionManager {
 
             self.delete_identities(&prover, batch).await
         }
-        .map(|v| v.into())
     }
 
     async fn produce_transaction_finalizer(
@@ -136,7 +123,7 @@ impl IdentityTransactionManager for OnChainIdentityTransactionManager {
         for pending_identity_tx in pending_identities {
             // Ignores the result of each transaction - we only care about a clean slate in
             // terms of pending transactions
-            drop(self.mine_transaction(pending_identity_tx.into()).await);
+            drop(self.mine_transaction(pending_identity_tx).await);
         }
 
         Ok(())
@@ -144,10 +131,7 @@ impl IdentityTransactionManager for OnChainIdentityTransactionManager {
 
     #[instrument(level = "debug", skip(self))]
     async fn mine_transaction(&self, transaction_id: TransactionId) -> anyhow::Result<bool> {
-        let result = self
-            .ethereum
-            .mine_transaction(transaction_id.into())
-            .await?;
+        let result = self.ethereum.mine_transaction(transaction_id).await?;
 
         Ok(result)
     }
@@ -196,7 +180,7 @@ impl OnChainIdentityTransactionManager {
         &self,
         prover: &Prover,
         batch: &BatchEntry,
-    ) -> anyhow::Result<crate::ethereum::write::TransactionId> {
+    ) -> anyhow::Result<TransactionId> {
         self.identity_manager
             .validate_merkle_proofs(&batch.data.0.identities)?;
         let start_index = *batch.data.0.indexes.first().expect("Should exist.");
@@ -253,7 +237,7 @@ impl OnChainIdentityTransactionManager {
         &self,
         prover: &Prover,
         batch: &BatchEntry,
-    ) -> anyhow::Result<crate::ethereum::write::TransactionId> {
+    ) -> anyhow::Result<TransactionId> {
         self.identity_manager
             .validate_merkle_proofs(&batch.data.0.identities)?;
         let pre_root: U256 = batch.prev_root.expect("Should exist.").into();
@@ -296,9 +280,7 @@ impl OnChainIdentityTransactionManager {
     }
 
     #[instrument(level = "debug", skip_all)]
-    async fn fetch_pending_identities(
-        &self,
-    ) -> anyhow::Result<Vec<crate::ethereum::write::TransactionId>> {
+    async fn fetch_pending_identities(&self) -> anyhow::Result<Vec<TransactionId>> {
         let pending_identities = self.ethereum.fetch_pending_transactions().await?;
 
         Ok(pending_identities)

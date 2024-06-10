@@ -7,9 +7,9 @@ pub use read::ReadProvider;
 use tracing::instrument;
 pub use write::TxError;
 
-use self::write::TransactionId;
 use self::write_provider::WriteProvider;
 use crate::config::Config;
+use crate::identity::transaction_manager::TransactionId;
 
 pub mod read;
 pub mod write;

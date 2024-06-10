@@ -33,7 +33,7 @@ pub async fn create_batches(
     wake_up_notify: Arc<Notify>,
 ) -> anyhow::Result<()> {
     tracing::info!("Awaiting for a clean slate");
-    app.identity_manager.await_clean_slate().await?;
+    app.transaction_manager.await_clean_slate().await?;
 
     tracing::info!("Starting batch creator.");
     ensure_batch_chain_initialized(&app).await?;

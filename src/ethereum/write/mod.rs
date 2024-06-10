@@ -1,24 +1,8 @@
 use std::error::Error;
-use std::fmt;
 
 use ethers::providers::ProviderError;
 use ethers::types::{TransactionReceipt, H256};
 use thiserror::Error;
-
-#[derive(Clone, Debug)]
-pub struct TransactionId(pub String);
-
-impl AsRef<str> for TransactionId {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for TransactionId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
 
 #[derive(Debug, Error)]
 #[allow(dead_code)] // Unused variants

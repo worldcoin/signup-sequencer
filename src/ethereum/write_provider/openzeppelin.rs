@@ -12,8 +12,8 @@ use tracing::{error, info, info_span, Instrument};
 use super::error::Error;
 use super::inner::{Inner, TransactionResult};
 use crate::config::OzDefenderConfig;
-use crate::ethereum::write::TransactionId;
 use crate::ethereum::TxError;
+use crate::identity::transaction_manager::TransactionId;
 
 static TX_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!("eth_tx_count", "The transaction count by bytes4.", &[
@@ -161,7 +161,7 @@ impl OzRelay {
 
                 self.mine_transaction_id(&transaction_id).await?;
 
-                return Ok(TransactionId(transaction_id));
+                return Ok(transaction_id);
             }
         }
 
@@ -189,14 +189,14 @@ impl OzRelay {
 
         info!(?tx_id, "Transaction submitted to OZ Relay");
 
-        Ok(TransactionId(tx_id))
+        Ok(tx_id)
     }
 
     pub async fn mine_transaction(
         &self,
         tx_id: TransactionId,
     ) -> Result<RelayerTransactionBase, TxError> {
-        self.mine_transaction_id(tx_id.0.as_str()).await
+        self.mine_transaction_id(tx_id.as_str()).await
     }
 
     pub async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
@@ -207,7 +207,7 @@ impl OzRelay {
 
         let pending_txs = recent_pending_txs
             .into_iter()
-            .map(|tx| TransactionId(tx.transaction_id))
+            .map(|tx| tx.transaction_id)
             .collect();
 
         Ok(pending_txs)

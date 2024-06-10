@@ -1,8 +1,8 @@
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::H256;
 
-use crate::ethereum::write::TransactionId;
 use crate::ethereum::TxError;
+use crate::identity::transaction_manager::TransactionId;
 
 #[async_trait::async_trait]
 pub trait Inner: Send + Sync + 'static {

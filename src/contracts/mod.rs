@@ -11,8 +11,8 @@ use tracing::{error, info, instrument, warn};
 
 use self::abi::{BridgedWorldId, DeleteIdentitiesCall, WorldId};
 use crate::config::Config;
-use crate::ethereum::write::TransactionId;
 use crate::ethereum::{Ethereum, ReadProvider};
+use crate::identity::transaction_manager::TransactionId;
 use crate::prover::identity::Identity;
 use crate::prover::{Proof, Prover, ProverConfig, ProverMap, ProverType};
 use crate::server::error::Error as ServerError;
@@ -296,28 +296,6 @@ impl IdentityManager {
         let result = self.ethereum.mine_transaction(transaction_id).await?;
 
         Ok(result)
-    }
-
-    #[instrument(level = "debug", skip_all)]
-    pub async fn fetch_pending_identities(&self) -> anyhow::Result<Vec<TransactionId>> {
-        let pending_identities = self.ethereum.fetch_pending_transactions().await?;
-
-        Ok(pending_identities)
-    }
-
-    /// Waits until all the pending transactions have been mined or failed
-    #[instrument(level = "debug", skip_all)]
-    pub async fn await_clean_slate(&self) -> anyhow::Result<()> {
-        // Await for all pending transactions
-        let pending_identities = self.fetch_pending_identities().await?;
-
-        for pending_identity_tx in pending_identities {
-            // Ignores the result of each transaction - we only care about a clean slate in
-            // terms of pending transactions
-            drop(self.mine_transaction(pending_identity_tx).await);
-        }
-
-        Ok(())
     }
 
     #[instrument(level = "debug", skip_all)]

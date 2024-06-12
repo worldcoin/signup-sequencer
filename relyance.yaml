@@ -1,0 +1,16 @@
+# Relyance Compliance Inspector Configuration
+
+# TODO: Replace text in < > with actual information from your environment
+
+# Product and Repository Metadata
+# Purpose: Useful to slice/dice the Data Inventory and Data Map in Relyance
+repository: signup-sequencer
+
+
+# Services and Code Relationship
+# Purpose: Configuration used to visualize the code base and relationships between microservices and code.
+# Note: Directory paths are relative to the repository's root directory. 
+# Note: Need a separate entry for each microservice. See example below.
+service:
+  - service: signup-sequencer
+  - source: src

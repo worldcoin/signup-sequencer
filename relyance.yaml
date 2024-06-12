@@ -1,0 +1,10 @@
+# Relyance Compliance Inspector Configuration
+
+# Product and Repository Metadata
+repository: signup-sequencer
+
+
+# Services and Code Relationship
+service:
+  - service: signup-sequencer
+  - source: src

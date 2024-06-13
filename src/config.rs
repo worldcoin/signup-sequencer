@@ -321,9 +321,7 @@ pub mod default {
     }
 
     pub fn offchain_mode_enabled() -> bool {
-        // todo(piotrh)
-        // false
-        true
+        false
     }
 }
 

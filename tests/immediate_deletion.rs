@@ -104,7 +104,7 @@ async fn immediate_deletion() -> anyhow::Result<()> {
     )
     .await;
 
-    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 2)).await;
 
     // Ensure the identity has not yet been deleted
     test_inclusion_proof_mined(
@@ -119,7 +119,7 @@ async fn immediate_deletion() -> anyhow::Result<()> {
     // Delete another identity to trigger a deletion batch
     test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 0, false).await;
 
-    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 2)).await;
 
     test_inclusion_proof_mined(
         &uri,

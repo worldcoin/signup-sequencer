@@ -11,7 +11,7 @@ use tracing::info;
 use crate::app::App;
 use crate::database::query::DatabaseQuery;
 use crate::database::types::DeletionEntry;
-use crate::identity_tree::Hash;
+use crate::identity_tree::{Hash, TreeVersionReadOps};
 
 pub async fn delete_identities(
     app: Arc<App>,
@@ -53,6 +53,16 @@ pub async fn delete_identities(
             .unzip();
 
         let _guard = pending_insertions_mutex.lock().await;
+
+        if deletions.len() == 1 {
+            let last_insertion_idx = app.tree_state()?.latest_tree().next_leaf() - 1;
+
+            let only_deletion_idx = *leaf_indices.first().unwrap();
+
+            if only_deletion_idx == last_insertion_idx {
+                continue;
+            }
+        }
 
         // Delete the commitments at the target leaf indices in the latest tree,
         // generating the proof for each update

@@ -301,6 +301,62 @@ pub async fn test_inclusion_proof(
 }
 
 #[instrument(skip_all)]
+pub async fn test_inclusion_proof_mined(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    leaf: &Hash,
+    expect_failure: bool,
+) {
+    for i in 0..NUM_ATTEMPTS_FOR_INCLUSION_PROOF {
+        let body = construct_inclusion_proof_body(leaf);
+        info!(?uri, "Contacting");
+        let req = Request::builder()
+            .method("POST")
+            .uri(uri.to_owned() + "/inclusionProof")
+            .header("Content-Type", "application/json")
+            .body(body)
+            .expect("Failed to create inclusion proof hyper::Body");
+
+        let mut response = client
+            .request(req)
+            .await
+            .expect("Failed to execute request.");
+
+        if expect_failure {
+            assert!(!response.status().is_success());
+            return;
+        } else {
+            assert!(response.status().is_success());
+        }
+
+        let bytes = hyper::body::to_bytes(response.body_mut())
+            .await
+            .expect("Failed to convert response body to bytes");
+        let result = String::from_utf8(bytes.into_iter().collect())
+            .expect("Could not parse response bytes to utf-8");
+        let result_json = serde_json::from_str::<serde_json::Value>(&result)
+            .expect("Failed to parse response as json");
+        let status = result_json["status"]
+            .as_str()
+            .expect("Failed to get status");
+
+        if status == "pending" {
+            info!("Got pending, waiting 5 seconds, iteration {}", i);
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        } else if status == "mined" {
+            return;
+        } else {
+            panic!("Unexpected status: {}", status);
+        }
+    }
+
+    panic!(
+        "Failed to get an inclusion proof after {} attempts!",
+        NUM_ATTEMPTS_FOR_INCLUSION_PROOF
+    );
+}
+
+#[instrument(skip_all)]
 pub async fn test_inclusion_status(
     uri: &str,
     client: &Client<HttpConnector>,

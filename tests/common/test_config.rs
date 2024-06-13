@@ -62,6 +62,11 @@ impl TestConfigBuilder {
         self
     }
 
+    pub fn batch_deletion_timeout(mut self, batch_deletion_timeout: Duration) -> Self {
+        self.batch_deletion_timeout = batch_deletion_timeout;
+        self
+    }
+
     pub fn tree_depth(mut self, tree_depth: usize) -> Self {
         self.tree_depth = tree_depth;
         self

@@ -71,7 +71,7 @@ pub mod prelude {
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener};
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
@@ -845,25 +845,29 @@ pub async fn spawn_mock_deletion_prover(
 /// Set the `QUIET_MODE` environment variable to reduce the complexity of the
 /// log output.
 pub fn init_tracing_subscriber() {
-    let quiet_mode = std::env::var("QUIET_MODE").is_ok();
-    let result = if quiet_mode {
-        tracing_subscriber::fmt()
-            .with_env_filter("info,signup_sequencer=debug")
-            .compact()
-            .with_timer(Uptime::default())
-            .try_init()
-    } else {
-        tracing_subscriber::fmt()
-            .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-            .with_line_number(true)
-            .with_env_filter("info,signup_sequencer=debug")
-            .with_timer(Uptime::default())
-            // .pretty()
-            .try_init()
-    };
-    if let Err(error) = result {
-        error!(error, "Failed to initialize tracing_subscriber");
-    }
+    static INIT: Once = Once::new();
+
+    INIT.call_once(|| {
+        let quiet_mode = std::env::var("QUIET_MODE").is_ok();
+        let result = if quiet_mode {
+            tracing_subscriber::fmt()
+                .with_env_filter("info,signup_sequencer=debug")
+                .compact()
+                .with_timer(Uptime::default())
+                .try_init()
+        } else {
+            tracing_subscriber::fmt()
+                .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+                .with_line_number(true)
+                .with_env_filter("info,signup_sequencer=debug")
+                .with_timer(Uptime::default())
+                // .pretty()
+                .try_init()
+        };
+        if let Err(error) = result {
+            error!(error, "Failed to initialize tracing_subscriber");
+        }
+    });
 }
 
 pub fn generate_reference_proof_json(

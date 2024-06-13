@@ -33,7 +33,6 @@ use crate::utils::retry_tx;
 
 pub struct App {
     pub database:           Arc<Database>,
-    pub identity_manager:   Arc<IdentityManager>,
     pub identity_processor: Arc<dyn IdentityProcessor>,
     pub prover_repository:  Arc<ProverRepository>,
     tree_state:             OnceLock<TreeState>,
@@ -54,11 +53,7 @@ impl App {
     /// on the tree state will also error.
     #[instrument(name = "App::new", level = "debug", skip_all)]
     pub async fn new(config: Config) -> anyhow::Result<Arc<Self>> {
-        let ethereum = Ethereum::new(&config);
-        let db = Database::new(&config.database);
-
-        let (ethereum, db) = tokio::try_join!(ethereum, db)?;
-
+        let db = Database::new(&config.database).await?;
         let database = Arc::new(db);
         let mut provers: HashSet<ProverConfig> = database.get_provers().await?;
 
@@ -68,8 +63,6 @@ impl App {
         database.insert_provers(non_inserted_provers).await?;
 
         let (insertion_prover_map, deletion_prover_map) = initialize_prover_maps(provers)?;
-
-        let identity_manager = Arc::new(IdentityManager::new(&config, ethereum.clone()).await?);
 
         let prover_repository = Arc::new(ProverRepository::new(
             insertion_prover_map,
@@ -81,6 +74,10 @@ impl App {
         let identity_processor: Arc<dyn IdentityProcessor> = if config.offchain_mode.enabled {
             Arc::new(OffChainIdentityProcessor::new(database.clone()))
         } else {
+            let ethereum = Ethereum::new(&config).await?;
+
+            let identity_manager = Arc::new(IdentityManager::new(&config, ethereum.clone()).await?);
+
             Arc::new(OnChainIdentityProcessor::new(
                 ethereum.clone(),
                 config.clone(),
@@ -95,7 +92,6 @@ impl App {
 
         let app = Arc::new(Self {
             database,
-            identity_manager,
             identity_processor,
             prover_repository,
             tree_state: OnceLock::new(),

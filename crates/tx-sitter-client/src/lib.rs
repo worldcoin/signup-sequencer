@@ -68,8 +68,14 @@ impl TxSitterClient {
     pub async fn get_txs(&self, tx_status: Option<TxStatus>) -> anyhow::Result<Vec<GetTxResponse>> {
         let mut url = format!("{}/txs", self.url);
 
-        if let Some(tx_status) = tx_status {
-            url.push_str(&format!("?status={}", tx_status));
+        match tx_status {
+            Some(TxStatus::Unsent) => {
+                url.push_str("?unsent=true");
+            }
+            Some(tx_status) => {
+                url.push_str(&format!("?status={}", tx_status));
+            }
+            None => {}
         }
 
         self.json_get(&url).await

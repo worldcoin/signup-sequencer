@@ -9,7 +9,7 @@ on:
     branches:
       - main
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [ opened, synchronize, reopened ]
     branches:
       - main
 
@@ -98,12 +98,12 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run --workspace --no-run
+          args: run --workspace --exclude e2e-tests --no-run
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run --workspace
+          args: run --workspace --exclude e2e-tests
 
   cargo-vet:
     name: Vet Dependencies

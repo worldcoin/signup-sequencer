@@ -2,7 +2,7 @@
 pub mod abi;
 pub mod scanner;
 
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, bail, Context};
 use ethers::providers::Middleware;
 use ethers::types::{H256, U256};
 use tracing::{error, info, instrument};
@@ -40,8 +40,12 @@ impl IdentityManager {
     where
         Self: Sized,
     {
+        let Some(network_config) = &config.network else {
+            bail!("Network config is required for IdentityManager.");
+        };
+
         // Check that there is code deployed at the target address.
-        let address = config.network.identity_manager_address;
+        let address = network_config.identity_manager_address;
         let code = ethereum.provider().get_code(address, None).await?;
         if code.as_ref().is_empty() {
             error!(
@@ -52,7 +56,7 @@ impl IdentityManager {
 
         // Connect to the running batching contract.
         let abi = WorldId::new(
-            config.network.identity_manager_address,
+            network_config.identity_manager_address,
             ethereum.provider().clone(),
         );
 
@@ -71,7 +75,7 @@ impl IdentityManager {
         let secondary_providers = ethereum.secondary_providers();
 
         let mut secondary_abis = Vec::new();
-        for (chain_id, address) in &config.network.relayed_identity_manager_addresses.0 {
+        for (chain_id, address) in &network_config.relayed_identity_manager_addresses.0 {
             let provider = secondary_providers
                 .get(chain_id)
                 .ok_or_else(|| anyhow!("No provider for chain id: {}", chain_id))?;

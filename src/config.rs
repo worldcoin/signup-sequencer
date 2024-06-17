@@ -14,9 +14,9 @@ use crate::utils::serde_utils::JsonStrWrapper;
 pub struct Config {
     pub app:           AppConfig,
     pub tree:          TreeConfig,
-    pub network:       NetworkConfig,
-    pub providers:     ProvidersConfig,
-    pub relayer:       RelayerConfig,
+    pub network:       Option<NetworkConfig>,
+    pub providers:     Option<ProvidersConfig>,
+    pub relayer:       Option<RelayerConfig>,
     pub database:      DatabaseConfig,
     pub server:        ServerConfig,
     #[serde(default)]
@@ -334,17 +334,6 @@ mod tests {
         provers_urls = "[]"
 
         [tree]
-
-        [network]
-        identity_manager_address = "0x0000000000000000000000000000000000000000"
-
-        [providers]
-        primary_network_provider = "http://localhost:8545"
-
-        [relayer]
-        kind = "tx_sitter"
-        tx_sitter_url = "http://localhost:3000"
-        tx_sitter_address = "0x0000000000000000000000000000000000000000"
 
         [database]
         database = "postgres://user:password@localhost:5432/database"

@@ -158,28 +158,40 @@ impl TestConfigBuilder {
                 force_cache_purge:       default::force_cache_purge(),
                 initial_leaf_value:      default::initial_leaf_value(),
             },
-            network:       NetworkConfig {
-                identity_manager_address:           self
-                    .identity_manager_address
-                    .context("Missing identity manager address")?,
-                relayed_identity_manager_addresses: Default::default(),
+            network:       if self.offchain_mode {
+                None
+            } else {
+                Some(NetworkConfig {
+                    identity_manager_address:           self
+                        .identity_manager_address
+                        .context("Missing identity manager address")?,
+                    relayed_identity_manager_addresses: Default::default(),
+                })
             },
-            providers:     ProvidersConfig {
-                primary_network_provider:  self
-                    .primary_network_provider
-                    .context("Missing primary network provider")?,
-                relayed_network_providers: Default::default(),
+            providers:     if self.offchain_mode {
+                None
+            } else {
+                Some(ProvidersConfig {
+                    primary_network_provider:  self
+                        .primary_network_provider
+                        .context("Missing primary network provider")?,
+                    relayed_network_providers: Default::default(),
+                })
             },
-            relayer:       RelayerConfig::OzDefender(OzDefenderConfig {
-                oz_api_url:              self.oz_api_url.context("Missing oz api url")?,
-                oz_address:              self.oz_address.context("Missing oz address")?,
-                oz_api_key:              "".to_string(),
-                oz_api_secret:           "".to_string(),
-                oz_transaction_validity: default::oz_transaction_validity(),
-                oz_send_timeout:         default::oz_send_timeout(),
-                oz_mine_timeout:         default::oz_mine_timeout(),
-                oz_gas_limit:            Default::default(),
-            }),
+            relayer:       if self.offchain_mode {
+                None
+            } else {
+                Some(RelayerConfig::OzDefender(OzDefenderConfig {
+                    oz_api_url:              self.oz_api_url.context("Missing oz api url")?,
+                    oz_address:              self.oz_address.context("Missing oz address")?,
+                    oz_api_key:              "".to_string(),
+                    oz_api_secret:           "".to_string(),
+                    oz_transaction_validity: default::oz_transaction_validity(),
+                    oz_send_timeout:         default::oz_send_timeout(),
+                    oz_mine_timeout:         default::oz_mine_timeout(),
+                    oz_gas_limit:            Default::default(),
+                }))
+            },
             database:      DatabaseConfig {
                 database,
                 migrate: default::migrate(),

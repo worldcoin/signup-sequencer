@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::Utc;
 use ethers::abi::RawLog;
@@ -21,8 +21,8 @@ use crate::database::types::{BatchEntry, BatchType};
 use crate::database::Database;
 use crate::ethereum::{Ethereum, ReadProvider};
 use crate::identity_tree::{Canonical, Hash, Intermediate, TreeVersion, TreeWithNextVersion};
+use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;
-use crate::prover::validator::ProofValidator;
 use crate::prover::Prover;
 use crate::utils::index_packing::pack_indices;
 use crate::utils::retry_tx;
@@ -56,7 +56,6 @@ pub struct OnChainIdentityProcessor {
     database:          Arc<Database>,
     identity_manager:  Arc<IdentityManager>,
     prover_repository: Arc<ProverRepository>,
-    proof_validator:   Arc<ProofValidator>,
 }
 
 #[async_trait]
@@ -169,7 +168,6 @@ impl OnChainIdentityProcessor {
         database: Arc<Database>,
         identity_manager: Arc<IdentityManager>,
         prover_repository: Arc<ProverRepository>,
-        proof_validator: Arc<ProofValidator>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             ethereum,
@@ -177,7 +175,6 @@ impl OnChainIdentityProcessor {
             database,
             identity_manager,
             prover_repository,
-            proof_validator,
         })
     }
 
@@ -210,8 +207,7 @@ impl OnChainIdentityProcessor {
         prover: &Prover,
         batch: &BatchEntry,
     ) -> anyhow::Result<TransactionId> {
-        self.proof_validator
-            .validate_merkle_proofs(&batch.data.0.identities)?;
+        self.validate_merkle_proofs(&batch.data.0.identities)?;
         let start_index = *batch.data.0.indexes.first().expect("Should exist.");
         let pre_root: U256 = batch.prev_root.expect("Should exist.").into();
         let post_root: U256 = batch.next_root.into();
@@ -267,8 +263,7 @@ impl OnChainIdentityProcessor {
         prover: &Prover,
         batch: &BatchEntry,
     ) -> anyhow::Result<TransactionId> {
-        self.proof_validator
-            .validate_merkle_proofs(&batch.data.0.identities)?;
+        self.validate_merkle_proofs(&batch.data.0.identities)?;
         let pre_root: U256 = batch.prev_root.expect("Should exist.").into();
         let post_root: U256 = batch.next_root.into();
         let deletion_indices: Vec<_> = batch.data.0.indexes.iter().map(|&v| v as u32).collect();
@@ -313,6 +308,23 @@ impl OnChainIdentityProcessor {
         let pending_identities = self.ethereum.fetch_pending_transactions().await?;
 
         Ok(pending_identities)
+    }
+
+    /// Validates that merkle proofs are of the correct length against tree
+    /// depth
+    pub fn validate_merkle_proofs(&self, identity_commitments: &[Identity]) -> anyhow::Result<()> {
+        let tree_depth = self.config.tree.tree_depth;
+        for id in identity_commitments {
+            if id.merkle_proof.len() != tree_depth {
+                return Err(anyhow!(format!(
+                    "Length of merkle proof ({len}) did not match tree depth ({depth})",
+                    len = id.merkle_proof.len(),
+                    depth = tree_depth
+                )));
+            }
+        }
+
+        Ok(())
     }
 }
 

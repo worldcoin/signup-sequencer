@@ -22,7 +22,6 @@ use crate::identity_tree::{
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::repository::ProverRepository;
-use crate::prover::validator::ProofValidator;
 use crate::prover::{ProverConfig, ProverType};
 use crate::server::data::{
     InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofQuery,
@@ -39,7 +38,6 @@ pub struct App {
     pub config:             Config,
 
     pub identity_validator: IdentityValidator,
-    pub proof_validator:    Arc<ProofValidator>,
 }
 
 impl App {
@@ -69,8 +67,6 @@ impl App {
             deletion_prover_map,
         ));
 
-        let proof_validator = Arc::new(ProofValidator::new(&config));
-
         let identity_processor: Arc<dyn IdentityProcessor> = if config.offchain_mode.enabled {
             Arc::new(OffChainIdentityProcessor::new(database.clone()))
         } else {
@@ -84,7 +80,6 @@ impl App {
                 database.clone(),
                 identity_manager.clone(),
                 prover_repository.clone(),
-                proof_validator.clone(),
             )?)
         };
 
@@ -97,7 +92,6 @@ impl App {
             tree_state: OnceLock::new(),
             config,
             identity_validator,
-            proof_validator,
         });
 
         Ok(app)

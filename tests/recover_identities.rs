@@ -4,8 +4,9 @@ mod common;
 
 use common::prelude::*;
 use signup_sequencer::identity_tree::{ProcessedStatus, UnprocessedStatus};
+use tracing::debug;
 
-use crate::common::{test_inclusion_status, test_recover_identity};
+use crate::common::{test_in_tree, test_not_in_tree, test_recover_identity};
 
 const IDLE_TIME: u64 = 7;
 
@@ -84,8 +85,15 @@ async fn recover_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
 
     let mut next_leaf_index = 0;
     // Insert enough identities to trigger an batch to be sent to the blockchain.
-    for i in 0..insertion_batch_size {
-        test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, i).await;
+    for _ in 0..insertion_batch_size {
+        test_insert_identity(
+            &uri,
+            &client,
+            &mut ref_tree,
+            &identities_ref,
+            next_leaf_index,
+        )
+        .await;
 
         next_leaf_index += 1;
     }
@@ -93,7 +101,16 @@ async fn recover_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
     // Check that we can also get these inclusion proofs back.
     for i in 0..insertion_batch_size {
-        test_inclusion_proof(&uri, &client, i, &ref_tree, &identities_ref[i], false).await;
+        test_inclusion_proof(
+            &mock_chain,
+            &uri,
+            &client,
+            i,
+            &ref_tree,
+            &identities_ref[i],
+            false,
+        )
+        .await;
     }
 
     // Test that we cannot recover with an identity that has previously been
@@ -117,7 +134,6 @@ async fn recover_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
         // Delete the identity at i and replace it with an identity at the back of the
         //  test identities array
         // TODO: we should update to a much cleaner approach
-        let recovery_leaf_index = test_identities.len() - i - 1;
 
         test_recover_identity(
             &uri,
@@ -125,7 +141,7 @@ async fn recover_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
             &mut ref_tree,
             &identities_ref,
             i,
-            identities_ref[recovery_leaf_index],
+            identities_ref[next_leaf_index],
             next_leaf_index,
             false,
         )
@@ -138,26 +154,41 @@ async fn recover_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
 
     // Ensure that identities have been deleted
     for i in 0..deletion_batch_size {
-        let recovery_leaf_index = test_identities.len() - i - 1;
-
-        test_inclusion_proof(&uri, &client, i, &ref_tree, &identities_ref[i], true).await;
-
-        // Check that the replacement identity has not been inserted yet
-        test_inclusion_status(
+        test_inclusion_proof(
+            &mock_chain,
             &uri,
             &client,
-            &identities_ref[recovery_leaf_index],
-            UnprocessedStatus::New,
+            i,
+            &ref_tree,
+            &identities_ref[i],
+            true,
         )
         .await;
+
+        // Check that the replacement identity has not been inserted yet
+        let recovery_leaf_index = insertion_batch_size + i;
+        test_not_in_tree(&uri, &client, &identities_ref[recovery_leaf_index]).await;
     }
+
+    // // Update ref tree with changes that will be done in background
+    // for i in 0..deletion_batch_size {
+    //     let recovery_leaf_index = insertion_batch_size + i;
+    //     ref_tree.set(recovery_leaf_index, identities_ref[recovery_leaf_index]);
+    // }
 
     // Sleep for root expiry
     tokio::time::sleep(Duration::from_secs(updated_root_history_expiry.as_u64())).await;
 
-    // Insert enough identities to trigger an batch to be sent to the blockchain.
-    for i in insertion_batch_size..insertion_batch_size * 2 {
-        test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, i).await;
+    // Insert enough identities to trigger a batch to be sent to the blockchain.
+    for _ in 0..insertion_batch_size {
+        test_insert_identity(
+            &uri,
+            &client,
+            &mut ref_tree,
+            &identities_ref,
+            next_leaf_index,
+        )
+        .await;
         next_leaf_index += 1;
     }
 
@@ -165,17 +196,11 @@ async fn recover_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
 
     // Check that the replacement identities have been inserted
     for i in 0..deletion_batch_size {
-        let recovery_leaf_index = test_identities.len() - i - 1;
+        let recovery_leaf_index = insertion_batch_size + i;
 
         // Check that the replacement identity has a mined status after an insertion
         // batch has completed
-        test_inclusion_status(
-            &uri,
-            &client,
-            &identities_ref[recovery_leaf_index],
-            ProcessedStatus::Mined,
-        )
-        .await;
+        test_in_tree(&uri, &client, &identities_ref[recovery_leaf_index]).await;
     }
 
     // Shutdown the app properly for the final time

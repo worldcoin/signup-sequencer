@@ -54,7 +54,6 @@ pub struct RootItem {
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProof {
-    pub status:  Status,
     pub root:    Option<Field>,
     pub proof:   Option<Proof>,
     pub message: Option<String>,
@@ -561,14 +560,9 @@ impl TreeState {
 
     #[must_use]
     pub fn get_proof_for(&self, item: &TreeItem) -> (Field, InclusionProof) {
-        let (leaf, root, proof) = match item.status {
-            ProcessedStatus::Pending => self.latest.get_leaf_and_proof(item.leaf_index),
-            ProcessedStatus::Processed => self.processed.get_leaf_and_proof(item.leaf_index),
-            ProcessedStatus::Mined => self.mined.get_leaf_and_proof(item.leaf_index),
-        };
+        let (leaf, root, proof) = self.latest.get_leaf_and_proof(item.leaf_index);
 
         let proof = InclusionProof {
-            status:  item.status.into(),
             root:    Some(root),
             proof:   Some(proof),
             message: None,

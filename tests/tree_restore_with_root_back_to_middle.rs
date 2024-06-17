@@ -73,6 +73,7 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
 
     // Check that we can also get these inclusion proofs back.
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         0,
@@ -83,6 +84,7 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         1,
@@ -93,6 +95,7 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         2,
@@ -102,6 +105,8 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
         false,
     )
     .await;
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     let mid_root: U256 = ref_tree.root().into();
 
@@ -113,6 +118,7 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
 
     // Check that we can also get these inclusion proofs back.
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         3,
@@ -123,6 +129,7 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         4,
@@ -133,6 +140,7 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         5,
@@ -142,6 +150,8 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
         false,
     )
     .await;
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     let tree_state = app.tree_state()?.clone();
 
@@ -200,6 +210,7 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
 
     // Check that we can also get these inclusion proofs back.
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         3,
@@ -210,6 +221,7 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         4,
@@ -220,6 +232,7 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         5,
@@ -229,6 +242,8 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
         false,
     )
     .await;
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     test_same_tree_states(&tree_state, &restored_tree_state).await?;
 

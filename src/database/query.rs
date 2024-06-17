@@ -487,13 +487,10 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             .collect::<Vec<_>>())
     }
 
-    async fn get_unprocessed_commit_status(
-        self,
-        commitment: &Hash,
-    ) -> Result<Option<(UnprocessedStatus, String)>, Error> {
+    async fn get_unprocessed_error(self, commitment: &Hash) -> Result<Option<String>, Error> {
         let query = sqlx::query(
             r#"
-                SELECT status, error_message FROM unprocessed_identities WHERE commitment = $1
+                SELECT error_message FROM unprocessed_identities WHERE commitment = $1
             "#,
         )
         .bind(commitment);
@@ -501,10 +498,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         let result = self.fetch_optional(query).await?;
 
         if let Some(row) = result {
-            return Ok(Some((
-                row.get::<&str, _>(0).parse().expect("couldn't read status"),
-                row.get::<Option<String>, _>(1).unwrap_or_default(),
-            )));
+            return Ok(Some(row.get::<Option<String>, _>(0).unwrap_or_default()));
         };
         Ok(None)
     }

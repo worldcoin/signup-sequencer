@@ -73,6 +73,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
     // Check that we can get inclusion proofs for things that already exist in the
     // database and on chain.
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         0,
@@ -82,6 +83,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         1,
@@ -100,6 +102,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
     // Check that we can get their inclusion proofs back.
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         0,
@@ -110,6 +113,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         1,
@@ -120,6 +124,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         2,
@@ -140,6 +145,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
     // Check that we can also get these inclusion proofs back.
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         3,
@@ -150,6 +156,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         4,
@@ -175,6 +182,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
     // Check that we can still get inclusion proofs for identities we know to have
     // been inserted previously. Here we check the first and last ones we inserted.
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         0,
@@ -185,6 +193,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         4,
@@ -211,6 +220,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
     // Check that we can still get inclusion proofs for identities we know to have
     // been inserted previously. Here we check the first and last ones we inserted.
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         0,
@@ -221,6 +231,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         4,

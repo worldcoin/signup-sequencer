@@ -261,10 +261,10 @@ mod test {
         assert_eq!(commit_hash, hash);
 
         let commit = db
-            .get_unprocessed_commit_status(&commit_hash)
-            .await?
+            .get_unprocessed_error(&commit_hash)
+            .await
             .expect("expected commitment status");
-        assert_eq!(commit.0, UnprocessedStatus::New);
+        assert_eq!(commit, Some("".to_string()));
 
         let identity_count = db
             .get_eligible_unprocessed_commitments(UnprocessedStatus::New)

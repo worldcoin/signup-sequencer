@@ -87,6 +87,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
 
     // Check that we can get their inclusion proofs back.
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         0,
@@ -97,6 +98,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         1,
@@ -107,6 +109,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         2,
@@ -173,6 +176,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
 
     // Check that we can also get these inclusion proofs back.
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         3,
@@ -183,6 +187,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         4,
@@ -211,6 +216,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         5,
@@ -239,6 +245,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         6,

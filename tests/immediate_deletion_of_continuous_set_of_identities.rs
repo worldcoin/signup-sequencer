@@ -89,6 +89,7 @@ async fn immediate_deletion_of_continuous_set_of_identities() -> anyhow::Result<
     // Check that we can also get these inclusion proofs back.
     for i in 0..insertion_batch_size {
         test_inclusion_proof(
+            &mock_chain,
             &uri,
             &client,
             i,
@@ -124,6 +125,7 @@ async fn immediate_deletion_of_continuous_set_of_identities() -> anyhow::Result<
 
     // Ensure the identity has not yet been deleted
     test_inclusion_proof_mined(
+        &mock_chain,
         &uri,
         &client,
         &Hash::from_str_radix(&test_identities[insertion_batch_size - 1], 16)
@@ -139,6 +141,7 @@ async fn immediate_deletion_of_continuous_set_of_identities() -> anyhow::Result<
     tokio::time::sleep(Duration::from_secs(IDLE_TIME * 2)).await;
 
     test_inclusion_proof_mined(
+        &mock_chain,
         &uri,
         &client,
         &Hash::from_str_radix(&test_identities[insertion_batch_size - 1], 16)

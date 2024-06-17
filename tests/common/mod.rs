@@ -22,7 +22,7 @@ pub mod prelude {
         SignerMiddleware, Wallet,
     };
     pub use ethers::providers::Middleware;
-    pub use ethers::types::{Bytes, H256, U256};
+    pub use ethers::types::{Bytes, H256, U128, U256};
     pub use ethers::utils::{Anvil, AnvilInstance};
     pub use ethers_solc::artifacts::{Bytecode, BytecodeObject};
     pub use hyper::client::HttpConnector;
@@ -89,6 +89,7 @@ use tracing::trace;
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
+use crate::common::abi::{BatchingContract, RootInfo};
 use crate::server::error::Error as ServerError;
 
 const NUM_ATTEMPTS_FOR_INCLUSION_PROOF: usize = 20;
@@ -241,6 +242,7 @@ pub async fn test_verify_proof_on_chain(
 
 #[instrument(skip_all)]
 pub async fn test_inclusion_proof(
+    mock_chain: &MockChain,
     uri: &str,
     client: &Client<HttpConnector>,
     leaf_index: usize,
@@ -278,25 +280,25 @@ pub async fn test_inclusion_proof(
         let result = serde_json::from_str::<InclusionProofResponse>(&result)
             .expect("Failed to parse response as json");
 
-        match result.0.status {
-            Status::Processed(Pending) => {
-                assert_eq!(
-                    result,
-                    generate_reference_proof(ref_tree, leaf_index, Status::Processed(Pending))
-                );
-                assert_eq!(response.status(), StatusCode::ACCEPTED);
-                info!("Got pending, waiting 5 seconds, iteration {}", i);
-                tokio::time::sleep(Duration::from_secs(5)).await;
-            }
-            Status::Processed(Mined) => {
-                // We don't differentiate between these 2 states in tests
-                let proof_json =
-                    generate_reference_proof(ref_tree, leaf_index, Status::Processed(Mined));
-                assert_eq!(result, proof_json);
+        let root: U256 = result.root.expect("Failed to parse root.").into();
+        let res = mock_chain
+            .identity_manager
+            .method::<U256, RootInfo>("queryRoot", root)
+            .expect("Failed to create method queryRoot on mocked chain.")
+            .call()
+            .await
+            .expect("Failed to call method queryRoot on mocked chain.");
 
-                return;
-            }
-            _ => panic!("Unexpected status: {:?}", result.0.status),
+        if res.root != U256::zero() {
+            let proof_json = generate_reference_proof(ref_tree, leaf_index);
+            assert_eq!(result, proof_json);
+
+            return;
+        } else {
+            assert_eq!(result, generate_reference_proof(ref_tree, leaf_index));
+            assert_eq!(response.status(), StatusCode::ACCEPTED);
+            info!("Got pending, waiting 5 seconds, iteration {}", i);
+            tokio::time::sleep(Duration::from_secs(5)).await;
         }
     }
 
@@ -308,6 +310,7 @@ pub async fn test_inclusion_proof(
 
 #[instrument(skip_all)]
 pub async fn test_inclusion_proof_mined(
+    mock_chain: &MockChain,
     uri: &str,
     client: &Client<HttpConnector>,
     leaf: &Hash,
@@ -342,17 +345,23 @@ pub async fn test_inclusion_proof_mined(
             .expect("Could not parse response bytes to utf-8");
         let result_json = serde_json::from_str::<serde_json::Value>(&result)
             .expect("Failed to parse response as json");
-        let status = result_json["status"]
-            .as_str()
-            .expect("Failed to get status");
 
-        if status == "pending" {
-            info!("Got pending, waiting 5 seconds, iteration {}", i);
-            tokio::time::sleep(Duration::from_secs(5)).await;
-        } else if status == "mined" {
+        let root = result_json["root"].as_str().expect("Failed to get root");
+
+        let root = U256::from_str(root).expect("Failed to parse root.");
+        let res = mock_chain
+            .identity_manager
+            .method::<U256, RootInfo>("queryRoot", root)
+            .expect("Failed to create method queryRoot on mocked chain.")
+            .call()
+            .await
+            .expect("Failed to call method queryRoot on mocked chain.");
+
+        if res.root != U256::zero() {
             return;
         } else {
-            panic!("Unexpected status: {}", status);
+            info!("Got pending, waiting 5 seconds, iteration {}", i);
+            tokio::time::sleep(Duration::from_secs(5)).await;
         }
     }
 
@@ -363,12 +372,7 @@ pub async fn test_inclusion_proof_mined(
 }
 
 #[instrument(skip_all)]
-pub async fn test_inclusion_status(
-    uri: &str,
-    client: &Client<HttpConnector>,
-    leaf: &Hash,
-    expected_status: impl Into<Status>,
-) {
+pub async fn test_not_in_tree(uri: &str, client: &Client<HttpConnector>, leaf: &Hash) {
     let body = construct_inclusion_proof_body(leaf);
     info!(?uri, "Contacting");
     let req = Request::builder()
@@ -388,17 +392,45 @@ pub async fn test_inclusion_status(
         .expect("Failed to convert response body to bytes");
     let result = String::from_utf8(bytes.into_iter().collect())
         .expect("Could not parse response bytes to utf-8");
-    println!(
-        "########################################################## \n
-        result: {:?}",
-        result
-    );
+
     let result = serde_json::from_str::<InclusionProofResponse>(&result)
-        .expect("Failed to parse response as json");
+        .expect("Failed to parse InclusionProofResponse");
 
-    let expected_status = expected_status.into();
+    assert_eq!(response.status(), StatusCode::OK);
 
-    assert_eq!(expected_status, result.0.status,);
+    assert_eq!(result.root, None);
+}
+
+#[instrument(skip_all)]
+pub async fn test_in_tree(uri: &str, client: &Client<HttpConnector>, leaf: &Hash) {
+    let body = construct_inclusion_proof_body(leaf);
+    info!(?uri, "Contacting");
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri.to_owned() + "/inclusionProof")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .expect("Failed to create inclusion proof hyper::Body");
+
+    let mut response = client
+        .request(req)
+        .await
+        .expect("Failed to execute request.");
+
+    let bytes = hyper::body::to_bytes(response.body_mut())
+        .await
+        .expect("Failed to convert response body to bytes");
+    let result = String::from_utf8(bytes.into_iter().collect())
+        .expect("Could not parse response bytes to utf-8");
+
+    let result = serde_json::from_str::<InclusionProofResponse>(&result)
+        .expect("Failed to parse InclusionProofResponse");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let root: U256 = result.root.expect("Failed to get root").into();
+
+    assert_ne!(root, U256::zero(), "Hash is not zero");
 }
 
 pub async fn api_delete_identity(
@@ -884,14 +916,12 @@ pub fn init_tracing_subscriber() {
 pub fn generate_reference_proof(
     ref_tree: &PoseidonTree,
     leaf_idx: usize,
-    status: Status,
 ) -> InclusionProofResponse {
-    InclusionProofResponse(InclusionProof {
-        status,
-        root: Some(ref_tree.root()),
-        proof: ref_tree.proof(leaf_idx),
+    InclusionProofResponse {
+        root:    Some(ref_tree.root()),
+        proof:   ref_tree.proof(leaf_idx),
         message: None,
-    })
+    }
 }
 
 /// Generates identities for the purposes of testing. The identities are encoded

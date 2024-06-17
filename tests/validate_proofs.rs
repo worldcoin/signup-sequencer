@@ -118,7 +118,16 @@ async fn validate_proofs(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     )
     .await;
 
-    test_inclusion_proof(&uri, &client, 0, &ref_tree, &TEST_LEAVES[0], false).await;
+    test_inclusion_proof(
+        &mock_chain,
+        &uri,
+        &client,
+        0,
+        &ref_tree,
+        &TEST_LEAVES[0],
+        false,
+    )
+    .await;
 
     if !offchain_mode_enabled {
         test_verify_proof_on_chain(

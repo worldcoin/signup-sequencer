@@ -1,24 +1,35 @@
+use chrono::Utc;
 use hyper::StatusCode;
 use semaphore::protocol::Proof;
 use semaphore::Field;
 use serde::{Deserialize, Serialize};
 
-use crate::identity_tree::{
-    Hash, InclusionProof, ProcessedStatus, RootItem, Status, UnprocessedStatus,
-};
+use crate::identity_tree::{Hash, InclusionProof, RootItem};
 use crate::prover::{ProverConfig, ProverType};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[serde(transparent)]
-pub struct InclusionProofResponse(pub InclusionProof);
+pub struct InclusionProofResponse {
+    pub root:    Option<Field>,
+    pub proof:   Option<semaphore::poseidon_tree::Proof>,
+    pub message: Option<String>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ListBatchSizesResponse(pub Vec<ProverConfig>);
+pub struct ListBatchSizesResponse(pub Vec<ListBatchSizesResponseEntry>);
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct VerifySemaphoreProofResponse(pub RootItem);
+pub struct ListBatchSizesResponseEntry {
+    pub url:         String,
+    pub timeout_s:   u64,
+    pub batch_size:  usize,
+    pub prover_type: ProverType,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifySemaphoreProofResponse {
+    pub root:                Field,
+    pub pending_valid_as_of: chrono::DateTime<Utc>,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -95,40 +106,35 @@ pub struct RecoveryRequest {
     pub new_identity_commitment:      Hash,
 }
 
-impl InclusionProofResponse {
-    #[must_use]
-    pub fn hide_processed_status(mut self) -> Self {
-        self.0.status = if self.0.status == Status::Processed(ProcessedStatus::Processed) {
-            Status::Processed(ProcessedStatus::Pending)
-        } else {
-            self.0.status
-        };
-
-        self
-    }
-}
-
 impl From<InclusionProof> for InclusionProofResponse {
     fn from(value: InclusionProof) -> Self {
-        Self(value)
+        Self {
+            root:    value.root,
+            proof:   value.proof,
+            message: value.message,
+        }
     }
 }
 
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
-        match self.0.status {
-            Status::Unprocessed(UnprocessedStatus::New)
-            | Status::Processed(ProcessedStatus::Pending) => StatusCode::ACCEPTED,
-            Status::Processed(ProcessedStatus::Mined | ProcessedStatus::Processed) => {
-                StatusCode::OK
-            }
-        }
+        StatusCode::OK
     }
 }
 
 impl From<Vec<ProverConfig>> for ListBatchSizesResponse {
     fn from(value: Vec<ProverConfig>) -> Self {
-        Self(value)
+        Self(
+            value
+                .into_iter()
+                .map(|v| ListBatchSizesResponseEntry {
+                    url:         v.url,
+                    timeout_s:   v.timeout_s,
+                    batch_size:  v.batch_size,
+                    prover_type: v.prover_type,
+                })
+                .collect(),
+        )
     }
 }
 
@@ -138,16 +144,12 @@ impl ToResponseCode for ListBatchSizesResponse {
     }
 }
 
-impl VerifySemaphoreProofResponse {
-    #[must_use]
-    pub fn hide_processed_status(mut self) -> Self {
-        self.0.status = if self.0.status == ProcessedStatus::Processed {
-            ProcessedStatus::Pending
-        } else {
-            self.0.status
-        };
-
-        self
+impl From<RootItem> for VerifySemaphoreProofResponse {
+    fn from(value: RootItem) -> Self {
+        Self {
+            root:                value.root,
+            pending_valid_as_of: value.pending_valid_as_of,
+        }
     }
 }
 

@@ -32,7 +32,12 @@ impl TxSitter {
         tx_id: TransactionId,
     ) -> Result<TransactionResult, TxError> {
         loop {
-            let tx = self.client.get_tx(&tx_id).await.map_err(TxError::Send)?;
+            let tx = self
+                .client
+                .get_tx(&tx_id)
+                .await
+                .context("Error fetching tx")
+                .map_err(TxError::Send)?;
 
             if tx.status == TxStatus::Mined || tx.status == TxStatus::Finalized {
                 return Ok(TransactionResult {
@@ -79,6 +84,7 @@ impl Inner for TxSitter {
                 tx_id:     None,
             })
             .await
+            .context("Error sending transaction")
             .map_err(TxError::Send)?;
 
         Ok(tx.tx_id)
@@ -89,21 +95,23 @@ impl Inner for TxSitter {
             .client
             .get_txs(Some(TxStatus::Unsent))
             .await
+            .context("Error fetching unsent transactions")
             .map_err(TxError::Send)?;
 
         let pending_txs = self
             .client
             .get_txs(Some(TxStatus::Pending))
             .await
+            .context("Error fetching pending transactions")
             .map_err(TxError::Send)?;
 
-        let mut txs = vec![];
+        let mut tx_ids = vec![];
 
         for tx in unsent_txs.into_iter().chain(pending_txs) {
-            txs.push(tx.tx_id);
+            tx_ids.push(tx.tx_id);
         }
 
-        Ok(txs)
+        Ok(tx_ids)
     }
 
     async fn mine_transaction(&self, tx: TransactionId) -> Result<TransactionResult, TxError> {

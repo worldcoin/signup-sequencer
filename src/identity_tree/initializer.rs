@@ -97,10 +97,12 @@ impl TreeInitializer {
 
         mined_items.sort_by_key(|item| item.leaf_index);
 
+        let mined_items = dedup_tree_updates(mined_items);
+
         if !self.config.force_cache_purge {
             info!("Attempting to restore tree from cache");
             if let Some(tree_state) = self
-                .get_cached_tree_state(mined_items.clone(), initial_root_hash)
+                .get_cached_tree_state(&mined_items, initial_root_hash)
                 .await?
             {
                 info!("tree restored from cache");
@@ -150,16 +152,14 @@ impl TreeInitializer {
 
     async fn get_cached_tree_state(
         &self,
-        mined_items: Vec<TreeUpdate>,
+        mined_items: &[TreeUpdate],
         initial_root_hash: Hash,
     ) -> anyhow::Result<Option<TreeState>> {
-        let mined_items = dedup_tree_updates(mined_items);
-
         let mut last_mined_index_in_dense: Option<usize> = None;
         let leftover_items = Self::get_leftover_leaves_and_update_index(
             &mut last_mined_index_in_dense,
             self.config.dense_tree_prefix_depth,
-            &mined_items,
+            mined_items,
         );
 
         let Some(mined_builder) = CanonicalTreeBuilder::restore(
@@ -227,10 +227,6 @@ impl TreeInitializer {
 
     #[instrument(skip_all)]
     async fn initialize_tree(&self, mined_items: Vec<TreeUpdate>) -> anyhow::Result<TreeState> {
-        // Flatten the updates for initial leaves
-        info!("Deduplicating mined items");
-
-        let mined_items = dedup_tree_updates(mined_items);
         let initial_leaf_value = self.identity_manager.initial_leaf_value();
 
         let initial_leaves = if mined_items.is_empty() {

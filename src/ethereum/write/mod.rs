@@ -16,7 +16,7 @@ pub enum TxError {
     #[error("Timeout while sending transaction")]
     SendTimeout,
 
-    #[error("Error sending transaction: {0}")]
+    #[error("Error sending transaction: {0:?}")]
     Send(anyhow::Error),
 
     #[error("Timeout while waiting for confirmations")]
@@ -34,6 +34,6 @@ pub enum TxError {
     #[error("Error parsing transaction id: {0}")]
     Parse(Box<dyn Error + Send + Sync + 'static>),
 
-    #[error("{0}")]
+    #[error("{0:?}")]
     Other(anyhow::Error),
 }

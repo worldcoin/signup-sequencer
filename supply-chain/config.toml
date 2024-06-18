@@ -1704,14 +1704,6 @@ criteria = "safe-to-deploy"
 version = "0.2.25"
 criteria = "safe-to-deploy"
 
-[[exemptions.tracing-test]]
-version = "0.2.4"
-criteria = "safe-to-run"
-
-[[exemptions.tracing-test-macro]]
-version = "0.2.4"
-criteria = "safe-to-run"
-
 [[exemptions.tungstenite]]
 version = "0.20.1"
 criteria = "safe-to-deploy"

@@ -1,7 +1,20 @@
 
 # cargo-vet audits file
 
-[audits]
+[[audits.retry]]
+who = "Piotr Heilman <piotr.heilman@gmail.com>"
+criteria = "safe-to-deploy"
+version = "2.0.0"
+
+[[audits.tracing-test]]
+who = "Piotr Heilman <piotr.heilman@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.2.4"
+
+[[audits.tracing-test-macro]]
+who = "Piotr Heilman <piotr.heilman@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.2.4"
 
 [[trusted.anstream]]
 criteria = "safe-to-deploy"

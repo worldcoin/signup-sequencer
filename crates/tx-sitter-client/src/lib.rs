@@ -37,7 +37,20 @@ impl TxSitterClient {
 
         let response = Self::validate_response(response).await?;
 
-        Ok(response.json().await?)
+        let body = response.text().await?;
+        let response = serde_json::from_str::<R>(&body);
+
+        match response {
+            Ok(response) => Ok(response),
+            Err(e) => {
+                tracing::error!("Error decoding response: {}: {:?}", e, body);
+                Err(anyhow::anyhow!(
+                    "Error decoding response: {}: {:?}",
+                    e,
+                    body
+                ))
+            }
+        }
     }
 
     async fn validate_response(response: Response) -> anyhow::Result<Response> {

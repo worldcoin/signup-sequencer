@@ -37,20 +37,7 @@ impl TxSitterClient {
 
         let response = Self::validate_response(response).await?;
 
-        let body = response.text().await?;
-        let response = serde_json::from_str::<R>(&body);
-
-        match response {
-            Ok(response) => Ok(response),
-            Err(e) => {
-                tracing::error!("Error decoding response: {}: {:?}", e, body);
-                Err(anyhow::anyhow!(
-                    "Error decoding response: {}: {:?}",
-                    e,
-                    body
-                ))
-            }
-        }
+        Ok(response.json().await?)
     }
 
     async fn validate_response(response: Response) -> anyhow::Result<Response> {
@@ -78,18 +65,25 @@ impl TxSitterClient {
     }
 
     #[instrument(skip(self))]
-    pub async fn get_txs(&self, tx_status: Option<TxStatus>) -> anyhow::Result<Vec<GetTxResponse>> {
-        let mut url = format!("{}/txs", self.url);
+    pub async fn get_txs(&self) -> anyhow::Result<Vec<GetTxResponse>> {
+        let url = format!("{}/txs", self.url);
 
-        match tx_status {
-            Some(TxStatus::Unsent) => {
-                url.push_str("?unsent=true");
-            }
-            Some(tx_status) => {
-                url.push_str(&format!("?status={}", tx_status));
-            }
-            None => {}
-        }
+        self.json_get(&url).await
+    }
+
+    #[instrument(skip(self))]
+    pub async fn get_txs_by_status(
+        &self,
+        tx_status: TxStatus,
+    ) -> anyhow::Result<Vec<GetTxResponse>> {
+        let url = format!("{}/txs?status={}", self.url, tx_status);
+
+        self.json_get(&url).await
+    }
+
+    #[instrument(skip(self))]
+    pub async fn get_unsent_txs(&self) -> anyhow::Result<Vec<GetTxResponse>> {
+        let url = format!("{}/txs?unsent=true", self.url);
 
         self.json_get(&url).await
     }

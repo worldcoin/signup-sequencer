@@ -39,7 +39,7 @@ impl TxSitter {
                 .context("Error fetching tx")
                 .map_err(TxError::Send)?;
 
-            if tx.status == TxStatus::Mined || tx.status == TxStatus::Finalized {
+            if tx.status == Some(TxStatus::Mined) || tx.status == Some(TxStatus::Finalized) {
                 return Ok(TransactionResult {
                     transaction_id: tx.tx_id,
                     hash:           Some(
@@ -93,14 +93,14 @@ impl Inner for TxSitter {
     async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
         let unsent_txs = self
             .client
-            .get_txs(Some(TxStatus::Unsent))
+            .get_unsent_txs()
             .await
             .context("Error fetching unsent transactions")
             .map_err(TxError::Send)?;
 
         let pending_txs = self
             .client
-            .get_txs(Some(TxStatus::Pending))
+            .get_txs_by_status(TxStatus::Pending)
             .await
             .context("Error fetching pending transactions")
             .map_err(TxError::Send)?;

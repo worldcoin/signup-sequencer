@@ -141,6 +141,29 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .await?)
     }
 
+    async fn get_non_zero_commitments_by_leaf_indexes<I: IntoIterator<Item = usize>>(
+        self,
+        leaf_indexes: I,
+    ) -> Result<Vec<Hash>, Error> {
+        let leaf_indexes: Vec<i64> = leaf_indexes.into_iter().map(|v| v as i64).collect();
+
+        Ok(sqlx::query(
+            r#"
+            SELECT commitment
+            FROM identities
+            WHERE leaf_index = ANY($1)
+            AND commitment != $2
+            "#,
+        )
+        .bind(&leaf_indexes[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
+        .bind(Hash::ZERO)
+        .fetch_all(self)
+        .await?
+        .into_iter()
+        .map(|row| row.get::<Hash, _>(0))
+        .collect())
+    }
+
     async fn get_latest_root_by_status(
         self,
         status: ProcessedStatus,

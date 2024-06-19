@@ -387,6 +387,8 @@ pub async fn test_not_in_tree(uri: &str, client: &Client<HttpConnector>, leaf: &
         .await
         .expect("Failed to execute request.");
 
+    assert_eq!(response.status(), StatusCode::OK);
+
     let bytes = hyper::body::to_bytes(response.body_mut())
         .await
         .expect("Failed to convert response body to bytes");
@@ -395,8 +397,6 @@ pub async fn test_not_in_tree(uri: &str, client: &Client<HttpConnector>, leaf: &
 
     let result = serde_json::from_str::<InclusionProofResponse>(&result)
         .expect("Failed to parse InclusionProofResponse");
-
-    assert_eq!(response.status(), StatusCode::OK);
 
     assert_eq!(result.root, None);
 }
@@ -417,6 +417,8 @@ pub async fn test_in_tree(uri: &str, client: &Client<HttpConnector>, leaf: &Hash
         .await
         .expect("Failed to execute request.");
 
+    assert_eq!(response.status(), StatusCode::OK);
+
     let bytes = hyper::body::to_bytes(response.body_mut())
         .await
         .expect("Failed to convert response body to bytes");
@@ -425,8 +427,6 @@ pub async fn test_in_tree(uri: &str, client: &Client<HttpConnector>, leaf: &Hash
 
     let result = serde_json::from_str::<InclusionProofResponse>(&result)
         .expect("Failed to parse InclusionProofResponse");
-
-    assert_eq!(response.status(), StatusCode::OK);
 
     let root: U256 = result.root.expect("Failed to get root").into();
 

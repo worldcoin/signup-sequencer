@@ -432,7 +432,7 @@ impl OnChainIdentityProcessor {
                 // NOTE: We must do this before updating the tree
                 //       because we fetch commitments from the processed tree
                 //       before they are deleted
-                self.update_eligible_recoveries(processed_tree, log, max_epoch_duration)
+                self.update_eligible_recoveries(log, max_epoch_duration)
                     .await?;
             }
 
@@ -506,7 +506,6 @@ impl OnChainIdentityProcessor {
 
     async fn update_eligible_recoveries(
         &self,
-        processed_tree: &TreeVersion<Intermediate>,
         log: &Log,
         max_epoch_duration: Duration,
     ) -> anyhow::Result<()> {
@@ -518,11 +517,13 @@ impl OnChainIdentityProcessor {
                 .await
                 .context("Could not fetch deletion indices from tx")?;
 
-            let commitments = processed_tree.commitments_by_indices(commitments.iter().copied());
-            let commitments: Vec<U256> = commitments
-                .into_iter()
-                .map(std::convert::Into::into)
-                .collect();
+            info!("[zzz] 1: {:?}", commitments);
+            let commitments = self
+                .database
+                .get_non_zero_commitments_by_leaf_indexes(commitments.iter().copied())
+                .await?;
+            let commitments: Vec<U256> = commitments.into_iter().map(Into::into).collect();
+            info!("[zzz] 2: {:?}", commitments);
 
             // Fetch the root history expiry time on chain
             let root_history_expiry = self.identity_manager.root_history_expiry().await?;

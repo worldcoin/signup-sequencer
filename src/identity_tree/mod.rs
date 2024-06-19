@@ -319,15 +319,6 @@ impl Version for Canonical {
 }
 impl HasNextVersion for Canonical {}
 
-/// Marker for an intermediate version – one that has both a predecessor and a
-/// successor.
-#[derive(Clone)]
-pub struct Intermediate;
-impl Version for Intermediate {
-    type TreeVersion = lazy_merkle_tree::Derived;
-}
-impl HasNextVersion for Intermediate {}
-
 /// Marker for the latest tree version – one that has no successor. It enables a
 /// different API, focusing on outside updates, rather than just pulling in
 /// updates from the successor.
@@ -500,26 +491,14 @@ where
 
 #[derive(Clone)]
 pub struct TreeState {
-    mined:     TreeVersion<Canonical>,
-    processed: TreeVersion<Intermediate>,
-    batching:  TreeVersion<Intermediate>,
-    latest:    TreeVersion<Latest>,
+    batching: TreeVersion<Canonical>,
+    latest:   TreeVersion<Latest>,
 }
 
 impl TreeState {
     #[must_use]
-    pub const fn new(
-        mined: TreeVersion<Canonical>,
-        processed: TreeVersion<Intermediate>,
-        batching: TreeVersion<Intermediate>,
-        latest: TreeVersion<Latest>,
-    ) -> Self {
-        Self {
-            mined,
-            processed,
-            batching,
-            latest,
-        }
+    pub const fn new(batching: TreeVersion<Canonical>, latest: TreeVersion<Latest>) -> Self {
+        Self { batching, latest }
     }
 
     pub fn latest_tree(&self) -> &TreeVersion<Latest> {
@@ -532,29 +511,11 @@ impl TreeState {
     }
 
     #[must_use]
-    pub fn get_mined_tree(&self) -> TreeVersion<Canonical> {
-        self.mined.clone()
-    }
-
-    pub fn mined_tree(&self) -> &TreeVersion<Canonical> {
-        &self.mined
-    }
-
-    #[must_use]
-    pub fn get_processed_tree(&self) -> TreeVersion<Intermediate> {
-        self.processed.clone()
-    }
-
-    pub fn processed_tree(&self) -> &TreeVersion<Intermediate> {
-        &self.processed
-    }
-
-    #[must_use]
-    pub fn get_batching_tree(&self) -> TreeVersion<Intermediate> {
+    pub fn get_batching_tree(&self) -> TreeVersion<Canonical> {
         self.batching.clone()
     }
 
-    pub fn batching_tree(&self) -> &TreeVersion<Intermediate> {
+    pub fn batching_tree(&self) -> &TreeVersion<Canonical> {
         &self.batching
     }
 
@@ -699,7 +660,7 @@ pub struct DerivedTreeBuilder<P: Version> {
 impl<P: Version> DerivedTreeBuilder<P> {
     #[must_use]
     const fn new<Prev: Version>(
-        tree: PoseidonTree<lazy_merkle_tree::Derived>,
+        tree: PoseidonTree<Derived>,
         next_leaf: usize,
         prev: TreeVersion<Prev>,
     ) -> DerivedTreeBuilder<Prev> {
@@ -718,19 +679,6 @@ impl<P: Version> DerivedTreeBuilder<P> {
     /// Updates a leaf in the resulting tree.
     pub fn update(&mut self, update: &TreeUpdate) {
         self.current.update(update.leaf_index, update.element);
-    }
-
-    /// Seals this version and returns a builder for the next version.
-    #[must_use]
-    pub fn seal_and_continue(
-        self,
-    ) -> (TreeVersion<Intermediate>, DerivedTreeBuilder<Intermediate>) {
-        let next_tree = self.current.tree.clone();
-        let next_leaf = self.current.next_leaf;
-        let sealed = TreeVersion(Arc::new(Mutex::new(self.current)));
-        let next = Self::new(next_tree, next_leaf, sealed.clone());
-        self.prev.get_data().next = Some(sealed.as_derived());
-        (sealed, next)
     }
 
     /// Seals this version and finishes the building process.

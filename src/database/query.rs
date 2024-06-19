@@ -141,6 +141,24 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .await?)
     }
 
+    async fn get_commitments_by_statuses(
+        self,
+        statuses: Vec<ProcessedStatus>,
+    ) -> Result<Vec<TreeUpdate>, Error> {
+        let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
+        Ok(sqlx::query_as::<_, TreeUpdate>(
+            r#"
+            SELECT leaf_index, commitment as element
+            FROM identities
+            WHERE status = ANY($1)
+            ORDER BY id ASC;
+            "#,
+        )
+        .bind(&statuses[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
+        .fetch_all(self)
+        .await?)
+    }
+
     async fn get_non_zero_commitments_by_leaf_indexes<I: IntoIterator<Item = usize>>(
         self,
         leaf_indexes: I,

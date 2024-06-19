@@ -954,21 +954,12 @@ pub async fn test_same_tree_states(
     tree_state2: &TreeState,
 ) -> anyhow::Result<()> {
     assert_eq!(
-        tree_state1.processed_tree().next_leaf(),
-        tree_state2.processed_tree().next_leaf()
+        tree_state1.batching_tree().next_leaf(),
+        tree_state2.batching_tree().next_leaf()
     );
     assert_eq!(
-        tree_state1.processed_tree().get_root(),
-        tree_state2.processed_tree().get_root()
-    );
-
-    assert_eq!(
-        tree_state1.mined_tree().next_leaf(),
-        tree_state2.mined_tree().next_leaf()
-    );
-    assert_eq!(
-        tree_state1.mined_tree().get_root(),
-        tree_state2.mined_tree().get_root()
+        tree_state1.batching_tree().get_root(),
+        tree_state2.batching_tree().get_root()
     );
 
     assert_eq!(

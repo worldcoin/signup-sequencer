@@ -58,15 +58,37 @@ pub struct GetTxResponse {
     // Sent tx data
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tx_hash: Option<H256>,
-    pub status:  TxStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status:  Option<TxStatus>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Display, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "camelCase")]
 pub enum TxStatus {
-    Unsent,
     Pending,
     Mined,
     Finalized,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_partial_tx_response() {
+        const DATA: &str = indoc::indoc! {r#"{
+                "data": "0xff",
+                "gasLimit": "2000000",
+                "nonce": 54,
+                "status": null,
+                "to": "0x928a514350a403e2f5e3288c102f6b1ccabeb37c",
+                "txHash": null,
+                "txId": "99e83a12-d6df-4f9c-aa43-048b38561dfd",
+                "value": "0"
+            }
+        "#};
+
+        serde_json::from_str::<GetTxResponse>(DATA).unwrap();
+    }
 }

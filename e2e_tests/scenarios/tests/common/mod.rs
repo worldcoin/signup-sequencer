@@ -85,17 +85,9 @@ pub fn init_tracing_subscriber() {
 /// to ensure that we do not run afoul of the element numeric limit for the
 /// snark scalar field.
 pub fn generate_test_commitments(count: usize) -> Vec<Hash> {
-    let mut commitments = vec![];
-
-    for _ in 0..count {
-        // Generate the identities using the just the last 64 bits (of 256) has so we're
-        // guaranteed to be less than SNARK_SCALAR_FIELD.
-        let commitment = Hash::from(rand::random::<u64>());
-
-        commitments.push(commitment);
-    }
-
-    commitments
+    (0..count)
+        .map(|_| Hash::from(rand::random::<u64>()))
+        .collect()
 }
 
 pub async fn delete_identity_with_retries(

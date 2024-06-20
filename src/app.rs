@@ -68,19 +68,22 @@ impl App {
         ));
 
         let identity_processor: Arc<dyn IdentityProcessor> = if config.offchain_mode.enabled {
-            Arc::new(OffChainIdentityProcessor::new(database.clone()))
+            Arc::new(OffChainIdentityProcessor::new(database.clone()).await?)
         } else {
             let ethereum = Ethereum::new(&config).await?;
 
             let identity_manager = Arc::new(IdentityManager::new(&config, ethereum.clone()).await?);
 
-            Arc::new(OnChainIdentityProcessor::new(
-                ethereum.clone(),
-                config.clone(),
-                database.clone(),
-                identity_manager.clone(),
-                prover_repository.clone(),
-            )?)
+            Arc::new(
+                OnChainIdentityProcessor::new(
+                    ethereum.clone(),
+                    config.clone(),
+                    database.clone(),
+                    identity_manager.clone(),
+                    prover_repository.clone(),
+                )
+                .await?,
+            )
         };
 
         let identity_validator = IdentityValidator::new(&config);

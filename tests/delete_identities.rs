@@ -9,7 +9,16 @@ use crate::common::test_delete_identity;
 const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
-async fn delete_identities() -> anyhow::Result<()> {
+async fn delete_identities_onchain() -> anyhow::Result<()> {
+    delete_identities(false).await
+}
+
+#[tokio::test]
+async fn delete_identities_offchain() -> anyhow::Result<()> {
+    delete_identities(true).await
+}
+
+async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -52,9 +61,10 @@ async fn delete_identities() -> anyhow::Result<()> {
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(mock_insertion_prover)
         .add_prover(mock_deletion_prover)
+        .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config.clone())
+    let (_, app_handle, local_addr, shutdown) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
 
@@ -118,12 +128,12 @@ async fn delete_identities() -> anyhow::Result<()> {
     // Shutdown the app and reset the mock shutdown, allowing us to test the
     // behaviour with saved data.
     info!("Stopping the app for testing purposes");
-    shutdown();
+    shutdown.shutdown();
     app_handle.await.unwrap();
-    reset_shutdown();
 
     // Test loading the state from a file when the on-chain contract has the state.
-    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr, shutdown) =
+        spawn_app(config).await.expect("Failed to spawn app.");
     let uri = "http://".to_owned() + &local_addr.to_string();
 
     // Ensure that identities have been deleted
@@ -156,7 +166,7 @@ async fn delete_identities() -> anyhow::Result<()> {
     }
 
     // Shutdown the app properly for the final time
-    shutdown();
+    shutdown.shutdown();
     app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
@@ -164,7 +174,6 @@ async fn delete_identities() -> anyhow::Result<()> {
     for (_, prover) in deletion_prover_map.into_iter() {
         prover.stop();
     }
-    reset_shutdown();
 
     Ok(())
 }

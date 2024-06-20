@@ -12,8 +12,8 @@ use crate::contracts::IdentityManager;
 use crate::database::query::DatabaseQuery as _;
 use crate::database::Database;
 use crate::ethereum::Ethereum;
-use crate::identity::transaction_manager::{
-    IdentityTransactionManager, OnChainIdentityTransactionManager,
+use crate::identity::processor::{
+    IdentityProcessor, OffChainIdentityProcessor, OnChainIdentityProcessor,
 };
 use crate::identity::validator::IdentityValidator;
 use crate::identity_tree::initializer::TreeInitializer;
@@ -21,6 +21,7 @@ use crate::identity_tree::{
     Hash, InclusionProof, ProcessedStatus, RootItem, TreeState, TreeVersionReadOps,
 };
 use crate::prover::map::initialize_prover_maps;
+use crate::prover::repository::ProverRepository;
 use crate::prover::{ProverConfig, ProverType};
 use crate::server::data::{
     InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofQuery,
@@ -30,11 +31,11 @@ use crate::server::error::Error as ServerError;
 use crate::utils::retry_tx;
 
 pub struct App {
-    pub database:            Arc<Database>,
-    pub identity_manager:    Arc<IdentityManager>,
-    pub transaction_manager: Arc<dyn IdentityTransactionManager>,
-    tree_state:              OnceLock<TreeState>,
-    pub config:              Config,
+    pub database:           Arc<Database>,
+    pub identity_processor: Arc<dyn IdentityProcessor>,
+    pub prover_repository:  Arc<ProverRepository>,
+    tree_state:             OnceLock<TreeState>,
+    pub config:             Config,
 
     pub identity_validator: IdentityValidator,
 }
@@ -50,11 +51,7 @@ impl App {
     /// on the tree state will also error.
     #[instrument(name = "App::new", level = "debug", skip_all)]
     pub async fn new(config: Config) -> anyhow::Result<Arc<Self>> {
-        let ethereum = Ethereum::new(&config);
-        let db = Database::new(&config.database);
-
-        let (ethereum, db) = tokio::try_join!(ethereum, db)?;
-
+        let db = Database::new(&config.database).await?;
         let database = Arc::new(db);
         let mut provers: HashSet<ProverConfig> = database.get_provers().await?;
 
@@ -65,29 +62,36 @@ impl App {
 
         let (insertion_prover_map, deletion_prover_map) = initialize_prover_maps(provers)?;
 
-        let identity_manager = Arc::new(
-            IdentityManager::new(
-                &config,
-                ethereum.clone(),
-                insertion_prover_map,
-                deletion_prover_map,
+        let prover_repository = Arc::new(ProverRepository::new(
+            insertion_prover_map,
+            deletion_prover_map,
+        ));
+
+        let identity_processor: Arc<dyn IdentityProcessor> = if config.offchain_mode.enabled {
+            Arc::new(OffChainIdentityProcessor::new(database.clone()).await?)
+        } else {
+            let ethereum = Ethereum::new(&config).await?;
+
+            let identity_manager = Arc::new(IdentityManager::new(&config, ethereum.clone()).await?);
+
+            Arc::new(
+                OnChainIdentityProcessor::new(
+                    ethereum.clone(),
+                    config.clone(),
+                    database.clone(),
+                    identity_manager.clone(),
+                    prover_repository.clone(),
+                )
+                .await?,
             )
-            .await?,
-        );
+        };
 
-        let transaction_manager = Arc::new(OnChainIdentityTransactionManager::new(
-            ethereum.clone(),
-            config.clone(),
-            database.clone(),
-            identity_manager.clone(),
-        )?);
-
-        let identity_validator = Default::default();
+        let identity_validator = IdentityValidator::new(&config);
 
         let app = Arc::new(Self {
             database,
-            identity_manager,
-            transaction_manager,
+            identity_processor,
+            prover_repository,
             tree_state: OnceLock::new(),
             config,
             identity_validator,
@@ -101,8 +105,7 @@ impl App {
     pub async fn init_tree(self: Arc<Self>) -> anyhow::Result<()> {
         let tree_state = TreeInitializer::new(
             self.database.clone(),
-            self.identity_manager.clone(),
-            self.transaction_manager.clone(),
+            self.identity_processor.clone(),
             self.config.tree.clone(),
         )
         .run()
@@ -132,12 +135,12 @@ impl App {
     /// queue malfunctions.
     #[instrument(level = "debug", skip(self))]
     pub async fn insert_identity(&self, commitment: Hash) -> Result<(), ServerError> {
-        if commitment == self.identity_manager.initial_leaf_value() {
+        if self.identity_validator.is_initial_leaf(&commitment) {
             warn!(?commitment, "Attempt to insert initial leaf.");
             return Err(ServerError::InvalidCommitment);
         }
 
-        if !self.identity_manager.has_insertion_provers().await {
+        if !self.prover_repository.has_insertion_provers().await {
             warn!(
                 ?commitment,
                 "Identity Manager has no insertion provers. Add provers with /addBatchSize \
@@ -146,7 +149,7 @@ impl App {
             return Err(ServerError::NoProversOnIdInsert);
         }
 
-        if !self.identity_validator.identity_is_reduced(commitment) {
+        if !self.identity_validator.is_reduced(commitment) {
             warn!(
                 ?commitment,
                 "The provided commitment is not an element of the field."
@@ -188,7 +191,7 @@ impl App {
         commitment: &Hash,
     ) -> Result<(), ServerError> {
         // Ensure that deletion provers exist
-        if !self.identity_manager.has_deletion_provers().await {
+        if !self.prover_repository.has_deletion_provers().await {
             warn!(
                 ?commitment,
                 "Identity Manager has no deletion provers. Add provers with /addBatchSize request."
@@ -245,7 +248,7 @@ impl App {
         new_commitment: &Hash,
     ) -> Result<(), ServerError> {
         retry_tx!(self.database.pool, tx, {
-            if *new_commitment == self.identity_manager.initial_leaf_value() {
+            if self.identity_validator.is_initial_leaf(new_commitment) {
                 warn!(
                     ?new_commitment,
                     "Attempt to insert initial leaf in recovery."
@@ -253,7 +256,7 @@ impl App {
                 return Err(ServerError::InvalidCommitment);
             }
 
-            if !self.identity_manager.has_insertion_provers().await {
+            if !self.prover_repository.has_insertion_provers().await {
                 warn!(
                     ?new_commitment,
                     "Identity Manager has no provers. Add provers with /addBatchSize request."
@@ -261,7 +264,7 @@ impl App {
                 return Err(ServerError::NoProversOnIdInsert);
             }
 
-            if !self.identity_validator.identity_is_reduced(*new_commitment) {
+            if !self.identity_validator.is_reduced(*new_commitment) {
                 warn!(
                     ?new_commitment,
                     "The new identity commitment is not reduced."
@@ -320,7 +323,7 @@ impl App {
         timeout_seconds: u64,
         prover_type: ProverType,
     ) -> Result<(), ServerError> {
-        self.identity_manager
+        self.prover_repository
             .add_batch_size(&url, batch_size, timeout_seconds, prover_type)
             .await?;
 
@@ -341,7 +344,7 @@ impl App {
         batch_size: usize,
         prover_type: ProverType,
     ) -> Result<(), ServerError> {
-        self.identity_manager
+        self.prover_repository
             .remove_batch_size(batch_size, prover_type)
             .await?;
 
@@ -355,7 +358,7 @@ impl App {
     /// Will return `Err` if something unknown went wrong.
     #[instrument(level = "debug", skip(self))]
     pub async fn list_batch_sizes(&self) -> Result<ListBatchSizesResponse, ServerError> {
-        let batches = self.identity_manager.list_batch_sizes().await?;
+        let batches = self.prover_repository.list_batch_sizes().await?;
 
         Ok(ListBatchSizesResponse::from(batches))
     }
@@ -368,7 +371,7 @@ impl App {
         &self,
         commitment: &Hash,
     ) -> Result<InclusionProofResponse, ServerError> {
-        if commitment == &self.identity_manager.initial_leaf_value() {
+        if self.identity_validator.is_initial_leaf(commitment) {
             return Err(ServerError::InvalidCommitment);
         }
 
@@ -424,7 +427,7 @@ impl App {
             request.signal_hash,
             request.external_nullifier_hash,
             &request.proof,
-            self.identity_manager.tree_depth(),
+            self.config.tree.tree_depth,
         );
 
         match checked {

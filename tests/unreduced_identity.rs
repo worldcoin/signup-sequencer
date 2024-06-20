@@ -2,7 +2,16 @@ mod common;
 use common::prelude::*;
 
 #[tokio::test]
-async fn test_unreduced_identity() -> anyhow::Result<()> {
+async fn test_unreduced_identity_onchain() -> anyhow::Result<()> {
+    test_unreduced_identity(false).await
+}
+
+#[tokio::test]
+async fn test_unreduced_identity_offchain() -> anyhow::Result<()> {
+    test_unreduced_identity(true).await
+}
+
+async fn test_unreduced_identity(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     info!("Starting unavailable prover test");
 
     let ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
@@ -38,9 +47,11 @@ async fn test_unreduced_identity() -> anyhow::Result<()> {
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)
+        .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr, shutdown) =
+        spawn_app(config).await.expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
@@ -93,12 +104,11 @@ async fn test_unreduced_identity() -> anyhow::Result<()> {
         body_str
     );
 
-    shutdown();
+    shutdown.shutdown();
     app_handle.await?;
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }
-    reset_shutdown();
 
     Ok(())
 }

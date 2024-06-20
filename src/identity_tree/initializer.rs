@@ -5,10 +5,9 @@ use semaphore::poseidon_tree::LazyPoseidonTree;
 use tracing::{info, instrument, warn};
 
 use crate::config::TreeConfig;
-use crate::contracts::IdentityManager;
 use crate::database::query::DatabaseQuery;
 use crate::database::Database;
-use crate::identity::transaction_manager::IdentityTransactionManager;
+use crate::identity::processor::IdentityProcessor;
 use crate::identity_tree::{
     CanonicalTreeBuilder, Hash, ProcessedStatus, TreeState, TreeUpdate, TreeVersionReadOps,
     TreeWithNextVersion,
@@ -16,23 +15,20 @@ use crate::identity_tree::{
 use crate::utils::tree_updates::dedup_tree_updates;
 
 pub struct TreeInitializer {
-    pub database:            Arc<Database>,
-    pub identity_manager:    Arc<IdentityManager>,
-    pub transaction_manager: Arc<dyn IdentityTransactionManager>,
-    pub config:              TreeConfig,
+    pub database:           Arc<Database>,
+    pub identity_processor: Arc<dyn IdentityProcessor>,
+    pub config:             TreeConfig,
 }
 
 impl TreeInitializer {
     pub fn new(
         database: Arc<Database>,
-        identity_manager: Arc<IdentityManager>,
-        transaction_manager: Arc<dyn IdentityTransactionManager>,
+        identity_processor: Arc<dyn IdentityProcessor>,
         config: TreeConfig,
     ) -> Self {
         Self {
             database,
-            identity_manager,
-            transaction_manager,
+            identity_processor,
             config,
         }
     }
@@ -41,31 +37,14 @@ impl TreeInitializer {
     /// Attempts to call this method more than once will result in a panic.
     pub async fn run(self) -> anyhow::Result<TreeState> {
         // Await for all pending transactions
-        self.transaction_manager.await_clean_slate().await?;
+        self.identity_processor.await_clean_slate().await?;
 
-        // Prefetch latest root & mark it as mined
-        let root_hash = self.identity_manager.latest_root().await?;
-        let root_hash = root_hash.into();
+        let initial_root_hash =
+            LazyPoseidonTree::new(self.config.tree_depth, self.config.initial_leaf_value).root();
 
-        let initial_root_hash = LazyPoseidonTree::new(
-            self.identity_manager.tree_depth(),
-            self.identity_manager.initial_leaf_value(),
-        )
-        .root();
-
-        // We don't store the initial root in the database, so we have to skip this step
-        // if the contract root hash is equal to initial root hash
-        if root_hash != initial_root_hash {
-            // Note that we don't have a way of queuing a root here for finalization.
-            // so it's going to stay as "processed" until the next root is mined.
-            self.database.mark_root_as_processed_tx(&root_hash).await?;
-            self.database.delete_batches_after_root(&root_hash).await?;
-        } else {
-            // Db is either empty or we're restarting with a new contract/chain
-            // so we should mark everything as pending
-            self.database.mark_all_as_pending().await?;
-            self.database.delete_all_batches().await?;
-        }
+        self.identity_processor
+            .tree_init_correction(&initial_root_hash)
+            .await?;
 
         let timer = Instant::now();
         let mut tree_state = self.restore_or_initialize_tree(initial_root_hash).await?;
@@ -163,9 +142,9 @@ impl TreeInitializer {
         );
 
         let Some(mined_builder) = CanonicalTreeBuilder::restore(
-            self.identity_manager.tree_depth(),
+            self.config.tree_depth,
             self.config.dense_tree_prefix_depth,
-            &self.identity_manager.initial_leaf_value(),
+            &self.config.initial_leaf_value,
             last_mined_index_in_dense,
             &leftover_items,
             self.config.tree_gc_threshold,
@@ -227,7 +206,7 @@ impl TreeInitializer {
 
     #[instrument(skip_all)]
     async fn initialize_tree(&self, mined_items: Vec<TreeUpdate>) -> anyhow::Result<TreeState> {
-        let initial_leaf_value = self.identity_manager.initial_leaf_value();
+        let initial_leaf_value = self.config.initial_leaf_value;
 
         let initial_leaves = if mined_items.is_empty() {
             vec![]
@@ -243,7 +222,7 @@ impl TreeInitializer {
         };
 
         info!("Creating mined tree");
-        let tree_depth = self.identity_manager.tree_depth();
+        let tree_depth = self.config.tree_depth;
         let dense_tree_prefix_depth = self.config.dense_tree_prefix_depth;
         let tree_gc_threshold = self.config.tree_gc_threshold;
         let cache_file = self.config.cache_file.clone();

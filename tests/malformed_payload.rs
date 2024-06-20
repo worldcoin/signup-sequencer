@@ -3,10 +3,19 @@ mod common;
 use common::prelude::*;
 use hyper::StatusCode;
 
+#[tokio::test]
+async fn malformed_payload_onchain() -> anyhow::Result<()> {
+    malformed_payload(false).await
+}
+
+#[tokio::test]
+async fn malformed_payload_offchain() -> anyhow::Result<()> {
+    malformed_payload(true).await
+}
+
 /// Tests that the app rejects payloads which are too large or are not valid
 /// UTF-8 strings
-#[tokio::test]
-async fn malformed_payload() -> anyhow::Result<()> {
+async fn malformed_payload(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     init_tracing_subscriber();
     info!("Starting malformed payload test");
 
@@ -44,9 +53,11 @@ async fn malformed_payload() -> anyhow::Result<()> {
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)
+        .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr, shutdown) =
+        spawn_app(config).await.expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
@@ -79,12 +90,11 @@ async fn malformed_payload() -> anyhow::Result<()> {
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-    shutdown();
+    shutdown.shutdown();
     app_handle.await?;
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }
-    reset_shutdown();
 
     Ok(())
 }

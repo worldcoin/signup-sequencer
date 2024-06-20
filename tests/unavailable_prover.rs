@@ -2,10 +2,19 @@ mod common;
 
 use common::prelude::*;
 
+#[tokio::test]
+async fn unavailable_prover_onchain() -> anyhow::Result<()> {
+    unavailable_prover(false).await
+}
+
+#[tokio::test]
+async fn unavailable_prover_offchain() -> anyhow::Result<()> {
+    unavailable_prover(false).await
+}
+
 /// Tests that the app can keep running even if the prover returns 500s
 /// and that it will eventually succeed if the prover becomes available again.
-#[tokio::test]
-async fn unavailable_prover() -> anyhow::Result<()> {
+async fn unavailable_prover(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     init_tracing_subscriber();
     info!("Starting unavailable prover test");
 
@@ -45,9 +54,11 @@ async fn unavailable_prover() -> anyhow::Result<()> {
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)
+        .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr, shutdown) =
+        spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(batch_size * 2);
     let identities_ref: Vec<Field> = test_identities
@@ -80,12 +91,11 @@ async fn unavailable_prover() -> anyhow::Result<()> {
     test_inclusion_proof(&uri, &client, 1, &ref_tree, &identities_ref[1], false).await;
     test_inclusion_proof(&uri, &client, 2, &ref_tree, &identities_ref[2], false).await;
 
-    shutdown();
+    shutdown.shutdown();
     app_handle.await?;
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }
-    reset_shutdown();
 
     Ok(())
 }

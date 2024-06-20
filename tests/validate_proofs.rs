@@ -3,7 +3,16 @@ mod common;
 use common::prelude::*;
 
 #[tokio::test]
-async fn validate_proofs() -> anyhow::Result<()> {
+async fn validate_proofs_onchain() -> anyhow::Result<()> {
+    validate_proofs(false).await
+}
+
+#[tokio::test]
+async fn validate_proofs_offchain() -> anyhow::Result<()> {
+    validate_proofs(true).await
+}
+
+async fn validate_proofs(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -46,9 +55,11 @@ async fn validate_proofs() -> anyhow::Result<()> {
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)
+        .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr, shutdown) =
+        spawn_app(config).await.expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
     let client = Client::new();
@@ -109,16 +120,18 @@ async fn validate_proofs() -> anyhow::Result<()> {
 
     test_inclusion_proof(&uri, &client, 0, &ref_tree, &TEST_LEAVES[0], false).await;
 
-    test_verify_proof_on_chain(
-        &identity_manager,
-        root,
-        signal_hash,
-        nullifier_hash,
-        external_nullifier_hash,
-        proof,
-    )
-    .await
-    .expect("Proof should verify correctly on chain.");
+    if !offchain_mode_enabled {
+        test_verify_proof_on_chain(
+            &identity_manager,
+            root,
+            signal_hash,
+            nullifier_hash,
+            external_nullifier_hash,
+            proof,
+        )
+        .await
+        .expect("Proof should verify correctly on chain.");
+    }
 
     // INVALID PROOF
 
@@ -136,16 +149,18 @@ async fn validate_proofs() -> anyhow::Result<()> {
     )
     .await;
 
-    test_verify_proof_on_chain(
-        &identity_manager,
-        root,
-        signal_hash,
-        invalid_nullifier_hash,
-        external_nullifier_hash,
-        proof,
-    )
-    .await
-    .expect_err("Proof verified on chain when it shouldn't have.");
+    if !offchain_mode_enabled {
+        test_verify_proof_on_chain(
+            &identity_manager,
+            root,
+            signal_hash,
+            invalid_nullifier_hash,
+            external_nullifier_hash,
+            proof,
+        )
+        .await
+        .expect_err("Proof verified on chain when it shouldn't have.");
+    }
 
     // IDENTITY NOT IN TREE
 
@@ -174,16 +189,18 @@ async fn validate_proofs() -> anyhow::Result<()> {
     )
     .await;
 
-    test_verify_proof_on_chain(
-        &identity_manager,
-        root,
-        signal_hash,
-        new_nullifier_hash,
-        external_nullifier_hash,
-        proof,
-    )
-    .await
-    .expect_err("Proof verified on chain when it shouldn't have.");
+    if !offchain_mode_enabled {
+        test_verify_proof_on_chain(
+            &identity_manager,
+            root,
+            signal_hash,
+            new_nullifier_hash,
+            external_nullifier_hash,
+            proof,
+        )
+        .await
+        .expect_err("Proof verified on chain when it shouldn't have.");
+    }
 
     // UNKNOWN ROOT
 
@@ -201,24 +218,25 @@ async fn validate_proofs() -> anyhow::Result<()> {
     )
     .await;
 
-    test_verify_proof_on_chain(
-        &identity_manager,
-        new_root,
-        signal_hash,
-        new_nullifier_hash,
-        external_nullifier_hash,
-        proof,
-    )
-    .await
-    .expect_err("Proof verified on chain when it shouldn't have.");
+    if !offchain_mode_enabled {
+        test_verify_proof_on_chain(
+            &identity_manager,
+            new_root,
+            signal_hash,
+            new_nullifier_hash,
+            external_nullifier_hash,
+            proof,
+        )
+        .await
+        .expect_err("Proof verified on chain when it shouldn't have.");
+    }
 
     // Shutdown the app properly for the final time
-    shutdown();
+    shutdown.shutdown();
     app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
     }
-    reset_shutdown();
 
     Ok(())
 }

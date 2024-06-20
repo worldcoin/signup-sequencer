@@ -10,7 +10,11 @@ use crate::common::{test_inclusion_status, test_recover_identity};
 const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
-async fn recover_identities() -> anyhow::Result<()> {
+async fn recover_identities_onchain() -> anyhow::Result<()> {
+    recover_identities(false).await
+}
+
+async fn recover_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -63,9 +67,11 @@ async fn recover_identities() -> anyhow::Result<()> {
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(mock_insertion_prover)
         .add_prover(mock_deletion_prover)
+        .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config).await.expect("Failed to spawn app.");
+    let (_, app_handle, local_addr, shutdown) =
+        spawn_app(config).await.expect("Failed to spawn app.");
 
     let test_identities = generate_test_identities(insertion_batch_size * 3);
     let identities_ref: Vec<Field> = test_identities
@@ -173,7 +179,7 @@ async fn recover_identities() -> anyhow::Result<()> {
     }
 
     // Shutdown the app properly for the final time
-    shutdown();
+    shutdown.shutdown();
     app_handle.await.unwrap();
     for (_, prover) in insertion_prover_map.into_iter() {
         prover.stop();
@@ -181,7 +187,6 @@ async fn recover_identities() -> anyhow::Result<()> {
     for (_, prover) in deletion_prover_map.into_iter() {
         prover.stop();
     }
-    reset_shutdown();
 
     Ok(())
 }

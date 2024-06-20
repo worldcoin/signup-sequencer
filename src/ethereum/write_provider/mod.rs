@@ -11,7 +11,7 @@ use self::openzeppelin::OzRelay;
 use self::tx_sitter::TxSitter;
 use super::{ReadProvider, TxError};
 use crate::config::RelayerConfig;
-use crate::identity::transaction_manager::TransactionId;
+use crate::identity::processor::TransactionId;
 
 mod error;
 mod inner;

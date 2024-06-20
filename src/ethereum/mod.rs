@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use anyhow::bail;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::Address;
 pub use read::ReadProvider;
@@ -9,7 +10,7 @@ pub use write::TxError;
 
 use self::write_provider::WriteProvider;
 use crate::config::Config;
-use crate::identity::transaction_manager::TransactionId;
+use crate::identity::processor::TransactionId;
 
 pub mod read;
 pub mod write;
@@ -27,12 +28,20 @@ pub struct Ethereum {
 impl Ethereum {
     #[instrument(name = "Ethereum::new", level = "debug", skip_all)]
     pub async fn new(config: &Config) -> anyhow::Result<Self> {
+        let Some(providers_config) = &config.providers else {
+            bail!("Providers config is required for Ethereum.");
+        };
+
+        let Some(relayer_config) = &config.relayer else {
+            bail!("Relayer config is required for Ethereum.");
+        };
+
         let read_provider =
-            ReadProvider::new(config.providers.primary_network_provider.clone().into()).await?;
+            ReadProvider::new(providers_config.primary_network_provider.clone().into()).await?;
 
         let mut secondary_read_providers = HashMap::new();
 
-        for secondary_url in &config.providers.relayed_network_providers.0 {
+        for secondary_url in &providers_config.relayed_network_providers.0 {
             let secondary_read_provider = ReadProvider::new(secondary_url.clone().into()).await?;
             secondary_read_providers.insert(
                 secondary_read_provider.chain_id.as_u64(),
@@ -40,9 +49,8 @@ impl Ethereum {
             );
         }
 
-        let write_provider: Arc<WriteProvider> = Arc::new(
-            write_provider::WriteProvider::new(read_provider.clone(), &config.relayer).await?,
-        );
+        let write_provider: Arc<WriteProvider> =
+            Arc::new(WriteProvider::new(read_provider.clone(), relayer_config).await?);
 
         Ok(Self {
             read_provider: Arc::new(read_provider),

@@ -58,7 +58,7 @@ async fn immediate_deletion() -> anyhow::Result<()> {
         .add_prover(mock_deletion_prover)
         .build()?;
 
-    let (_, app_handle, local_addr) = spawn_app(config.clone())
+    let (_, app_handle, local_addr, shutdown) = spawn_app(config.clone())
         .await
         .expect("Failed to spawn app.");
 
@@ -133,9 +133,8 @@ async fn immediate_deletion() -> anyhow::Result<()> {
     // Shutdown the app and reset the mock shutdown, allowing us to test the
     // behaviour with saved data.
     info!("Stopping the app for testing purposes");
-    shutdown();
+    shutdown.shutdown();
     app_handle.await.unwrap();
-    reset_shutdown();
 
     Ok(())
 }

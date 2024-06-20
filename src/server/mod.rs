@@ -16,7 +16,7 @@ use tracing::info;
 
 use crate::app::App;
 use crate::config::ServerConfig;
-use crate::shutdown::await_shutdown;
+use crate::shutdown::Shutdown;
 
 mod custom_middleware;
 pub mod data;
@@ -148,11 +148,15 @@ async fn metrics() -> Result<Response<Body>, Error> {
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
 /// a path beyond `/`, or cannot be cast into an IP address. Also returns an
 /// `Err` if the server cannot bind to the given address.
-pub async fn run(app: Arc<App>, config: ServerConfig) -> anyhow::Result<()> {
+pub async fn run(
+    app: Arc<App>,
+    config: ServerConfig,
+    shutdown: Arc<Shutdown>,
+) -> anyhow::Result<()> {
     info!("Will listen on {}", config.address);
     let listener = TcpListener::bind(config.address)?;
 
-    bind_from_listener(app, config.serve_timeout, listener).await?;
+    bind_from_listener(app, config.serve_timeout, listener, shutdown).await?;
 
     Ok(())
 }
@@ -165,6 +169,7 @@ pub async fn bind_from_listener(
     app: Arc<App>,
     serve_timeout: Duration,
     listener: TcpListener,
+    shutdown: Arc<Shutdown>,
 ) -> anyhow::Result<()> {
     let router = Router::new()
         // Operate on identity commitments
@@ -197,7 +202,7 @@ pub async fn bind_from_listener(
 
     let server = axum::Server::from_tcp(listener)?
         .serve(router.into_make_service())
-        .with_graceful_shutdown(await_shutdown());
+        .with_graceful_shutdown(shutdown.await_shutdown());
 
     server.await?;
 

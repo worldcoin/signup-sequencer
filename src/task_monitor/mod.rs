@@ -10,6 +10,7 @@ use tracing::{info, instrument, warn};
 use crate::app::App;
 use crate::database::query::DatabaseQuery as _;
 use crate::database::Database;
+use crate::shutdown::Shutdown;
 
 pub mod tasks;
 
@@ -76,13 +77,15 @@ pub struct TaskMonitor {
     /// await the join handles - which requires ownership of the handle and by
     /// extension the instance.
     instance: RwLock<Option<RunningInstance>>,
+    shutdown: Arc<Shutdown>,
     app:      Arc<App>,
 }
 
 impl TaskMonitor {
-    pub fn new(app: Arc<App>) -> Self {
+    pub fn new(app: Arc<App>, shutdown: Arc<Shutdown>) -> Self {
         Self {
             instance: RwLock::new(None),
+            shutdown,
             app,
         }
     }
@@ -118,6 +121,7 @@ impl TaskMonitor {
             tree_init,
             shutdown_sender.clone(),
             TREE_INIT_BACKOFF,
+            self.shutdown.clone(),
         );
 
         handles.push(tree_init_handle);
@@ -129,6 +133,7 @@ impl TaskMonitor {
             finalize_identities,
             shutdown_sender.clone(),
             FINALIZE_IDENTITIES_BACKOFF,
+            self.shutdown.clone(),
         );
         handles.push(finalize_identities_handle);
 
@@ -139,6 +144,7 @@ impl TaskMonitor {
             queue_monitor,
             shutdown_sender.clone(),
             QUEUE_MONITOR_BACKOFF,
+            self.shutdown.clone(),
         );
         handles.push(queue_monitor_handle);
 
@@ -161,6 +167,7 @@ impl TaskMonitor {
             create_batches,
             shutdown_sender.clone(),
             PROCESS_IDENTITIES_BACKOFF,
+            self.shutdown.clone(),
         );
         handles.push(create_batches_handle);
 
@@ -181,6 +188,7 @@ impl TaskMonitor {
             process_identities,
             shutdown_sender.clone(),
             PROCESS_IDENTITIES_BACKOFF,
+            self.shutdown.clone(),
         );
         handles.push(process_identities_handle);
 
@@ -192,6 +200,7 @@ impl TaskMonitor {
             monitor_txs,
             shutdown_sender.clone(),
             PROCESS_IDENTITIES_BACKOFF,
+            self.shutdown.clone(),
         );
         handles.push(monitor_txs_handle);
 
@@ -213,6 +222,7 @@ impl TaskMonitor {
             insert_identities,
             shutdown_sender.clone(),
             INSERT_IDENTITIES_BACKOFF,
+            self.shutdown.clone(),
         );
         handles.push(insert_identities_handle);
 
@@ -231,6 +241,7 @@ impl TaskMonitor {
             delete_identities,
             shutdown_sender.clone(),
             DELETE_IDENTITIES_BACKOFF,
+            self.shutdown.clone(),
         );
         handles.push(delete_identities_handle);
 

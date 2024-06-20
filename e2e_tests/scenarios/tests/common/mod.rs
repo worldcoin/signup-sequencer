@@ -2,10 +2,23 @@
 // test crates - so some code may not be used in some cases
 #![allow(dead_code, clippy::too_many_arguments, unused_imports)]
 
+use std::time::Duration;
+
+use anyhow::anyhow;
 use ethers::types::U256;
+use hyper::client::HttpConnector;
+use hyper::Client;
+use serde_json::Value;
+use signup_sequencer::identity_tree::ProcessedStatus::Mined;
+use signup_sequencer::identity_tree::{Hash, Status};
+use signup_sequencer::server::data::InclusionProofResponse;
+use tokio::time::sleep;
 use tracing::error;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::time::Uptime;
+
+use crate::common::api::{delete_identity, inclusion_proof, inclusion_proof_raw, insert_identity};
+use crate::common::prelude::StatusCode;
 
 mod api;
 pub mod docker_compose;
@@ -25,7 +38,11 @@ pub mod prelude {
     pub use tracing::{error, info, instrument};
     pub use tracing_subscriber::fmt::format;
 
-    pub use super::{generate_test_commitments, init_tracing_subscriber};
+    pub use super::{
+        bad_request_inclusion_proof_with_retries, delete_identity_with_retries,
+        generate_test_commitments, init_tracing_subscriber, insert_identity_with_retries,
+        mined_inclusion_proof_with_retries,
+    };
     pub use crate::common::api::{
         delete_identity, inclusion_proof, inclusion_proof_raw, insert_identity,
     };
@@ -67,17 +84,106 @@ pub fn init_tracing_subscriber() {
 /// would be used in reality. This is both to make them easier to generate and
 /// to ensure that we do not run afoul of the element numeric limit for the
 /// snark scalar field.
-pub fn generate_test_commitments(count: usize) -> Vec<String> {
+pub fn generate_test_commitments(count: usize) -> Vec<Hash> {
     let mut commitments = vec![];
 
     for _ in 0..count {
         // Generate the identities using the just the last 64 bits (of 256) has so we're
         // guaranteed to be less than SNARK_SCALAR_FIELD.
-        let bytes: [u8; 32] = U256::from(rand::random::<u64>()).into();
-        let identity_string: String = hex::encode(bytes);
+        let commitment = Hash::from(rand::random::<u64>());
 
-        commitments.push(identity_string);
+        commitments.push(commitment);
     }
 
     commitments
+}
+
+pub async fn delete_identity_with_retries(
+    client: &Client<HttpConnector>,
+    uri: &String,
+    commitment: &Hash,
+    retries_count: usize,
+    retries_interval: f32,
+) -> anyhow::Result<()> {
+    let mut last_err = None;
+
+    for _ in 0..retries_count {
+        match delete_identity(client, uri, commitment).await {
+            Ok(_) => return Ok(()),
+            Err(err) => last_err = Some(err),
+        }
+        sleep(Duration::from_secs_f32(retries_interval)).await;
+    }
+
+    Err(last_err.unwrap_or_else(|| anyhow!("All retries failed without error")))
+}
+
+pub async fn insert_identity_with_retries(
+    client: &Client<HttpConnector>,
+    uri: &String,
+    commitment: &Hash,
+    retries_count: usize,
+    retries_interval: f32,
+) -> anyhow::Result<()> {
+    let mut last_err = None;
+    for _ in 0..retries_count {
+        match insert_identity(&client, &uri, &commitment).await {
+            Ok(_) => return Ok(()),
+            Err(err) => last_err = Some(err),
+        }
+        _ = sleep(Duration::from_secs_f32(retries_interval)).await;
+    }
+
+    Err(last_err.unwrap_or_else(|| anyhow!("All retries failed without error")))
+}
+
+pub async fn mined_inclusion_proof_with_retries(
+    client: &Client<HttpConnector>,
+    uri: &String,
+    commitment: &Hash,
+    retries_count: usize,
+    retries_interval: f32,
+) -> anyhow::Result<InclusionProofResponse> {
+    let mut last_res = Err(anyhow!("No calls at all"));
+    for _i in 0..retries_count {
+        last_res = inclusion_proof(&client, &uri, &commitment).await;
+
+        if let Ok(ref inclusion_proof_json) = last_res {
+            if inclusion_proof_json.0.status == Status::Processed(Mined) {
+                break;
+            }
+        };
+
+        _ = sleep(Duration::from_secs_f32(retries_interval)).await;
+    }
+
+    let inclusion_proof_json = last_res?;
+
+    assert_eq!(inclusion_proof_json.0.status, Status::Processed(Mined));
+
+    Ok(inclusion_proof_json)
+}
+
+pub async fn bad_request_inclusion_proof_with_retries(
+    client: &Client<HttpConnector>,
+    uri: &String,
+    commitment: &Hash,
+    retries_count: usize,
+    retries_interval: f32,
+) -> anyhow::Result<()> {
+    let mut last_err = None;
+
+    for _ in 0..retries_count {
+        match inclusion_proof_raw(client, uri, commitment).await {
+            Ok(response) if response.status_code == StatusCode::BAD_REQUEST => return Ok(()),
+            Err(err) => {
+                error!("error: {}", err);
+                last_err = Some(err);
+            }
+            _ => {}
+        }
+        sleep(Duration::from_secs_f32(retries_interval)).await;
+    }
+
+    Err(last_err.unwrap_or_else(|| anyhow!("All retries failed to return BAD_REQUEST")))
 }

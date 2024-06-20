@@ -59,7 +59,7 @@ pub mod prelude {
         DEFAULT_TREE_DENSE_PREFIX_DEPTH, DEFAULT_TREE_DEPTH,
     };
     pub use super::{
-        abi as ContractAbi, generate_reference_proof_json, generate_test_identities,
+        abi as ContractAbi, generate_reference_proof, generate_test_identities,
         init_tracing_subscriber, spawn_app, spawn_deps, spawn_mock_deletion_prover,
         spawn_mock_insertion_prover, test_inclusion_proof, test_insert_identity, test_verify_proof,
         test_verify_proof_on_chain,
@@ -76,7 +76,13 @@ use std::sync::Arc;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use hyper::StatusCode;
-use signup_sequencer::identity_tree::{Status, TreeState, TreeVersionReadOps};
+use semaphore::poseidon_tree::Proof;
+use signup_sequencer::identity_tree::ProcessedStatus::{Mined, Pending};
+use signup_sequencer::identity_tree::{InclusionProof, Status, TreeState, TreeVersionReadOps};
+use signup_sequencer::server::data::{
+    AddBatchSizeRequest, DeletionRequest, InclusionProofRequest, InclusionProofResponse,
+    InsertCommitmentRequest, RecoveryRequest, RemoveBatchSizeRequest, VerifySemaphoreProofRequest,
+};
 use signup_sequencer::task_monitor::TaskMonitor;
 use testcontainers::clients::Cli;
 use tracing::trace;
@@ -269,28 +275,28 @@ pub async fn test_inclusion_proof(
             .expect("Failed to convert response body to bytes");
         let result = String::from_utf8(bytes.into_iter().collect())
             .expect("Could not parse response bytes to utf-8");
-        let result_json = serde_json::from_str::<serde_json::Value>(&result)
+        let result = serde_json::from_str::<InclusionProofResponse>(&result)
             .expect("Failed to parse response as json");
-        let status = result_json["status"]
-            .as_str()
-            .expect("Failed to get status");
 
-        if status == "pending" {
-            assert_eq!(
-                result_json,
-                generate_reference_proof_json(ref_tree, leaf_index, "pending")
-            );
-            assert_eq!(response.status(), StatusCode::ACCEPTED);
-            info!("Got pending, waiting 5 seconds, iteration {}", i);
-            tokio::time::sleep(Duration::from_secs(5)).await;
-        } else if status == "mined" {
-            // We don't differentiate between these 2 states in tests
-            let proof_json = generate_reference_proof_json(ref_tree, leaf_index, status);
-            assert_eq!(result_json, proof_json);
+        match result.0.status {
+            Status::Processed(Pending) => {
+                assert_eq!(
+                    result,
+                    generate_reference_proof(ref_tree, leaf_index, Status::Processed(Pending))
+                );
+                assert_eq!(response.status(), StatusCode::ACCEPTED);
+                info!("Got pending, waiting 5 seconds, iteration {}", i);
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+            Status::Processed(Mined) => {
+                // We don't differentiate between these 2 states in tests
+                let proof_json =
+                    generate_reference_proof(ref_tree, leaf_index, Status::Processed(Mined));
+                assert_eq!(result, proof_json);
 
-            return;
-        } else {
-            panic!("Unexpected status: {}", status);
+                return;
+            }
+            _ => panic!("Unexpected status: {:?}", result.0.status),
         }
     }
 
@@ -331,18 +337,12 @@ pub async fn test_inclusion_status(
         result: {:?}",
         result
     );
-    let result_json = serde_json::from_str::<serde_json::Value>(&result)
+    let result = serde_json::from_str::<InclusionProofResponse>(&result)
         .expect("Failed to parse response as json");
-    let status = result_json["status"]
-        .as_str()
-        .expect("Failed to get status");
 
     let expected_status = expected_status.into();
 
-    assert_eq!(
-        expected_status,
-        Status::from_str(status).expect("Could not convert str to Status")
-    );
+    assert_eq!(expected_status, result.0.status,);
 }
 
 #[instrument(skip_all)]
@@ -441,17 +441,12 @@ pub async fn test_add_batch_size(
     prover_type: ProverType,
     client: &Client<HttpConnector>,
 ) -> anyhow::Result<()> {
-    let prover_url_string: String = prover_url.into();
-
-    let body = Body::from(
-        json!({
-            "url": prover_url_string,
-            "batchSize": batch_size,
-            "timeoutSeconds": 3,
-            "proverType": prover_type
-        })
-        .to_string(),
-    );
+    let body = Body::from(serde_json::to_string(&AddBatchSizeRequest {
+        url: prover_url.into(),
+        batch_size: batch_size as usize,
+        timeout_seconds: 3,
+        prover_type,
+    })?);
     let request = Request::builder()
         .method("POST")
         .uri(uri.into() + "/addBatchSize")
@@ -475,8 +470,10 @@ pub async fn test_remove_batch_size(
     prover_type: ProverType,
     expect_failure: bool,
 ) -> anyhow::Result<()> {
-    let body =
-        Body::from(json!({ "batchSize": batch_size, "proverType": prover_type }).to_string());
+    let body = Body::from(serde_json::to_string(&RemoveBatchSizeRequest {
+        batch_size: batch_size as usize,
+        prover_type,
+    })?);
     let request = Request::builder()
         .method("POST")
         .uri(uri.into() + "/removeBatchSize")
@@ -537,41 +534,41 @@ pub async fn test_insert_identity(
 
 fn construct_inclusion_proof_body(identity_commitment: &Hash) -> Body {
     Body::from(
-        json!({
-            "identityCommitment": identity_commitment,
+        serde_json::to_string(&InclusionProofRequest {
+            identity_commitment: *identity_commitment,
         })
-        .to_string(),
+        .expect("Cannot serialize InclusionProofRequest"),
     )
 }
 
 fn construct_delete_identity_body(identity_commitment: &Hash) -> Body {
     Body::from(
-        json!({
-            "identityCommitment": identity_commitment,
+        serde_json::to_string(&DeletionRequest {
+            identity_commitment: *identity_commitment,
         })
-        .to_string(),
+        .expect("Cannot serialize DeletionRequest"),
     )
 }
 
 pub fn construct_recover_identity_body(
-    prev_identity_commitment: &Hash,
+    previous_identity_commitment: &Hash,
     new_identity_commitment: &Hash,
 ) -> Body {
     Body::from(
-        json!({
-            "previousIdentityCommitment":prev_identity_commitment ,
-            "newIdentityCommitment": new_identity_commitment,
+        serde_json::to_string(&RecoveryRequest {
+            previous_identity_commitment: *previous_identity_commitment,
+            new_identity_commitment:      *new_identity_commitment,
         })
-        .to_string(),
+        .expect("Cannot serialize RecoveryRequest"),
     )
 }
 
 pub fn construct_insert_identity_body(identity_commitment: &Field) -> Body {
     Body::from(
-        json!({
-            "identityCommitment": identity_commitment,
+        serde_json::to_string(&InsertCommitmentRequest {
+            identity_commitment: *identity_commitment,
         })
-        .to_string(),
+        .expect("Cannot serialize InsertCommitmentRequest"),
     )
 }
 
@@ -583,14 +580,14 @@ fn construct_verify_proof_body(
     proof: protocol::Proof,
 ) -> Body {
     Body::from(
-        json!({
-            "root": root,
-            "signalHash": signal_hash,
-            "nullifierHash": nullifer_hash,
-            "externalNullifierHash": external_nullifier_hash,
-            "proof": proof,
+        serde_json::to_string(&VerifySemaphoreProofRequest {
+            root,
+            signal_hash,
+            nullifier_hash: nullifer_hash,
+            external_nullifier_hash,
+            proof,
         })
-        .to_string(),
+        .expect("Cannot serialize VerifySemaphoreProofRequest"),
     )
 }
 
@@ -800,27 +797,16 @@ pub fn init_tracing_subscriber() {
     }
 }
 
-pub fn generate_reference_proof_json(
+pub fn generate_reference_proof(
     ref_tree: &PoseidonTree,
     leaf_idx: usize,
-    status: &str,
-) -> serde_json::Value {
-    let proof = ref_tree
-        .proof(leaf_idx)
-        .unwrap()
-        .0
-        .iter()
-        .map(|branch| match branch {
-            Branch::Left(hash) => json!({ "Left": hash }),
-            Branch::Right(hash) => json!({ "Right": hash }),
-        })
-        .collect::<Vec<_>>();
-    let root = ref_tree.root();
-    json!({
-        "status": status,
-        "root": root,
-        "proof": proof,
-        "message": serde_json::Value::Null
+    status: Status,
+) -> InclusionProofResponse {
+    InclusionProofResponse(InclusionProof {
+        status,
+        root: Some(ref_tree.root()),
+        proof: ref_tree.proof(leaf_idx),
+        message: None,
     })
 }
 

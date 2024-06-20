@@ -168,13 +168,11 @@ pub async fn setup(cwd: &str) -> anyhow::Result<DockerComposeGuard> {
 }
 
 fn generate_project_name() -> String {
-    let charset: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
-    let mut rng = rand::thread_rng();
-    (0..8)
-        .map(|_| {
-            let idx = rng.gen_range(0..charset.len());
-            charset[idx] as char
-        })
+    thread_rng()
+        .sample_iter(Alphanumeric)
+        .filter(|c| c.is_ascii_lowercase())
+        .take(8)
+        .map(char::from)
         .collect()
 }
 

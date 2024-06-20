@@ -8,7 +8,7 @@ use crate::identity_tree::{
 };
 use crate::prover::{ProverConfig, ProverType};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(transparent)]
 pub struct InclusionProofResponse(pub InclusionProof);
 

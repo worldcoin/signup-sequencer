@@ -4,6 +4,10 @@ use anyhow::Error;
 use hyper::client::HttpConnector;
 use hyper::{Body, Client, Request};
 use serde_json::{json, Value};
+use signup_sequencer::identity_tree::Hash;
+use signup_sequencer::server::data::{
+    DeletionRequest, InclusionProofRequest, InclusionProofResponse, InsertCommitmentRequest,
+};
 use tracing::debug;
 
 use crate::common::prelude::StatusCode;
@@ -16,15 +20,12 @@ pub struct RawResponse {
 pub async fn insert_identity(
     client: &Client<HttpConnector>,
     uri: &String,
-    commitment: &String,
+    commitment: &Hash,
 ) -> anyhow::Result<()> {
     debug!("Calling /insertIdentity");
-    let body = Body::from(
-        json!({
-            "identityCommitment": format!("0x{}", commitment),
-        })
-        .to_string(),
-    );
+    let body = Body::from(serde_json::to_string(&InsertCommitmentRequest {
+        identity_commitment: *commitment,
+    })?);
 
     let req = Request::builder()
         .method("POST")
@@ -55,15 +56,12 @@ pub async fn insert_identity(
 pub async fn delete_identity(
     client: &Client<HttpConnector>,
     uri: &String,
-    commitment: &String,
+    commitment: &Hash,
 ) -> anyhow::Result<()> {
     debug!("Calling /deleteIdentity");
-    let body = Body::from(
-        json!({
-            "identityCommitment": format!("0x{}", commitment),
-        })
-        .to_string(),
-    );
+    let body = Body::from(serde_json::to_string(&DeletionRequest {
+        identity_commitment: *commitment,
+    })?);
 
     let req = Request::builder()
         .method("POST")
@@ -94,15 +92,12 @@ pub async fn delete_identity(
 pub async fn inclusion_proof_raw(
     client: &Client<HttpConnector>,
     uri: &String,
-    commitment: &String,
+    commitment: &Hash,
 ) -> anyhow::Result<RawResponse> {
     debug!("Calling /inclusionProof");
-    let body = Body::from(
-        json!({
-            "identityCommitment": format!("0x{}", commitment),
-        })
-        .to_string(),
-    );
+    let body = Body::from(serde_json::to_string(&InclusionProofRequest {
+        identity_commitment: *commitment,
+    })?);
 
     let req = Request::builder()
         .method("POST")
@@ -130,12 +125,12 @@ pub async fn inclusion_proof_raw(
 pub async fn inclusion_proof(
     client: &Client<HttpConnector>,
     uri: &String,
-    commitment: &String,
-) -> anyhow::Result<Value> {
+    commitment: &Hash,
+) -> anyhow::Result<InclusionProofResponse> {
     let result = inclusion_proof_raw(client, uri, commitment).await?;
 
-    let result_json =
-        serde_json::from_str::<Value>(&result.body).expect("Failed to parse response as json");
+    let result_json = serde_json::from_str::<InclusionProofResponse>(&result.body)
+        .expect("Failed to parse response as json");
 
     Ok(result_json)
 }

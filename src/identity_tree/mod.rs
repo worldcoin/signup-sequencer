@@ -51,7 +51,7 @@ pub struct RootItem {
     pub mined_valid_as_of:   Option<chrono::DateTime<Utc>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProof {
     pub status:  Status,

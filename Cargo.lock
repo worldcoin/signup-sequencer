@@ -1988,6 +1988,7 @@ dependencies = [
  "rand",
  "retry",
  "serde_json",
+ "signup-sequencer",
  "tokio",
  "tracing",
  "tracing-futures",

@@ -83,6 +83,7 @@ zeroize = "1.6.0"
 [dev-dependencies]
 dotenv = "0.15.0"
 hex = "0.4.3"
+lazy_static = "1.4.0"
 maplit = "1.0.2"
 micro-oz = { path = "crates/micro-oz" }
 postgres-docker-utils = { path = "crates/postgres-docker-utils" }

@@ -5592,6 +5592,7 @@ dependencies = [
  "humantime-serde",
  "hyper",
  "indoc",
+ "lazy_static",
  "maplit",
  "micro-oz",
  "once_cell",

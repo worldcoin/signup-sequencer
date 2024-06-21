@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use clap::Parser;
 use signup_sequencer::app::App;
-use signup_sequencer::config::{Config, ServiceConfig};
+use signup_sequencer::config::{load_config, ServiceConfig};
 use signup_sequencer::server;
 use signup_sequencer::shutdown::{watch_shutdown_signals, Shutdown};
 use signup_sequencer::task_monitor::TaskMonitor;
@@ -34,7 +34,7 @@ async fn main() -> eyre::Result<()> {
 }
 
 async fn sequencer_app(args: Args) -> anyhow::Result<()> {
-    let config = load_config(&args)?;
+    let config = load_config(args.config.as_deref())?;
 
     let _tracing_shutdown_handle = init_telemetry(&config.service)?;
 
@@ -65,24 +65,6 @@ async fn sequencer_app(args: Args) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn load_config(args: &Args) -> anyhow::Result<Config> {
-    let mut settings = config::Config::builder();
-
-    if let Some(ref path) = args.config {
-        settings = settings.add_source(config::File::from(path.clone()).required(true));
-    }
-
-    let settings = settings
-        .add_source(
-            config::Environment::with_prefix("SEQ")
-                .separator("__")
-                .try_parsing(true),
-        )
-        .build()?;
-
-    Ok(settings.try_deserialize::<Config>()?)
-}
-
 fn init_telemetry(service: &ServiceConfig) -> anyhow::Result<TracingShutdownHandle> {
     if let Some(ref datadog) = service.datadog {
         Ok(DatadogBattery::init(
@@ -93,18 +75,5 @@ fn init_telemetry(service: &ServiceConfig) -> anyhow::Result<TracingShutdownHand
         ))
     } else {
         Ok(StdoutBattery::init())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_example_env() {
-        dotenv::from_path("example.env").ok();
-        let args = Args { config: None };
-        let config = load_config(&args).unwrap();
-        println!("{:#?}", config);
     }
 }

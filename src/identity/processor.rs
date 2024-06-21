@@ -20,7 +20,7 @@ use crate::database::query::DatabaseQuery;
 use crate::database::types::{BatchEntry, BatchType};
 use crate::database::{Database, Error};
 use crate::ethereum::{Ethereum, ReadProvider};
-use crate::identity_tree::{Canonical, Hash, TreeVersion, TreeWithNextVersion};
+use crate::identity_tree::Hash;
 use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;
 use crate::prover::Prover;
@@ -33,9 +33,7 @@ pub type TransactionId = String;
 pub trait IdentityProcessor: Send + Sync + 'static {
     async fn commit_identities(&self, batch: &BatchEntry) -> anyhow::Result<TransactionId>;
 
-    async fn finalize_identities(
-        &self,
-    ) -> anyhow::Result<()>;
+    async fn finalize_identities(&self) -> anyhow::Result<()>;
 
     async fn await_clean_slate(&self) -> anyhow::Result<()>;
 
@@ -88,16 +86,11 @@ impl IdentityProcessor for OnChainIdentityProcessor {
         }
     }
 
-    async fn finalize_identities(
-        &self,
-    ) -> anyhow::Result<()> {
+    async fn finalize_identities(&self) -> anyhow::Result<()> {
         let mainnet_logs = self.fetch_mainnet_logs().await?;
 
-        self.finalize_mainnet_roots(
-            &mainnet_logs,
-            self.config.app.max_epoch_duration,
-        )
-        .await?;
+        self.finalize_mainnet_roots(&mainnet_logs, self.config.app.max_epoch_duration)
+            .await?;
 
         let mut roots = Self::extract_roots_from_mainnet_logs(mainnet_logs);
         roots.extend(self.fetch_secondary_logs().await?);
@@ -553,9 +546,7 @@ impl IdentityProcessor for OffChainIdentityProcessor {
         Ok(batch.id.to_string())
     }
 
-    async fn finalize_identities(
-        &self,
-    ) -> anyhow::Result<()> {
+    async fn finalize_identities(&self) -> anyhow::Result<()> {
         let batches = {
             let mut committed_batches = self.committed_batches.lock().unwrap();
             let copied = committed_batches.clone();

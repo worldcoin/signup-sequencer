@@ -95,6 +95,7 @@ async fn unavailable_prover(offchain_mode_enabled: bool) -> anyhow::Result<()> {
         &ref_tree,
         &identities_ref[0],
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -105,6 +106,7 @@ async fn unavailable_prover(offchain_mode_enabled: bool) -> anyhow::Result<()> {
         &ref_tree,
         &identities_ref[1],
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -115,6 +117,7 @@ async fn unavailable_prover(offchain_mode_enabled: bool) -> anyhow::Result<()> {
         &ref_tree,
         &identities_ref[2],
         false,
+        offchain_mode_enabled,
     )
     .await;
 

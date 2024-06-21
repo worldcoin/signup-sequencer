@@ -126,6 +126,7 @@ async fn validate_proofs(offchain_mode_enabled: bool) -> anyhow::Result<()> {
         &ref_tree,
         &TEST_LEAVES[0],
         false,
+        offchain_mode_enabled,
     )
     .await;
 

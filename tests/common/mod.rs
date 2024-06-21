@@ -77,8 +77,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use hyper::StatusCode;
 use semaphore::poseidon_tree::Proof;
-use signup_sequencer::identity_tree::ProcessedStatus::{Mined, Pending};
-use signup_sequencer::identity_tree::{InclusionProof, Status, TreeState, TreeVersionReadOps};
+use signup_sequencer::identity_tree::{InclusionProof, TreeState, TreeVersionReadOps};
 use signup_sequencer::server::data::{
     AddBatchSizeRequest, DeletionRequest, InclusionProofRequest, InclusionProofResponse,
     InsertCommitmentRequest, RecoveryRequest, RemoveBatchSizeRequest, VerifySemaphoreProofRequest,
@@ -249,6 +248,7 @@ pub async fn test_inclusion_proof(
     ref_tree: &PoseidonTree,
     leaf: &Hash,
     expect_failure: bool,
+    offchain_mode_enabled: bool,
 ) {
     for i in 0..NUM_ATTEMPTS_FOR_INCLUSION_PROOF {
         let body = construct_inclusion_proof_body(leaf);
@@ -280,26 +280,37 @@ pub async fn test_inclusion_proof(
         let result = serde_json::from_str::<InclusionProofResponse>(&result)
             .expect("Failed to parse response as json");
 
-        let root: U256 = result.root.expect("Failed to parse root.").into();
-        let res = mock_chain
-            .identity_manager
-            .method::<U256, RootInfo>("queryRoot", root)
-            .expect("Failed to create method queryRoot on mocked chain.")
-            .call()
-            .await
-            .expect("Failed to call method queryRoot on mocked chain.");
+        if let Some(root) = result.root {
+            if offchain_mode_enabled {
+                // For offchain mode returning root in inclusion proof response means the proof
+                // is valid.
+                let proof_json = generate_reference_proof(ref_tree, leaf_index);
+                assert_eq!(result, proof_json);
 
-        if res.root != U256::zero() {
-            let proof_json = generate_reference_proof(ref_tree, leaf_index);
-            assert_eq!(result, proof_json);
+                return;
+            }
+            let root: U256 = root.into();
 
-            return;
-        } else {
-            assert_eq!(result, generate_reference_proof(ref_tree, leaf_index));
-            assert_eq!(response.status(), StatusCode::ACCEPTED);
-            info!("Got pending, waiting 5 seconds, iteration {}", i);
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            let res = mock_chain
+                .identity_manager
+                .method::<U256, RootInfo>("queryRoot", root)
+                .expect("Failed to create method queryRoot on mocked chain.")
+                .call()
+                .await
+                .expect("Failed to call method queryRoot on mocked chain.");
+
+            if res.root != U256::zero() {
+                let proof_json = generate_reference_proof(ref_tree, leaf_index);
+                assert_eq!(result, proof_json);
+
+                return;
+            }
         }
+
+        assert_eq!(result, generate_reference_proof(ref_tree, leaf_index));
+        assert_eq!(response.status(), StatusCode::OK);
+        info!("Got pending, waiting 5 seconds, iteration {}", i);
+        tokio::time::sleep(Duration::from_secs(5)).await;
     }
 
     panic!(
@@ -315,6 +326,7 @@ pub async fn test_inclusion_proof_mined(
     client: &Client<HttpConnector>,
     leaf: &Hash,
     expect_failure: bool,
+    offchain_mode_enabled: bool,
 ) {
     for i in 0..NUM_ATTEMPTS_FOR_INCLUSION_PROOF {
         let body = construct_inclusion_proof_body(leaf);
@@ -343,26 +355,32 @@ pub async fn test_inclusion_proof_mined(
             .expect("Failed to convert response body to bytes");
         let result = String::from_utf8(bytes.into_iter().collect())
             .expect("Could not parse response bytes to utf-8");
-        let result_json = serde_json::from_str::<serde_json::Value>(&result)
+        let result = serde_json::from_str::<InclusionProofResponse>(&result)
             .expect("Failed to parse response as json");
 
-        let root = result_json["root"].as_str().expect("Failed to get root");
+        if let Some(root) = result.root {
+            if offchain_mode_enabled {
+                // For offchain mode returning root in inclusion proof response means the proof
+                // is valid.
+                return;
+            }
+            let root: U256 = root.into();
 
-        let root = U256::from_str(root).expect("Failed to parse root.");
-        let res = mock_chain
-            .identity_manager
-            .method::<U256, RootInfo>("queryRoot", root)
-            .expect("Failed to create method queryRoot on mocked chain.")
-            .call()
-            .await
-            .expect("Failed to call method queryRoot on mocked chain.");
+            let res = mock_chain
+                .identity_manager
+                .method::<U256, RootInfo>("queryRoot", root)
+                .expect("Failed to create method queryRoot on mocked chain.")
+                .call()
+                .await
+                .expect("Failed to call method queryRoot on mocked chain.");
 
-        if res.root != U256::zero() {
-            return;
-        } else {
-            info!("Got pending, waiting 5 seconds, iteration {}", i);
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            if res.root != U256::zero() {
+                return;
+            }
         }
+
+        info!("Got pending, waiting 5 seconds, iteration {}", i);
+        tokio::time::sleep(Duration::from_secs(5)).await;
     }
 
     panic!(

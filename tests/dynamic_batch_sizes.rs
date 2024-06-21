@@ -95,6 +95,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -106,6 +107,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[1], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -117,6 +119,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[2], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
 
@@ -184,6 +187,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[3], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -195,6 +199,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[4], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
 
@@ -224,6 +229,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[5], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
 
@@ -253,6 +259,7 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[6], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
 

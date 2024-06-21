@@ -95,6 +95,7 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
             &Hash::from_str_radix(&test_identities[i], 16)
                 .expect("Failed to parse Hash from test leaf"),
             false,
+            offchain_mode_enabled,
         )
         .await;
     }
@@ -117,6 +118,7 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
             &Hash::from_str_radix(&test_identities[i], 16)
                 .expect("Failed to parse Hash from test leaf"),
             true,
+            offchain_mode_enabled,
         )
         .await;
     }
@@ -149,6 +151,7 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
             &Hash::from_str_radix(&test_identities[i], 16)
                 .expect("Failed to parse Hash from test leaf"),
             true,
+            offchain_mode_enabled,
         )
         .await;
     }
@@ -165,6 +168,7 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
             &Hash::from_str_radix(&test_identities[i], 16)
                 .expect("Failed to parse Hash from test leaf"),
             false,
+            offchain_mode_enabled,
         )
         .await;
     }

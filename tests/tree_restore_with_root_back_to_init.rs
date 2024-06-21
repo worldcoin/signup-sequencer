@@ -81,6 +81,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -92,6 +93,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         &Hash::from_str_radix(&test_identities[1], 16)
             .expect("Failed to parse Hash from test leaf 1"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -103,6 +105,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         &Hash::from_str_radix(&test_identities[2], 16)
             .expect("Failed to parse Hash from test leaf 2"),
         false,
+        offchain_mode_enabled,
     )
     .await;
 
@@ -170,6 +173,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -181,6 +185,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         &Hash::from_str_radix(&test_identities[1], 16)
             .expect("Failed to parse Hash from test leaf 1"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -192,6 +197,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         &Hash::from_str_radix(&test_identities[2], 16)
             .expect("Failed to parse Hash from test leaf 2"),
         false,
+        offchain_mode_enabled,
     )
     .await;
 

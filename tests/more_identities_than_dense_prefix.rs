@@ -97,6 +97,7 @@ async fn more_identities_than_dense_prefix(offchain_mode_enabled: bool) -> anyho
         &ref_tree,
         &identities_ref[0],
         false,
+        offchain_mode_enabled,
     )
     .await;
 
@@ -109,6 +110,7 @@ async fn more_identities_than_dense_prefix(offchain_mode_enabled: bool) -> anyho
         &ref_tree,
         &identities_ref[num_identities_total - 1],
         false,
+        offchain_mode_enabled,
     )
     .await;
 
@@ -143,6 +145,7 @@ async fn more_identities_than_dense_prefix(offchain_mode_enabled: bool) -> anyho
         &ref_tree,
         &identities_ref[0],
         false,
+        offchain_mode_enabled,
     )
     .await;
 
@@ -155,6 +158,7 @@ async fn more_identities_than_dense_prefix(offchain_mode_enabled: bool) -> anyho
         &ref_tree,
         &identities_ref[num_identities_total - 1],
         false,
+        offchain_mode_enabled,
     )
     .await;
 

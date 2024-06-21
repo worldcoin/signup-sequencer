@@ -90,7 +90,17 @@ async fn multi_prover(offchain_mode_enabled: bool) -> anyhow::Result<()> {
 
     // Identities should have been inserted and processed
     for (i, identity) in identities_ref.iter().enumerate().take(batch_size_3) {
-        test_inclusion_proof(&mock_chain, &uri, &client, i, &ref_tree, identity, false).await;
+        test_inclusion_proof(
+            &mock_chain,
+            &uri,
+            &client,
+            i,
+            &ref_tree,
+            identity,
+            false,
+            offchain_mode_enabled,
+        )
+        .await;
     }
 
     // Now re re-enable the larger prover and disable the smaller one
@@ -116,6 +126,7 @@ async fn multi_prover(offchain_mode_enabled: bool) -> anyhow::Result<()> {
             &ref_tree,
             &identities_ref[i + offset],
             false,
+            offchain_mode_enabled,
         )
         .await;
     }

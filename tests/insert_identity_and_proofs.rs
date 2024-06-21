@@ -80,6 +80,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         &ref_tree,
         &config.tree.initial_leaf_value,
         true,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -90,6 +91,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         &ref_tree,
         &config.tree.initial_leaf_value,
         true,
+        offchain_mode_enabled,
     )
     .await;
 
@@ -110,6 +112,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -121,6 +124,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         &Hash::from_str_radix(&test_identities[1], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -132,6 +136,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         &Hash::from_str_radix(&test_identities[2], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
 
@@ -153,6 +158,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         &Hash::from_str_radix(&test_identities[3], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -164,6 +170,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         &Hash::from_str_radix(&test_identities[4], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
 
@@ -190,6 +197,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -201,6 +209,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         &Hash::from_str_radix(&test_identities[4], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
 
@@ -228,6 +237,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
@@ -239,6 +249,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         &Hash::from_str_radix(&test_identities[4], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
 

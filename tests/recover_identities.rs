@@ -107,6 +107,7 @@ async fn recover_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
             &ref_tree,
             &identities_ref[i],
             false,
+            offchain_mode_enabled,
         )
         .await;
     }
@@ -160,6 +161,7 @@ async fn recover_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
             &ref_tree,
             &identities_ref[i],
             true,
+            offchain_mode_enabled,
         )
         .await;
 

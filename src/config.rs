@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::time::Duration;
 
 use ethers::types::{Address, H160};
@@ -10,12 +11,33 @@ use crate::prover::ProverConfig;
 use crate::utils::secret::SecretUrl;
 use crate::utils::serde_utils::JsonStrWrapper;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+pub fn load_config(config_file_path: Option<&Path>) -> anyhow::Result<Config> {
+    let mut settings = config::Config::builder();
+
+    if let Some(path) = config_file_path {
+        settings = settings.add_source(config::File::from(path).required(true));
+    }
+
+    let settings = settings
+        .add_source(
+            config::Environment::with_prefix("SEQ")
+                .separator("__")
+                .try_parsing(true),
+        )
+        .build()?;
+
+    Ok(settings.try_deserialize::<Config>()?)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     pub app:           AppConfig,
     pub tree:          TreeConfig,
+    #[serde(default)]
     pub network:       Option<NetworkConfig>,
+    #[serde(default)]
     pub providers:     Option<ProvidersConfig>,
+    #[serde(default)]
     pub relayer:       Option<RelayerConfig>,
     pub database:      DatabaseConfig,
     pub server:        ServerConfig,
@@ -25,7 +47,7 @@ pub struct Config {
     pub offchain_mode: OffchainModeConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppConfig {
     /// A list of prover urls (along with batch size, type and timeout) that
     /// will be inserted into the DB at startup
@@ -77,7 +99,7 @@ pub struct AppConfig {
     pub monitored_txs_capacity: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TreeConfig {
     /// The depth of the tree that the contract is working with. This needs to
     /// agree with the verifier in the deployed contract, and also with
@@ -108,7 +130,7 @@ pub struct TreeConfig {
     pub initial_leaf_value: Field,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetworkConfig {
     /// The address of the identity manager contract.
     pub identity_manager_address: Address,
@@ -119,7 +141,7 @@ pub struct NetworkConfig {
     pub relayed_identity_manager_addresses: JsonStrWrapper<HashMap<u64, Address>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProvidersConfig {
     /// Provider url for the primary chain
     pub primary_network_provider: SecretUrl,
@@ -129,7 +151,7 @@ pub struct ProvidersConfig {
     pub relayed_network_providers: JsonStrWrapper<Vec<SecretUrl>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 #[serde(rename_all = "snake_case")]
 pub enum RelayerConfig {
@@ -147,7 +169,7 @@ impl RelayerConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OzDefenderConfig {
     /// Api url
     #[serde(default = "default::oz_api_url")]
@@ -179,7 +201,7 @@ pub struct OzDefenderConfig {
     pub oz_gas_limit: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TxSitterConfig {
     pub tx_sitter_url: String,
 
@@ -188,7 +210,7 @@ pub struct TxSitterConfig {
     pub tx_sitter_gas_limit: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DatabaseConfig {
     pub database: SecretUrl,
 
@@ -199,7 +221,7 @@ pub struct DatabaseConfig {
     pub max_connections: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub address: SocketAddr,
 
@@ -208,7 +230,7 @@ pub struct ServerConfig {
     pub serve_timeout: Duration,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServiceConfig {
     // Service name - used for logging, metrics and tracing
     #[serde(default = "default::service_name")]
@@ -216,12 +238,12 @@ pub struct ServiceConfig {
     pub datadog:      Option<DatadogConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DatadogConfig {
     pub traces_endpoint: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OffchainModeConfig {
     #[serde(default = "default::offchain_mode_enabled")]
     pub enabled: bool,
@@ -327,6 +349,8 @@ pub mod default {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
 
     const MINIMAL_TOML: &str = indoc::indoc! {r#"
@@ -344,11 +368,6 @@ mod tests {
         [offchain_mode]
         enabled = false
     "#};
-
-    #[test]
-    fn deserialize_minimal_config() {
-        let _config: Config = toml::from_str(MINIMAL_TOML).unwrap();
-    }
 
     const FULL_TOML: &str = indoc::indoc! {r#"
         [app]
@@ -403,11 +422,192 @@ mod tests {
         enabled = false
     "#};
 
+    const OFFCHAIN_TOML: &str = indoc::indoc! {r#"
+        [app]
+        provers_urls = "[]"
+        batch_insertion_timeout = "3m"
+        batch_deletion_timeout = "1h"
+        min_batch_deletion_size = 100
+        max_epoch_duration = "0s"
+        scanning_window_size = 100
+        scanning_chain_head_offset = 0
+        time_between_scans = "30s"
+        monitored_txs_capacity = 100
+
+        [tree]
+        tree_depth = 30
+        dense_tree_prefix_depth = 20
+        tree_gc_threshold = 10000
+        cache_file = "/data/cache_file"
+        force_cache_purge = false
+        initial_leaf_value = "0x1"
+
+        [database]
+        database = "postgres://user:password@localhost:5432/database"
+        migrate = true
+        max_connections = 10
+
+        [server]
+        address = "0.0.0.0:3001"
+        serve_timeout = "30s"
+
+        [service]
+        service_name = "signup-sequencer"
+
+        [service.datadog]
+        traces_endpoint = "http://localhost:8126"
+
+        [offchain_mode]
+        enabled = true
+    "#};
+
+    const FULL_ENV: &str = indoc::indoc! {r#"
+        SEQ__APP__PROVERS_URLS=[]
+        SEQ__APP__BATCH_INSERTION_TIMEOUT=3m
+        SEQ__APP__BATCH_DELETION_TIMEOUT=1h
+        SEQ__APP__MIN_BATCH_DELETION_SIZE=100
+        SEQ__APP__MAX_EPOCH_DURATION=0s
+        SEQ__APP__SCANNING_WINDOW_SIZE=100
+        SEQ__APP__SCANNING_CHAIN_HEAD_OFFSET=0
+        SEQ__APP__TIME_BETWEEN_SCANS=30s
+        SEQ__APP__MONITORED_TXS_CAPACITY=100
+
+        SEQ__TREE__TREE_DEPTH=30
+        SEQ__TREE__DENSE_TREE_PREFIX_DEPTH=20
+        SEQ__TREE__TREE_GC_THRESHOLD=10000
+        SEQ__TREE__CACHE_FILE=/data/cache_file
+        SEQ__TREE__FORCE_CACHE_PURGE=false
+        SEQ__TREE__INITIAL_LEAF_VALUE=0x1
+
+        SEQ__NETWORK__IDENTITY_MANAGER_ADDRESS=0x0000000000000000000000000000000000000000
+        SEQ__NETWORK__RELAYED_IDENTITY_MANAGER_ADDRESSES={}
+
+        SEQ__PROVIDERS__PRIMARY_NETWORK_PROVIDER=http://localhost:8545/
+        SEQ__PROVIDERS__RELAYED_NETWORK_PROVIDERS=[]
+
+        SEQ__RELAYER__KIND=tx_sitter
+        SEQ__RELAYER__TX_SITTER_URL=http://localhost:3000
+        SEQ__RELAYER__TX_SITTER_ADDRESS=0x0000000000000000000000000000000000000000
+        SEQ__RELAYER__TX_SITTER_GAS_LIMIT=100000
+
+        SEQ__DATABASE__DATABASE=postgres://user:password@localhost:5432/database
+        SEQ__DATABASE__MIGRATE=true
+        SEQ__DATABASE__MAX_CONNECTIONS=10
+
+        SEQ__SERVER__ADDRESS=0.0.0.0:3001
+        SEQ__SERVER__SERVE_TIMEOUT=30s
+
+        SEQ__SERVICE__SERVICE_NAME=signup-sequencer
+
+        SEQ__SERVICE__DATADOG__TRACES_ENDPOINT=http://localhost:8126
+
+        SEQ__OFFCHAIN_MODE__ENABLED=false
+    "#};
+
+    const OFFCHAIN_ENV: &str = indoc::indoc! {r#"
+        SEQ__APP__PROVERS_URLS=[]
+        SEQ__APP__BATCH_INSERTION_TIMEOUT=3m
+        SEQ__APP__BATCH_DELETION_TIMEOUT=1h
+        SEQ__APP__MIN_BATCH_DELETION_SIZE=100
+        SEQ__APP__MAX_EPOCH_DURATION=0s
+        SEQ__APP__SCANNING_WINDOW_SIZE=100
+        SEQ__APP__SCANNING_CHAIN_HEAD_OFFSET=0
+        SEQ__APP__TIME_BETWEEN_SCANS=30s
+        SEQ__APP__MONITORED_TXS_CAPACITY=100
+
+        SEQ__TREE__TREE_DEPTH=30
+        SEQ__TREE__DENSE_TREE_PREFIX_DEPTH=20
+        SEQ__TREE__TREE_GC_THRESHOLD=10000
+        SEQ__TREE__CACHE_FILE=/data/cache_file
+        SEQ__TREE__FORCE_CACHE_PURGE=false
+        SEQ__TREE__INITIAL_LEAF_VALUE=0x1
+
+        SEQ__DATABASE__DATABASE=postgres://user:password@localhost:5432/database
+        SEQ__DATABASE__MIGRATE=true
+        SEQ__DATABASE__MAX_CONNECTIONS=10
+
+        SEQ__SERVER__ADDRESS=0.0.0.0:3001
+        SEQ__SERVER__SERVE_TIMEOUT=30s
+
+        SEQ__SERVICE__SERVICE_NAME=signup-sequencer
+
+        SEQ__SERVICE__DATADOG__TRACES_ENDPOINT=http://localhost:8126
+
+        SEQ__OFFCHAIN_MODE__ENABLED=true
+    "#};
+
+    #[test]
+    fn deserialize_minimal_config() {
+        let _config: Config = toml::from_str(MINIMAL_TOML).unwrap();
+    }
+
     #[test]
     fn full_toml_round_trip() {
         let config: Config = toml::from_str(FULL_TOML).unwrap();
         let serialized = toml::to_string_pretty(&config).unwrap();
         println!("{}", serialized);
         similar_asserts::assert_eq!(serialized.trim(), FULL_TOML.trim());
+    }
+
+    #[test]
+    fn offchain_config() {
+        let config: Config = toml::from_str(OFFCHAIN_TOML).unwrap();
+        let serialized = toml::to_string_pretty(&config).unwrap();
+        println!("{}", serialized);
+        similar_asserts::assert_eq!(serialized.trim(), OFFCHAIN_TOML.trim());
+    }
+
+    // Necessary because the env tests might be run within the same process
+    // so they would end up clashing on env var values
+    lazy_static::lazy_static! {
+        static ref ENV_MUTEX: Mutex<()> = Mutex::new(());
+    }
+
+    #[test]
+    fn full_from_env() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
+        load_env(FULL_ENV);
+
+        let parsed_config: Config = toml::from_str(FULL_TOML).unwrap();
+        let env_config: Config = load_config(None).unwrap();
+
+        assert_eq!(parsed_config, env_config);
+
+        purge_env(FULL_ENV);
+    }
+
+    #[test]
+    fn offchain_from_env() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
+        load_env(OFFCHAIN_ENV);
+
+        let parsed_config: Config = toml::from_str(OFFCHAIN_TOML).unwrap();
+        let env_config: Config = load_config(None).unwrap();
+
+        assert_eq!(parsed_config, env_config);
+
+        purge_env(OFFCHAIN_ENV);
+    }
+
+    fn load_env(s: &str) {
+        for line in s.lines().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            let mut parts = line.splitn(2, '=');
+            let key = parts.next().expect("Missing key");
+            let value = parts.next().expect("Missing value");
+
+            println!("Setting '{}'='{}'", key, value);
+            std::env::set_var(key, value);
+        }
+    }
+
+    fn purge_env(s: &str) {
+        for line in s.lines().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            let mut parts = line.splitn(2, '=');
+            let key = parts.next().expect("Missing key");
+
+            std::env::remove_var(key);
+        }
     }
 }

@@ -495,13 +495,11 @@ impl OnChainIdentityProcessor {
                 .await
                 .context("Could not fetch deletion indices from tx")?;
 
-            info!("[zzz] 1: {:?}", commitments);
             let commitments = self
                 .database
                 .get_non_zero_commitments_by_leaf_indexes(commitments.iter().copied())
                 .await?;
             let commitments: Vec<U256> = commitments.into_iter().map(Into::into).collect();
-            info!("[zzz] 2: {:?}", commitments);
 
             // Fetch the root history expiry time on chain
             let root_history_expiry = self.identity_manager.root_history_expiry().await?;

@@ -170,12 +170,6 @@ async fn recover_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
         test_not_in_tree(&uri, &client, &identities_ref[recovery_leaf_index]).await;
     }
 
-    // // Update ref tree with changes that will be done in background
-    // for i in 0..deletion_batch_size {
-    //     let recovery_leaf_index = insertion_batch_size + i;
-    //     ref_tree.set(recovery_leaf_index, identities_ref[recovery_leaf_index]);
-    // }
-
     // Sleep for root expiry
     tokio::time::sleep(Duration::from_secs(updated_root_history_expiry.as_u64())).await;
 

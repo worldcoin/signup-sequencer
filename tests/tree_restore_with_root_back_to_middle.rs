@@ -206,7 +206,6 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
         restored_tree_state.batching_tree().get_root(),
         mid_root.into()
     );
-    assert_eq!(restored_tree_state.mined_tree().get_root(), mid_root.into());
     assert_eq!(
         restored_tree_state.processed_tree().get_root(),
         mid_root.into()

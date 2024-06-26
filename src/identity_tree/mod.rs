@@ -500,8 +500,7 @@ where
 
 #[derive(Clone)]
 pub struct TreeState {
-    mined:     TreeVersion<Canonical>,
-    processed: TreeVersion<Intermediate>,
+    processed: TreeVersion<Canonical>,
     batching:  TreeVersion<Intermediate>,
     latest:    TreeVersion<Latest>,
 }
@@ -509,13 +508,11 @@ pub struct TreeState {
 impl TreeState {
     #[must_use]
     pub const fn new(
-        mined: TreeVersion<Canonical>,
-        processed: TreeVersion<Intermediate>,
+        processed: TreeVersion<Canonical>,
         batching: TreeVersion<Intermediate>,
         latest: TreeVersion<Latest>,
     ) -> Self {
         Self {
-            mined,
             processed,
             batching,
             latest,
@@ -532,20 +529,11 @@ impl TreeState {
     }
 
     #[must_use]
-    pub fn get_mined_tree(&self) -> TreeVersion<Canonical> {
-        self.mined.clone()
-    }
-
-    pub fn mined_tree(&self) -> &TreeVersion<Canonical> {
-        &self.mined
-    }
-
-    #[must_use]
-    pub fn get_processed_tree(&self) -> TreeVersion<Intermediate> {
+    pub fn get_processed_tree(&self) -> TreeVersion<Canonical> {
         self.processed.clone()
     }
 
-    pub fn processed_tree(&self) -> &TreeVersion<Intermediate> {
+    pub fn processed_tree(&self) -> &TreeVersion<Canonical> {
         &self.processed
     }
 

@@ -15,7 +15,7 @@ use crate::database;
 use crate::database::query::DatabaseQuery as _;
 use crate::database::Database;
 use crate::identity_tree::{
-    AppliedTreeUpdate, Canonical, Hash, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
+    AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
 use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;
@@ -187,7 +187,7 @@ async fn ensure_batch_chain_initialized(app: &Arc<App>) -> anyhow::Result<()> {
 async fn commit_identities(
     database: &Database,
     prover_repository: &Arc<ProverRepository>,
-    batching_tree: &TreeVersion<Canonical>,
+    batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
     updates: &[AppliedTreeUpdate],
 ) -> anyhow::Result<()> {
@@ -234,7 +234,7 @@ async fn commit_identities(
 #[instrument(level = "info", skip_all)]
 pub async fn insert_identities(
     database: &Database,
-    batching_tree: &TreeVersion<Canonical>,
+    batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
     updates: &[AppliedTreeUpdate],
     batch_size: usize,
@@ -370,7 +370,7 @@ fn assert_updates_are_consecutive(updates: &[AppliedTreeUpdate]) {
 
 pub async fn delete_identities(
     database: &Database,
-    batching_tree: &TreeVersion<Canonical>,
+    batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
     updates: &[AppliedTreeUpdate],
     batch_size: usize,
@@ -465,7 +465,7 @@ pub async fn delete_identities(
     Ok(())
 }
 
-fn determine_batch_type(tree: &TreeVersion<Canonical>) -> Option<BatchType> {
+fn determine_batch_type(tree: &TreeVersion<Intermediate>) -> Option<BatchType> {
     let next_update = tree.peek_next_updates(1);
     if next_update.is_empty() {
         return None;

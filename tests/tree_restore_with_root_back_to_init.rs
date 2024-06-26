@@ -160,6 +160,14 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         restored_tree_state.batching_tree().get_root(),
         initial_root.into()
     );
+    assert_eq!(
+        restored_tree_state.mined_tree().get_root(),
+        initial_root.into()
+    );
+    assert_eq!(
+        restored_tree_state.processed_tree().get_root(),
+        initial_root.into()
+    );
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 

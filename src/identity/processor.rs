@@ -20,7 +20,7 @@ use crate::database::query::DatabaseQuery;
 use crate::database::types::{BatchEntry, BatchType};
 use crate::database::{Database, Error};
 use crate::ethereum::{Ethereum, ReadProvider};
-use crate::identity_tree::Hash;
+use crate::identity_tree::{Canonical, Hash, Intermediate, TreeVersion, TreeWithNextVersion};
 use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;
 use crate::prover::Prover;
@@ -33,7 +33,11 @@ pub type TransactionId = String;
 pub trait IdentityProcessor: Send + Sync + 'static {
     async fn commit_identities(&self, batch: &BatchEntry) -> anyhow::Result<TransactionId>;
 
-    async fn finalize_identities(&self) -> anyhow::Result<()>;
+    async fn finalize_identities(
+        &self,
+        processed_tree: &TreeVersion<Intermediate>,
+        mined_tree: &TreeVersion<Canonical>,
+    ) -> anyhow::Result<()>;
 
     async fn await_clean_slate(&self) -> anyhow::Result<()>;
 
@@ -86,16 +90,24 @@ impl IdentityProcessor for OnChainIdentityProcessor {
         }
     }
 
-    async fn finalize_identities(&self) -> anyhow::Result<()> {
+    async fn finalize_identities(
+        &self,
+        processed_tree: &TreeVersion<Intermediate>,
+        mined_tree: &TreeVersion<Canonical>,
+    ) -> anyhow::Result<()> {
         let mainnet_logs = self.fetch_mainnet_logs().await?;
 
-        self.finalize_mainnet_roots(&mainnet_logs, self.config.app.max_epoch_duration)
-            .await?;
+        self.finalize_mainnet_roots(
+            processed_tree,
+            &mainnet_logs,
+            self.config.app.max_epoch_duration,
+        )
+        .await?;
 
         let mut roots = Self::extract_roots_from_mainnet_logs(mainnet_logs);
         roots.extend(self.fetch_secondary_logs().await?);
 
-        self.finalize_secondary_roots(roots).await?;
+        self.finalize_secondary_roots(mined_tree, roots).await?;
 
         Ok(())
     }
@@ -390,6 +402,7 @@ impl OnChainIdentityProcessor {
     #[instrument(level = "info", skip_all)]
     async fn finalize_mainnet_roots(
         &self,
+        processed_tree: &TreeVersion<Intermediate>,
         logs: &[Log],
         max_epoch_duration: Duration,
     ) -> Result<(), anyhow::Error> {
@@ -422,13 +435,21 @@ impl OnChainIdentityProcessor {
                 self.update_eligible_recoveries(log, max_epoch_duration)
                     .await?;
             }
+
+            let updates_count = processed_tree.apply_updates_up_to(post_root.into());
+
+            info!(updates_count, ?pre_root, ?post_root, "Mined tree updated");
         }
 
         Ok(())
     }
 
     #[instrument(level = "info", skip_all)]
-    async fn finalize_secondary_roots(&self, roots: Vec<U256>) -> Result<(), anyhow::Error> {
+    async fn finalize_secondary_roots(
+        &self,
+        finalized_tree: &TreeVersion<Canonical>,
+        roots: Vec<U256>,
+    ) -> Result<(), anyhow::Error> {
         for root in roots {
             info!(?root, "Finalizing root");
 
@@ -442,6 +463,7 @@ impl OnChainIdentityProcessor {
             }
 
             self.database.mark_root_as_mined_tx(&root.into()).await?;
+            finalized_tree.apply_updates_up_to(root.into());
 
             info!(?root, "Root finalized");
         }
@@ -544,7 +566,11 @@ impl IdentityProcessor for OffChainIdentityProcessor {
         Ok(batch.id.to_string())
     }
 
-    async fn finalize_identities(&self) -> anyhow::Result<()> {
+    async fn finalize_identities(
+        &self,
+        processed_tree: &TreeVersion<Intermediate>,
+        mined_tree: &TreeVersion<Canonical>,
+    ) -> anyhow::Result<()> {
         let batches = {
             let mut committed_batches = self.committed_batches.lock().unwrap();
             let copied = committed_batches.clone();
@@ -565,6 +591,8 @@ impl IdentityProcessor for OffChainIdentityProcessor {
             self.database
                 .mark_root_as_mined_tx(&batch.next_root)
                 .await?;
+            processed_tree.apply_updates_up_to(batch.next_root);
+            mined_tree.apply_updates_up_to(batch.next_root);
         }
 
         Ok(())

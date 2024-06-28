@@ -18,7 +18,7 @@ use crate::contracts::scanner::BlockScanner;
 use crate::contracts::IdentityManager;
 use crate::database::query::DatabaseQuery;
 use crate::database::types::{BatchEntry, BatchType};
-use crate::database::Database;
+use crate::database::{Database, Error};
 use crate::ethereum::{Ethereum, ReadProvider};
 use crate::identity_tree::{Canonical, Hash, Intermediate, TreeVersion, TreeWithNextVersion};
 use crate::prover::identity::Identity;
@@ -143,13 +143,18 @@ impl IdentityProcessor for OnChainIdentityProcessor {
             // Note that we don't have a way of queuing a root here for
             // finalization. so it's going to stay as "processed"
             // until the next root is mined. self.database.
-            self.database.mark_root_as_processed_tx(&root_hash).await?;
-            self.database.delete_batches_after_root(&root_hash).await?;
+            self.database
+                .mark_root_as_processed_and_delete_batches_tx(&root_hash)
+                .await?;
         } else {
             // Db is either empty or we're restarting with a new contract/chain
             // so we should mark everything as pending
-            self.database.mark_all_as_pending().await?;
-            self.database.delete_all_batches().await?;
+            retry_tx!(self.database.pool, tx, {
+                tx.mark_all_as_pending().await?;
+                tx.delete_all_batches().await?;
+                Result::<(), Error>::Ok(())
+            })
+            .await?;
         }
 
         Ok(())

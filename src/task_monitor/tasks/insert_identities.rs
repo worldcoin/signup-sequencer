@@ -3,13 +3,14 @@ use std::time::Duration;
 
 use tokio::sync::{Mutex, Notify};
 use tokio::time;
-use tracing::{info, instrument};
+use tracing::info;
 
 use crate::app::App;
 use crate::database::query::DatabaseQuery as _;
 use crate::database::types::UnprocessedCommitment;
 use crate::database::Database;
 use crate::identity_tree::{Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
+use crate::utils::retry_tx;
 
 pub async fn insert_identities(
     app: Arc<App>,
@@ -36,7 +37,7 @@ pub async fn insert_identities(
         insert_identities_batch(
             &app.database,
             app.tree_state()?.latest_tree(),
-            unprocessed,
+            &unprocessed,
             &pending_insertions_mutex,
         )
         .await?;
@@ -46,34 +47,36 @@ pub async fn insert_identities(
     }
 }
 
-#[instrument(level = "info", skip_all)]
-async fn insert_identities_batch(
+pub async fn insert_identities_batch(
     database: &Database,
     latest_tree: &TreeVersion<Latest>,
-    identities: Vec<UnprocessedCommitment>,
+    identities: &[UnprocessedCommitment],
     pending_insertions_mutex: &Mutex<()>,
 ) -> anyhow::Result<()> {
-    // Filter out any identities that are already in the `identities` table
-    let mut filtered_identities = vec![];
-    for identity in identities {
-        if database
-            .get_identity_leaf_index(&identity.commitment)
-            .await?
-            .is_some()
-        {
-            tracing::warn!(?identity.commitment, "Duplicate identity");
-            database
-                .remove_unprocessed_identity(&identity.commitment)
-                .await?;
-        } else {
-            filtered_identities.push(identity.commitment);
+    let filtered_identities = retry_tx!(database, tx, {
+        // Filter out any identities that are already in the `identities` table
+        let mut filtered_identities = vec![];
+        for identity in identities {
+            if tx
+                .get_identity_leaf_index(&identity.commitment)
+                .await?
+                .is_some()
+            {
+                tracing::warn!(?identity.commitment, "Duplicate identity");
+                tx.remove_unprocessed_identity(&identity.commitment).await?;
+            } else {
+                filtered_identities.push(identity.commitment);
+            }
         }
-    }
+        Result::<_, anyhow::Error>::Ok(filtered_identities)
+    })
+    .await?;
 
     let _guard = pending_insertions_mutex.lock().await;
 
-    let next_db_index = database.get_next_leaf_index().await?;
     let next_leaf = latest_tree.next_leaf();
+
+    let next_db_index = retry_tx!(database, tx, tx.get_next_leaf_index().await).await?;
 
     assert_eq!(
         next_leaf, next_db_index,
@@ -89,15 +92,15 @@ async fn insert_identities_batch(
         "Length mismatch when appending identities to tree"
     );
 
-    let items = data.into_iter().zip(filtered_identities);
+    retry_tx!(database, tx, {
+        for ((root, _proof, leaf_index), identity) in data.iter().zip(&filtered_identities) {
+            tx.insert_pending_identity(*leaf_index, identity, root)
+                .await?;
 
-    for ((root, _proof, leaf_index), identity) in items {
-        database
-            .insert_pending_identity(leaf_index, &identity, &root)
-            .await?;
+            tx.remove_unprocessed_identity(identity).await?;
+        }
 
-        database.remove_unprocessed_identity(&identity).await?;
-    }
-
-    Ok(())
+        Ok(())
+    })
+    .await
 }

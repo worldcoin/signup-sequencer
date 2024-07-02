@@ -30,6 +30,7 @@ pub const TX_RETRY_LIMIT: u32 = 10;
 ///     tx.execute("SELECT * FROM table").await?;
 ///     Ok(tx.execute("SELECT * FROM other").await?)
 /// }).await;
+#[macro_export]
 macro_rules! retry_tx {
     ($pool:expr, $tx:ident, $expression:expr) => {
         async {
@@ -38,20 +39,29 @@ macro_rules! retry_tx {
             loop {
                 let mut $tx = $pool.begin().await?;
                 res = async { $expression }.await;
-                if res.is_err() {
-                    $tx.rollback().await?;
-                    return res;
+                let limit = 10;
+                if let Err(e) = res {
+                    counter += 1;
+                    if counter > limit {
+                        return Err(e.into());
+                    } else {
+                        $tx.rollback().await?;
+                        tracing::warn!(
+                            error = ?e,
+                            "db transaction returned error ({counter}/{limit})"
+                        );
+                        continue;
+                    }
                 }
                 match $tx.commit().await {
                     Err(e) => {
                         counter += 1;
-                        let limit = crate::utils::TX_RETRY_LIMIT;
                         if counter > limit {
                             return Err(e.into());
                         } else {
                             tracing::warn!(
-                                "db transaction commit failed ({counter}/{limit}): {:?}",
-                                e
+                                error = ?e,
+                                "db transaction commit failed ({counter}/{limit})"
                             );
                         }
                     }
@@ -62,7 +72,6 @@ macro_rules! retry_tx {
         }
     };
 }
-pub(crate) use retry_tx;
 
 pub fn spawn_monitored_with_backoff<S, F>(
     future_spawner: S,

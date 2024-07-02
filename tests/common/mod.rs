@@ -401,16 +401,13 @@ pub async fn test_inclusion_status(
     assert_eq!(expected_status, result.0.status,);
 }
 
-#[instrument(skip_all)]
-pub async fn test_delete_identity(
+pub async fn api_delete_identity(
     uri: &str,
     client: &Client<HttpConnector>,
-    ref_tree: &mut PoseidonTree,
-    test_leaves: &[Field],
-    leaf_index: usize,
+    leaf: &Field,
     expect_failure: bool,
-) -> (merkle_tree::Proof<PoseidonHash>, Field) {
-    let body = construct_delete_identity_body(&test_leaves[leaf_index]);
+) {
+    let body = construct_delete_identity_body(leaf);
 
     let req = Request::builder()
         .method("POST")
@@ -433,7 +430,18 @@ pub async fn test_delete_identity(
         assert!(response.status().is_success());
         assert!(bytes.is_empty());
     }
+}
 
+#[instrument(skip_all)]
+pub async fn test_delete_identity(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    ref_tree: &mut PoseidonTree,
+    test_leaves: &[Field],
+    leaf_index: usize,
+    expect_failure: bool,
+) -> (merkle_tree::Proof<PoseidonHash>, Field) {
+    api_delete_identity(uri, client, &test_leaves[leaf_index], expect_failure).await;
     ref_tree.set(leaf_index, Hash::ZERO);
     (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())
 }
@@ -556,14 +564,8 @@ pub async fn test_remove_batch_size(
 }
 
 #[instrument(skip_all)]
-pub async fn test_insert_identity(
-    uri: &str,
-    client: &Client<HttpConnector>,
-    ref_tree: &mut PoseidonTree,
-    test_leaves: &[Field],
-    leaf_index: usize,
-) -> (merkle_tree::Proof<PoseidonHash>, Field) {
-    let body = construct_insert_identity_body(&test_leaves[leaf_index]);
+pub async fn api_insert_identity(uri: &str, client: &Client<HttpConnector>, leaf: &Field) {
+    let body = construct_insert_identity_body(leaf);
     let req = Request::builder()
         .method("POST")
         .uri(uri.to_owned() + "/insertIdentity")
@@ -583,6 +585,18 @@ pub async fn test_insert_identity(
     }
 
     assert!(bytes.is_empty());
+}
+
+#[instrument(skip_all)]
+pub async fn test_insert_identity(
+    uri: &str,
+    client: &Client<HttpConnector>,
+    ref_tree: &mut PoseidonTree,
+    test_leaves: &[Field],
+    leaf_index: usize,
+) -> (merkle_tree::Proof<PoseidonHash>, Field) {
+    api_insert_identity(uri, client, &test_leaves[leaf_index]).await;
+
     ref_tree.set(leaf_index, test_leaves[leaf_index]);
 
     (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())

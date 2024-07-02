@@ -10,7 +10,7 @@ use crate::database::query::DatabaseQuery as _;
 use crate::database::types::UnprocessedCommitment;
 use crate::database::Database;
 use crate::identity_tree::{Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
-use crate::utils::retry_tx;
+use crate::retry_tx;
 
 pub async fn insert_identities(
     app: Arc<App>,
@@ -100,7 +100,7 @@ pub async fn insert_identities_batch(
             tx.remove_unprocessed_identity(identity).await?;
         }
 
-        Ok(())
+        Result::<_, anyhow::Error>::Ok(())
     })
     .await
 }

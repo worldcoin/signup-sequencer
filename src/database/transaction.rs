@@ -4,7 +4,7 @@ use tracing::instrument;
 use crate::database::query::DatabaseQuery;
 use crate::database::{Database, Error};
 use crate::identity_tree::{Hash, ProcessedStatus};
-use crate::utils::retry_tx;
+use crate::retry_tx;
 
 async fn mark_root_as_processed(
     tx: &mut Transaction<'_, Postgres>,
@@ -96,7 +96,7 @@ impl Database {
         retry_tx!(self.pool, tx, {
             mark_root_as_processed(&mut tx, root).await?;
             tx.delete_batches_after_root(root).await?;
-            Ok(())
+            Result::<_, Error>::Ok(())
         })
         .await
     }

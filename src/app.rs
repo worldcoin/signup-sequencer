@@ -23,12 +23,12 @@ use crate::identity_tree::{
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::repository::ProverRepository;
 use crate::prover::{ProverConfig, ProverType};
+use crate::retry_tx;
 use crate::server::data::{
     InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofQuery,
     VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
 };
 use crate::server::error::Error as ServerError;
-use crate::utils::retry_tx;
 
 pub struct App {
     pub database:           Arc<Database>,

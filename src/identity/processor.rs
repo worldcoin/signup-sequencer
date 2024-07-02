@@ -24,8 +24,8 @@ use crate::identity_tree::{Canonical, Hash, Intermediate, TreeVersion, TreeWithN
 use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;
 use crate::prover::Prover;
+use crate::retry_tx;
 use crate::utils::index_packing::pack_indices;
-use crate::utils::retry_tx;
 
 pub type TransactionId = String;
 
@@ -549,7 +549,7 @@ impl OnChainIdentityProcessor {
                     .await?;
             }
 
-            Ok(())
+            Result::<_, anyhow::Error>::Ok(())
         })
         .await
     }
@@ -648,7 +648,7 @@ impl OffChainIdentityProcessor {
                     .await?;
             }
 
-            Ok(())
+            Result::<_, anyhow::Error>::Ok(())
         })
         .await
     }

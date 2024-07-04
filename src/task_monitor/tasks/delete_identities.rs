@@ -54,12 +54,18 @@ pub async fn delete_identities(
 
         let _guard = pending_insertions_mutex.lock().await;
 
-        if deletions.len() == 1 {
-            let last_insertion_idx = app.tree_state()?.latest_tree().next_leaf() - 1;
+        // Check if the deletion batch could potentially create a duplicate root batch
+        if let Some(last_leaf_index) = app.tree_state()?.latest_tree().next_leaf().checked_sub(1) {
+            let mut sorted_indices = leaf_indices.clone();
+            sorted_indices.sort();
 
-            let only_deletion_idx = *leaf_indices.first().unwrap();
+            let indices_are_continuous = sorted_indices.windows(2).all(|w| w[1] == w[0] + 1);
 
-            if only_deletion_idx == last_insertion_idx {
+            if indices_are_continuous && sorted_indices.last().unwrap() == &last_leaf_index {
+                tracing::warn!(
+                    "Deletion batch could potentially create a duplicate root batch. Deletion \
+                     batch will be postponed"
+                );
                 continue;
             }
         }

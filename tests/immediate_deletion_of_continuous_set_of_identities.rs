@@ -11,8 +11,16 @@ use crate::common::test_delete_identity;
 
 const IDLE_TIME: u64 = 7;
 
+/// This test ensures that we're safe against a scenario where we delete a set
+/// of identities which were just inserted.
+///
+/// Example:
+/// Let's say we insert identities at indexes 0, 1, 2, 3, 4 in batches of 0, 1,
+/// 2 and 3, 4. We then delete identites at indexes 4 and 3 - this will result
+/// in the same batch post root as from the insertion batch 0, 1, 2. This breaks
+/// a central assumption that roots are unique.
 #[tokio::test]
-async fn immediate_deletion() -> anyhow::Result<()> {
+async fn immediate_deletion_of_continuous_set_of_identities() -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -92,14 +100,22 @@ async fn immediate_deletion() -> anyhow::Result<()> {
         .await;
     }
 
-    // Only delete the last identity from the previous batch
-    // which would create a duplicate root
+    // Delete 2 identities from the top - this could create a duplicate root
     test_delete_identity(
         &uri,
         &client,
         &mut ref_tree,
         &identities_ref,
         insertion_batch_size - 1,
+        false,
+    )
+    .await;
+    test_delete_identity(
+        &uri,
+        &client,
+        &mut ref_tree,
+        &identities_ref,
+        insertion_batch_size - 2,
         false,
     )
     .await;
@@ -116,7 +132,8 @@ async fn immediate_deletion() -> anyhow::Result<()> {
     )
     .await;
 
-    // Delete another identity to trigger a deletion batch
+    // Delete another identity to trigger a deletion batch - crucially there must be
+    // gaps in deletions, or a new insertion must happen in between
     test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, 0, false).await;
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME * 2)).await;

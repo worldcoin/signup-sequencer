@@ -18,11 +18,11 @@ async fn insert_100() -> anyhow::Result<()> {
     let identities = generate_test_commitments(10);
 
     for commitment in identities.iter() {
-        _ = insert_identity_with_retries(&client, &uri, commitment, 10, 3.0).await?;
+        insert_identity_with_retries(&client, &uri, commitment, 10, 3.0).await?;
     }
 
     for commitment in identities.iter() {
-        _ = mined_inclusion_proof_with_retries(&client, &uri, commitment, 60, 10.0).await?;
+        mined_inclusion_proof_with_retries(&client, &uri, commitment, 60, 10.0).await?;
     }
 
     Ok(())

@@ -119,7 +119,7 @@ pub async fn insert_identity_with_retries(
 ) -> anyhow::Result<()> {
     let mut last_err = None;
     for _ in 0..retries_count {
-        match insert_identity(&client, &uri, &commitment).await {
+        match insert_identity(client, uri, commitment).await {
             Ok(_) => return Ok(()),
             Err(err) => last_err = Some(err),
         }
@@ -138,7 +138,7 @@ pub async fn mined_inclusion_proof_with_retries(
 ) -> anyhow::Result<InclusionProofResponse> {
     let mut last_res = Err(anyhow!("No calls at all"));
     for _i in 0..retries_count {
-        last_res = inclusion_proof(&client, &uri, &commitment).await;
+        last_res = inclusion_proof(client, uri, commitment).await;
 
         if let Ok(ref inclusion_proof_json) = last_res {
             if inclusion_proof_json.0.status == Status::Processed(Mined) {

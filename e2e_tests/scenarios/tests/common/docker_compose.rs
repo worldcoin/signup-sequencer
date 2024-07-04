@@ -162,9 +162,9 @@ pub async fn setup(cwd: &str) -> anyhow::Result<DockerComposeGuard> {
     let balancer_port = parse_exposed_port(stdout);
     res.update_balancer_port(balancer_port);
 
-    _ = await_running(&res).await?;
+    await_running(&res).await?;
 
-    return Ok(res);
+    Ok(res)
 }
 
 fn generate_project_name() -> String {
@@ -186,7 +186,7 @@ async fn await_running(docker_compose_guard: &DockerComposeGuard<'_>) -> anyhow:
     loop {
         let healthy = check_health(docker_compose_guard.get_local_addr()).await;
         if healthy.is_ok() && healthy.unwrap() {
-            success_counter = success_counter + 1;
+            success_counter += 1;
         }
 
         if success_counter >= min_success_counts {
@@ -214,7 +214,7 @@ async fn check_health(local_addr: String) -> anyhow::Result<bool> {
 
     let response = client.request(healthcheck).await?;
 
-    return Ok(response.status() == StatusCode::OK);
+    Ok(response.status() == StatusCode::OK)
 }
 
 fn run_cmd_to_output(
@@ -237,7 +237,7 @@ fn run_cmd_to_output(
 
     let output = command
         .output()
-        .expect(&format!("Failed to run command: {}", cmd_str));
+        .with_context(|| format!("Failed to run command: {}", cmd_str))?;
 
     let stdout_utf = String::from_utf8(output.stdout)?;
     let stderr_utf = String::from_utf8(output.stderr)?;
@@ -261,7 +261,7 @@ fn parse_exposed_port(s: String) -> u32 {
     parts
         .last()
         .unwrap()
-        .split(":")
+        .split(':')
         .last()
         .unwrap()
         .parse::<u32>()

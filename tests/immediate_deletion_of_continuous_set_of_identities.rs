@@ -29,7 +29,9 @@ async fn immediate_deletion_of_continuous_set_of_identities_offchain() -> anyhow
     immediate_deletion_of_continuous_set_of_identities(true).await
 }
 
-async fn immediate_deletion_of_continuous_set_of_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
+async fn immediate_deletion_of_continuous_set_of_identities(
+    offchain_mode_enabled: bool,
+) -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");

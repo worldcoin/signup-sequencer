@@ -3,8 +3,6 @@
 mod common;
 
 use common::prelude::*;
-use signup_sequencer::identity_tree::{ProcessedStatus, UnprocessedStatus};
-use tracing::debug;
 
 use crate::common::{test_in_tree, test_not_in_tree, test_recover_identity};
 

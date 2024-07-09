@@ -18,6 +18,8 @@ pub struct SendTxRequest {
     pub priority:  TransactionPriority,
     #[serde(default)]
     pub tx_id:     Option<String>,
+    #[serde(default)]
+    pub blobs:     Option<Vec<Vec<u8>>>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Copy, Default)]

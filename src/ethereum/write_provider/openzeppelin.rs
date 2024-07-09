@@ -129,9 +129,11 @@ impl OzRelay {
     /// safe"). Don't rely on `only_once` option in high frequency code.
     /// This is mostly useful to recover from timeouts or app crashes that
     /// take multiple seconds to restart.
+    #[allow(unused_variables)]
     pub async fn send_transaction(
         &self,
         mut tx: TypedTransaction,
+        blob: Option<Vec<u8>>,
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
         if let Some(gas_limit) = self.gas_limit {
@@ -219,9 +221,10 @@ impl Inner for OzRelay {
     async fn send_transaction(
         &self,
         tx: TypedTransaction,
+        blob: Option<Vec<u8>>,
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
-        self.send_transaction(tx, only_once).await
+        self.send_transaction(tx, blob, only_once).await
     }
 
     async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {

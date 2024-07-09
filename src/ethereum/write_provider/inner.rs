@@ -9,6 +9,7 @@ pub trait Inner: Send + Sync + 'static {
     async fn send_transaction(
         &self,
         tx: TypedTransaction,
+        blob: Option<Vec<u8>>,
         only_once: bool,
     ) -> Result<TransactionId, TxError>;
 

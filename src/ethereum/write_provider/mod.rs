@@ -59,9 +59,10 @@ impl WriteProvider {
     pub async fn send_transaction(
         &self,
         tx: TypedTransaction,
+        blob: Option<Vec<u8>>,
         only_once: bool,
     ) -> Result<TransactionId, TxError> {
-        self.inner.send_transaction(tx, only_once).await
+        self.inner.send_transaction(tx, blob, only_once).await
     }
 
     pub async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {

@@ -112,27 +112,49 @@ impl IdentityManager {
         let actual_start_index: u32 = start_index.try_into()?;
 
         let proof_points_array: [U256; 8] = proof_data.into();
-        let identities = identity_commitments
+        let identities: Vec<U256> = identity_commitments
             .iter()
             .map(|id| id.commitment)
             .collect();
 
-        // We want to send the transaction through our ethereum provider rather than
-        // directly now. To that end, we create it, and then send it later, waiting for
-        // it to complete.
-        let register_identities_transaction = self
-            .abi
-            .register_identities(
-                proof_points_array,
-                pre_root,
-                actual_start_index,
-                identities,
-                post_root,
-            )
-            .tx;
+        let send_as_blob = true;
+
+        let (tx, binary) = if send_as_blob {
+            let register_identities_transaction = self
+                .abi
+                .register_identities_with_blob(
+                    proof_points_array,
+                    pre_root,
+                    actual_start_index,
+                    post_root,
+                )
+                .tx;
+
+            let mut binary = Vec::new();
+
+            for identity in identities {
+                let string_rep = identity.to_string();
+                binary.extend_from_slice(string_rep.as_bytes());
+            }
+
+            (register_identities_transaction, Some(binary))
+        } else {
+            let register_identities_transaction = self
+                .abi
+                .register_identities(
+                    proof_points_array,
+                    pre_root,
+                    actual_start_index,
+                    identities,
+                    post_root,
+                )
+                .tx;
+
+            (register_identities_transaction, None)
+        };
 
         self.ethereum
-            .send_transaction(register_identities_transaction, true)
+            .send_transaction(tx, binary, true)
             .await
             .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
     }
@@ -159,7 +181,7 @@ impl IdentityManager {
             .tx;
 
         self.ethereum
-            .send_transaction(delete_identities_transaction, true)
+            .send_transaction(delete_identities_transaction, None, true)
             .await
             .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
     }

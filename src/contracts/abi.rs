@@ -35,6 +35,7 @@ abigen!(
     r#"[
         struct RootInfo { uint256 root; uint128 supersededTimestamp; bool isValid }
         event TreeChanged(uint256 indexed preRoot, uint8 indexed kind, uint256 indexed postRoot)
+        function registerIdentitiesWithBlob(uint256[8] calldata insertionProof, uint256 preRoot, uint32 startIndex, uint256 postRoot) public virtual
         function registerIdentities(uint256[8] calldata insertionProof, uint256 preRoot, uint32 startIndex, uint256[] calldata identityCommitments, uint256 postRoot) public virtual
         function deleteIdentities(uint256[8] calldata deletionProof, bytes calldata packedDeletionIndices, uint256 preRoot, uint256 postRoot) public virtual
         function latestRoot() public view virtual returns (uint256 root)

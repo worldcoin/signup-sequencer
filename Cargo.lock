@@ -1987,6 +1987,7 @@ dependencies = [
  "hyper",
  "rand",
  "retry",
+ "serde",
  "serde_json",
  "signup-sequencer",
  "tokio",

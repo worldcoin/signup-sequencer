@@ -17,10 +17,14 @@ use tracing::error;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::time::Uptime;
 
+use crate::common::abi::RootInfo;
 use crate::common::api::{delete_identity, inclusion_proof, inclusion_proof_raw, insert_identity};
+use crate::common::chain::Chain;
 use crate::common::prelude::StatusCode;
 
+mod abi;
 mod api;
+pub mod chain;
 pub mod docker_compose;
 
 #[allow(unused)]
@@ -132,28 +136,39 @@ pub async fn insert_identity_with_retries(
 pub async fn mined_inclusion_proof_with_retries(
     client: &Client<HttpConnector>,
     uri: &String,
+    chain: &Chain,
     commitment: &Hash,
     retries_count: usize,
     retries_interval: f32,
-) -> anyhow::Result<InclusionProofResponse> {
+) -> anyhow::Result<()> {
     let mut last_res = Err(anyhow!("No calls at all"));
     for _i in 0..retries_count {
         last_res = inclusion_proof(client, uri, commitment).await;
 
         if let Ok(ref inclusion_proof_json) = last_res {
-            if inclusion_proof_json.0.status == Status::Processed(Mined) {
-                break;
+            if let Some(root) = inclusion_proof_json.root {
+                let res = chain
+                    .identity_manager
+                    .method::<U256, RootInfo>("queryRoot", root.into())
+                    .expect("Failed to create method queryRoot on chain.")
+                    .call()
+                    .await
+                    .expect("Failed to call method queryRoot on chain.");
+
+                if res.root != U256::zero() {
+                    return Ok(());
+                }
             }
         };
 
         _ = sleep(Duration::from_secs_f32(retries_interval)).await;
     }
 
-    let inclusion_proof_json = last_res?;
+    if last_res.is_err() {
+        return last_res.map(|_| ());
+    }
 
-    assert_eq!(inclusion_proof_json.0.status, Status::Processed(Mined));
-
-    Ok(inclusion_proof_json)
+    Err(anyhow!("Inclusion proof not found on chain"))
 }
 
 pub async fn bad_request_inclusion_proof_with_retries(

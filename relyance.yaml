@@ -5,6 +5,6 @@ repository: signup-sequencer
 
 
 # Services and Code Relationship
-services:
+service:
   - service: signup-sequencer
-  - source: src
+    source: src

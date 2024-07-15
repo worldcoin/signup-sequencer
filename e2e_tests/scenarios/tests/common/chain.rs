@@ -15,6 +15,7 @@ use ethers::utils::{Anvil, AnvilInstance};
 use tracing::info;
 
 use super::abi as ContractAbi;
+use crate::common::abi::IWorldIDIdentityManager;
 use crate::common::prelude::instrument;
 
 type SpecialisedClient =
@@ -25,18 +26,16 @@ pub type SpecialisedContract = Contract<SpecialisedClient>;
 
 pub struct Chain {
     pub private_key:      SigningKey,
-    pub identity_manager: SpecialisedContract,
+    pub identity_manager: IWorldIDIdentityManager<SpecialisedClient>,
 }
 
 #[instrument(skip_all)]
 pub async fn create_chain(chain_addr: String) -> anyhow::Result<Chain> {
     // This private key is taken from tx-sitter configuration in compose.yaml.
     // Env name: TX_SITTER__SERVICE__PREDEFINED__RELAYER__KEY_ID
-    let private_key = SigningKey::from_slice(&[
-        0xd1, 0x06, 0x07, 0x66, 0x2a, 0x85, 0x42, 0x4f, 0x02, 0xa3, 0x3f, 0xb1, 0xe6, 0xd0, 0x95,
-        0xbd, 0x0a, 0xc7, 0x15, 0x43, 0x96, 0xff, 0x09, 0x76, 0x2e, 0x41, 0xf8, 0x2f, 0xf2, 0x23,
-        0x3a, 0xaa,
-    ])?;
+    let private_key = SigningKey::from_slice(&hex_literal::hex!(
+        "d10607662a85424f02a33fb1e6d095bd0ac7154396ff09762e41f82ff2233aaa"
+    ))?;
     // This address is taken from signup-sequencer configuration in config.toml.
     // Section: [network], param name: identity_manager_address
     let identity_manager_contract_address =
@@ -53,11 +52,8 @@ pub async fn create_chain(chain_addr: String) -> anyhow::Result<Chain> {
     let client = NonceManagerMiddleware::new(client, wallet.address());
     let client = Arc::new(client);
 
-    let identity_manager: SpecialisedContract = Contract::new(
-        identity_manager_contract_address,
-        ContractAbi::IDENTITYMANAGERCONTRACT_ABI.clone(),
-        client.clone(),
-    );
+    let identity_manager =
+        IWorldIDIdentityManager::new(identity_manager_contract_address, client.clone());
 
     Ok(Chain {
         private_key,

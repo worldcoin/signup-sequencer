@@ -5,6 +5,7 @@
 use std::time::Duration;
 
 use anyhow::anyhow;
+use ethers::providers::Middleware;
 use ethers::types::U256;
 use hyper::client::HttpConnector;
 use hyper::Client;
@@ -141,21 +142,19 @@ pub async fn mined_inclusion_proof_with_retries(
     retries_count: usize,
     retries_interval: f32,
 ) -> anyhow::Result<()> {
-    let mut last_res = Err(anyhow!("No calls at all"));
+    let mut last_res = None;
     for _i in 0..retries_count {
-        last_res = inclusion_proof(client, uri, commitment).await;
+        last_res = Some(inclusion_proof(client, uri, commitment).await?);
 
-        if let Ok(ref inclusion_proof_json) = last_res {
+        if let Some(ref inclusion_proof_json) = last_res {
             if let Some(root) = inclusion_proof_json.root {
-                let res = chain
+                let (root, ..) = chain
                     .identity_manager
-                    .method::<U256, RootInfo>("queryRoot", root.into())
-                    .expect("Failed to create method queryRoot on chain.")
+                    .query_root(root.into())
                     .call()
-                    .await
-                    .expect("Failed to call method queryRoot on chain.");
+                    .await?;
 
-                if res.root != U256::zero() {
+                if root != U256::zero() {
                     return Ok(());
                 }
             }
@@ -164,8 +163,8 @@ pub async fn mined_inclusion_proof_with_retries(
         _ = sleep(Duration::from_secs_f32(retries_interval)).await;
     }
 
-    if last_res.is_err() {
-        return last_res.map(|_| ());
+    if last_res.is_none() {
+        return Err(anyhow!("No calls at all"));
     }
 
     Err(anyhow!("Inclusion proof not found on chain"))

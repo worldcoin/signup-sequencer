@@ -17,6 +17,7 @@ signup-sequencer = { path = "./../.." }
 anyhow = "1.0"
 ethers = { version = "2.0.10" }
 hex = "0.4.3"
+hex-literal = "0.4.1"
 hyper = { version = "^0.14.17", features = ["tcp", "http1", "http2", "client"] }
 rand = "0.8.5"
 retry = "2.0.0"

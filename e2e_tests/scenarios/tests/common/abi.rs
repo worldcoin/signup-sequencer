@@ -3,7 +3,7 @@
 use ethers::prelude::abigen;
 
 abigen!(
-    IdentityManagerContract,
+    IWorldIDIdentityManager,
     r#"[
         struct RootInfo { uint256 root; uint128 supersededTimestamp; bool isValid }
         function queryRoot(uint256 root) public view virtual returns (RootInfo memory)

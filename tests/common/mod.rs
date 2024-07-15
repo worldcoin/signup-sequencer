@@ -280,7 +280,7 @@ pub async fn test_inclusion_proof(
         let result = serde_json::from_str::<InclusionProofResponse>(&result)
             .expect("Failed to parse response as json");
 
-        if let Some(root) = result.root {
+        if let Some(root) = result.0.root {
             if offchain_mode_enabled {
                 // For offchain mode returning root in inclusion proof response means the proof
                 // is valid.
@@ -357,7 +357,7 @@ pub async fn test_inclusion_proof_mined(
         let result = serde_json::from_str::<InclusionProofResponse>(&result)
             .expect("Failed to parse response as json");
 
-        if let Some(root) = result.root {
+        if let Some(root) = result.0.root {
             if offchain_mode_enabled {
                 // For offchain mode returning root in inclusion proof response means the proof
                 // is valid.
@@ -414,7 +414,7 @@ pub async fn test_not_in_tree(uri: &str, client: &Client<HttpConnector>, leaf: &
     let result = serde_json::from_str::<InclusionProofResponse>(&result)
         .expect("Failed to parse InclusionProofResponse");
 
-    assert_eq!(result.root, None);
+    assert_eq!(result.0.root, None);
 }
 
 #[instrument(skip_all)]
@@ -444,7 +444,7 @@ pub async fn test_in_tree(uri: &str, client: &Client<HttpConnector>, leaf: &Hash
     let result = serde_json::from_str::<InclusionProofResponse>(&result)
         .expect("Failed to parse InclusionProofResponse");
 
-    let root: U256 = result.root.expect("Failed to get root").into();
+    let root: U256 = result.0.root.expect("Failed to get root").into();
 
     assert_ne!(root, U256::zero(), "Hash is not zero");
 }
@@ -933,11 +933,11 @@ pub fn generate_reference_proof(
     ref_tree: &PoseidonTree,
     leaf_idx: usize,
 ) -> InclusionProofResponse {
-    InclusionProofResponse {
+    InclusionProofResponse(InclusionProof {
         root:    Some(ref_tree.root()),
         proof:   ref_tree.proof(leaf_idx),
         message: None,
-    }
+    })
 }
 
 /// Generates identities for the purposes of testing. The identities are encoded

@@ -1,4 +1,3 @@
-use chrono::Utc;
 use hyper::StatusCode;
 use semaphore::protocol::Proof;
 use semaphore::Field;
@@ -8,28 +7,13 @@ use crate::identity_tree::{Hash, InclusionProof, RootItem};
 use crate::prover::{ProverConfig, ProverType};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct InclusionProofResponse {
-    pub root:    Option<Field>,
-    pub proof:   Option<semaphore::poseidon_tree::Proof>,
-    pub message: Option<String>,
-}
+pub struct InclusionProofResponse(pub InclusionProof);
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ListBatchSizesResponse(pub Vec<ListBatchSizesResponseEntry>);
+pub struct ListBatchSizesResponse(pub Vec<ProverConfig>);
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ListBatchSizesResponseEntry {
-    pub url:         String,
-    pub timeout_s:   u64,
-    pub batch_size:  usize,
-    pub prover_type: ProverType,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct VerifySemaphoreProofResponse {
-    pub root:                Field,
-    pub pending_valid_as_of: chrono::DateTime<Utc>,
-}
+pub struct VerifySemaphoreProofResponse(pub RootItem);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -108,11 +92,7 @@ pub struct RecoveryRequest {
 
 impl From<InclusionProof> for InclusionProofResponse {
     fn from(value: InclusionProof) -> Self {
-        Self {
-            root:    value.root,
-            proof:   value.proof,
-            message: value.message,
-        }
+        Self(value)
     }
 }
 
@@ -124,17 +104,7 @@ impl ToResponseCode for InclusionProofResponse {
 
 impl From<Vec<ProverConfig>> for ListBatchSizesResponse {
     fn from(value: Vec<ProverConfig>) -> Self {
-        Self(
-            value
-                .into_iter()
-                .map(|v| ListBatchSizesResponseEntry {
-                    url:         v.url,
-                    timeout_s:   v.timeout_s,
-                    batch_size:  v.batch_size,
-                    prover_type: v.prover_type,
-                })
-                .collect(),
-        )
+        Self(value)
     }
 }
 
@@ -146,10 +116,7 @@ impl ToResponseCode for ListBatchSizesResponse {
 
 impl From<RootItem> for VerifySemaphoreProofResponse {
     fn from(value: RootItem) -> Self {
-        Self {
-            root:                value.root,
-            pending_valid_as_of: value.pending_valid_as_of,
-        }
+        Self(value)
     }
 }
 

@@ -88,7 +88,8 @@ use tracing::trace;
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
-use crate::common::abi::{BatchingContract, RootInfo};
+use crate::common::abi::{IWorldIDIdentityManager, RootInfo};
+use crate::common::chain_mock::SpecialisedClient;
 use crate::server::error::Error as ServerError;
 
 const NUM_ATTEMPTS_FOR_INCLUSION_PROOF: usize = 20;
@@ -208,7 +209,7 @@ async fn test_verify_proof_inner(
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 pub async fn test_verify_proof_on_chain(
-    identity_manager: &SpecialisedContract,
+    identity_manager: &IWorldIDIdentityManager<SpecialisedClient>,
     root: Field,
     signal_hash: Field,
     nullifier_hash: Field,
@@ -224,17 +225,16 @@ pub async fn test_verify_proof_on_chain(
             [ar.0, ar.1, bs.0[0], bs.0[1], bs.1[0], bs.1[1], krs.0, krs.1]
         }
     };
-    let method = identity_manager.method::<_, ()>(
-        "verifyProof",
-        (
+    identity_manager
+        .verify_proof(
             root_tok,
             signal_hash_tok,
             nullifier_hash_tok,
             external_nullifier_hash_tok,
             proof_tok,
-        ),
-    )?;
-    method.call().await?;
+        )
+        .call()
+        .await?;
 
     Ok(())
 }
@@ -291,15 +291,14 @@ pub async fn test_inclusion_proof(
             }
             let root: U256 = root.into();
 
-            let res = mock_chain
+            let (root, ..) = mock_chain
                 .identity_manager
-                .method::<U256, RootInfo>("queryRoot", root)
-                .expect("Failed to create method queryRoot on mocked chain.")
+                .query_root(root)
                 .call()
                 .await
                 .expect("Failed to call method queryRoot on mocked chain.");
 
-            if res.root != U256::zero() {
+            if root != U256::zero() {
                 let proof_json = generate_reference_proof(ref_tree, leaf_index);
                 assert_eq!(result, proof_json);
 
@@ -366,15 +365,14 @@ pub async fn test_inclusion_proof_mined(
             }
             let root: U256 = root.into();
 
-            let res = mock_chain
+            let (root, ..) = mock_chain
                 .identity_manager
-                .method::<U256, RootInfo>("queryRoot", root)
-                .expect("Failed to create method queryRoot on mocked chain.")
+                .query_root(root)
                 .call()
                 .await
                 .expect("Failed to call method queryRoot on mocked chain.");
 
-            if res.root != U256::zero() {
+            if root != U256::zero() {
                 return;
             }
         }

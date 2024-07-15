@@ -39,7 +39,7 @@ async fn recover_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     let updated_root_history_expiry = U256::from(30);
     mock_chain
         .identity_manager
-        .method::<_, ()>("setRootHistoryExpiry", updated_root_history_expiry)?
+        .set_root_history_expiry(updated_root_history_expiry)
         .send()
         .await?
         .await?;

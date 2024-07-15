@@ -3,7 +3,7 @@
 use ethers::prelude::abigen;
 
 abigen!(
-    BatchingContract,
+    IWorldIDIdentityManager,
     r#"[
         struct RootInfo { uint256 root; uint128 supersededTimestamp; bool isValid }
         function initialize(uint8 treeDepth, uint256 initialRoot, address _batchInsertionVerifiers, address _batchUpdateVerifiers, address _semaphoreVerifier) public virtual

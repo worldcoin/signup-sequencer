@@ -147,7 +147,7 @@ pub async fn mined_inclusion_proof_with_retries(
         last_res = Some(inclusion_proof(client, uri, commitment).await?);
 
         if let Some(ref inclusion_proof_json) = last_res {
-            if let Some(root) = inclusion_proof_json.root {
+            if let Some(root) = inclusion_proof_json.0.root {
                 let (root, ..) = chain
                     .identity_manager
                     .query_root(root.into())

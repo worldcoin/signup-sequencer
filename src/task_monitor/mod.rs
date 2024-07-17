@@ -18,8 +18,7 @@ const TREE_INIT_BACKOFF: Duration = Duration::from_secs(5);
 const PROCESS_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const FINALIZE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const QUEUE_MONITOR_BACKOFF: Duration = Duration::from_secs(5);
-const INSERT_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
-const DELETE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
+const MODIFY_TREE_BACKOFF: Duration = Duration::from_secs(5);
 
 struct RunningInstance {
     handles:         Vec<JoinHandle<()>>,
@@ -204,46 +203,19 @@ impl TaskMonitor {
         );
         handles.push(monitor_txs_handle);
 
-        let pending_insertion_mutex = Arc::new(Mutex::new(()));
-
-        // Insert identities
+        // Modify tree
         let app = self.app.clone();
         let wake_up_notify = base_wake_up_notify.clone();
-        let insertion_mutex = pending_insertion_mutex.clone();
-        let insert_identities = move || {
-            self::tasks::insert_identities::insert_identities(
-                app.clone(),
-                insertion_mutex.clone(),
-                wake_up_notify.clone(),
-            )
-        };
+        let modify_tree =
+            move || tasks::modify_tree::modify_tree(app.clone(), wake_up_notify.clone());
 
-        let insert_identities_handle = crate::utils::spawn_monitored_with_backoff(
-            insert_identities,
+        let modify_tree_handle = crate::utils::spawn_monitored_with_backoff(
+            modify_tree,
             shutdown_sender.clone(),
-            INSERT_IDENTITIES_BACKOFF,
+            MODIFY_TREE_BACKOFF,
             self.shutdown.clone(),
         );
-        handles.push(insert_identities_handle);
-
-        // Delete identities
-        let app = self.app.clone();
-        let wake_up_notify = base_wake_up_notify.clone();
-        let delete_identities = move || {
-            self::tasks::delete_identities::delete_identities(
-                app.clone(),
-                pending_insertion_mutex.clone(),
-                wake_up_notify.clone(),
-            )
-        };
-
-        let delete_identities_handle = crate::utils::spawn_monitored_with_backoff(
-            delete_identities,
-            shutdown_sender.clone(),
-            DELETE_IDENTITIES_BACKOFF,
-            self.shutdown.clone(),
-        );
-        handles.push(delete_identities_handle);
+        handles.push(modify_tree_handle);
 
         // Create the instance
         *instance = Some(RunningInstance {

@@ -2,6 +2,8 @@ mod common;
 
 use common::prelude::*;
 
+use crate::common::spawn_app_returning_initialized_tree;
+
 const IDLE_TIME: u64 = 7;
 
 #[tokio::test]
@@ -109,7 +111,7 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
     )
     .await;
 
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     let mid_root: U256 = ref_tree.root().into();
 
@@ -157,7 +159,7 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
     )
     .await;
 
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     let tree_state = app.tree_state()?.clone();
 
@@ -190,13 +192,14 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
         .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (app, app_handle, local_addr, shutdown) = spawn_app(config.clone())
-        .await
-        .expect("Failed to spawn app.");
+    let (_, app_handle, local_addr, shutdown, initialized_tree) =
+        spawn_app_returning_initialized_tree(config.clone())
+            .await
+            .expect("Failed to spawn app.");
 
     let uri = "http://".to_owned() + &local_addr.to_string();
 
-    let restored_tree_state = app.tree_state()?.clone();
+    let restored_tree_state = initialized_tree;
 
     assert_eq!(
         restored_tree_state.latest_tree().get_root(),

@@ -34,6 +34,9 @@ pub async fn create_batches(
     tracing::info!("Awaiting for a clean slate");
     app.identity_processor.await_clean_slate().await?;
 
+    tracing::info!("Awaiting for initialized tree");
+    app.tree_state()?;
+
     tracing::info!("Starting batch creator.");
     ensure_batch_chain_initialized(&app).await?;
 

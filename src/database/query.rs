@@ -486,6 +486,17 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         Ok(())
     }
 
+    async fn count_deletions(self) -> Result<i32, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT COUNT(*)
+            FROM deletions
+            "#,
+        );
+        let result = self.fetch_one(query).await?;
+        Ok(result.get::<i64, _>(0) as i32)
+    }
+
     // TODO: consider using a larger value than i64 for leaf index, ruint should
     // have postgres compatibility for u256
     async fn get_deletions(self) -> Result<Vec<DeletionEntry>, Error> {

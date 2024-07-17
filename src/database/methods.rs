@@ -220,7 +220,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
 
         Ok(sqlx::query_as::<_, TreeUpdate>(
             r#"
-            SELECT leaf_index, commitment as element
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
             FROM identities
             WHERE status = $1
             ORDER BY id ASC;
@@ -241,7 +241,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
         Ok(sqlx::query_as::<_, TreeUpdate>(
             r#"
-            SELECT leaf_index, commitment as element
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
             FROM identities
             WHERE status = ANY($1)
             ORDER BY id ASC;
@@ -252,8 +252,24 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .await?)
     }
 
+    async fn get_commitments_after_id(self, id: usize) -> Result<Vec<TreeUpdate>, Error> {
+        let mut conn = self.acquire().await?;
+
+        Ok(sqlx::query_as::<_, TreeUpdate>(
+            r#"
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            FROM identities
+            WHERE id > $1
+            ORDER BY id ASC;
+            "#,
+        )
+        .bind(id as i64)
+        .fetch_all(&mut *conn)
+        .await?)
+    }
+
     #[instrument(skip(self, leaf_indexes), level = "debug")]
-    async fn get_non_zero_commitments_by_leaf_indexes<I>(
+    async fn get_non_zero_commitments_by_leaf_indexes<I: IntoIterator<Item = usize>>(
         self,
         leaf_indexes: I,
     ) -> Result<Vec<Hash>, Error>
@@ -319,6 +335,43 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             "#,
         )
         .bind(root)
+        .fetch_optional(&mut *conn)
+        .await?)
+    }
+
+    async fn get_latest_tree_update_by_statuses(
+        self,
+        statuses: Vec<ProcessedStatus>,
+    ) -> Result<Option<TreeUpdate>, Error> {
+        let mut conn = self.acquire().await?;
+
+        let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
+        Ok(sqlx::query_as::<_, TreeUpdate>(
+            r#"
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            FROM identities
+            WHERE status = ANY($1)
+            ORDER BY id DESC
+            LIMIT 1;
+            "#,
+        )
+        .bind(&statuses[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
+        .fetch_optional(&mut *conn)
+        .await?)
+    }
+
+    async fn get_tree_update_by_root(self, root: &Hash) -> Result<Option<TreeUpdate>, Error> {
+        let mut conn = self.acquire().await?;
+
+        Ok(sqlx::query_as::<_, TreeUpdate>(
+            r#"
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            FROM identities
+            WHERE root = $1
+            LIMIT 1;
+            "#,
+        )
+        .bind(root) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
         .fetch_optional(&mut *conn)
         .await?)
     }
@@ -726,7 +779,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
-    #[instrument(skip(self), level = "debug")]
+    #[instrument(skip(self, identities, indexes), level = "debug")]
     async fn insert_new_batch(
         self,
         next_root: &Hash,
@@ -809,6 +862,25 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .await?;
 
         Ok(res)
+    }
+
+    async fn count_not_finalized_batches(self) -> Result<i32, Error> {
+        let mut conn = self.acquire().await?;
+
+        let res = sqlx::query(
+            r#"
+            SELECT COUNT(*)
+            FROM batches
+            LEFT JOIN transactions ON batches.next_root = transactions.batch_next_root
+            LEFT JOIN identities ON batches.next_root = identities.root
+            WHERE transactions.batch_next_root IS NOT NULL AND batches.prev_root IS NOT NULL AND identities.status = $1
+            "#,
+        )
+        .bind(<&str>::from(ProcessedStatus::Pending))
+        .fetch_one(&mut *conn)
+        .await?;
+
+        Ok(res.get::<i64, _>(0) as i32)
     }
 
     #[instrument(skip(self), level = "debug")]

@@ -8,9 +8,9 @@ use crate::config::TreeConfig;
 use crate::database::methods::DbMethods;
 use crate::database::Database;
 use crate::identity::processor::IdentityProcessor;
+use crate::identity_tree::builder::CanonicalTreeBuilder;
 use crate::identity_tree::{
-    CanonicalTreeBuilder, Hash, ProcessedStatus, TreeState, TreeUpdate, TreeVersionReadOps,
-    TreeWithNextVersion,
+    Hash, ProcessedStatus, TreeState, TreeUpdate, TreeVersionReadOps, TreeWithNextVersion,
 };
 use crate::utils::tree_updates::dedup_tree_updates;
 
@@ -116,10 +116,10 @@ impl TreeInitializer {
     }
 
     pub fn get_leftover_leaves_and_update_index(
-        index: &mut Option<usize>,
+        last_dense_leaf: &mut Option<TreeUpdate>,
         dense_prefix_depth: usize,
         mined_items: &[TreeUpdate],
-    ) -> Vec<ruint::Uint<256, 4>> {
+    ) -> Vec<TreeUpdate> {
         let leftover_items = if mined_items.is_empty() {
             vec![]
         } else {
@@ -127,7 +127,12 @@ impl TreeInitializer {
             // if the last index is greater than dense_prefix_depth, 1 << dense_prefix_depth
             // should be the last index in restored tree
             let last_index = std::cmp::min(max_leaf, (1 << dense_prefix_depth) - 1);
-            *index = Some(last_index);
+            let last_dense_leaf_index =
+                mined_items.iter().rposition(|v| v.leaf_index <= last_index);
+
+            *last_dense_leaf = last_dense_leaf_index
+                .and_then(|v| mined_items.get(v))
+                .cloned();
 
             info!("calculated last dense tree index: {}", last_index);
 
@@ -135,15 +140,7 @@ impl TreeInitializer {
                 return vec![];
             }
 
-            let mut leaves = Vec::with_capacity(max_leaf - last_index);
-
-            let leftover = &mined_items[(last_index + 1)..];
-
-            for item in leftover {
-                leaves.push(item.element);
-            }
-
-            leaves
+            mined_items[last_dense_leaf_index.map(|v| v + 1).unwrap_or(0)..].to_vec()
         };
 
         info!(
@@ -161,9 +158,9 @@ impl TreeInitializer {
     ) -> anyhow::Result<Option<TreeState>> {
         info!("Restoring tree from cache");
 
-        let mut last_mined_index_in_dense: Option<usize> = None;
+        let mut last_mined_leaf_in_dense: Option<TreeUpdate> = None;
         let leftover_items = Self::get_leftover_leaves_and_update_index(
-            &mut last_mined_index_in_dense,
+            &mut last_mined_leaf_in_dense,
             self.config.dense_tree_prefix_depth,
             mined_items,
         );
@@ -174,7 +171,7 @@ impl TreeInitializer {
             self.config.tree_depth,
             self.config.dense_tree_prefix_depth,
             &self.config.initial_leaf_value,
-            last_mined_index_in_dense,
+            last_mined_leaf_in_dense,
             &leftover_items,
             self.config.tree_gc_threshold,
             &self.config.cache_file,
@@ -253,10 +250,11 @@ impl TreeInitializer {
             vec![]
         } else {
             let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
-            let mut leaves = vec![initial_leaf_value; max_leaf + 1];
+            let mut leaves = vec![None; max_leaf + 1];
 
             for item in mined_items {
-                leaves[item.leaf_index] = item.element;
+                let i = item.leaf_index;
+                leaves[i] = Some(item);
             }
 
             leaves
@@ -347,13 +345,15 @@ mod test {
     pub fn generate_test_identities_with_index(identity_count: usize) -> Vec<TreeUpdate> {
         let mut identities = vec![];
 
-        for i in 1..=identity_count {
+        for i in 0..identity_count {
             let bytes: [u8; 32] = U256::from(rand::random::<u64>()).into();
             let identity = Uint::<256, 4>::from_le_bytes(bytes);
 
             identities.push(TreeUpdate {
+                sequence_id: i + 1,
                 leaf_index: i,
                 element: identity,
+                post_root: identity,
             });
         }
 
@@ -372,7 +372,7 @@ mod test {
         // indecies at all)
         let identities: Vec<TreeUpdate> = vec![];
 
-        let mut last_mined_index_in_dense: Option<usize> = None;
+        let mut last_mined_index_in_dense: Option<TreeUpdate> = None;
         let leaves = TreeInitializer::get_leftover_leaves_and_update_index(
             &mut last_mined_index_in_dense,
             dense_prefix_depth,
@@ -385,7 +385,7 @@ mod test {
         // since there are no identities at all the leaves should be 0
         assert_eq!(leaves.len(), 0);
 
-        // first test with less then dense prefix
+        // first test with less than dense prefix
         let identities = generate_test_identities_with_index(less_identities_count);
 
         last_mined_index_in_dense = None;
@@ -397,12 +397,15 @@ mod test {
         );
 
         // check if the index is correct
-        assert_eq!(last_mined_index_in_dense, Some(identities.len()));
-        // since there are less identities then dense prefix, the leavs should be empty
-        // vector
+        assert_eq!(
+            last_mined_index_in_dense.unwrap().leaf_index,
+            identities.len() - 1
+        );
+        // since there are fewer identities than dense prefix, the leaves should be
+        // empty vector
         assert!(leaves.is_empty());
 
-        // lets try now with more identities then dense prefix supports
+        // let's try now with more identities than dense prefix supports
 
         // this should generate 2^dense_prefix + 2
         let identities = generate_test_identities_with_index(more_identities_count);
@@ -416,16 +419,16 @@ mod test {
 
         // check if the index is correct
         assert_eq!(
-            last_mined_index_in_dense,
-            Some((1 << dense_prefix_depth) - 1)
+            last_mined_index_in_dense.unwrap().leaf_index,
+            (1 << dense_prefix_depth) - 1
         );
 
-        // since there are more identities then dense prefix, the leavs should be 2
+        // since there are more identities than dense prefix, the leaves should be 2
         assert_eq!(leaves.len(), 2);
 
         // additional check for correctness
-        assert_eq!(leaves[0], identities[8].element);
-        assert_eq!(leaves[1], identities[9].element);
+        assert_eq!(leaves[0].element, identities[8].element);
+        assert_eq!(leaves[1].element, identities[9].element);
 
         Ok(())
     }

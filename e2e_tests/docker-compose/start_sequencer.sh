@@ -1,0 +1,1 @@
+docker compose --project-name local-test --profile e2e-ha up sequencer-db semaphore-keys-init-insertion semaphore-keys-init-deletion semaphore-insertion semaphore-deletion signup-sequencer-balancer signup-sequencer-0

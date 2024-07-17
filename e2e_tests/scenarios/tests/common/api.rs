@@ -8,7 +8,7 @@ use signup_sequencer::identity_tree::Hash;
 use signup_sequencer::server::data::{
     DeletionRequest, InclusionProofRequest, InclusionProofResponse, InsertCommitmentRequest,
 };
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::common::prelude::StatusCode;
 
@@ -133,15 +133,15 @@ pub async fn inclusion_proof(
     client: &Client<HttpConnector>,
     uri: &String,
     commitment: &Hash,
-) -> anyhow::Result<Option<InclusionProofResponse>> {
+) -> anyhow::Result<(StatusCode, Option<InclusionProofResponse>)> {
     let result = inclusion_proof_raw(client, uri, commitment).await?;
 
-    if result.status_code == StatusCode::NOT_FOUND {
-        return Ok(None);
+    if !result.status_code.is_success() {
+        return Ok((result.status_code, None));
     }
 
     let result_json = serde_json::from_str::<InclusionProofResponse>(&result.body)
         .expect("Failed to parse response as json");
 
-    Ok(Some(result_json))
+    Ok((result.status_code, Some(result_json)))
 }

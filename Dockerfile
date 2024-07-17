@@ -1,4 +1,4 @@
-FROM debian:12 as build-env
+FROM debian:12 AS build-env
 
 WORKDIR /src
 

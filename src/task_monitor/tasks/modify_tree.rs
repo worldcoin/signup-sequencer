@@ -18,7 +18,11 @@ use crate::retry_tx;
 // them from single task that determines which type of operations to run. It is
 // done that way to reduce number of used mutexes and eliminate the risk of some
 // tasks not being run at all as mutex is not preserving unlock order.
-pub async fn modify_tree(app: Arc<App>, wake_up_notify: Arc<Notify>) -> anyhow::Result<()> {
+pub async fn modify_tree(
+    app: Arc<App>,
+    sync_tree_notify: Arc<Notify>,
+    tree_synced_notify: Arc<Notify>,
+) -> anyhow::Result<()> {
     info!("Starting modify tree task.");
 
     let batch_deletion_timeout = chrono::Duration::from_std(app.config.app.batch_deletion_timeout)
@@ -34,36 +38,41 @@ pub async fn modify_tree(app: Arc<App>, wake_up_notify: Arc<Notify>) -> anyhow::
                 info!("Modify tree task woken due to timeout");
             }
 
-            () = wake_up_notify.notified() => {
-                info!("Modify tree task woken due to request");
+            () = tree_synced_notify.notified() => {
+                info!("Modify tree task woken due to tree synced event");
             },
         }
 
         let tree_state = app.tree_state()?;
 
-        retry_tx!(&app.database, tx, {
+        let tree_modified = retry_tx!(&app.database, tx, {
             do_modify_tree(
                 &mut tx,
                 batch_deletion_timeout,
                 min_batch_deletion_size,
                 tree_state,
-                &wake_up_notify,
             )
             .await
         })
         .await?;
 
-        // wake_up_notify.notify_one();
+        // It is very important to generate that event AFTER transaction is committed to
+        // database. Otherwise, notified task may not see changes as transaction was not
+        // committed yet.
+        if tree_modified {
+            sync_tree_notify.notify_one();
+        }
     }
 }
 
+/// Looks for any pending changes to the tree. Returns true if there were any
+/// changes applied to the tree.
 async fn do_modify_tree(
     tx: &mut Transaction<'_, Postgres>,
     batch_deletion_timeout: chrono::Duration,
     min_batch_deletion_size: usize,
     tree_state: &TreeState,
-    wake_up_notify: &Arc<Notify>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let deletions = tx.get_deletions().await?;
 
     // Deleting identities has precedence over inserting them.
@@ -76,12 +85,10 @@ async fn do_modify_tree(
     )
     .await?
     {
-        run_deletions(tx, tree_state, deletions, wake_up_notify).await?;
+        run_deletions(tx, tree_state, deletions).await
     } else {
-        run_insertions(tx, tree_state, wake_up_notify).await?;
+        run_insertions(tx, tree_state).await
     }
-
-    Ok(())
 }
 
 pub async fn should_run_deletion(
@@ -124,16 +131,16 @@ pub async fn should_run_deletion(
     Ok(true)
 }
 
+/// Run insertions and returns true if there were any changes to the tree.
 pub async fn run_insertions(
     tx: &mut Transaction<'_, Postgres>,
     tree_state: &TreeState,
-    wake_up_notify: &Arc<Notify>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let unprocessed = tx
         .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
         .await?;
     if unprocessed.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
 
     let latest_tree = tree_state.latest_tree();
@@ -164,7 +171,9 @@ pub async fn run_insertions(
     );
 
     let mut pre_root = &latest_tree.get_root();
-    let data = latest_tree.append_many(&filtered_identities);
+    let data = latest_tree
+        .clone()
+        .simulate_append_many(&filtered_identities);
 
     assert_eq!(
         data.len(),
@@ -180,20 +189,17 @@ pub async fn run_insertions(
         tx.remove_unprocessed_identity(identity).await?;
     }
 
-    // Immediately look for next operations
-    wake_up_notify.notify_one();
-
-    Ok(())
+    Ok(true)
 }
 
+/// Run deletions and returns true if there were any changes to the tree.
 pub async fn run_deletions(
     tx: &mut Transaction<'_, Postgres>,
     tree_state: &TreeState,
     mut deletions: Vec<DeletionEntry>,
-    wake_up_notify: &Arc<Notify>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     if deletions.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
 
     // This sorting is very important. It ensures that we will create a unique root
@@ -209,7 +215,10 @@ pub async fn run_deletions(
     let mut pre_root = tree_state.latest_tree().get_root();
     // Delete the commitments at the target leaf indices in the latest tree,
     // generating the proof for each update
-    let data = tree_state.latest_tree().delete_many(&leaf_indices);
+    let data = tree_state
+        .latest_tree()
+        .clone()
+        .simulate_delete_many(&leaf_indices);
 
     assert_eq!(
         data.len(),
@@ -228,8 +237,5 @@ pub async fn run_deletions(
     // Remove the previous commitments from the deletions table
     tx.remove_deletions(&previous_commitments).await?;
 
-    // Immediately look for next operations
-    wake_up_notify.notify_one();
-
-    Ok(())
+    Ok(true)
 }

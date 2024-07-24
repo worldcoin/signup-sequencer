@@ -140,21 +140,21 @@ services:
     command: [ "/config.toml" ]
     environment:
       - RUST_LOG=debug
-#  signup-sequencer-1:
-#    <<: *signup-sequencer-def
-#    hostname: signup-sequencer-1
-#    ports:
-#      - ${SIGNUP_SEQUENCER_0_PORT:-9081}:8080
+  signup-sequencer-1:
+    <<: *signup-sequencer-def
+    hostname: signup-sequencer-1
+    ports:
+      - ${SIGNUP_SEQUENCER_1_PORT:-9081}:8080
 #  signup-sequencer-2:
 #    <<: *signup-sequencer-def
 #    hostname: signup-sequencer-2
 #    ports:
-#      - ${SIGNUP_SEQUENCER_0_PORT:-9082}:8080
+#      - ${SIGNUP_SEQUENCER_2_PORT:-9082}:8080
 #  signup-sequencer-3:
 #    <<: *signup-sequencer-def
 #    hostname: signup-sequencer-3
 #    ports:
-#      - ${SIGNUP_SEQUENCER_0_PORT:-9083}:8080
+#      - ${SIGNUP_SEQUENCER_3_PORT:-9083}:8080
 volumes:
   tx_sitter_db_data:
     driver: local

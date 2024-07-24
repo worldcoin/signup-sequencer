@@ -29,7 +29,8 @@ const DEBOUNCE_THRESHOLD_SECS: i64 = 1;
 pub async fn create_batches(
     app: Arc<App>,
     next_batch_notify: Arc<Notify>,
-    wake_up_notify: Arc<Notify>,
+    sync_tree_notify: Arc<Notify>,
+    tree_synced_notify: Arc<Notify>,
 ) -> anyhow::Result<()> {
     tracing::info!("Awaiting for a clean slate");
     app.identity_processor.await_clean_slate().await?;
@@ -55,15 +56,21 @@ pub async fn create_batches(
     // (possibly-incomplete) batch anyway.
     let mut last_batch_time: DateTime<Utc> = app.database.get_latest_insertion().await?.timestamp;
 
+    let check_next_batch_notify = Notify::new();
+
     loop {
         // We wait either for a timer tick or a full batch
         select! {
             _ = timer.tick() => {
-                tracing::info!("Identity batch insertion woken due to timeout");
+                tracing::info!("Create batches woken due to timeout");
             }
 
-            () = wake_up_notify.notified() => {
-                tracing::trace!("Identity batch insertion woken due to request");
+            () = tree_synced_notify.notified() => {
+                tracing::trace!("Create batches woken due tree synced event");
+            },
+
+            () = check_next_batch_notify.notified() => {
+                tracing::trace!("Create batches woken due instant check for next batch");
             },
         }
 
@@ -94,6 +101,7 @@ pub async fn create_batches(
                 &app.prover_repository,
                 app.tree_state()?.batching_tree(),
                 &next_batch_notify,
+                &sync_tree_notify,
                 &updates,
             )
             .await?;
@@ -116,6 +124,7 @@ pub async fn create_batches(
                     &app.prover_repository,
                     app.tree_state()?.batching_tree(),
                     &next_batch_notify,
+                    &sync_tree_notify,
                     &updates,
                 )
                 .await?;
@@ -152,6 +161,7 @@ pub async fn create_batches(
                         &app.prover_repository,
                         app.tree_state()?.batching_tree(),
                         &next_batch_notify,
+                        &sync_tree_notify,
                         &updates,
                     )
                     .await?;
@@ -169,7 +179,7 @@ pub async fn create_batches(
         }
 
         // We want to check if there's a full batch available immediately
-        wake_up_notify.notify_one();
+        check_next_batch_notify.notify_one();
     }
 }
 
@@ -188,6 +198,7 @@ async fn commit_identities(
     prover_repository: &Arc<ProverRepository>,
     batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
+    sync_tree_notify: &Arc<Notify>,
     updates: &[AppliedTreeUpdate],
 ) -> anyhow::Result<()> {
     // If the update is an insertion
@@ -208,6 +219,7 @@ async fn commit_identities(
             database,
             batching_tree,
             next_batch_notify,
+            sync_tree_notify,
             updates,
             batch_size,
         )
@@ -223,6 +235,7 @@ async fn commit_identities(
             database,
             batching_tree,
             next_batch_notify,
+            sync_tree_notify,
             updates,
             batch_size,
         )
@@ -235,6 +248,7 @@ pub async fn insert_identities(
     database: &Database,
     batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
+    sync_tree_notify: &Arc<Notify>,
     updates: &[AppliedTreeUpdate],
     batch_size: usize,
 ) -> anyhow::Result<()> {
@@ -250,14 +264,15 @@ pub async fn insert_identities(
     let latest_tree_from_updates = updates
         .last()
         .expect("Updates is non empty.")
-        .result
+        .post_state
+        .tree
         .clone();
 
     // Next get merkle proofs for each update - note the proofs are acquired from
     // intermediate versions of the tree
     let mut merkle_proofs: Vec<_> = updates
         .iter()
-        .map(|update| update.result.proof(update.update.leaf_index))
+        .map(|update| update.post_state.tree.proof(update.update.leaf_index))
         .collect();
 
     // Grab some variables for sizes to make querying easier.
@@ -338,7 +353,8 @@ pub async fn insert_identities(
 
     TaskMonitor::log_batch_size(updates.len());
 
-    batching_tree.apply_updates_up_to(post_root);
+    sync_tree_notify.notify_one();
+    // batching_tree.apply_updates_up_to(post_root);
 
     Ok(())
 }
@@ -371,6 +387,7 @@ pub async fn delete_identities(
     database: &Database,
     batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
+    sync_tree_notify: &Arc<Notify>,
     updates: &[AppliedTreeUpdate],
     batch_size: usize,
 ) -> anyhow::Result<()> {
@@ -379,13 +396,14 @@ pub async fn delete_identities(
 
     let mut deletion_indices: Vec<_> = updates.iter().map(|f| f.update.leaf_index).collect();
 
-    let commitments = batching_tree.commitments_by_indices(deletion_indices.iter().copied());
+    let commitments = batching_tree.commitments_by_leaves(deletion_indices.iter().copied());
     let mut commitments: Vec<U256> = commitments.into_iter().map(U256::from).collect();
 
     let latest_tree_from_updates = updates
         .last()
         .expect("Updates is non empty.")
-        .result
+        .post_state
+        .tree
         .clone();
 
     // Next get merkle proofs for each update - note the proofs are acquired from
@@ -394,7 +412,8 @@ pub async fn delete_identities(
         .iter()
         .map(|update_with_tree| {
             update_with_tree
-                .result
+                .post_state
+                .tree
                 .proof(update_with_tree.update.leaf_index)
         })
         .collect();
@@ -459,7 +478,8 @@ pub async fn delete_identities(
 
     TaskMonitor::log_batch_size(updates.len());
 
-    batching_tree.apply_updates_up_to(post_root);
+    sync_tree_notify.notify_one();
+    // batching_tree.apply_updates_up_to(post_root);
 
     Ok(())
 }

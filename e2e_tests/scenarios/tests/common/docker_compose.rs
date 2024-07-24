@@ -26,6 +26,9 @@ pub struct DockerComposeGuard<'a> {
     semaphore_insertion_port: u32,
     semaphore_deletion_port: u32,
     signup_sequencer_0_port: u32,
+    signup_sequencer_1_port: u32,
+    signup_sequencer_2_port: u32,
+    signup_sequencer_3_port: u32,
     signup_sequencer_balancer_port: u32,
 }
 
@@ -81,6 +84,18 @@ impl<'a> DockerComposeGuard<'a> {
         res.insert(
             String::from("SIGNUP_SEQUENCER_0_PORT"),
             self.signup_sequencer_0_port.to_string(),
+        );
+        res.insert(
+            String::from("SIGNUP_SEQUENCER_1_PORT"),
+            self.signup_sequencer_1_port.to_string(),
+        );
+        res.insert(
+            String::from("SIGNUP_SEQUENCER_2_PORT"),
+            self.signup_sequencer_2_port.to_string(),
+        );
+        res.insert(
+            String::from("SIGNUP_SEQUENCER_3_PORT"),
+            self.signup_sequencer_3_port.to_string(),
         );
         res.insert(
             String::from("SIGNUP_SEQUENCER_BALANCER_PORT"),
@@ -152,6 +167,9 @@ pub async fn setup(cwd: &str) -> anyhow::Result<DockerComposeGuard> {
         semaphore_insertion_port: 0,
         semaphore_deletion_port: 0,
         signup_sequencer_0_port: 0,
+        signup_sequencer_1_port: 0,
+        signup_sequencer_2_port: 0,
+        signup_sequencer_3_port: 0,
         signup_sequencer_balancer_port: 0,
     };
 

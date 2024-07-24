@@ -134,7 +134,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
     ) -> Result<Vec<TreeUpdate>, Error> {
         Ok(sqlx::query_as::<_, TreeUpdate>(
             r#"
-            SELECT leaf_index, commitment as element
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
             FROM identities
             WHERE status = $1
             ORDER BY id ASC;
@@ -152,13 +152,27 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
         Ok(sqlx::query_as::<_, TreeUpdate>(
             r#"
-            SELECT leaf_index, commitment as element
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
             FROM identities
             WHERE status = ANY($1)
             ORDER BY id ASC;
             "#,
         )
         .bind(&statuses[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
+        .fetch_all(self)
+        .await?)
+    }
+
+    async fn get_commitments_after_id(self, id: usize) -> Result<Vec<TreeUpdate>, Error> {
+        Ok(sqlx::query_as::<_, TreeUpdate>(
+            r#"
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            FROM identities
+            WHERE id > $1
+            ORDER BY id ASC;
+            "#,
+        )
+        .bind(id as i64)
         .fetch_all(self)
         .await?)
     }
@@ -229,6 +243,39 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             "#,
         )
         .bind(root)
+        .fetch_optional(self)
+        .await?)
+    }
+
+    async fn get_latest_tree_update_by_statuses(
+        self,
+        statuses: Vec<ProcessedStatus>,
+    ) -> Result<Option<TreeUpdate>, Error> {
+        let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
+        Ok(sqlx::query_as::<_, TreeUpdate>(
+            r#"
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            FROM identities
+            WHERE status = ANY($1)
+            ORDER BY id DESC
+            LIMIT 1;
+            "#,
+        )
+        .bind(&statuses[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
+        .fetch_optional(self)
+        .await?)
+    }
+
+    async fn get_tree_update_by_root(self, root: &Hash) -> Result<Option<TreeUpdate>, Error> {
+        Ok(sqlx::query_as::<_, TreeUpdate>(
+            r#"
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            FROM identities
+            WHERE root = $1
+            LIMIT 1;
+            "#,
+        )
+        .bind(root) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
         .fetch_optional(self)
         .await?)
     }

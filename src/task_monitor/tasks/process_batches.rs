@@ -12,7 +12,6 @@ pub async fn process_batches(
     app: Arc<App>,
     monitored_txs_sender: Arc<mpsc::Sender<TransactionId>>,
     next_batch_notify: Arc<Notify>,
-    wake_up_notify: Arc<Notify>,
 ) -> anyhow::Result<()> {
     tracing::info!("Awaiting for a clean slate");
     app.identity_processor.await_clean_slate().await?;
@@ -24,19 +23,21 @@ pub async fn process_batches(
 
     let mut timer = time::interval(Duration::from_secs(5));
 
+    let check_next_batch_notify = Notify::new();
+
     loop {
         // We wait either for a timer tick or a full batch
         select! {
             _ = timer.tick() => {
-                tracing::info!("Identity processor woken due to timeout");
+                tracing::info!("Process batches woken due to timeout");
             }
 
             () = next_batch_notify.notified() => {
-                tracing::trace!("Identity processor woken due to next batch creation");
+                tracing::trace!("Process batches woken due to next batch request");
             },
 
-            () = wake_up_notify.notified() => {
-                tracing::trace!("Identity processor woken due to request");
+            () = check_next_batch_notify.notified() => {
+                tracing::trace!("Process batches woken due instant check for next batch");
             },
         }
 
@@ -57,6 +58,6 @@ pub async fn process_batches(
             .await?;
 
         // We want to check if there's a full batch available immediately
-        wake_up_notify.notify_one();
+        check_next_batch_notify.notify_one();
     }
 }

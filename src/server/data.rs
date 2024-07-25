@@ -3,21 +3,16 @@ use semaphore::protocol::Proof;
 use semaphore::Field;
 use serde::{Deserialize, Serialize};
 
-use crate::identity_tree::{
-    Hash, InclusionProof, ProcessedStatus, RootItem, Status, UnprocessedStatus,
-};
+use crate::identity_tree::{Hash, InclusionProof, RootItem};
 use crate::prover::{ProverConfig, ProverType};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[serde(transparent)]
 pub struct InclusionProofResponse(pub InclusionProof);
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct ListBatchSizesResponse(pub Vec<ProverConfig>);
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct VerifySemaphoreProofResponse(pub RootItem);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -95,19 +90,6 @@ pub struct RecoveryRequest {
     pub new_identity_commitment:      Hash,
 }
 
-impl InclusionProofResponse {
-    #[must_use]
-    pub fn hide_processed_status(mut self) -> Self {
-        self.0.status = if self.0.status == Status::Processed(ProcessedStatus::Processed) {
-            Status::Processed(ProcessedStatus::Pending)
-        } else {
-            self.0.status
-        };
-
-        self
-    }
-}
-
 impl From<InclusionProof> for InclusionProofResponse {
     fn from(value: InclusionProof) -> Self {
         Self(value)
@@ -116,13 +98,7 @@ impl From<InclusionProof> for InclusionProofResponse {
 
 impl ToResponseCode for InclusionProofResponse {
     fn to_response_code(&self) -> StatusCode {
-        match self.0.status {
-            Status::Unprocessed(UnprocessedStatus::New)
-            | Status::Processed(ProcessedStatus::Pending) => StatusCode::ACCEPTED,
-            Status::Processed(ProcessedStatus::Mined | ProcessedStatus::Processed) => {
-                StatusCode::OK
-            }
-        }
+        StatusCode::OK
     }
 }
 
@@ -138,16 +114,9 @@ impl ToResponseCode for ListBatchSizesResponse {
     }
 }
 
-impl VerifySemaphoreProofResponse {
-    #[must_use]
-    pub fn hide_processed_status(mut self) -> Self {
-        self.0.status = if self.0.status == ProcessedStatus::Processed {
-            ProcessedStatus::Pending
-        } else {
-            self.0.status
-        };
-
-        self
+impl From<RootItem> for VerifySemaphoreProofResponse {
+    fn from(value: RootItem) -> Self {
+        Self(value)
     }
 }
 

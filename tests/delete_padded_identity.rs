@@ -86,6 +86,7 @@ async fn delete_padded_identity(offchain_mode_enabled: bool) -> anyhow::Result<(
     // Check that we can also get these inclusion proofs back.
     for i in 0..insertion_batch_size {
         test_inclusion_proof(
+            &mock_chain,
             &uri,
             &client,
             i,
@@ -93,6 +94,7 @@ async fn delete_padded_identity(offchain_mode_enabled: bool) -> anyhow::Result<(
             &Hash::from_str_radix(&test_identities[i], 16)
                 .expect("Failed to parse Hash from test leaf"),
             false,
+            offchain_mode_enabled,
         )
         .await;
     }
@@ -108,6 +110,7 @@ async fn delete_padded_identity(offchain_mode_enabled: bool) -> anyhow::Result<(
 
     // make sure that identity 3 wasn't deleted
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         2,
@@ -115,11 +118,13 @@ async fn delete_padded_identity(offchain_mode_enabled: bool) -> anyhow::Result<(
         &Hash::from_str_radix(&test_identities[2], 16)
             .expect("Failed to parse Hash from test leaf"),
         false,
+        offchain_mode_enabled,
     )
     .await;
 
     // Ensure that the first and second identities were deleted
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         0,
@@ -127,9 +132,11 @@ async fn delete_padded_identity(offchain_mode_enabled: bool) -> anyhow::Result<(
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf"),
         true,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         1,
@@ -137,6 +144,7 @@ async fn delete_padded_identity(offchain_mode_enabled: bool) -> anyhow::Result<(
         &Hash::from_str_radix(&test_identities[1], 16)
             .expect("Failed to parse Hash from test leaf"),
         true,
+        offchain_mode_enabled,
     )
     .await;
 

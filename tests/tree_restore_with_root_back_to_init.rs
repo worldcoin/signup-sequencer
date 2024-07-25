@@ -73,6 +73,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
 
     // Check that we can also get these inclusion proofs back.
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         0,
@@ -80,9 +81,11 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         1,
@@ -90,9 +93,11 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         &Hash::from_str_radix(&test_identities[1], 16)
             .expect("Failed to parse Hash from test leaf 1"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         2,
@@ -100,8 +105,11 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         &Hash::from_str_radix(&test_identities[2], 16)
             .expect("Failed to parse Hash from test leaf 2"),
         false,
+        offchain_mode_enabled,
     )
     .await;
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     let tree_state = app.tree_state()?.clone();
 
@@ -153,10 +161,6 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         initial_root.into()
     );
     assert_eq!(
-        restored_tree_state.mined_tree().get_root(),
-        initial_root.into()
-    );
-    assert_eq!(
         restored_tree_state.processed_tree().get_root(),
         initial_root.into()
     );
@@ -165,6 +169,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
 
     // Check that we can also get these inclusion proofs back.
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         0,
@@ -172,9 +177,11 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         1,
@@ -182,9 +189,11 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         &Hash::from_str_radix(&test_identities[1], 16)
             .expect("Failed to parse Hash from test leaf 1"),
         false,
+        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         2,
@@ -192,8 +201,11 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         &Hash::from_str_radix(&test_identities[2], 16)
             .expect("Failed to parse Hash from test leaf 2"),
         false,
+        offchain_mode_enabled,
     )
     .await;
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     test_same_tree_states(&tree_state, &restored_tree_state).await?;
 

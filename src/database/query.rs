@@ -141,6 +141,47 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .await?)
     }
 
+    async fn get_commitments_by_statuses(
+        self,
+        statuses: Vec<ProcessedStatus>,
+    ) -> Result<Vec<TreeUpdate>, Error> {
+        let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
+        Ok(sqlx::query_as::<_, TreeUpdate>(
+            r#"
+            SELECT leaf_index, commitment as element
+            FROM identities
+            WHERE status = ANY($1)
+            ORDER BY id ASC;
+            "#,
+        )
+        .bind(&statuses[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
+        .fetch_all(self)
+        .await?)
+    }
+
+    async fn get_non_zero_commitments_by_leaf_indexes<I: IntoIterator<Item = usize>>(
+        self,
+        leaf_indexes: I,
+    ) -> Result<Vec<Hash>, Error> {
+        let leaf_indexes: Vec<i64> = leaf_indexes.into_iter().map(|v| v as i64).collect();
+
+        Ok(sqlx::query(
+            r#"
+            SELECT commitment
+            FROM identities
+            WHERE leaf_index = ANY($1)
+            AND commitment != $2
+            "#,
+        )
+        .bind(&leaf_indexes[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
+        .bind(Hash::ZERO)
+        .fetch_all(self)
+        .await?
+        .into_iter()
+        .map(|row| row.get::<Hash, _>(0))
+        .collect())
+    }
+
     async fn get_latest_root_by_status(
         self,
         status: ProcessedStatus,
@@ -487,13 +528,10 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             .collect::<Vec<_>>())
     }
 
-    async fn get_unprocessed_commit_status(
-        self,
-        commitment: &Hash,
-    ) -> Result<Option<(UnprocessedStatus, String)>, Error> {
+    async fn get_unprocessed_error(self, commitment: &Hash) -> Result<Option<String>, Error> {
         let query = sqlx::query(
             r#"
-                SELECT status, error_message FROM unprocessed_identities WHERE commitment = $1
+                SELECT error_message FROM unprocessed_identities WHERE commitment = $1
             "#,
         )
         .bind(commitment);
@@ -501,10 +539,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         let result = self.fetch_optional(query).await?;
 
         if let Some(row) = result {
-            return Ok(Some((
-                row.get::<&str, _>(0).parse().expect("couldn't read status"),
-                row.get::<Option<String>, _>(1).unwrap_or_default(),
-            )));
+            return Ok(Some(row.get::<Option<String>, _>(0).unwrap_or_default()));
         };
         Ok(None)
     }

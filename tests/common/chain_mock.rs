@@ -16,6 +16,7 @@ use ethers::utils::{Anvil, AnvilInstance};
 use ethers_solc::artifacts::BytecodeObject;
 use tracing::{info, instrument};
 
+use super::abi::IWorldIDIdentityManager;
 use super::{abi as ContractAbi, CompiledContract};
 
 pub type SpecialisedContract = Contract<SpecialisedClient>;
@@ -23,7 +24,7 @@ pub type SpecialisedContract = Contract<SpecialisedClient>;
 pub struct MockChain {
     pub anvil:            AnvilInstance,
     pub private_key:      SigningKey,
-    pub identity_manager: SpecialisedContract,
+    pub identity_manager: IWorldIDIdentityManager<SpecialisedClient>,
 }
 
 #[instrument(skip_all)]
@@ -196,7 +197,7 @@ pub async fn spawn_mock_chain(
 
     let identity_manager: SpecialisedContract = Contract::new(
         identity_manager_contract.address(),
-        ContractAbi::BATCHINGCONTRACT_ABI.clone(),
+        ContractAbi::IWORLDIDIDENTITYMANAGER_ABI.clone(),
         client.clone(),
     );
 
@@ -206,6 +207,8 @@ pub async fn spawn_mock_chain(
         .await?
         .await?;
 
+    let identity_manager = IWorldIDIdentityManager::from(identity_manager);
+
     Ok(MockChain {
         anvil: chain,
         private_key,
@@ -213,7 +216,7 @@ pub async fn spawn_mock_chain(
     })
 }
 
-type SpecialisedClient =
+pub type SpecialisedClient =
     NonceManagerMiddleware<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>>;
 type SharableClient = Arc<SpecialisedClient>;
 type SpecialisedFactory = ContractFactory<SpecialisedClient>;

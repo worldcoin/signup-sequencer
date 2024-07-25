@@ -89,16 +89,28 @@ async fn more_identities_than_dense_prefix(offchain_mode_enabled: bool) -> anyho
     tokio::time::sleep(Duration::from_secs(IDLE_TIME * num_batches_total as u64)).await;
 
     // Check that we can get inclusion proof for the first identity
-    test_inclusion_proof(&uri, &client, 0, &ref_tree, &identities_ref[0], false).await;
+    test_inclusion_proof(
+        &mock_chain,
+        &uri,
+        &client,
+        0,
+        &ref_tree,
+        &identities_ref[0],
+        false,
+        offchain_mode_enabled,
+    )
+    .await;
 
     // Check that we can get inclusion proof for the last identity
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         num_identities_total - 1,
         &ref_tree,
         &identities_ref[num_identities_total - 1],
         false,
+        offchain_mode_enabled,
     )
     .await;
 
@@ -125,16 +137,28 @@ async fn more_identities_than_dense_prefix(offchain_mode_enabled: bool) -> anyho
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
     // Check that we can get inclusion proof for the first identity
-    test_inclusion_proof(&uri, &client, 0, &ref_tree, &identities_ref[0], false).await;
+    test_inclusion_proof(
+        &mock_chain,
+        &uri,
+        &client,
+        0,
+        &ref_tree,
+        &identities_ref[0],
+        false,
+        offchain_mode_enabled,
+    )
+    .await;
 
     // Check that we can get inclusion proof for the last identity
     test_inclusion_proof(
+        &mock_chain,
         &uri,
         &client,
         num_identities_total - 1,
         &ref_tree,
         &identities_ref[num_identities_total - 1],
         false,
+        offchain_mode_enabled,
     )
     .await;
 

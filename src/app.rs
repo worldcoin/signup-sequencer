@@ -17,9 +17,7 @@ use crate::identity::processor::{
 };
 use crate::identity::validator::IdentityValidator;
 use crate::identity_tree::initializer::TreeInitializer;
-use crate::identity_tree::{
-    Hash, InclusionProof, ProcessedStatus, RootItem, TreeState, TreeVersionReadOps,
-};
+use crate::identity_tree::{Hash, InclusionProof, RootItem, TreeState, TreeVersionReadOps};
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::repository::ProverRepository;
 use crate::prover::{ProverConfig, ProverType};
@@ -375,17 +373,13 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        if let Some((status, error_message)) = self
-            .database
-            .get_unprocessed_commit_status(commitment)
-            .await?
-        {
-            return Ok(InclusionProofResponse(InclusionProof {
-                status:  status.into(),
+        if let Some(error_message) = self.database.get_unprocessed_error(commitment).await? {
+            return Ok(InclusionProof {
                 root:    None,
                 proof:   None,
                 message: Some(error_message),
-            }));
+            }
+            .into());
         }
 
         let item = self
@@ -400,7 +394,7 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        Ok(InclusionProofResponse(proof))
+        Ok(proof.into())
     }
 
     /// # Errors
@@ -431,7 +425,7 @@ impl App {
         );
 
         match checked {
-            Ok(true) => Ok(VerifySemaphoreProofResponse(root_state)),
+            Ok(true) => Ok(root_state.into()),
             Ok(false) => Err(ServerError::InvalidProof),
             Err(err) => {
                 info!(?err, "verify_proof failed with error");
@@ -447,48 +441,18 @@ impl App {
     ) -> Result<(), ServerError> {
         let tree_state = self.tree_state()?;
         let latest_root = tree_state.get_latest_tree().get_root();
-        let batching_root = tree_state.get_batching_tree().get_root();
-        let processed_root = tree_state.get_processed_tree().get_root();
-        let mined_root = tree_state.get_mined_tree().get_root();
 
-        tracing::info!("Validating age max_root_age: {max_root_age:?}");
+        info!("Validating age max_root_age: {max_root_age:?}");
 
         let root = root_state.root;
-
-        match root_state.status {
-            // Pending status implies the batching or latest tree
-            ProcessedStatus::Pending if latest_root == root || batching_root == root => {
-                tracing::warn!("Root is pending - skipping");
-                return Ok(());
-            }
-            // Processed status is hidden - this should never happen
-            ProcessedStatus::Processed if processed_root == root => {
-                tracing::warn!("Root is processed - skipping");
-                return Ok(());
-            }
-            // Processed status is hidden so it could be either processed or mined
-            ProcessedStatus::Mined if processed_root == root || mined_root == root => {
-                tracing::warn!("Root is mined - skipping");
-                return Ok(());
-            }
-            _ => (),
+        if latest_root == root {
+            return Ok(());
         }
 
-        let now = chrono::Utc::now();
+        let now = Utc::now();
+        let root_age = now - root_state.pending_valid_as_of;
 
-        let root_age = if matches!(
-            root_state.status,
-            ProcessedStatus::Pending | ProcessedStatus::Processed
-        ) {
-            now - root_state.pending_valid_as_of
-        } else {
-            let mined_at = root_state
-                .mined_valid_as_of
-                .ok_or(ServerError::InvalidRoot)?;
-            now - mined_at
-        };
-
-        tracing::warn!("Root age: {root_age:?}");
+        warn!("Root age: {root_age:?}");
 
         if root_age > max_root_age {
             Err(ServerError::RootTooOld)

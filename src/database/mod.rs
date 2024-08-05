@@ -1176,7 +1176,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn can_insert_same_root_multiple_times() -> anyhow::Result<()> {
+    async fn can_not_insert_same_root_multiple_times() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let identities = mock_identities(2);
@@ -1185,8 +1185,11 @@ mod test {
         db.insert_pending_identity(0, &identities[0], &roots[0])
             .await?;
 
-        db.insert_pending_identity(1, &identities[1], &roots[0])
-            .await?;
+        let res = db
+            .insert_pending_identity(1, &identities[1], &roots[0])
+            .await;
+
+        assert!(res.is_err(), "Inserting duplicate root should fail");
 
         let root_state = db
             .get_root_state(&roots[0])

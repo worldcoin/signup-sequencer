@@ -5,7 +5,6 @@
 use std::time::Duration;
 
 use anyhow::anyhow;
-use ethers::providers::Middleware;
 use ethers::types::U256;
 use hyper::client::HttpConnector;
 use hyper::Client;
@@ -18,14 +17,10 @@ use tracing::error;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::time::Uptime;
 
-use crate::common::abi::RootInfo;
 use crate::common::api::{delete_identity, inclusion_proof, inclusion_proof_raw, insert_identity};
-use crate::common::chain::Chain;
 use crate::common::prelude::StatusCode;
 
-mod abi;
 mod api;
-pub mod chain;
 pub mod docker_compose;
 
 #[allow(unused)]
@@ -137,37 +132,28 @@ pub async fn insert_identity_with_retries(
 pub async fn mined_inclusion_proof_with_retries(
     client: &Client<HttpConnector>,
     uri: &String,
-    chain: &Chain,
     commitment: &Hash,
     retries_count: usize,
     retries_interval: f32,
-) -> anyhow::Result<()> {
-    let mut last_res = None;
+) -> anyhow::Result<InclusionProofResponse> {
+    let mut last_res = Err(anyhow!("No calls at all"));
     for _i in 0..retries_count {
-        last_res = Some(inclusion_proof(client, uri, commitment).await?);
+        last_res = inclusion_proof(client, uri, commitment).await;
 
-        if let Some(ref inclusion_proof_json) = last_res {
-            if let Some(root) = inclusion_proof_json.0.root {
-                let (root, ..) = chain
-                    .identity_manager
-                    .query_root(root.into())
-                    .call()
-                    .await?;
-
-                if root != U256::zero() {
-                    return Ok(());
-                }
+        if let Ok(ref inclusion_proof_json) = last_res {
+            if inclusion_proof_json.0.status == Status::Processed(Mined) {
+                break;
             }
         };
 
         _ = sleep(Duration::from_secs_f32(retries_interval)).await;
     }
 
-    if last_res.is_none() {
-        return Err(anyhow!("No calls at all"));
-    }
+    let inclusion_proof_json = last_res?;
 
-    Err(anyhow!("Inclusion proof not found on chain"))
+    assert_eq!(inclusion_proof_json.0.status, Status::Processed(Mined));
+
+    Ok(inclusion_proof_json)
 }
 
 pub async fn bad_request_inclusion_proof_with_retries(

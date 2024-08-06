@@ -20,7 +20,7 @@ use crate::database::query::DatabaseQuery;
 use crate::database::types::{BatchEntry, BatchType};
 use crate::database::{Database, Error};
 use crate::ethereum::{Ethereum, ReadProvider};
-use crate::identity_tree::{Canonical, Hash, TreeVersion, TreeWithNextVersion};
+use crate::identity_tree::{Canonical, Hash, Intermediate, TreeVersion, TreeWithNextVersion};
 use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;
 use crate::prover::Prover;
@@ -35,7 +35,8 @@ pub trait IdentityProcessor: Send + Sync + 'static {
 
     async fn finalize_identities(
         &self,
-        processed_tree: &TreeVersion<Canonical>,
+        processed_tree: &TreeVersion<Intermediate>,
+        mined_tree: &TreeVersion<Canonical>,
     ) -> anyhow::Result<()>;
 
     async fn await_clean_slate(&self) -> anyhow::Result<()>;
@@ -91,7 +92,8 @@ impl IdentityProcessor for OnChainIdentityProcessor {
 
     async fn finalize_identities(
         &self,
-        processed_tree: &TreeVersion<Canonical>,
+        processed_tree: &TreeVersion<Intermediate>,
+        mined_tree: &TreeVersion<Canonical>,
     ) -> anyhow::Result<()> {
         let mainnet_logs = self.fetch_mainnet_logs().await?;
 
@@ -105,7 +107,7 @@ impl IdentityProcessor for OnChainIdentityProcessor {
         let mut roots = Self::extract_roots_from_mainnet_logs(mainnet_logs);
         roots.extend(self.fetch_secondary_logs().await?);
 
-        self.finalize_secondary_roots(roots).await?;
+        self.finalize_secondary_roots(mined_tree, roots).await?;
 
         Ok(())
     }
@@ -400,7 +402,7 @@ impl OnChainIdentityProcessor {
     #[instrument(level = "info", skip_all)]
     async fn finalize_mainnet_roots(
         &self,
-        processed_tree: &TreeVersion<Canonical>,
+        processed_tree: &TreeVersion<Intermediate>,
         logs: &[Log],
         max_epoch_duration: Duration,
     ) -> Result<(), anyhow::Error> {
@@ -430,7 +432,7 @@ impl OnChainIdentityProcessor {
                 // NOTE: We must do this before updating the tree
                 //       because we fetch commitments from the processed tree
                 //       before they are deleted
-                self.update_eligible_recoveries(log, max_epoch_duration)
+                self.update_eligible_recoveries(processed_tree, log, max_epoch_duration)
                     .await?;
             }
 
@@ -443,7 +445,11 @@ impl OnChainIdentityProcessor {
     }
 
     #[instrument(level = "info", skip_all)]
-    async fn finalize_secondary_roots(&self, roots: Vec<U256>) -> Result<(), anyhow::Error> {
+    async fn finalize_secondary_roots(
+        &self,
+        finalized_tree: &TreeVersion<Canonical>,
+        roots: Vec<U256>,
+    ) -> Result<(), anyhow::Error> {
         for root in roots {
             info!(?root, "Finalizing root");
 
@@ -457,6 +463,7 @@ impl OnChainIdentityProcessor {
             }
 
             self.database.mark_root_as_mined_tx(&root.into()).await?;
+            finalized_tree.apply_updates_up_to(root.into());
 
             info!(?root, "Root finalized");
         }
@@ -499,6 +506,7 @@ impl OnChainIdentityProcessor {
 
     async fn update_eligible_recoveries(
         &self,
+        processed_tree: &TreeVersion<Intermediate>,
         log: &Log,
         max_epoch_duration: Duration,
     ) -> anyhow::Result<()> {
@@ -510,11 +518,11 @@ impl OnChainIdentityProcessor {
                 .await
                 .context("Could not fetch deletion indices from tx")?;
 
-            let commitments = self
-                .database
-                .get_non_zero_commitments_by_leaf_indexes(commitments.iter().copied())
-                .await?;
-            let commitments: Vec<U256> = commitments.into_iter().map(Into::into).collect();
+            let commitments = processed_tree.commitments_by_indices(commitments.iter().copied());
+            let commitments: Vec<U256> = commitments
+                .into_iter()
+                .map(std::convert::Into::into)
+                .collect();
 
             // Fetch the root history expiry time on chain
             let root_history_expiry = self.identity_manager.root_history_expiry().await?;
@@ -561,7 +569,8 @@ impl IdentityProcessor for OffChainIdentityProcessor {
 
     async fn finalize_identities(
         &self,
-        processed_tree: &TreeVersion<Canonical>,
+        processed_tree: &TreeVersion<Intermediate>,
+        mined_tree: &TreeVersion<Canonical>,
     ) -> anyhow::Result<()> {
         let batches = {
             let mut committed_batches = self.committed_batches.lock().unwrap();
@@ -584,6 +593,7 @@ impl IdentityProcessor for OffChainIdentityProcessor {
                 .mark_root_as_mined_tx(&batch.next_root)
                 .await?;
             processed_tree.apply_updates_up_to(batch.next_root);
+            mined_tree.apply_updates_up_to(batch.next_root);
         }
 
         Ok(())

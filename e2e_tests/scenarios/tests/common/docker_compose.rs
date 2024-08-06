@@ -34,10 +34,6 @@ impl<'a> DockerComposeGuard<'a> {
         format!("{}:{}", LOCAL_ADDR, self.signup_sequencer_balancer_port)
     }
 
-    pub fn get_chain_addr(&self) -> String {
-        format!("{}:{}", LOCAL_ADDR, self.chain_port)
-    }
-
     pub async fn restart_sequencer(&self) -> anyhow::Result<()> {
         let (stdout, stderr) = run_cmd_to_output(
             self.cwd,
@@ -100,26 +96,6 @@ impl<'a> DockerComposeGuard<'a> {
     fn update_balancer_port(&mut self, signup_sequencer_balancer_port: u32) {
         self.signup_sequencer_balancer_port = signup_sequencer_balancer_port
     }
-
-    fn update_chain_port(&mut self, chain_port: u32) {
-        self.chain_port = chain_port
-    }
-
-    fn get_mapped_port(&self, service_name: &str, port: u32) -> anyhow::Result<u32> {
-        let (stdout, stderr) = run_cmd_to_output(
-            self.cwd,
-            self.envs_with_ports(),
-            self.generate_command(format!("port {service_name} {port}").as_str()),
-        )
-        .context("Looking for balancer selected port.")?;
-
-        debug!(
-            "Docker compose starting output:\n stdout:\n{}\nstderr:\n{}\n",
-            stdout, stderr
-        );
-
-        Ok(parse_exposed_port(stdout))
-    }
 }
 
 impl<'a> Drop for DockerComposeGuard<'a> {
@@ -171,11 +147,20 @@ pub async fn setup(cwd: &str) -> anyhow::Result<DockerComposeGuard> {
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let balancer_port = res.get_mapped_port("signup-sequencer-balancer", 8080)?;
-    res.update_balancer_port(balancer_port);
+    let (stdout, stderr) = run_cmd_to_output(
+        res.cwd,
+        res.envs_with_ports(),
+        res.generate_command("port signup-sequencer-balancer 8080"),
+    )
+    .context("Looking for balancer selected port.")?;
 
-    let chain_port = res.get_mapped_port("chain", 8545)?;
-    res.update_chain_port(chain_port);
+    debug!(
+        "Docker compose starting output:\n stdout:\n{}\nstderr:\n{}\n",
+        stdout, stderr
+    );
+
+    let balancer_port = parse_exposed_port(stdout);
+    res.update_balancer_port(balancer_port);
 
     await_running(&res).await?;
 

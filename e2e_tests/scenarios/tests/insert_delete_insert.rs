@@ -2,7 +2,7 @@ mod common;
 
 use common::prelude::*;
 
-use crate::common::{chain, docker_compose};
+use crate::common::docker_compose;
 
 #[tokio::test]
 async fn insert_delete_insert() -> anyhow::Result<()> {
@@ -11,7 +11,6 @@ async fn insert_delete_insert() -> anyhow::Result<()> {
     info!("Starting e2e test");
 
     let docker_compose = docker_compose::setup("./../docker-compose").await?;
-    let chain = chain::create_chain(docker_compose.get_chain_addr()).await?;
 
     let uri = format!("http://{}", docker_compose.get_local_addr());
     let client = Client::new();
@@ -23,7 +22,7 @@ async fn insert_delete_insert() -> anyhow::Result<()> {
     }
 
     for commitment in identities.iter() {
-        mined_inclusion_proof_with_retries(&client, &uri, &chain, commitment, 60, 10.0).await?;
+        mined_inclusion_proof_with_retries(&client, &uri, commitment, 60, 10.0).await?;
     }
 
     let first_commitment = identities.first().unwrap();
@@ -38,7 +37,7 @@ async fn insert_delete_insert() -> anyhow::Result<()> {
     }
 
     for commitment in new_identities.iter() {
-        mined_inclusion_proof_with_retries(&client, &uri, &chain, commitment, 60, 10.0).await?;
+        mined_inclusion_proof_with_retries(&client, &uri, commitment, 60, 10.0).await?;
     }
 
     Ok(())

@@ -87,39 +87,9 @@ async fn unavailable_prover(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     info!("Prover has been reenabled");
 
     // Test that the identities have been inserted and processed
-    test_inclusion_proof(
-        &mock_chain,
-        &uri,
-        &client,
-        0,
-        &ref_tree,
-        &identities_ref[0],
-        false,
-        offchain_mode_enabled,
-    )
-    .await;
-    test_inclusion_proof(
-        &mock_chain,
-        &uri,
-        &client,
-        1,
-        &ref_tree,
-        &identities_ref[1],
-        false,
-        offchain_mode_enabled,
-    )
-    .await;
-    test_inclusion_proof(
-        &mock_chain,
-        &uri,
-        &client,
-        2,
-        &ref_tree,
-        &identities_ref[2],
-        false,
-        offchain_mode_enabled,
-    )
-    .await;
+    test_inclusion_proof(&uri, &client, 0, &ref_tree, &identities_ref[0], false).await;
+    test_inclusion_proof(&uri, &client, 1, &ref_tree, &identities_ref[1], false).await;
+    test_inclusion_proof(&uri, &client, 2, &ref_tree, &identities_ref[2], false).await;
 
     shutdown.shutdown();
     app_handle.await?;

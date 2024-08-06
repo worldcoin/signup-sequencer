@@ -36,6 +36,8 @@ async fn inclusion_proof(
         .inclusion_proof(&inclusion_proof_request.identity_commitment)
         .await?;
 
+    let result = result.hide_processed_status();
+
     Ok((result.to_response_code(), Json(result)))
 }
 
@@ -60,6 +62,8 @@ async fn verify_semaphore_proof(
             &verify_semaphore_proof_query,
         )
         .await?;
+
+    let result = result.hide_processed_status();
 
     Ok((result.to_response_code(), Json(result)))
 }

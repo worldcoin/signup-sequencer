@@ -87,7 +87,6 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
 
     // Check that we can get their inclusion proofs back.
     test_inclusion_proof(
-        &mock_chain,
         &uri,
         &client,
         0,
@@ -95,11 +94,9 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[0], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
-        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
-        &mock_chain,
         &uri,
         &client,
         1,
@@ -107,11 +104,9 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[1], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
-        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
-        &mock_chain,
         &uri,
         &client,
         2,
@@ -119,7 +114,6 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[2], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
-        offchain_mode_enabled,
     )
     .await;
 
@@ -179,7 +173,6 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
 
     // Check that we can also get these inclusion proofs back.
     test_inclusion_proof(
-        &mock_chain,
         &uri,
         &client,
         3,
@@ -187,11 +180,9 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[3], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
-        offchain_mode_enabled,
     )
     .await;
     test_inclusion_proof(
-        &mock_chain,
         &uri,
         &client,
         4,
@@ -199,7 +190,6 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[4], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
-        offchain_mode_enabled,
     )
     .await;
 
@@ -221,7 +211,6 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
     test_inclusion_proof(
-        &mock_chain,
         &uri,
         &client,
         5,
@@ -229,7 +218,6 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[5], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
-        offchain_mode_enabled,
     )
     .await;
 
@@ -251,7 +239,6 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
     test_inclusion_proof(
-        &mock_chain,
         &uri,
         &client,
         6,
@@ -259,7 +246,6 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
         &Hash::from_str_radix(&test_identities[6], 16)
             .expect("Failed to parse Hash from test leaf 0"),
         false,
-        offchain_mode_enabled,
     )
     .await;
 

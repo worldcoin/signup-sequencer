@@ -87,7 +87,6 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Check that we can also get these inclusion proofs back.
     for i in 0..insertion_batch_size {
         test_inclusion_proof(
-            &mock_chain,
             &uri,
             &client,
             i,
@@ -95,7 +94,6 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
             &Hash::from_str_radix(&test_identities[i], 16)
                 .expect("Failed to parse Hash from test leaf"),
             false,
-            offchain_mode_enabled,
         )
         .await;
     }
@@ -110,7 +108,6 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Ensure that identities have been deleted
     for i in 0..deletion_batch_size {
         test_inclusion_proof(
-            &mock_chain,
             &uri,
             &client,
             i,
@@ -118,7 +115,6 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
             &Hash::from_str_radix(&test_identities[i], 16)
                 .expect("Failed to parse Hash from test leaf"),
             true,
-            offchain_mode_enabled,
         )
         .await;
     }
@@ -143,7 +139,6 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Ensure that identities have been deleted
     for i in 0..deletion_batch_size {
         test_inclusion_proof(
-            &mock_chain,
             &uri,
             &client,
             i,
@@ -151,7 +146,6 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
             &Hash::from_str_radix(&test_identities[i], 16)
                 .expect("Failed to parse Hash from test leaf"),
             true,
-            offchain_mode_enabled,
         )
         .await;
     }
@@ -160,7 +154,6 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // that have not been deleted
     for i in deletion_batch_size + 1..insertion_batch_size {
         test_inclusion_proof(
-            &mock_chain,
             &uri,
             &client,
             i,
@@ -168,7 +161,6 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
             &Hash::from_str_radix(&test_identities[i], 16)
                 .expect("Failed to parse Hash from test leaf"),
             false,
-            offchain_mode_enabled,
         )
         .await;
     }

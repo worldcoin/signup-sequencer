@@ -20,18 +20,7 @@ const IDLE_TIME: u64 = 7;
 /// in the same batch post root as from the insertion batch 0, 1, 2. This breaks
 /// a central assumption that roots are unique.
 #[tokio::test]
-async fn immediate_deletion_of_continuous_set_of_identities_onchain() -> anyhow::Result<()> {
-    immediate_deletion_of_continuous_set_of_identities(false).await
-}
-
-#[tokio::test]
-async fn immediate_deletion_of_continuous_set_of_identities_offchain() -> anyhow::Result<()> {
-    immediate_deletion_of_continuous_set_of_identities(true).await
-}
-
-async fn immediate_deletion_of_continuous_set_of_identities(
-    offchain_mode_enabled: bool,
-) -> anyhow::Result<()> {
+async fn immediate_deletion_of_continuous_set_of_identities() -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -100,7 +89,6 @@ async fn immediate_deletion_of_continuous_set_of_identities(
     // Check that we can also get these inclusion proofs back.
     for i in 0..insertion_batch_size {
         test_inclusion_proof(
-            &mock_chain,
             &uri,
             &client,
             i,
@@ -108,7 +96,6 @@ async fn immediate_deletion_of_continuous_set_of_identities(
             &Hash::from_str_radix(&test_identities[i], 16)
                 .expect("Failed to parse Hash from test leaf"),
             false,
-            offchain_mode_enabled,
         )
         .await;
     }
@@ -137,13 +124,11 @@ async fn immediate_deletion_of_continuous_set_of_identities(
 
     // Ensure the identity has not yet been deleted
     test_inclusion_proof_mined(
-        &mock_chain,
         &uri,
         &client,
         &Hash::from_str_radix(&test_identities[insertion_batch_size - 1], 16)
             .expect("Failed to parse Hash from test leaf"),
         false,
-        offchain_mode_enabled,
     )
     .await;
 
@@ -154,13 +139,11 @@ async fn immediate_deletion_of_continuous_set_of_identities(
     tokio::time::sleep(Duration::from_secs(IDLE_TIME * 2)).await;
 
     test_inclusion_proof_mined(
-        &mock_chain,
         &uri,
         &client,
         &Hash::from_str_radix(&test_identities[insertion_batch_size - 1], 16)
             .expect("Failed to parse Hash from test leaf"),
         true,
-        offchain_mode_enabled,
     )
     .await;
 

@@ -9,7 +9,7 @@ use ethers::abi::RawLog;
 use ethers::addressbook::Address;
 use ethers::contract::EthEvent;
 use ethers::middleware::Middleware;
-use ethers::prelude::{Log, Topic, ValueOrArray, U256};
+use ethers::prelude::{Log, Topic, ValueOrArray};
 use tokio::sync::Notify;
 use tracing::{error, info, instrument};
 
@@ -18,10 +18,11 @@ use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangeKind, Tre
 use crate::contracts::scanner::BlockScanner;
 use crate::contracts::IdentityManager;
 use crate::database::query::DatabaseQuery;
+use crate::database::transaction::{mark_root_as_mined, mark_root_as_processed};
 use crate::database::types::{BatchEntry, BatchType};
 use crate::database::{Database, Error};
 use crate::ethereum::{Ethereum, ReadProvider};
-use crate::identity_tree::Hash;
+use crate::identity_tree::{Hash, ProcessedStatus};
 use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;
 use crate::prover::Prover;
@@ -222,16 +223,16 @@ impl OnChainIdentityProcessor {
     ) -> anyhow::Result<TransactionId> {
         self.validate_merkle_proofs(&batch.data.0.identities)?;
         let start_index = *batch.data.0.indexes.first().expect("Should exist.");
-        let pre_root: U256 = batch.prev_root.expect("Should exist.").into();
-        let post_root: U256 = batch.next_root.into();
+        let pre_root: Hash = batch.prev_root.expect("Should exist.");
+        let post_root: Hash = batch.next_root;
 
         // We prepare the proof before reserving a slot in the pending identities
         let proof = crate::prover::proof::prepare_insertion_proof(
             prover,
             start_index,
-            pre_root,
+            pre_root.into(),
             &batch.data.0.identities,
-            post_root,
+            post_root.into(),
         )
         .await?;
 
@@ -248,8 +249,8 @@ impl OnChainIdentityProcessor {
             .identity_manager
             .register_identities(
                 start_index,
-                pre_root,
-                post_root,
+                pre_root.into(),
+                post_root.into(),
                 batch.data.0.identities.clone(),
                 proof,
             )
@@ -277,17 +278,17 @@ impl OnChainIdentityProcessor {
         batch: &BatchEntry,
     ) -> anyhow::Result<TransactionId> {
         self.validate_merkle_proofs(&batch.data.0.identities)?;
-        let pre_root: U256 = batch.prev_root.expect("Should exist.").into();
-        let post_root: U256 = batch.next_root.into();
+        let pre_root: Hash = batch.prev_root.expect("Should exist.");
+        let post_root: Hash = batch.next_root;
         let deletion_indices: Vec<_> = batch.data.0.indexes.iter().map(|&v| v as u32).collect();
 
         // We prepare the proof before reserving a slot in the pending identities
         let proof = crate::prover::proof::prepare_deletion_proof(
             prover,
-            pre_root,
+            pre_root.into(),
             deletion_indices.clone(),
             batch.data.0.identities.clone(),
-            post_root,
+            post_root.into(),
         )
         .await?;
 
@@ -299,7 +300,12 @@ impl OnChainIdentityProcessor {
         // identity manager and wait for that transaction to be mined.
         let transaction_id = self
             .identity_manager
-            .delete_identities(proof, packed_deletion_indices, pre_root, post_root)
+            .delete_identities(
+                proof,
+                packed_deletion_indices,
+                pre_root.into(),
+                post_root.into(),
+            )
             .await
             .map_err(|e| {
                 error!(?e, "Failed to insert identity to contract.");
@@ -362,7 +368,7 @@ impl OnChainIdentityProcessor {
         Ok(mainnet_logs)
     }
 
-    async fn fetch_secondary_logs(&self) -> anyhow::Result<Vec<U256>>
+    async fn fetch_secondary_logs(&self) -> anyhow::Result<Vec<Hash>>
     where
         <ReadProvider as Middleware>::Error: 'static,
     {
@@ -404,20 +410,37 @@ impl OnChainIdentityProcessor {
                 continue;
             };
 
-            let pre_root = event.pre_root;
-            let post_root = event.post_root;
+            let pre_root: Hash = event.pre_root.into();
+            let post_root: Hash = event.post_root.into();
             let kind = TreeChangeKind::from(event.kind);
 
             info!(?pre_root, ?post_root, ?kind, "Mining batch");
 
             // Double check
-            if !self.identity_manager.is_root_mined(post_root).await? {
+            if !self
+                .identity_manager
+                .is_root_mined(post_root.into())
+                .await?
+            {
                 continue;
             }
 
-            self.database
-                .mark_root_as_processed_tx(&post_root.into())
-                .await?;
+            retry_tx!(self.database.pool, tx, {
+                // With current flow it is required to mark root as processed first as this is
+                // how required mined_at field is set, We set proper state only if not set
+                // previously.
+                let root_state = tx.get_root_state(&post_root.into()).await?;
+                match root_state {
+                    Some(root_state) if root_state.status == ProcessedStatus::Processed => {}
+                    Some(root_state) if root_state.status == ProcessedStatus::Mined => {}
+                    _ => {
+                        mark_root_as_processed(&mut tx, &post_root.into()).await?;
+                    }
+                }
+
+                Ok::<(), anyhow::Error>(())
+            })
+            .await?;
 
             info!(?pre_root, ?post_root, ?kind, "Batch mined");
 
@@ -436,20 +459,34 @@ impl OnChainIdentityProcessor {
     }
 
     #[instrument(level = "info", skip_all)]
-    async fn finalize_secondary_roots(&self, roots: Vec<U256>) -> Result<(), anyhow::Error> {
+    async fn finalize_secondary_roots(&self, roots: Vec<Hash>) -> Result<(), anyhow::Error> {
         for root in roots {
             info!(?root, "Finalizing root");
 
             // Check if mined on all L2s
             if !self
                 .identity_manager
-                .is_root_mined_multi_chain(root)
+                .is_root_mined_multi_chain(root.into())
                 .await?
             {
                 continue;
             }
 
-            self.database.mark_root_as_mined_tx(&root.into()).await?;
+            retry_tx!(self.database.pool, tx, {
+                // With current flow it is required to mark root as processed first as this is
+                // how required mined_at field is set, We set proper state only if not set
+                // previously.
+                let root_state = tx.get_root_state(&root.into()).await?;
+                match root_state {
+                    Some(root_state) if root_state.status == ProcessedStatus::Mined => {}
+                    _ => {
+                        mark_root_as_mined(&mut tx, &root.into()).await?;
+                    }
+                }
+
+                Ok::<(), anyhow::Error>(())
+            })
+            .await?;
 
             info!(?root, "Root finalized");
         }
@@ -457,7 +494,7 @@ impl OnChainIdentityProcessor {
         Ok(())
     }
 
-    fn extract_roots_from_mainnet_logs(mainnet_logs: Vec<Log>) -> Vec<U256> {
+    fn extract_roots_from_mainnet_logs(mainnet_logs: Vec<Log>) -> Vec<Hash> {
         let mut roots = vec![];
         for log in mainnet_logs {
             let Some(event) = Self::raw_log_to_tree_changed(&log) else {
@@ -466,7 +503,7 @@ impl OnChainIdentityProcessor {
 
             let post_root = event.post_root;
 
-            roots.push(post_root);
+            roots.push(post_root.into());
         }
         roots
     }
@@ -477,13 +514,13 @@ impl OnChainIdentityProcessor {
         TreeChangedFilter::decode_log(&raw_log).ok()
     }
 
-    fn extract_roots_from_secondary_logs(logs: &[Log]) -> Vec<U256> {
+    fn extract_roots_from_secondary_logs(logs: &[Log]) -> Vec<Hash> {
         let mut roots = vec![];
 
         for log in logs {
             let raw_log = RawLog::from((log.topics.clone(), log.data.to_vec()));
             if let Ok(event) = RootAddedFilter::decode_log(&raw_log) {
-                roots.push(event.root);
+                roots.push(event.root.into());
             }
         }
 
@@ -507,7 +544,6 @@ impl OnChainIdentityProcessor {
                 .database
                 .get_non_zero_commitments_by_leaf_indexes(commitments.iter().copied())
                 .await?;
-            let commitments: Vec<U256> = commitments.into_iter().map(Into::into).collect();
 
             // Fetch the root history expiry time on chain
             let root_history_expiry = self.identity_manager.root_history_expiry().await?;
@@ -565,14 +601,25 @@ impl IdentityProcessor for OffChainIdentityProcessor {
                 self.update_eligible_recoveries(batch).await?;
             }
 
-            // With current flow it is required to mark root as processed first as this is
-            // how required mined_at field is set
-            self.database
-                .mark_root_as_processed_tx(&batch.next_root)
-                .await?;
-            self.database
-                .mark_root_as_mined_tx(&batch.next_root)
-                .await?;
+            retry_tx!(self.database.pool, tx, {
+                // With current flow it is required to mark root as processed first as this is
+                // how required mined_at field is set, We set proper state only if not set
+                // previously.
+                let root_state = tx.get_root_state(&batch.next_root).await?;
+                match root_state {
+                    Some(root_state) if root_state.status == ProcessedStatus::Processed => {
+                        mark_root_as_mined(&mut tx, &batch.next_root).await?;
+                    }
+                    Some(root_state) if root_state.status == ProcessedStatus::Mined => {}
+                    _ => {
+                        mark_root_as_processed(&mut tx, &batch.next_root).await?;
+                        mark_root_as_mined(&mut tx, &batch.next_root).await?;
+                    }
+                }
+
+                Ok::<(), anyhow::Error>(())
+            })
+            .await?;
 
             sync_tree_notify.notify_one();
         }
@@ -613,8 +660,12 @@ impl OffChainIdentityProcessor {
 
     async fn update_eligible_recoveries(&self, batch: &BatchEntry) -> anyhow::Result<()> {
         retry_tx!(self.database.pool, tx, {
-            let commitments: Vec<U256> =
-                batch.data.identities.iter().map(|v| v.commitment).collect();
+            let commitments: Vec<Hash> = batch
+                .data
+                .identities
+                .iter()
+                .map(|v| v.commitment.into())
+                .collect();
             let eligibility_timestamp = Utc::now();
 
             // Check if any deleted commitments correspond with entries in the

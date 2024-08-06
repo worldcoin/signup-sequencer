@@ -97,17 +97,17 @@ async fn sync_tree(
             latest_tree.apply_updates(&tree_updates);
 
             if let Some(batching_tree_update) = latest_batching_tree_update {
-                if batching_tree_update.sequence_id >= batching_tree.get_last_sequence_id() {
+                if batching_tree_update.sequence_id > batching_tree.get_last_sequence_id() {
                     batching_tree.apply_updates_up_to(batching_tree_update.post_root);
-                } else {
+                } else if batching_tree_update.sequence_id < batching_tree.get_last_sequence_id() {
                     batching_tree.rewind_updates_up_to(batching_tree_update.post_root);
                 }
             }
         } else {
             if let Some(batching_tree_update) = latest_batching_tree_update {
-                if batching_tree_update.sequence_id >= batching_tree.get_last_sequence_id() {
+                if batching_tree_update.sequence_id > batching_tree.get_last_sequence_id() {
                     batching_tree.apply_updates_up_to(batching_tree_update.post_root);
-                } else {
+                } else if batching_tree_update.sequence_id < batching_tree.get_last_sequence_id() {
                     batching_tree.rewind_updates_up_to(batching_tree_update.post_root);
                 }
             }
@@ -116,7 +116,9 @@ async fn sync_tree(
     }
 
     if let Some(ref processed_tree_update) = latest_processed_tree_update {
-        processed_tree.apply_updates_up_to(processed_tree_update.post_root);
+        if processed_tree_update.sequence_id > processed_tree.get_last_sequence_id() {
+            processed_tree.apply_updates_up_to(processed_tree_update.post_root);
+        }
     }
 
     Ok(())

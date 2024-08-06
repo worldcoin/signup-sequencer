@@ -3,7 +3,7 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Error};
+use anyhow::{anyhow, Context, Error};
 use hyper::{Body, Client};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -133,7 +133,7 @@ impl<'a> DockerComposeGuard<'a> {
             stdout, stderr
         );
 
-        Ok(parse_exposed_port(stdout))
+        parse_exposed_port(stdout)
     }
 }
 
@@ -189,11 +189,27 @@ pub async fn setup(cwd: &str) -> anyhow::Result<DockerComposeGuard> {
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let balancer_port = res.get_mapped_port("signup-sequencer-balancer", 8080)?;
-    res.update_balancer_port(balancer_port);
+    let mut balancer_port = Err(anyhow!("Balancer port not queried."));
+    for _ in 0..3 {
+        balancer_port = res.get_mapped_port("signup-sequencer-balancer", 8080);
+        if balancer_port.is_ok() {
+            break;
+        }
 
-    let chain_port = res.get_mapped_port("chain", 8545)?;
-    res.update_chain_port(chain_port);
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    res.update_balancer_port(balancer_port?);
+
+    let mut chain_port = Err(anyhow!("Chain port not queried."));
+    for _ in 0..3 {
+        chain_port = res.get_mapped_port("chain", 8545);
+        if chain_port.is_ok() {
+            break;
+        }
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    res.update_chain_port(chain_port?);
 
     await_running(&res).await?;
 
@@ -284,19 +300,17 @@ fn run_cmd(cwd: &str, envs: HashMap<String, String>, cmd_str: String) -> anyhow:
     Ok(())
 }
 
-fn parse_exposed_port(s: String) -> u32 {
+fn parse_exposed_port(s: String) -> anyhow::Result<u32> {
     let parts: Vec<_> = s
         .split_whitespace()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .collect();
 
-    parts
-        .last()
-        .unwrap()
-        .split(':')
-        .last()
-        .unwrap()
-        .parse::<u32>()
-        .unwrap()
+    let port = parts.last().map(|v| v.split(':').last()).flatten();
+
+    match port {
+        Some(port) => port.parse::<u32>().map_err(|err| anyhow!(err)),
+        None => Err(anyhow!("Port not found in string.")),
+    }
 }

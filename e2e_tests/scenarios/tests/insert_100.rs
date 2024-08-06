@@ -16,14 +16,14 @@ async fn insert_100() -> anyhow::Result<()> {
     let uri = format!("http://{}", docker_compose.get_local_addr());
     let client = Client::new();
 
-    let identities = generate_test_commitments(100);
+    let identities = generate_test_commitments(1000);
 
     for commitment in identities.iter() {
         insert_identity_with_retries(&client, &uri, commitment, 10, 3.0).await?;
     }
 
     for commitment in identities.iter() {
-        mined_inclusion_proof_with_retries(&client, &uri, &chain, commitment, 60, 10.0).await?;
+        mined_inclusion_proof_with_retries(&client, &uri, &chain, commitment, 60, 45.0).await?;
     }
 
     Ok(())

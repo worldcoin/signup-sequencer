@@ -255,6 +255,17 @@ pub async fn insert_identities(
     assert_updates_are_consecutive(updates);
 
     let pre_root = batching_tree.get_root();
+
+    let mut tx = database.pool.begin().await?;
+    let latest_batch = tx.get_latest_batch().await?;
+    if let Some(latest_batch) = latest_batch {
+        if pre_root != latest_batch.next_root {
+            // Tree not synced
+            sync_tree_notify.notify_one();
+            return Ok(());
+        }
+    }
+
     let mut insertion_indices: Vec<_> = updates.iter().map(|f| f.update.leaf_index).collect();
     let mut commitments: Vec<U256> = updates
         .iter()
@@ -332,15 +343,17 @@ pub async fn insert_identities(
     );
 
     // With all the data prepared we can submit the batch to database.
-    database
-        .insert_new_batch(
-            &post_root,
-            &pre_root,
-            database::types::BatchType::Insertion,
-            &identity_commitments,
-            &insertion_indices,
-        )
-        .await?;
+    tx.insert_new_batch(
+        &post_root,
+        &pre_root,
+        database::types::BatchType::Insertion,
+        &identity_commitments,
+        &insertion_indices,
+    )
+    .await?;
+
+    // It is important to commit transaction as soon as possible.
+    tx.commit().await?;
 
     tracing::info!(
         start_index,
@@ -393,6 +406,16 @@ pub async fn delete_identities(
 ) -> anyhow::Result<()> {
     // Grab the initial conditions before the updates are applied to the tree.
     let pre_root = batching_tree.get_root();
+
+    let mut tx = database.pool.begin().await?;
+    let latest_batch = tx.get_latest_batch().await?;
+    if let Some(latest_batch) = latest_batch {
+        if pre_root != latest_batch.next_root {
+            // Tree not synced
+            sync_tree_notify.notify_one();
+            return Ok(());
+        }
+    }
 
     let mut deletion_indices: Vec<_> = updates.iter().map(|f| f.update.leaf_index).collect();
 
@@ -462,15 +485,17 @@ pub async fn delete_identities(
     tracing::info!(?pre_root, ?post_root, "Submitting deletion batch to DB");
 
     // With all the data prepared we can submit the batch to database.
-    database
-        .insert_new_batch(
-            &post_root,
-            &pre_root,
-            database::types::BatchType::Deletion,
-            &identity_commitments,
-            &deletion_indices,
-        )
-        .await?;
+    tx.insert_new_batch(
+        &post_root,
+        &pre_root,
+        database::types::BatchType::Deletion,
+        &identity_commitments,
+        &deletion_indices,
+    )
+    .await?;
+
+    // It is important to commit transaction as soon as possible.
+    tx.commit().await?;
 
     tracing::info!(?pre_root, ?post_root, "Deletion batch submitted to DB");
 
@@ -479,7 +504,6 @@ pub async fn delete_identities(
     TaskMonitor::log_batch_size(updates.len());
 
     sync_tree_notify.notify_one();
-    // batching_tree.apply_updates_up_to(post_root);
 
     Ok(())
 }

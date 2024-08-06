@@ -782,6 +782,23 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         Ok(res)
     }
 
+    async fn count_not_finalized_batches(self) -> Result<i32, Error> {
+        let res = sqlx::query(
+            r#"
+            SELECT COUNT(*)
+            FROM batches
+            LEFT JOIN transactions ON batches.next_root = transactions.batch_next_root
+            LEFT JOIN identities ON batches.next_root = identities.root
+            WHERE transactions.batch_next_root IS NOT NULL AND batches.prev_root IS NOT NULL AND identities.status = $1
+            "#,
+        )
+        .bind(<&str>::from(ProcessedStatus::Pending))
+        .fetch_one(self)
+        .await?;
+
+        Ok(res.get::<i64, _>(0) as i32)
+    }
+
     async fn get_next_batch_without_transaction(self) -> Result<Option<BatchEntry>, Error> {
         let res = sqlx::query_as::<_, BatchEntry>(
             r#"

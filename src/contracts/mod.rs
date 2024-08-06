@@ -3,6 +3,7 @@ pub mod abi;
 pub mod scanner;
 
 use anyhow::{anyhow, bail, Context};
+use ethers::abi::AbiEncode;
 use ethers::providers::Middleware;
 use ethers::types::{H256, U256};
 use tracing::{error, info, instrument};
@@ -131,8 +132,14 @@ impl IdentityManager {
             )
             .tx;
 
+        let tx_id = format!(
+            "tx-{}-{}",
+            hex::encode(pre_root.encode()),
+            hex::encode(post_root.encode())
+        );
+
         self.ethereum
-            .send_transaction(register_identities_transaction, true)
+            .send_transaction(register_identities_transaction, true, Some(tx_id))
             .await
             .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
     }
@@ -158,8 +165,14 @@ impl IdentityManager {
             )
             .tx;
 
+        let tx_id = format!(
+            "tx-{}-{}",
+            hex::encode(pre_root.encode()),
+            hex::encode(post_root.encode())
+        );
+
         self.ethereum
-            .send_transaction(delete_identities_transaction, true)
+            .send_transaction(delete_identities_transaction, true, Some(tx_id))
             .await
             .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
     }

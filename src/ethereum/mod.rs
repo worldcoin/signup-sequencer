@@ -78,9 +78,12 @@ impl Ethereum {
         &self,
         tx: TypedTransaction,
         only_once: bool,
+        tx_id: Option<String>,
     ) -> Result<TransactionId, TxError> {
         tracing::info!(?tx, "Sending transaction");
-        self.write_provider.send_transaction(tx, only_once).await
+        self.write_provider
+            .send_transaction(tx, only_once, tx_id)
+            .await
     }
 
     pub async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {

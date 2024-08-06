@@ -1,5 +1,8 @@
+use std::fmt;
+
+use anyhow::bail;
 use data::{GetTxResponse, SendTxRequest, SendTxResponse, TxStatus};
-use reqwest::Response;
+use reqwest::{Response, StatusCode};
 use tracing::instrument;
 
 pub mod data;
@@ -7,6 +10,22 @@ pub mod data;
 pub struct TxSitterClient {
     client: reqwest::Client,
     url:    String,
+}
+
+#[derive(Debug)]
+pub struct HttpError {
+    pub status: StatusCode,
+    pub body:   String,
+}
+
+impl fmt::Display for HttpError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Response failed with status {} - {}",
+            self.status, self.body
+        )
+    }
 }
 
 impl TxSitterClient {
@@ -46,9 +65,7 @@ impl TxSitterClient {
             let body = response.text().await?;
 
             tracing::error!("Response failed with status {} - {}", status, body);
-            return Err(anyhow::anyhow!(
-                "Response failed with status {status} - {body}"
-            ));
+            bail!(HttpError { body, status });
         }
 
         Ok(response)
@@ -56,19 +73,19 @@ impl TxSitterClient {
 
     #[instrument(skip(self))]
     pub async fn send_tx(&self, req: &SendTxRequest) -> anyhow::Result<SendTxResponse> {
-        self.json_post(&format!("{}/tx", self.url), req).await
+        Ok(self.json_post(&format!("{}/tx", self.url), req).await?)
     }
 
     #[instrument(skip(self))]
     pub async fn get_tx(&self, tx_id: &str) -> anyhow::Result<GetTxResponse> {
-        self.json_get(&format!("{}/tx/{}", self.url, tx_id)).await
+        Ok(self.json_get(&format!("{}/tx/{}", self.url, tx_id)).await?)
     }
 
     #[instrument(skip(self))]
     pub async fn get_txs(&self) -> anyhow::Result<Vec<GetTxResponse>> {
         let url = format!("{}/txs", self.url);
 
-        self.json_get(&url).await
+        Ok(self.json_get(&url).await?)
     }
 
     #[instrument(skip(self))]
@@ -78,14 +95,14 @@ impl TxSitterClient {
     ) -> anyhow::Result<Vec<GetTxResponse>> {
         let url = format!("{}/txs?status={}", self.url, tx_status);
 
-        self.json_get(&url).await
+        Ok(self.json_get(&url).await?)
     }
 
     #[instrument(skip(self))]
     pub async fn get_unsent_txs(&self) -> anyhow::Result<Vec<GetTxResponse>> {
         let url = format!("{}/txs?unsent=true", self.url);
 
-        self.json_get(&url).await
+        Ok(self.json_get(&url).await?)
     }
 
     pub fn rpc_url(&self) -> String {

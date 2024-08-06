@@ -18,8 +18,8 @@ const TREE_INIT_BACKOFF: Duration = Duration::from_secs(5);
 const PROCESS_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const FINALIZE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const QUEUE_MONITOR_BACKOFF: Duration = Duration::from_secs(5);
-const INSERT_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
-const DELETE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
+const MODIFY_TREE_BACKOFF: Duration = Duration::from_secs(5);
+const SYNC_TREE_STATE_WITH_DB_BACKOFF: Duration = Duration::from_secs(5);
 
 struct RunningInstance {
     handles:         Vec<JoinHandle<()>>,
@@ -107,15 +107,23 @@ impl TaskMonitor {
         let monitored_txs_sender = Arc::new(monitored_txs_sender);
         let monitored_txs_receiver = Arc::new(Mutex::new(monitored_txs_receiver));
 
-        let base_wake_up_notify = Arc::new(Notify::new());
-        // Immediately notify so we can start processing if we have pending identities
-        // in the database
-        base_wake_up_notify.notify_one();
+        let base_next_batch_notify = Arc::new(Notify::new());
+        // Immediately notify, so we can start processing if we have pending operations
+        base_next_batch_notify.notify_one();
+
+        let base_sync_tree_notify = Arc::new(Notify::new());
+        // Immediately notify, so we can start processing if we have pending operations
+        base_sync_tree_notify.notify_one();
+
+        let base_tree_synced_notify = Arc::new(Notify::new());
+        // Immediately notify, so we can start processing if we have pending operations
+        base_tree_synced_notify.notify_one();
 
         let mut handles = Vec::new();
 
         // Initialize the Tree
         let app = self.app.clone();
+
         let tree_init = move || app.clone().init_tree();
         let tree_init_handle = crate::utils::spawn_monitored_with_backoff(
             tree_init,
@@ -128,7 +136,11 @@ impl TaskMonitor {
 
         // Finalize identities
         let app = self.app.clone();
-        let finalize_identities = move || tasks::finalize_identities::finalize_roots(app.clone());
+        let sync_tree_notify = base_sync_tree_notify.clone();
+
+        let finalize_identities = move || {
+            tasks::finalize_identities::finalize_roots(app.clone(), sync_tree_notify.clone())
+        };
         let finalize_identities_handle = crate::utils::spawn_monitored_with_backoff(
             finalize_identities,
             shutdown_sender.clone(),
@@ -139,6 +151,7 @@ impl TaskMonitor {
 
         // Report length of the queue of identities
         let app = self.app.clone();
+
         let queue_monitor = move || tasks::monitor_queue::monitor_queue(app.clone());
         let queue_monitor_handle = crate::utils::spawn_monitored_with_backoff(
             queue_monitor,
@@ -148,19 +161,18 @@ impl TaskMonitor {
         );
         handles.push(queue_monitor_handle);
 
-        // Process identities
-        let base_next_batch_notify = Arc::new(Notify::new());
-
         // Create batches
         let app = self.app.clone();
         let next_batch_notify = base_next_batch_notify.clone();
-        let wake_up_notify = base_wake_up_notify.clone();
+        let sync_tree_notify = base_sync_tree_notify.clone();
+        let tree_synced_notify = base_tree_synced_notify.clone();
 
         let create_batches = move || {
             tasks::create_batches::create_batches(
                 app.clone(),
                 next_batch_notify.clone(),
-                wake_up_notify.clone(),
+                sync_tree_notify.clone(),
+                tree_synced_notify.clone(),
             )
         };
         let create_batches_handle = crate::utils::spawn_monitored_with_backoff(
@@ -174,14 +186,12 @@ impl TaskMonitor {
         // Process batches
         let app = self.app.clone();
         let next_batch_notify = base_next_batch_notify.clone();
-        let wake_up_notify = base_wake_up_notify.clone();
 
         let process_identities = move || {
             tasks::process_batches::process_batches(
                 app.clone(),
                 monitored_txs_sender.clone(),
                 next_batch_notify.clone(),
-                wake_up_notify.clone(),
             )
         };
         let process_identities_handle = crate::utils::spawn_monitored_with_backoff(
@@ -194,6 +204,7 @@ impl TaskMonitor {
 
         // Monitor transactions
         let app = self.app.clone();
+
         let monitor_txs =
             move || tasks::monitor_txs::monitor_txs(app.clone(), monitored_txs_receiver.clone());
         let monitor_txs_handle = crate::utils::spawn_monitored_with_backoff(
@@ -204,46 +215,45 @@ impl TaskMonitor {
         );
         handles.push(monitor_txs_handle);
 
-        let pending_insertion_mutex = Arc::new(Mutex::new(()));
-
-        // Insert identities
+        // Modify tree
         let app = self.app.clone();
-        let wake_up_notify = base_wake_up_notify.clone();
-        let insertion_mutex = pending_insertion_mutex.clone();
-        let insert_identities = move || {
-            self::tasks::insert_identities::insert_identities(
+        let sync_tree_notify = base_sync_tree_notify.clone();
+        let tree_synced_notify = base_tree_synced_notify.clone();
+
+        let modify_tree = move || {
+            tasks::modify_tree::modify_tree(
                 app.clone(),
-                insertion_mutex.clone(),
-                wake_up_notify.clone(),
+                sync_tree_notify.clone(),
+                tree_synced_notify.clone(),
             )
         };
-
-        let insert_identities_handle = crate::utils::spawn_monitored_with_backoff(
-            insert_identities,
+        let modify_tree_handle = crate::utils::spawn_monitored_with_backoff(
+            modify_tree,
             shutdown_sender.clone(),
-            INSERT_IDENTITIES_BACKOFF,
+            MODIFY_TREE_BACKOFF,
             self.shutdown.clone(),
         );
-        handles.push(insert_identities_handle);
+        handles.push(modify_tree_handle);
 
-        // Delete identities
+        // Sync tree state with DB
         let app = self.app.clone();
-        let wake_up_notify = base_wake_up_notify.clone();
-        let delete_identities = move || {
-            self::tasks::delete_identities::delete_identities(
+        let sync_tree_notify = base_sync_tree_notify.clone();
+        let tree_synced_notify = base_tree_synced_notify.clone();
+
+        let sync_tree_state_with_db = move || {
+            tasks::sync_tree_state_with_db::sync_tree_state_with_db(
                 app.clone(),
-                pending_insertion_mutex.clone(),
-                wake_up_notify.clone(),
+                sync_tree_notify.clone(),
+                tree_synced_notify.clone(),
             )
         };
-
-        let delete_identities_handle = crate::utils::spawn_monitored_with_backoff(
-            delete_identities,
+        let sync_tree_state_with_db_handle = crate::utils::spawn_monitored_with_backoff(
+            sync_tree_state_with_db,
             shutdown_sender.clone(),
-            DELETE_IDENTITIES_BACKOFF,
+            SYNC_TREE_STATE_WITH_DB_BACKOFF,
             self.shutdown.clone(),
         );
-        handles.push(delete_identities_handle);
+        handles.push(sync_tree_state_with_db_handle);
 
         // Create the instance
         *instance = Some(RunningInstance {

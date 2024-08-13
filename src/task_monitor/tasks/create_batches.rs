@@ -367,7 +367,6 @@ pub async fn insert_identities(
     TaskMonitor::log_batch_size(updates.len());
 
     sync_tree_notify.notify_one();
-    // batching_tree.apply_updates_up_to(post_root);
 
     Ok(())
 }

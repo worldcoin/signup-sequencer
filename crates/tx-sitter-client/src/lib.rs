@@ -73,19 +73,19 @@ impl TxSitterClient {
 
     #[instrument(skip(self))]
     pub async fn send_tx(&self, req: &SendTxRequest) -> anyhow::Result<SendTxResponse> {
-        Ok(self.json_post(&format!("{}/tx", self.url), req).await?)
+        self.json_post(&format!("{}/tx", self.url), req).await
     }
 
     #[instrument(skip(self))]
     pub async fn get_tx(&self, tx_id: &str) -> anyhow::Result<GetTxResponse> {
-        Ok(self.json_get(&format!("{}/tx/{}", self.url, tx_id)).await?)
+        self.json_get(&format!("{}/tx/{}", self.url, tx_id)).await
     }
 
     #[instrument(skip(self))]
     pub async fn get_txs(&self) -> anyhow::Result<Vec<GetTxResponse>> {
         let url = format!("{}/txs", self.url);
 
-        Ok(self.json_get(&url).await?)
+        self.json_get(&url).await
     }
 
     #[instrument(skip(self))]
@@ -95,14 +95,14 @@ impl TxSitterClient {
     ) -> anyhow::Result<Vec<GetTxResponse>> {
         let url = format!("{}/txs?status={}", self.url, tx_status);
 
-        Ok(self.json_get(&url).await?)
+        self.json_get(&url).await
     }
 
     #[instrument(skip(self))]
     pub async fn get_unsent_txs(&self) -> anyhow::Result<Vec<GetTxResponse>> {
         let url = format!("{}/txs?unsent=true", self.url);
 
-        Ok(self.json_get(&url).await?)
+        self.json_get(&url).await
     }
 
     pub fn rpc_url(&self) -> String {

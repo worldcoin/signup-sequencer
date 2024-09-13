@@ -29,7 +29,7 @@ axum = "0.6.4"
 axum-server = "0.4.4"
 bytes = "1.4.0"
 chrono = { version = "0.4.19", features = ["serde"] }
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.0", features = ["derive", "env"] }
 telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "802a4f39f358e077b11c8429b4c65f3e45b85959" }
 config = "0.13.4"
 ethers = { version = "2.0.10", features = ["ws", "ipc", "openssl", "abigen"] }
@@ -79,9 +79,9 @@ tracing-futures = "0.2"
 tx-sitter-client = { path = "crates/tx-sitter-client" }
 url = { version = "2.2", features = ["serde"] }
 zeroize = "1.6.0"
+dotenvy = "0.15.0"
 
 [dev-dependencies]
-dotenv = "0.15.0"
 hex = "0.4.3"
 lazy_static = "1.4.0"
 maplit = "1.0.2"

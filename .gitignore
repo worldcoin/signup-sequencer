@@ -11,3 +11,5 @@ commitments.json
 
 e2e_tests/docker-compose/keys/*
 !e2e_tests/docker-compose/keys/.keep
+
+.env

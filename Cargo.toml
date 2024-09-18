@@ -49,7 +49,7 @@ oz-api = { path = "crates/oz-api" }
 prometheus = "0.13.3"
 reqwest = { version = "0.11.18", features = ["json"] }
 ruint = { version = "1.12.3", features = ["primitive-types", "sqlx"] }
-semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "bc647145c7defcd0190898fd0e0d41562cbe8f7d", features = [
+semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "251e908d89d598c976901306bc29f06ab59e799d", features = [
     "depth_30",
 ] }
 serde = { version = "1.0", features = ["derive"] }
@@ -88,7 +88,7 @@ maplit = "1.0.2"
 micro-oz = { path = "crates/micro-oz" }
 postgres-docker-utils = { path = "crates/postgres-docker-utils" }
 regex = { version = "1.7.1", features = ["std"] }
-semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "bc647145c7defcd0190898fd0e0d41562cbe8f7d", features = [
+semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "251e908d89d598c976901306bc29f06ab59e799d", features = [
     "depth_20",
 ] }
 similar-asserts = "1.5.0"

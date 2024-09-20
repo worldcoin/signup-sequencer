@@ -29,7 +29,7 @@ axum = "0.6.4"
 axum-server = "0.4.4"
 bytes = "1.4.0"
 chrono = { version = "0.4.19", features = ["serde"] }
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.0", features = ["derive", "env"] }
 telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "802a4f39f358e077b11c8429b4c65f3e45b85959" }
 config = "0.13.4"
 ethers = { version = "2.0.10", features = ["ws", "ipc", "openssl", "abigen"] }
@@ -48,8 +48,8 @@ oz-api = { path = "crates/oz-api" }
 # We need upstream PR#465 to fix #272.
 prometheus = "0.13.3"
 reqwest = { version = "0.11.18", features = ["json"] }
-ruint = { version = "1.12.1", features = ["primitive-types", "sqlx"] }
-semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "5170c42292a4abc9e332742c8c392a480b075609", features = [
+ruint = { version = "1.12.3", features = ["primitive-types", "sqlx"] }
+semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "251e908d89d598c976901306bc29f06ab59e799d", features = [
     "depth_30",
 ] }
 serde = { version = "1.0", features = ["derive"] }
@@ -79,16 +79,16 @@ tracing-futures = "0.2"
 tx-sitter-client = { path = "crates/tx-sitter-client" }
 url = { version = "2.2", features = ["serde"] }
 zeroize = "1.6.0"
+dotenvy = "0.15.0"
 
 [dev-dependencies]
-dotenv = "0.15.0"
 hex = "0.4.3"
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 micro-oz = { path = "crates/micro-oz" }
 postgres-docker-utils = { path = "crates/postgres-docker-utils" }
 regex = { version = "1.7.1", features = ["std"] }
-semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "5170c42292a4abc9e332742c8c392a480b075609", features = [
+semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "251e908d89d598c976901306bc29f06ab59e799d", features = [
     "depth_20",
 ] }
 similar-asserts = "1.5.0"

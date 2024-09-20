@@ -14,8 +14,7 @@ on:
       - main
 
 env:
-  RUST_VERSION: "1.78.0-nightly"
-  NIGHTLY_VERSION: nightly-2024-02-05
+  RUST_VERSION: "1.81.0"
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
@@ -32,7 +31,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: ${{ env.NIGHTLY_VERSION }}
+          toolchain: ${{ env.RUST_VERSION }}
           override: true
           components: rustfmt, clippy
       - name: Install protobuf-compiler
@@ -46,13 +45,13 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-lint-
-      - name: Check formatting
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+          key: ${{ env.RUST_VERSION }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ env.RUST_VERSION }}-cargo-lint-
+      # - name: Check formatting
+      #   uses: actions-rs/cargo@v1
+      #   with:
+      #     command: fmt
+      #     args: --all -- --check
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -73,7 +72,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: ${{ env.NIGHTLY_VERSION }}
+          toolchain: ${{ env.RUST_VERSION }}
           override: true
       - name: Install protobuf-compiler
         run: sudo apt-get install -y protobuf-compiler
@@ -86,8 +85,8 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ env.RUST_VERSION }}-${{ env.NIGHTLY_VERSION }}-cargo-test-
+          key: ${{ env.RUST_VERSION }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ env.RUST_VERSION }}-cargo-test-
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:

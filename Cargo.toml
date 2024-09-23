@@ -87,7 +87,7 @@ lazy_static = "1.4.0"
 maplit = "1.0.2"
 micro-oz = { path = "crates/micro-oz" }
 postgres-docker-utils = { path = "crates/postgres-docker-utils" }
-regex = { version = "1.7.1", features = ["std"] }
+regex = { version = "1.10.6", features = ["std"] }
 semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "251e908d89d598c976901306bc29f06ab59e799d", features = [
     "depth_20",
 ] }

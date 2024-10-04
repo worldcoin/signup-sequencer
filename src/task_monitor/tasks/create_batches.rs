@@ -50,11 +50,7 @@ pub async fn create_batches(
     // inserted. If we have an incomplete batch but are within a small delta of the
     // tick happening anyway in the wake branch, we insert the current
     // (possibly-incomplete) batch anyway.
-    let mut last_batch_time: DateTime<Utc> = app
-        .database
-        .get_latest_insertion_timestamp()
-        .await?
-        .unwrap_or(Utc::now());
+    let mut last_batch_time: DateTime<Utc> = app.database.get_latest_insertion().await?.timestamp;
 
     loop {
         // We wait either for a timer tick or a full batch
@@ -127,7 +123,7 @@ pub async fn create_batches(
                 timer.reset();
                 last_batch_time = Utc::now();
                 app.database
-                    .update_latest_insertion_timestamp(last_batch_time)
+                    .update_latest_insertion(last_batch_time)
                     .await?;
             } else {
                 // Check if the next batch after the current insertion batch is

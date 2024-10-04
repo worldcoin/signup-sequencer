@@ -6,7 +6,9 @@ use sqlx::{Executor, Postgres, Row};
 use tracing::instrument;
 use types::{DeletionEntry, LatestDeletionEntry, RecoveryEntry};
 
-use crate::database::types::{BatchEntry, BatchEntryData, BatchType, TransactionEntry};
+use crate::database::types::{
+    BatchEntry, BatchEntryData, BatchType, LatestInsertionEntry, TransactionEntry,
+};
 use crate::database::{types, Error};
 use crate::identity_tree::{
     Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate, UnprocessedStatus,
@@ -25,17 +27,19 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         leaf_index: usize,
         identity: &Hash,
         root: &Hash,
+        pre_root: &Hash,
     ) -> Result<(), Error> {
         let insert_pending_identity_query = sqlx::query(
             r#"
-            INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of)
-            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+            INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of, pre_root)
+            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5)
             "#,
         )
         .bind(leaf_index as i64)
         .bind(identity)
         .bind(root)
-        .bind(<&str>::from(ProcessedStatus::Pending));
+        .bind(<&str>::from(ProcessedStatus::Pending))
+        .bind(pre_root);
 
         self.execute(insert_pending_identity_query).await?;
 
@@ -182,6 +186,17 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .collect())
     }
 
+    async fn get_latest_root(self) -> Result<Option<Hash>, Error> {
+        Ok(sqlx::query(
+            r#"
+            SELECT root FROM identities ORDER BY id DESC LIMIT 1
+            "#,
+        )
+        .fetch_optional(self)
+        .await?
+        .map(|r| r.get::<Hash, _>(0)))
+    }
+
     async fn get_latest_root_by_status(
         self,
         status: ProcessedStatus,
@@ -218,7 +233,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .await?)
     }
 
-    async fn get_latest_insertion_timestamp(self) -> Result<Option<DateTime<Utc>>, Error> {
+    async fn get_latest_insertion(self) -> Result<LatestInsertionEntry, Error> {
         let query = sqlx::query(
             r#"
             SELECT insertion_timestamp
@@ -228,7 +243,15 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
 
         let row = self.fetch_optional(query).await?;
 
-        Ok(row.map(|r| r.get::<DateTime<Utc>, _>(0)))
+        if let Some(row) = row {
+            Ok(LatestInsertionEntry {
+                timestamp: row.get(0),
+            })
+        } else {
+            Ok(LatestInsertionEntry {
+                timestamp: Utc::now(),
+            })
+        }
     }
 
     async fn count_unprocessed_identities(self) -> Result<i32, Error> {
@@ -383,7 +406,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         }
     }
 
-    async fn update_latest_insertion_timestamp(
+    async fn update_latest_insertion(
         self,
         insertion_timestamp: DateTime<Utc>,
     ) -> Result<(), Error> {

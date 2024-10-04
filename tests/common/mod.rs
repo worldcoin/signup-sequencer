@@ -714,6 +714,22 @@ fn construct_verify_proof_body(
 pub async fn spawn_app(
     config: Config,
 ) -> anyhow::Result<(Arc<App>, JoinHandle<()>, SocketAddr, Arc<Shutdown>)> {
+    spawn_app_returning_initialized_tree(config).await.map(
+        |(app, join_handle, socket_addr, shutdown, _)| (app, join_handle, socket_addr, shutdown),
+    )
+}
+
+#[instrument(skip_all)]
+#[allow(clippy::type_complexity)]
+pub async fn spawn_app_returning_initialized_tree(
+    config: Config,
+) -> anyhow::Result<(
+    Arc<App>,
+    JoinHandle<()>,
+    SocketAddr,
+    Arc<Shutdown>,
+    TreeState,
+)> {
     let server_config = config.server.clone();
     let app = App::new(config).await.expect("Failed to create App");
     let shutdown = Arc::new(Shutdown::new());
@@ -728,8 +744,9 @@ pub async fn spawn_app(
     // For our tests to work we need the tree to be initialized.
     while app.tree_state().is_err() {
         trace!("Waiting for the tree to be initialized");
-        tokio::time::sleep(Duration::from_millis(250)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
+    let initialized_tree_state = app.tree_state()?.clone();
 
     let app_clone = app.clone();
     let shutdown_clone = shutdown.clone();
@@ -756,7 +773,13 @@ pub async fn spawn_app(
 
     info!("App ready");
 
-    Ok((app, app_handle, local_addr, shutdown))
+    Ok((
+        app,
+        app_handle,
+        local_addr,
+        shutdown,
+        initialized_tree_state,
+    ))
 }
 
 pub async fn check_metrics(socket_addr: &SocketAddr) -> anyhow::Result<()> {

@@ -10,6 +10,7 @@ pub trait Inner: Send + Sync + 'static {
         &self,
         tx: TypedTransaction,
         only_once: bool,
+        tx_id: Option<String>,
     ) -> Result<TransactionId, TxError>;
 
     async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError>;

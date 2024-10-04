@@ -133,6 +133,7 @@ impl OzRelay {
         &self,
         mut tx: TypedTransaction,
         only_once: bool,
+        _tx_id: Option<String>,
     ) -> Result<TransactionId, TxError> {
         if let Some(gas_limit) = self.gas_limit {
             tx.set_gas(gas_limit);
@@ -220,8 +221,9 @@ impl Inner for OzRelay {
         &self,
         tx: TypedTransaction,
         only_once: bool,
+        tx_id: Option<String>,
     ) -> Result<TransactionId, TxError> {
-        self.send_transaction(tx, only_once).await
+        self.send_transaction(tx, only_once, tx_id).await
     }
 
     async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {

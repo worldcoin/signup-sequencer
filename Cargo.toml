@@ -33,7 +33,7 @@ clap = { version = "4.0", features = ["derive", "env"] }
 telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "12cc036234b4e9b86f22ff7e35d499e2ff1e6304" }
 config = "0.13.4"
 ethers = { version = "2.0.10", features = ["ws", "ipc", "openssl", "abigen"] }
-ethers-solc = "2.0.10"
+ethers-solc = "2.0.14"
 eyre = "0.6"
 futures = "0.3"
 futures-util = { version = "^0.3" }

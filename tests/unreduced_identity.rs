@@ -58,21 +58,15 @@ async fn test_unreduced_identity(offchain_mode_enabled: bool) -> anyhow::Result<
 
     // Test unreduced identity for insertion
     let body = common::construct_insert_identity_body(&ruint::Uint::<256, 4>::MAX);
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri.to_owned() + "/insertIdentity")
+    let response = client
+        .post(uri.to_owned() + "/insertIdentity")
         .header("Content-Type", "application/json")
         .body(body)
-        .expect("Failed to create insert identity hyper::Body");
-
-    let response = client
-        .request(req)
+        .send()
         .await
-        .expect("Failed to execute request.");
+        .expect("Failed to create insert identity");
 
-    let bytes = hyper::body::to_bytes(response.into_body())
-        .await
-        .expect("Failed to read body bytes");
+    let bytes = response.bytes().await.expect("Failed to read body bytes");
     let body_str = String::from_utf8_lossy(&bytes);
 
     assert_eq!(
@@ -82,21 +76,15 @@ async fn test_unreduced_identity(offchain_mode_enabled: bool) -> anyhow::Result<
 
     // Test unreduced identity for recovery
     let body = common::construct_recover_identity_body(&Hash::ZERO, &ruint::Uint::<256, 4>::MAX);
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri.to_owned() + "/recoverIdentity")
+    let response = client
+        .post(uri.to_owned() + "/recoverIdentity")
         .header("Content-Type", "application/json")
         .body(body)
-        .expect("Failed to create insert identity hyper::Body");
-
-    let response = client
-        .request(req)
+        .send()
         .await
-        .expect("Failed to execute request.");
+        .expect("Failed to create insert identity");
 
-    let bytes = hyper::body::to_bytes(response.into_body())
-        .await
-        .expect("Failed to read body bytes");
+    let bytes = response.bytes().await.expect("Failed to read body bytes");
     let body_str = String::from_utf8_lossy(&bytes);
 
     assert_eq!(

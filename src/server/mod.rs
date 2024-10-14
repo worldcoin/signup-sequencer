@@ -1,6 +1,5 @@
 pub mod error;
 
-use std::net::TcpListener;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -13,6 +12,7 @@ use error::Error;
 use hyper::header::CONTENT_TYPE;
 use hyper::StatusCode;
 use prometheus::{Encoder, TextEncoder};
+use tokio::net::TcpListener;
 use tracing::info;
 
 use crate::app::App;
@@ -151,7 +151,7 @@ pub async fn run(
     shutdown: Arc<Shutdown>,
 ) -> anyhow::Result<()> {
     info!("Will listen on {}", config.address);
-    let listener = TcpListener::bind(config.address)?;
+    let listener = TcpListener::bind(config.address).await?;
 
     bind_from_listener(app, config.serve_timeout, listener, shutdown).await?;
 

@@ -439,6 +439,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         Ok(())
     }
 
+    #[cfg(test)]
     async fn get_all_recoveries(self) -> Result<Vec<RecoveryEntry>, Error> {
         Ok(
             sqlx::query_as::<_, RecoveryEntry>("SELECT * FROM recoveries")
@@ -659,6 +660,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         Ok(())
     }
 
+    #[cfg(test)]
     async fn get_next_batch(self, prev_root: &Hash) -> Result<Option<BatchEntry>, Error> {
         let res = sqlx::query_as::<_, BatchEntry>(
             r#"
@@ -692,29 +694,6 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
                 data
             FROM batches
             ORDER BY id DESC
-            LIMIT 1
-            "#,
-        )
-        .fetch_optional(self)
-        .await?;
-
-        Ok(res)
-    }
-
-    async fn get_latest_batch_with_transaction(self) -> Result<Option<BatchEntry>, Error> {
-        let res = sqlx::query_as::<_, BatchEntry>(
-            r#"
-            SELECT
-                batches.id,
-                batches.next_root,
-                batches.prev_root,
-                batches.created_at,
-                batches.batch_type,
-                batches.data
-            FROM batches
-            LEFT JOIN transactions ON batches.next_root = transactions.batch_next_root
-            WHERE transactions.batch_next_root IS NOT NULL AND batches.prev_root IS NOT NULL
-            ORDER BY batches.id DESC
             LIMIT 1
             "#,
         )
@@ -767,26 +746,6 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         Ok(res)
     }
 
-    async fn get_all_batches_after(self, id: i64) -> Result<Vec<BatchEntry>, Error> {
-        let res = sqlx::query_as::<_, BatchEntry>(
-            r#"
-            SELECT
-                id,
-                next_root,
-                prev_root,
-                created_at,
-                batch_type,
-                data
-            FROM batches WHERE id >= $1 ORDER BY id ASC
-            "#,
-        )
-        .bind(id)
-        .fetch_all(self)
-        .await?;
-
-        Ok(res)
-    }
-
     #[instrument(skip(self), level = "debug")]
     async fn delete_batches_after_root(self, root: &Hash) -> Result<(), Error> {
         let query = sqlx::query(
@@ -813,15 +772,6 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         Ok(())
     }
 
-    async fn root_in_batch_chain(self, root: &Hash) -> Result<bool, Error> {
-        let query = sqlx::query(
-            r#"SELECT exists(SELECT 1 FROM batches where prev_root = $1 OR next_root = $1)"#,
-        )
-        .bind(root);
-        let row_unprocessed = self.fetch_one(query).await?;
-        Ok(row_unprocessed.get::<bool, _>(0))
-    }
-
     async fn insert_new_transaction(
         self,
         transaction_id: &String,
@@ -841,26 +791,5 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
 
         self.execute(query).await?;
         Ok(())
-    }
-
-    async fn get_transaction_for_batch(
-        self,
-        next_root: &Hash,
-    ) -> Result<Option<TransactionEntry>, Error> {
-        let res = sqlx::query_as::<_, TransactionEntry>(
-            r#"
-            SELECT
-                transaction_id,
-                batch_next_root,
-                created_at
-            FROM transactions WHERE batch_next_root = $1
-            LIMIT 1
-            "#,
-        )
-        .bind(next_root)
-        .fetch_optional(self)
-        .await?;
-
-        Ok(res)
     }
 }

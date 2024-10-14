@@ -25,10 +25,9 @@ pub mod prelude {
     pub use ethers::types::{Bytes, H256, U128, U256};
     pub use ethers::utils::{Anvil, AnvilInstance};
     pub use ethers_solc::artifacts::{Bytecode, BytecodeObject};
-    pub use hyper::client::HttpConnector;
-    pub use hyper::{Body, Client, Request};
     pub use once_cell::sync::Lazy;
     pub use postgres_docker_utils::DockerContainer;
+    pub use reqwest::{Client, StatusCode};
     pub use semaphore::identity::Identity;
     pub use semaphore::merkle_tree::{self, Branch};
     pub use semaphore::poseidon_tree::{PoseidonHash, PoseidonTree};
@@ -69,13 +68,13 @@ pub mod prelude {
 }
 
 use std::collections::HashMap;
-use std::net::{SocketAddr, TcpListener};
+use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::{Arc, Once};
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use hyper::StatusCode;
+use reqwest::{Body, Client, Method, Request, RequestBuilder, StatusCode};
 use semaphore::poseidon_tree::Proof;
 use signup_sequencer::identity_tree::{InclusionProof, TreeState, TreeVersionReadOps};
 use signup_sequencer::server::data::{
@@ -84,6 +83,7 @@ use signup_sequencer::server::data::{
 };
 use signup_sequencer::task_monitor::TaskMonitor;
 use testcontainers::clients::Cli;
+use tokio::net::TcpListener;
 use tracing::trace;
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
@@ -98,7 +98,7 @@ const NUM_ATTEMPTS_FOR_INCLUSION_PROOF: usize = 20;
 #[instrument(skip_all)]
 pub async fn test_verify_proof(
     uri: &str,
-    client: &Client<HttpConnector>,
+    client: &Client,
     root: Field,
     signal_hash: Field,
     nullifier_hash: Field,
@@ -124,7 +124,7 @@ pub async fn test_verify_proof(
 #[instrument(skip_all)]
 pub async fn test_verify_proof_with_age(
     uri: &str,
-    client: &Client<HttpConnector>,
+    client: &Client,
     root: Field,
     signal_hash: Field,
     nullifier_hash: Field,
@@ -151,7 +151,7 @@ pub async fn test_verify_proof_with_age(
 #[instrument(skip_all)]
 async fn test_verify_proof_inner(
     uri: &str,
-    client: &Client<HttpConnector>,
+    client: &Client,
     root: Field,
     signal_hash: Field,
     nullifier_hash: Field,
@@ -175,26 +175,25 @@ async fn test_verify_proof_inner(
         None => format!("{uri}/verifySemaphoreProof"),
     };
 
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri)
+    let response = client
+        .request(Method::POST, uri)
         .header("Content-Type", "application/json")
         .body(body)
-        .expect("Failed to create verify proof hyper::Body");
-
-    let mut response = client
-        .request(req)
+        .send()
         .await
-        .expect("Failed to execute request.");
+        .expect("Failed to execute request");
 
-    let bytes = hyper::body::to_bytes(response.body_mut())
+    let response_status = response.status();
+    let bytes = response
+        .bytes()
         .await
-        .expect("Failed to convert response body to bytes");
+        .expect("Failed to get response bytes");
+
     let result = String::from_utf8(bytes.into_iter().collect())
         .expect("Could not parse response bytes to utf-8");
 
     if let Some(expected_failure) = expected_failure {
-        assert!(!response.status().is_success());
+        assert!(!response_status.is_success());
         assert!(
             result.contains(expected_failure),
             "Result (`{}`) did not contain expected failure (`{}`)",
@@ -202,7 +201,7 @@ async fn test_verify_proof_inner(
             expected_failure
         );
     } else {
-        assert!(response.status().is_success());
+        assert!(response_status.is_success());
     }
 }
 
@@ -243,7 +242,7 @@ pub async fn test_verify_proof_on_chain(
 pub async fn test_inclusion_proof(
     mock_chain: &MockChain,
     uri: &str,
-    client: &Client<HttpConnector>,
+    client: &Client,
     leaf_index: usize,
     ref_tree: &PoseidonTree,
     leaf: &Hash,
@@ -253,17 +252,13 @@ pub async fn test_inclusion_proof(
     for i in 0..NUM_ATTEMPTS_FOR_INCLUSION_PROOF {
         let body = construct_inclusion_proof_body(leaf);
         info!(?uri, "Contacting");
-        let req = Request::builder()
-            .method("POST")
-            .uri(uri.to_owned() + "/inclusionProof")
+        let response = client
+            .post(uri.to_owned() + "/inclusionProof")
             .header("Content-Type", "application/json")
             .body(body)
-            .expect("Failed to create inclusion proof hyper::Body");
-
-        let mut response = client
-            .request(req)
+            .send()
             .await
-            .expect("Failed to execute request.");
+            .expect("Failed to execute request");
 
         if expect_failure {
             assert!(!response.status().is_success());
@@ -272,9 +267,12 @@ pub async fn test_inclusion_proof(
             assert!(response.status().is_success());
         }
 
-        let bytes = hyper::body::to_bytes(response.body_mut())
+        let response_status = response.status();
+        let bytes = response
+            .bytes()
             .await
-            .expect("Failed to convert response body to bytes");
+            .expect("Failed to get response bytes");
+
         let result = String::from_utf8(bytes.into_iter().collect())
             .expect("Could not parse response bytes to utf-8");
         let result = serde_json::from_str::<InclusionProofResponse>(&result)
@@ -307,7 +305,7 @@ pub async fn test_inclusion_proof(
         }
 
         assert_eq!(result, generate_reference_proof(ref_tree, leaf_index));
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response_status, StatusCode::OK);
         info!("Got pending, waiting 5 seconds, iteration {}", i);
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
@@ -322,7 +320,7 @@ pub async fn test_inclusion_proof(
 pub async fn test_inclusion_proof_mined(
     mock_chain: &MockChain,
     uri: &str,
-    client: &Client<HttpConnector>,
+    client: &Client,
     leaf: &Hash,
     expect_failure: bool,
     offchain_mode_enabled: bool,
@@ -330,17 +328,14 @@ pub async fn test_inclusion_proof_mined(
     for i in 0..NUM_ATTEMPTS_FOR_INCLUSION_PROOF {
         let body = construct_inclusion_proof_body(leaf);
         info!(?uri, "Contacting");
-        let req = Request::builder()
-            .method("POST")
-            .uri(uri.to_owned() + "/inclusionProof")
+
+        let response = client
+            .post(uri.to_owned() + "/inclusionProof")
             .header("Content-Type", "application/json")
             .body(body)
-            .expect("Failed to create inclusion proof hyper::Body");
-
-        let mut response = client
-            .request(req)
+            .send()
             .await
-            .expect("Failed to execute request.");
+            .expect("Failed to create inclusion proof");
 
         if expect_failure {
             assert!(!response.status().is_success());
@@ -349,9 +344,10 @@ pub async fn test_inclusion_proof_mined(
             assert!(response.status().is_success());
         }
 
-        let bytes = hyper::body::to_bytes(response.body_mut())
+        let bytes = response
+            .bytes()
             .await
-            .expect("Failed to convert response body to bytes");
+            .expect("Failed to get response bytes");
         let result = String::from_utf8(bytes.into_iter().collect())
             .expect("Could not parse response bytes to utf-8");
         let result = serde_json::from_str::<InclusionProofResponse>(&result)
@@ -388,26 +384,23 @@ pub async fn test_inclusion_proof_mined(
 }
 
 #[instrument(skip_all)]
-pub async fn test_not_in_tree(uri: &str, client: &Client<HttpConnector>, leaf: &Hash) {
+pub async fn test_not_in_tree(uri: &str, client: &Client, leaf: &Hash) {
     let body = construct_inclusion_proof_body(leaf);
     info!(?uri, "Contacting");
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri.to_owned() + "/inclusionProof")
+    let response = client
+        .post(uri.to_owned() + "/inclusionProof")
         .header("Content-Type", "application/json")
         .body(body)
-        .expect("Failed to create inclusion proof hyper::Body");
-
-    let mut response = client
-        .request(req)
+        .send()
         .await
-        .expect("Failed to execute request.");
+        .expect("Failed to create inclusion proof");
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let bytes = hyper::body::to_bytes(response.body_mut())
+    let bytes = response
+        .bytes()
         .await
-        .expect("Failed to convert response body to bytes");
+        .expect("Failed to get response bytes");
     let result = String::from_utf8(bytes.into_iter().collect())
         .expect("Could not parse response bytes to utf-8");
 
@@ -418,26 +411,23 @@ pub async fn test_not_in_tree(uri: &str, client: &Client<HttpConnector>, leaf: &
 }
 
 #[instrument(skip_all)]
-pub async fn test_in_tree(uri: &str, client: &Client<HttpConnector>, leaf: &Hash) {
+pub async fn test_in_tree(uri: &str, client: &Client, leaf: &Hash) {
     let body = construct_inclusion_proof_body(leaf);
     info!(?uri, "Contacting");
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri.to_owned() + "/inclusionProof")
+    let response = client
+        .post(uri.to_owned() + "/inclusionProof")
         .header("Content-Type", "application/json")
         .body(body)
-        .expect("Failed to create inclusion proof hyper::Body");
-
-    let mut response = client
-        .request(req)
+        .send()
         .await
-        .expect("Failed to execute request.");
+        .expect("Failed to create inclusion proof");
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let bytes = hyper::body::to_bytes(response.body_mut())
+    let bytes = response
+        .bytes()
         .await
-        .expect("Failed to convert response body to bytes");
+        .expect("Failed to get response bytes");
     let result = String::from_utf8(bytes.into_iter().collect())
         .expect("Could not parse response bytes to utf-8");
 
@@ -449,33 +439,28 @@ pub async fn test_in_tree(uri: &str, client: &Client<HttpConnector>, leaf: &Hash
     assert_ne!(root, U256::zero(), "Hash is not zero");
 }
 
-pub async fn api_delete_identity(
-    uri: &str,
-    client: &Client<HttpConnector>,
-    leaf: &Field,
-    expect_failure: bool,
-) {
+pub async fn api_delete_identity(uri: &str, client: &Client, leaf: &Field, expect_failure: bool) {
     let body = construct_delete_identity_body(leaf);
 
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri.to_owned() + "/deleteIdentity")
+    let response = client
+        .post(uri.to_owned() + "/deleteIdentity")
         .header("Content-Type", "application/json")
         .body(body)
-        .expect("Failed to create insert identity hyper::Body");
+        .send()
+        .await
+        .expect("Failed to create insert identity");
 
-    let mut response = client
-        .request(req)
+    let response_status = response.status();
+
+    let bytes = response
+        .bytes()
         .await
-        .expect("Failed to execute request.");
-    let bytes = hyper::body::to_bytes(response.body_mut())
-        .await
-        .expect("Failed to convert response body to bytes");
+        .expect("Failed to get response bytes");
 
     if expect_failure {
-        assert!(!response.status().is_success());
+        assert!(!response_status.is_success());
     } else {
-        assert!(response.status().is_success());
+        assert!(response_status.is_success());
         assert!(bytes.is_empty());
     }
 }
@@ -483,7 +468,7 @@ pub async fn api_delete_identity(
 #[instrument(skip_all)]
 pub async fn test_delete_identity(
     uri: &str,
-    client: &Client<HttpConnector>,
+    client: &Client,
     ref_tree: &mut PoseidonTree,
     test_leaves: &[Field],
     leaf_index: usize,
@@ -497,7 +482,7 @@ pub async fn test_delete_identity(
 #[instrument(skip_all)]
 pub async fn test_recover_identity(
     uri: &str,
-    client: &Client<HttpConnector>,
+    client: &Client,
     ref_tree: &mut PoseidonTree,
     test_leaves: &[Field],
     previous_leaf_index: usize,
@@ -509,26 +494,25 @@ pub async fn test_recover_identity(
 
     let body = construct_recover_identity_body(&previous_leaf, &new_leaf);
 
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri.to_owned() + "/recoverIdentity")
+    let response = client
+        .post(uri.to_owned() + "/recoverIdentity")
         .header("Content-Type", "application/json")
         .body(body)
-        .expect("Failed to create insert identity hyper::Body");
-
-    let mut response = client
-        .request(req)
+        .send()
         .await
-        .expect("Failed to execute request.");
+        .expect("Failed to create insert identity");
 
-    let bytes = hyper::body::to_bytes(response.body_mut())
+    let response_status = response.status();
+
+    let bytes = response
+        .bytes()
         .await
-        .expect("Failed to convert response body to bytes");
+        .expect("Failed to get response bytes");
 
     if expect_failure {
-        assert!(!response.status().is_success());
+        assert!(!response_status.is_success());
     } else {
-        assert!(response.status().is_success());
+        assert!(response_status.is_success());
         assert!(bytes.is_empty());
     }
 
@@ -551,7 +535,7 @@ pub async fn test_add_batch_size(
     prover_url: impl Into<String>,
     batch_size: u64,
     prover_type: ProverType,
-    client: &Client<HttpConnector>,
+    client: &Client,
 ) -> anyhow::Result<()> {
     let body = Body::from(serde_json::to_string(&AddBatchSizeRequest {
         url: prover_url.into(),
@@ -559,17 +543,14 @@ pub async fn test_add_batch_size(
         timeout_seconds: 3,
         prover_type,
     })?);
-    let request = Request::builder()
-        .method("POST")
-        .uri(uri.into() + "/addBatchSize")
-        .header("Content-Type", "application/json")
-        .body(body)
-        .expect("Failed to create add batch size hyper::Body");
 
     client
-        .request(request)
+        .post(uri.into() + "/addBatchSize")
+        .header("Content-Type", "application/json")
+        .body(body)
+        .send()
         .await
-        .expect("Failed to execute request.");
+        .expect("Failed to create add batch size");
 
     Ok(())
 }
@@ -578,7 +559,7 @@ pub async fn test_add_batch_size(
 pub async fn test_remove_batch_size(
     uri: impl Into<String>,
     batch_size: u64,
-    client: &Client<HttpConnector>,
+    client: &Client,
     prover_type: ProverType,
     expect_failure: bool,
 ) -> anyhow::Result<()> {
@@ -586,23 +567,21 @@ pub async fn test_remove_batch_size(
         batch_size: batch_size as usize,
         prover_type,
     })?);
-    let request = Request::builder()
-        .method("POST")
-        .uri(uri.into() + "/removeBatchSize")
+
+    let response = client
+        .post(uri.into() + "/removeBatchSize")
         .header("Content-Type", "application/json")
         .body(body)
-        .expect("Failed to create remove batch size hyper::Body");
-
-    let mut result = client
-        .request(request)
+        .send()
         .await
-        .expect("Request didn't return.");
+        .expect("Failed to create remove batch size");
 
-    let body_bytes = hyper::body::to_bytes(result.body_mut())
+    let bytes = response
+        .bytes()
         .await
-        .expect("Failed to get response bytes.");
-    let body_str =
-        String::from_utf8(body_bytes.into_iter().collect()).expect("Failed to decode response.");
+        .expect("Failed to get response bytes");
+
+    let body_str = String::from_utf8(bytes.to_vec()).expect("Failed to decode response.");
 
     if expect_failure && body_str != "The last batch size cannot be removed" {
         anyhow::bail!("Expected failure, but got success");
@@ -612,25 +591,24 @@ pub async fn test_remove_batch_size(
 }
 
 #[instrument(skip_all)]
-pub async fn api_insert_identity(uri: &str, client: &Client<HttpConnector>, leaf: &Field) {
+pub async fn api_insert_identity(uri: &str, client: &Client, leaf: &Field) {
     let body = construct_insert_identity_body(leaf);
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri.to_owned() + "/insertIdentity")
+    let response = client
+        .post(uri.to_owned() + "/insertIdentity")
         .header("Content-Type", "application/json")
         .body(body)
-        .expect("Failed to create insert identity hyper::Body");
+        .send()
+        .await
+        .expect("Failed to create insert identity");
 
-    let mut response = client
-        .request(req)
-        .await
-        .expect("Failed to execute request.");
-    let bytes = hyper::body::to_bytes(response.body_mut())
-        .await
-        .expect("Failed to convert response body to bytes");
     if !response.status().is_success() {
         panic!("Failed to insert identity");
     }
+
+    let bytes = response
+        .bytes()
+        .await
+        .expect("Failed to get response bytes");
 
     assert!(bytes.is_empty());
 }
@@ -638,7 +616,7 @@ pub async fn api_insert_identity(uri: &str, client: &Client<HttpConnector>, leaf
 #[instrument(skip_all)]
 pub async fn test_insert_identity(
     uri: &str,
-    client: &Client<HttpConnector>,
+    client: &Client,
     ref_tree: &mut PoseidonTree,
     test_leaves: &[Field],
     leaf_index: usize,
@@ -675,7 +653,7 @@ pub fn construct_recover_identity_body(
     Body::from(
         serde_json::to_string(&RecoveryRequest {
             previous_identity_commitment: *previous_identity_commitment,
-            new_identity_commitment:      *new_identity_commitment,
+            new_identity_commitment: *new_identity_commitment,
         })
         .expect("Cannot serialize RecoveryRequest"),
     )
@@ -721,7 +699,9 @@ pub async fn spawn_app(
     let task_monitor = TaskMonitor::new(app.clone(), shutdown.clone());
     task_monitor.start().await;
 
-    let listener = TcpListener::bind(server_config.address).expect("Failed to bind random port");
+    let listener = TcpListener::bind(server_config.address)
+        .await
+        .expect("Failed to bind random port");
     let local_addr = listener.local_addr()?;
 
     info!("Waiting for tree initialization");
@@ -762,15 +742,12 @@ pub async fn spawn_app(
 pub async fn check_metrics(socket_addr: &SocketAddr) -> anyhow::Result<()> {
     let uri = format!("http://{}", socket_addr);
     let client = Client::new();
-    let req = Request::builder()
-        .method("GET")
-        .uri(uri.to_owned() + "/metrics")
-        .body(Body::empty())
-        .expect("Failed to create metrics hyper::Body");
     let response = client
-        .request(req)
+        .get(uri.to_owned() + "/metrics")
+        .send()
         .await
-        .context("Failed to execute metrics request.")?;
+        .expect("Failed to create metrics");
+
     if !response.status().is_success() {
         anyhow::bail!("Metrics endpoint failed");
     }
@@ -781,15 +758,13 @@ pub async fn check_metrics(socket_addr: &SocketAddr) -> anyhow::Result<()> {
 pub async fn check_health(socket_addr: &SocketAddr) -> anyhow::Result<()> {
     let uri = format!("http://{}", socket_addr);
     let client = Client::new();
-    let req = Request::builder()
-        .method("GET")
-        .uri(uri.to_owned() + "/health")
-        .body(Body::empty())
-        .expect("Failed to create health check hyper::Body");
+
     let response = client
-        .request(req)
+        .get(uri.to_owned() + "/health")
+        .send()
         .await
-        .context("Failed to execute health check request.")?;
+        .expect("Failed to create health check");
+
     if !response.status().is_success() {
         anyhow::bail!("Health check failed");
     }
@@ -799,7 +774,7 @@ pub async fn check_health(socket_addr: &SocketAddr) -> anyhow::Result<()> {
 
 #[derive(Deserialize, Serialize, Debug)]
 struct CompiledContract {
-    abi:      Abi,
+    abi: Abi,
     bytecode: Bytecode,
 }
 
@@ -934,8 +909,8 @@ pub fn generate_reference_proof(
     leaf_idx: usize,
 ) -> InclusionProofResponse {
     InclusionProofResponse(InclusionProof {
-        root:    Some(ref_tree.root()),
-        proof:   ref_tree.proof(leaf_idx),
+        root: Some(ref_tree.root()),
+        proof: ref_tree.proof(leaf_idx),
         message: None,
     })
 }

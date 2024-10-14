@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::sync::Arc;
 
 use eyre::Result;
@@ -5,7 +6,7 @@ use tokio::sync::watch::{self, Receiver, Sender};
 use tracing::info;
 
 pub struct Shutdown {
-    sender:   Sender<bool>,
+    sender: Sender<bool>,
     receiver: Receiver<bool>,
 }
 
@@ -31,13 +32,16 @@ impl Shutdown {
     ///
     /// Resolves immediately if the program is already shutting down.
     /// The resulting future is safe to cancel by dropping.
-    pub async fn await_shutdown(&self) {
+    pub fn await_shutdown(&self) -> impl Future<Output = ()> + 'static {
         let mut watch = self.receiver.clone();
-        if *watch.borrow_and_update() {
-            return;
+
+        async move {
+            if *watch.borrow_and_update() {
+                return;
+            }
+            // Does not fail because the channel never closes test_config.
+            watch.changed().await.unwrap();
         }
-        // Does not fail because the channel never closes test_config.
-        watch.changed().await.unwrap();
     }
 }
 

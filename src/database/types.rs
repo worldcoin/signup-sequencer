@@ -10,18 +10,22 @@ use crate::identity_tree::{Hash, UnprocessedStatus};
 use crate::prover::identity::Identity;
 
 pub struct UnprocessedCommitment {
-    pub commitment:            Hash,
-    pub status:                UnprocessedStatus,
-    pub created_at:            DateTime<Utc>,
-    pub processed_at:          Option<DateTime<Utc>>,
-    pub error_message:         Option<String>,
+    pub commitment: Hash,
+    pub status: UnprocessedStatus,
+    pub created_at: DateTime<Utc>,
+    pub processed_at: Option<DateTime<Utc>>,
+    pub error_message: Option<String>,
     pub eligibility_timestamp: DateTime<Utc>,
 }
 
 #[derive(FromRow)]
 pub struct RecoveryEntry {
+    // existing commitment is used in tests only, but recoveries in general
+    // are used in production code via the FromRow trait
+    // so removing this field would break the production code
+    #[allow(unused)]
     pub existing_commitment: Hash,
-    pub new_commitment:      Hash,
+    pub new_commitment: Hash,
 }
 
 pub struct LatestInsertionEntry {
@@ -68,26 +72,20 @@ impl std::fmt::Display for BatchType {
 
 #[derive(Debug, Clone, FromRow)]
 pub struct BatchEntry {
-    pub id:         i64,
-    pub next_root:  Hash,
+    pub id: i64,
+    pub next_root: Hash,
     // In general prev_root is present all the time except the first row (head of the batches
     // chain)
-    pub prev_root:  Option<Hash>,
+    pub prev_root: Option<Hash>,
     pub created_at: DateTime<Utc>,
     pub batch_type: BatchType,
-    pub data:       sqlx::types::Json<BatchEntryData>,
+    pub data: sqlx::types::Json<BatchEntryData>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BatchEntryData {
     pub identities: Vec<Identity>,
-    pub indexes:    Vec<usize>,
-}
-
-#[derive(Debug, Clone, FromRow)]
-pub struct TransactionEntry {
-    pub batch_next_root: Hash,
-    pub transaction_id:  String,
+    pub indexes: Vec<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

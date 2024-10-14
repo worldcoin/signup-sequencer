@@ -141,7 +141,7 @@ async fn main() -> anyhow::Result<()> {
             let client = reqwest::Client::new();
 
             let response = client
-                .post(&format!("{}/insertIdentity", args.sequencer_url))
+                .post(format!("{}/insertIdentity", args.sequencer_url))
                 .basic_auth(basic_auth_username, Some(basic_auth_password))
                 .json(&InsertCommitmentRequest {
                     identity_commitment,
@@ -167,7 +167,7 @@ async fn main() -> anyhow::Result<()> {
             let client = reqwest::Client::new();
 
             let response = client
-                .post(&format!("{}/inclusionProof", args.sequencer_url))
+                .post(format!("{}/inclusionProof", args.sequencer_url))
                 .json(&InclusionProofRequest {
                     identity_commitment,
                 })
@@ -199,7 +199,7 @@ async fn main() -> anyhow::Result<()> {
             let client = reqwest::Client::new();
 
             let response = client
-                .post(&format!("{}/verifySemaphoreProof", args.sequencer_url))
+                .post(format!("{}/verifySemaphoreProof", args.sequencer_url))
                 .json(&proof_request)
                 .send()
                 .await?;
@@ -218,7 +218,7 @@ async fn main() -> anyhow::Result<()> {
             let client = reqwest::Client::new();
 
             let response = client
-                .post(&format!("{}/inclusionProof", args.sequencer_url))
+                .post(format!("{}/inclusionProof", args.sequencer_url))
                 .json(&InclusionProofRequest {
                     identity_commitment: identity.commitment(),
                 })

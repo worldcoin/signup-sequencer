@@ -4,7 +4,7 @@ CREATE UNIQUE INDEX idx_unique_deletion_leaf on identities(leaf_index) WHERE com
 -- Add the new 'prev_root' column
 ALTER TABLE identities ADD COLUMN pre_root BYTEA;
 
--- This constraint ensures that we have consistent database and changes to the tre are done in a valid sequence.
+-- This constraint ensures that we have consistent database and changes to the tree are done in a valid sequence.
 CREATE OR REPLACE FUNCTION validate_pre_root() returns trigger as $$
     DECLARE
         last_id identities.id%type;

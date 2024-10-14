@@ -24,6 +24,10 @@ pub struct RecoveryEntry {
     pub new_commitment:      Hash,
 }
 
+pub struct LatestInsertionEntry {
+    pub timestamp: DateTime<Utc>,
+}
+
 pub struct LatestDeletionEntry {
     pub timestamp: DateTime<Utc>,
 }

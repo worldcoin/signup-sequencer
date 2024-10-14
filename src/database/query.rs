@@ -6,9 +6,7 @@ use sqlx::{Executor, Postgres, Row};
 use tracing::instrument;
 use types::{DeletionEntry, LatestDeletionEntry, RecoveryEntry};
 
-use crate::database::types::{
-    BatchEntry, BatchEntryData, BatchType, LatestInsertionEntry, TransactionEntry,
-};
+use crate::database::types::{BatchEntry, BatchEntryData, BatchType, LatestInsertionEntry};
 use crate::database::{types, Error};
 use crate::identity_tree::{
     Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate, UnprocessedStatus,
@@ -184,17 +182,6 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .into_iter()
         .map(|row| row.get::<Hash, _>(0))
         .collect())
-    }
-
-    async fn get_latest_root(self) -> Result<Option<Hash>, Error> {
-        Ok(sqlx::query(
-            r#"
-            SELECT root FROM identities ORDER BY id DESC LIMIT 1
-            "#,
-        )
-        .fetch_optional(self)
-        .await?
-        .map(|r| r.get::<Hash, _>(0)))
     }
 
     async fn get_latest_root_by_status(
@@ -621,7 +608,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .bind(BatchType::Insertion)
         .bind(sqlx::types::Json::from(BatchEntryData {
             identities: vec![],
-            indexes:    vec![],
+            indexes: vec![],
         }));
 
         self.execute(query).await?;
@@ -653,7 +640,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .bind(batch_type)
         .bind(sqlx::types::Json::from(BatchEntryData {
             identities: identities.to_vec(),
-            indexes:    indexes.to_vec(),
+            indexes: indexes.to_vec(),
         }));
 
         self.execute(query).await?;

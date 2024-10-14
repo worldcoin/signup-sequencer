@@ -1,4 +1,5 @@
-use axum::http::{Request, StatusCode};
+use axum::extract::Request;
+use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::Response;
 use once_cell::sync::Lazy;
@@ -23,7 +24,7 @@ static LATENCY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!("api_latency_seconds", "The API latency in seconds.").unwrap()
 });
 
-pub async fn middleware<B>(request: Request<B>, next: Next<B>) -> Result<Response, StatusCode> {
+pub async fn middleware(request: Request, next: Next) -> Result<Response, StatusCode> {
     let _timer = LATENCY.start_timer(); // Observes on drop
     REQUESTS.inc();
 

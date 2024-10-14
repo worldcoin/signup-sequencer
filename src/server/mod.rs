@@ -4,13 +4,14 @@ use std::net::TcpListener;
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{middleware, Json, Router};
 use error::Error;
 use hyper::header::CONTENT_TYPE;
-use hyper::{Body, StatusCode};
+use hyper::StatusCode;
 use prometheus::{Encoder, TextEncoder};
 use tracing::info;
 
@@ -196,9 +197,7 @@ pub async fn bind_from_listener(
         ))
         .with_state(app.clone());
 
-    let server = axum::Server::from_tcp(listener)?
-        .serve(router.into_make_service())
-        .with_graceful_shutdown(shutdown.await_shutdown());
+    let server = axum::serve(listener, router).with_graceful_shutdown(shutdown.await_shutdown());
 
     server.await?;
 

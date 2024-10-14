@@ -1,5 +1,5 @@
 use data::{GetTxResponse, SendTxRequest, SendTxResponse, TxStatus};
-use reqwest::Response;
+use reqwest::{RequestBuilder, Response};
 use tracing::instrument;
 
 pub mod data;
@@ -16,6 +16,10 @@ impl TxSitterClient {
             url:    url.to_string(),
         }
     }
+
+    // async fn inject_tracing_headers(req_builder: &mut RequestBuilder) {
+    //     trace_to_
+    // }
 
     async fn json_post<T, R>(&self, url: &str, body: T) -> anyhow::Result<R>
     where

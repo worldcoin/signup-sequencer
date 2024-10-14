@@ -1,22 +1,18 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use axum::http::{Request, StatusCode};
+use axum::{body::Body, extract::Request};
+use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::Response;
 use bytes::Bytes;
-use hyper::body::HttpBody;
-use hyper::{Body, Method};
+use hyper::Method;
 use telemetry_batteries::tracing::{trace_from_headers, trace_to_headers};
 use tracing::{error, info, info_span, warn, Instrument};
 
 // 1 MiB
 const MAX_REQUEST_BODY_SIZE: u64 = 1024 * 1024;
 
-pub async fn middleware<B>(request: Request<B>, next: Next<Body>) -> Result<Response, StatusCode>
-where
-    B: HttpBody,
-    <B as HttpBody>::Error: std::error::Error,
-{
+pub async fn middleware(request: Request, next: Next) -> Result<Response, StatusCode> {
     let (parts, body) = request.into_parts();
 
     let uri_path = parts.uri.path().to_string();

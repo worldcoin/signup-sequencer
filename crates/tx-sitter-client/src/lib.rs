@@ -1,5 +1,8 @@
+use std::fmt;
+
+use anyhow::bail;
 use data::{GetTxResponse, SendTxRequest, SendTxResponse, TxStatus};
-use reqwest::Response;
+use reqwest::{Response, StatusCode};
 use tracing::instrument;
 
 pub mod data;
@@ -7,6 +10,22 @@ pub mod data;
 pub struct TxSitterClient {
     client: reqwest::Client,
     url:    String,
+}
+
+#[derive(Debug)]
+pub struct HttpError {
+    pub status: StatusCode,
+    pub body:   String,
+}
+
+impl fmt::Display for HttpError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Response failed with status {} - {}",
+            self.status, self.body
+        )
+    }
 }
 
 impl TxSitterClient {
@@ -46,9 +65,7 @@ impl TxSitterClient {
             let body = response.text().await?;
 
             tracing::error!("Response failed with status {} - {}", status, body);
-            return Err(anyhow::anyhow!(
-                "Response failed with status {status} - {body}"
-            ));
+            bail!(HttpError { body, status });
         }
 
         Ok(response)

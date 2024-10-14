@@ -6,7 +6,7 @@ use crate::database::{Database, Error};
 use crate::identity_tree::{Hash, ProcessedStatus};
 use crate::retry_tx;
 
-async fn mark_root_as_processed(
+pub async fn mark_root_as_processed(
     tx: &mut Transaction<'_, Postgres>,
     root: &Hash,
 ) -> Result<(), Error> {

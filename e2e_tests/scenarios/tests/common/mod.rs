@@ -146,16 +146,20 @@ pub async fn mined_inclusion_proof_with_retries(
     for _i in 0..retries_count {
         last_res = Some(inclusion_proof(client, uri, commitment).await?);
 
-        if let Some(ref inclusion_proof_json) = last_res {
-            if let Some(root) = inclusion_proof_json.0.root {
-                let (root, ..) = chain
-                    .identity_manager
-                    .query_root(root.into())
-                    .call()
-                    .await?;
+        if let Some((status_code, ref inclusion_proof_json)) = last_res {
+            if status_code.is_success() {
+                if let Some(inclusion_proof_json) = inclusion_proof_json {
+                    if let Some(root) = inclusion_proof_json.0.root {
+                        let (root, ..) = chain
+                            .identity_manager
+                            .query_root(root.into())
+                            .call()
+                            .await?;
 
-                if root != U256::zero() {
-                    return Ok(());
+                        if root != U256::zero() {
+                            return Ok(());
+                        }
+                    }
                 }
             }
         };

@@ -134,7 +134,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
     ) -> Result<Vec<TreeUpdate>, Error> {
         Ok(sqlx::query_as::<_, TreeUpdate>(
             r#"
-            SELECT leaf_index, commitment as element
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
             FROM identities
             WHERE status = $1
             ORDER BY id ASC;
@@ -152,13 +152,27 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
         Ok(sqlx::query_as::<_, TreeUpdate>(
             r#"
-            SELECT leaf_index, commitment as element
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
             FROM identities
             WHERE status = ANY($1)
             ORDER BY id ASC;
             "#,
         )
         .bind(&statuses[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
+        .fetch_all(self)
+        .await?)
+    }
+
+    async fn get_commitments_after_id(self, id: usize) -> Result<Vec<TreeUpdate>, Error> {
+        Ok(sqlx::query_as::<_, TreeUpdate>(
+            r#"
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            FROM identities
+            WHERE id > $1
+            ORDER BY id ASC;
+            "#,
+        )
+        .bind(id as i64)
         .fetch_all(self)
         .await?)
     }
@@ -229,6 +243,39 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             "#,
         )
         .bind(root)
+        .fetch_optional(self)
+        .await?)
+    }
+
+    async fn get_latest_tree_update_by_statuses(
+        self,
+        statuses: Vec<ProcessedStatus>,
+    ) -> Result<Option<TreeUpdate>, Error> {
+        let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
+        Ok(sqlx::query_as::<_, TreeUpdate>(
+            r#"
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            FROM identities
+            WHERE status = ANY($1)
+            ORDER BY id DESC
+            LIMIT 1;
+            "#,
+        )
+        .bind(&statuses[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
+        .fetch_optional(self)
+        .await?)
+    }
+
+    async fn get_tree_update_by_root(self, root: &Hash) -> Result<Option<TreeUpdate>, Error> {
+        Ok(sqlx::query_as::<_, TreeUpdate>(
+            r#"
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            FROM identities
+            WHERE root = $1
+            LIMIT 1;
+            "#,
+        )
+        .bind(root) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
         .fetch_optional(self)
         .await?)
     }
@@ -486,6 +533,17 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         Ok(())
     }
 
+    async fn count_deletions(self) -> Result<i32, Error> {
+        let query = sqlx::query(
+            r#"
+            SELECT COUNT(*)
+            FROM deletions
+            "#,
+        );
+        let result = self.fetch_one(query).await?;
+        Ok(result.get::<i64, _>(0) as i32)
+    }
+
     // TODO: consider using a larger value than i64 for leaf index, ruint should
     // have postgres compatibility for u256
     async fn get_deletions(self) -> Result<Vec<DeletionEntry>, Error> {
@@ -722,6 +780,23 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .await?;
 
         Ok(res)
+    }
+
+    async fn count_not_finalized_batches(self) -> Result<i32, Error> {
+        let res = sqlx::query(
+            r#"
+            SELECT COUNT(*)
+            FROM batches
+            LEFT JOIN transactions ON batches.next_root = transactions.batch_next_root
+            LEFT JOIN identities ON batches.next_root = identities.root
+            WHERE transactions.batch_next_root IS NOT NULL AND batches.prev_root IS NOT NULL AND identities.status = $1
+            "#,
+        )
+        .bind(<&str>::from(ProcessedStatus::Pending))
+        .fetch_one(self)
+        .await?;
+
+        Ok(res.get::<i64, _>(0) as i32)
     }
 
     async fn get_next_batch_without_transaction(self) -> Result<Option<BatchEntry>, Error> {

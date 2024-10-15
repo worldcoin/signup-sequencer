@@ -317,10 +317,6 @@ criteria = "safe-to-deploy"
 version = "0.6.12"
 criteria = "safe-to-deploy"
 
-[[exemptions.bytemuck]]
-version = "1.19.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.bytes]]
 version = "1.7.1"
 criteria = "safe-to-deploy"
@@ -403,6 +399,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.combine]]
 version = "4.6.7"
+criteria = "safe-to-deploy"
+
+[[exemptions.concurrent-queue]]
+version = "2.5.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.config]]
@@ -654,7 +654,7 @@ version = "2.0.14"
 criteria = "safe-to-deploy"
 
 [[exemptions.event-listener]]
-version = "2.5.3"
+version = "5.3.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.eyre]]
@@ -786,7 +786,7 @@ version = "1.0.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.hashlink]]
-version = "0.8.4"
+version = "0.7.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.hermit-abi]]
@@ -934,7 +934,7 @@ version = "0.0.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.libsqlite3-sys]]
-version = "0.25.2"
+version = "0.30.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.linux-raw-sys]]
@@ -1127,6 +1127,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.parity-scale-codec-derive]]
 version = "3.6.12"
+criteria = "safe-to-deploy"
+
+[[exemptions.parking]]
+version = "2.2.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.parking_lot]]
@@ -1385,14 +1389,6 @@ criteria = "safe-to-deploy"
 version = "0.9.6"
 criteria = "safe-to-deploy"
 
-[[exemptions.ruint]]
-version = "1.12.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.ruint-macro]]
-version = "1.2.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.rust-ini]]
 version = "0.18.0"
 criteria = "safe-to-deploy"
@@ -1590,31 +1586,31 @@ version = "0.2.6"
 criteria = "safe-to-deploy"
 
 [[exemptions.sqlx]]
-version = "0.7.4"
+version = "0.8.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.sqlx-core]]
-version = "0.7.4"
+version = "0.8.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.sqlx-macros]]
-version = "0.7.4"
+version = "0.8.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.sqlx-macros-core]]
-version = "0.7.4"
+version = "0.8.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.sqlx-mysql]]
-version = "0.7.4"
+version = "0.8.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.sqlx-postgres]]
-version = "0.7.4"
+version = "0.8.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.sqlx-sqlite]]
-version = "0.7.4"
+version = "0.8.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.stable_deref_trait]]
@@ -1839,7 +1835,7 @@ criteria = "safe-to-deploy"
 
 [[exemptions.unicode-segmentation]]
 version = "1.12.0"
-criteria = "safe-to-deploy"
+criteria = "safe-to-run"
 
 [[exemptions.unicode-width]]
 version = "0.1.14"

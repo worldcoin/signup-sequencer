@@ -1,7 +1,6 @@
 mod common;
 
 use common::prelude::*;
-use hyper::StatusCode;
 
 #[tokio::test]
 async fn malformed_payload_onchain() -> anyhow::Result<()> {
@@ -65,28 +64,25 @@ async fn malformed_payload(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // 20 MiB zero bytes
     let body = vec![0u8; 1024 * 1024 * 20];
 
-    let too_large_payload = Request::builder()
-        .method("POST")
-        .uri(format!("{uri}/insertIdentity"))
+    let response = client
+        .post(format!("{uri}/insertIdentity"))
         .header("Content-Type", "application/json")
-        .body(Body::from(body))
+        .body(body)
+        .send()
+        .await
         .unwrap();
-
-    let response = client.request(too_large_payload).await?;
 
     assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
 
     // A KiB of 0xffs is not a valid UTF-8 string
     let body = vec![0xffu8; 1024];
 
-    let invalid_payload = Request::builder()
-        .method("POST")
-        .uri(format!("{uri}/insertIdentity"))
+    let response = client
+        .post(format!("{uri}/insertIdentity"))
         .header("Content-Type", "application/json")
-        .body(Body::from(body))
-        .unwrap();
-
-    let response = client.request(invalid_payload).await?;
+        .body(body)
+        .send()
+        .await?;
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 

@@ -1,22 +1,20 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use axum::http::{Request, StatusCode};
+use axum::body::Body;
+use axum::extract::Request;
+use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::Response;
-use bytes::Bytes;
-use hyper::body::HttpBody;
-use hyper::{Body, Method};
+use bytes::{BufMut, Bytes};
+use futures::StreamExt;
+use hyper::{body::Body as _, Method};
 use telemetry_batteries::tracing::{trace_from_headers, trace_to_headers};
 use tracing::{error, info, info_span, warn, Instrument};
 
 // 1 MiB
 const MAX_REQUEST_BODY_SIZE: u64 = 1024 * 1024;
 
-pub async fn middleware<B>(request: Request<B>, next: Next<Body>) -> Result<Response, StatusCode>
-where
-    B: HttpBody,
-    <B as HttpBody>::Error: std::error::Error,
-{
+pub async fn middleware(request: Request, next: Next) -> Result<Response, StatusCode> {
     let (parts, body) = request.into_parts();
 
     let uri_path = parts.uri.path().to_string();
@@ -126,7 +124,7 @@ async fn handle_response(
             );
         }
 
-        let body = axum::body::boxed(Body::from(response_body));
+        let body = Body::from(response_body);
 
         Response::from_parts(parts, body)
     } else {
@@ -146,13 +144,7 @@ async fn handle_response(
 
 /// Reads the body of a request into a `Bytes` object chunk by chunk
 /// and returns an error if the body is larger than `MAX_REQUEST_BODY_SIZE`.
-async fn body_to_bytes_safe<B>(body: B) -> Result<Bytes, StatusCode>
-where
-    B: HttpBody,
-    <B as HttpBody>::Error: std::error::Error,
-{
-    use bytes::BufMut;
-
+async fn body_to_bytes_safe(body: Body) -> Result<Bytes, StatusCode> {
     let size_hint = body
         .size_hint()
         .upper()
@@ -168,10 +160,9 @@ where
     }
 
     let mut body_bytes = Vec::with_capacity(size_hint as usize);
+    let mut data_stream = body.into_data_stream();
 
-    futures_util::pin_mut!(body);
-
-    while let Some(chunk) = body.data().await {
+    while let Some(chunk) = data_stream.next().await {
         let chunk = chunk.map_err(|error| {
             error!("Error reading body: {}", error);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -193,11 +184,7 @@ where
     Ok(body_bytes.into())
 }
 
-async fn body_to_string<B>(body: B) -> Result<String, StatusCode>
-where
-    B: HttpBody,
-    <B as HttpBody>::Error: std::error::Error,
-{
+async fn body_to_string(body: Body) -> Result<String, StatusCode> {
     let body_bytes = body_to_bytes_safe(body).await?;
 
     let s = match String::from_utf8(body_bytes.to_vec()) {

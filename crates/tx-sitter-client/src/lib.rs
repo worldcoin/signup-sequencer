@@ -1,20 +1,30 @@
 use data::{GetTxResponse, SendTxRequest, SendTxResponse, TxStatus};
-use reqwest::Response;
+use reqwest::header::HeaderMap;
+use reqwest::{RequestBuilder, Response};
+use telemetry_batteries::tracing::trace_to_headers;
 use tracing::instrument;
 
 pub mod data;
 
 pub struct TxSitterClient {
     client: reqwest::Client,
-    url:    String,
+    url: String,
 }
 
 impl TxSitterClient {
     pub fn new(url: impl ToString) -> Self {
         Self {
             client: reqwest::Client::new(),
-            url:    url.to_string(),
+            url: url.to_string(),
         }
+    }
+
+    fn inject_tracing_headers(req_builder: RequestBuilder) -> RequestBuilder {
+        let mut headers = HeaderMap::new();
+
+        trace_to_headers(&mut headers);
+
+        req_builder.headers(headers)
     }
 
     async fn json_post<T, R>(&self, url: &str, body: T) -> anyhow::Result<R>
@@ -22,7 +32,10 @@ impl TxSitterClient {
         T: serde::Serialize,
         R: serde::de::DeserializeOwned,
     {
-        let response = self.client.post(url).json(&body).send().await?;
+        let response = Self::inject_tracing_headers(self.client.post(url))
+            .json(&body)
+            .send()
+            .await?;
 
         let response = Self::validate_response(response).await?;
 
@@ -33,7 +46,9 @@ impl TxSitterClient {
     where
         R: serde::de::DeserializeOwned,
     {
-        let response = self.client.get(url).send().await?;
+        let response = Self::inject_tracing_headers(self.client.get(url))
+            .send()
+            .await?;
 
         let response = Self::validate_response(response).await?;
 

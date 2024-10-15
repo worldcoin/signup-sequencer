@@ -1,9 +1,6 @@
 mod common;
 
-use std::str::FromStr;
-
 use common::prelude::*;
-use hyper::Uri;
 
 use crate::common::{test_add_batch_size, test_remove_batch_size};
 
@@ -134,15 +131,18 @@ async fn dynamic_batch_sizes(offchain_mode_enabled: bool) -> anyhow::Result<()> 
     .expect("Failed to add batch size.");
 
     // Query for the available provers.
-    let batch_sizes_uri: Uri =
-        Uri::from_str(&format!("{}/listBatchSizes", uri.as_str())).expect("Unable to parse URI.");
-    let mut batch_sizes = client
+    let batch_sizes_uri = format!("{uri}/listBatchSizes");
+    let batch_sizes = client
         .get(batch_sizes_uri)
+        .send()
         .await
         .expect("Failed to execute get request");
-    let batch_sizes_bytes = hyper::body::to_bytes(batch_sizes.body_mut())
+
+    let batch_sizes_bytes = batch_sizes
+        .bytes()
         .await
         .expect("Failed to get response bytes");
+
     let batch_size_str = String::from_utf8(batch_sizes_bytes.into_iter().collect())
         .expect("Failed to decode response");
     let batch_size_json =

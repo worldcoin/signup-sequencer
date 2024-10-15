@@ -1,10 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::database::{HasArguments, HasValueRef};
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::prelude::FromRow;
-use sqlx::{Decode, Encode, Postgres, Type};
+use sqlx::{Database, Decode, Encode, Postgres, Type};
 
 use crate::identity_tree::{Hash, UnprocessedStatus};
 use crate::prover::identity::Identity;
@@ -92,7 +91,10 @@ pub struct BatchEntryData {
 pub struct Commitments(pub Vec<Hash>);
 
 impl Encode<'_, Postgres> for Commitments {
-    fn encode_by_ref(&self, buf: &mut <Postgres as HasArguments<'_>>::ArgumentBuffer) -> IsNull {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, BoxDynError> {
         let commitments = &self
             .0
             .iter()
@@ -104,7 +106,7 @@ impl Encode<'_, Postgres> for Commitments {
 }
 
 impl Decode<'_, Postgres> for Commitments {
-    fn decode(value: <Postgres as HasValueRef<'_>>::ValueRef) -> Result<Self, BoxDynError> {
+    fn decode(value: <Postgres as Database>::ValueRef<'_>) -> Result<Self, BoxDynError> {
         let value = <Vec<[u8; 32]> as Decode<Postgres>>::decode(value)?;
 
         let res = value.iter().map(|&v| Hash::from_be_bytes(v)).collect();
@@ -133,7 +135,10 @@ impl From<Vec<Hash>> for Commitments {
 pub struct LeafIndexes(pub Vec<usize>);
 
 impl Encode<'_, Postgres> for LeafIndexes {
-    fn encode_by_ref(&self, buf: &mut <Postgres as HasArguments<'_>>::ArgumentBuffer) -> IsNull {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Postgres as Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, BoxDynError> {
         let commitments = &self
             .0
             .iter()
@@ -145,7 +150,7 @@ impl Encode<'_, Postgres> for LeafIndexes {
 }
 
 impl Decode<'_, Postgres> for LeafIndexes {
-    fn decode(value: <Postgres as HasValueRef<'_>>::ValueRef) -> Result<Self, BoxDynError> {
+    fn decode(value: <Postgres as Database>::ValueRef<'_>) -> Result<Self, BoxDynError> {
         let value = <Vec<i64> as Decode<Postgres>>::decode(value)?;
 
         let res = value.iter().map(|&v| v as usize).collect();

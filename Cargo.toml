@@ -54,7 +54,7 @@ semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "251e908d
 ] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sqlx = { version = "0.7", features = [
+sqlx = { version = "0.8.2", features = [
     "runtime-tokio-native-tls",
     "any",
     "postgres",
@@ -97,6 +97,10 @@ testcontainers = "0.15.0"
 testcontainers-modules = { version = "0.3.7", features = ["postgres"] }
 tracing-subscriber = "0.3.11"
 tracing-test = "0.2"
+
+[patch.crates-io]
+# Necessary until https://github.com/recmo/uint/pull/400 is merged and released
+ruint = { git = "https://github.com/Dzejkop/uint", rev = "9a1a6019c519e9cd76add2494190d21fc5f574f9" }
 
 [profile.release]
 panic = "abort"

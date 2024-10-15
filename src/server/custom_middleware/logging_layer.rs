@@ -162,8 +162,6 @@ async fn body_to_bytes_safe(body: Body) -> Result<Bytes, StatusCode> {
     let mut body_bytes = Vec::with_capacity(size_hint as usize);
     let mut data_stream = body.into_data_stream();
 
-    // futures_util::pin_mut!(body);
-
     while let Some(chunk) = data_stream.next().await {
         let chunk = chunk.map_err(|error| {
             error!("Error reading body: {}", error);

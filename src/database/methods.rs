@@ -1,12 +1,14 @@
 use std::collections::HashSet;
 
+use axum::async_trait;
 use chrono::{DateTime, Utc};
 use ruint::aliases::U256;
-use sqlx::{Executor, Postgres, Row};
+use sqlx::{Acquire, Executor, Postgres, Row};
 use tracing::instrument;
-use types::{DeletionEntry, LatestDeletionEntry, RecoveryEntry};
+use types::{DeletionEntry, RecoveryEntry};
 
-use crate::database::types::{BatchEntry, BatchEntryData, BatchType, LatestInsertionEntry};
+use super::types::{LatestDeletionEntry, LatestInsertionEntry};
+use crate::database::types::{BatchEntry, BatchEntryData, BatchType};
 use crate::database::{types, Error};
 use crate::identity_tree::{
     Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate, UnprocessedStatus,
@@ -16,10 +18,8 @@ use crate::prover::{ProverConfig, ProverType};
 
 const MAX_UNPROCESSED_FETCH_COUNT: i64 = 10_000;
 
-/// This trait provides the individual and composable queries to the database.
-/// Each method is a single atomic query, and can be composed within a
-/// transaction.
-pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
+#[async_trait]
+pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     async fn insert_pending_identity(
         self,
         leaf_index: usize,
@@ -27,7 +27,9 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         root: &Hash,
         pre_root: &Hash,
     ) -> Result<(), Error> {
-        let insert_pending_identity_query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
             INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of, pre_root)
             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5)
@@ -37,15 +39,17 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .bind(identity)
         .bind(root)
         .bind(<&str>::from(ProcessedStatus::Pending))
-        .bind(pre_root);
-
-        self.execute(insert_pending_identity_query).await?;
+        .bind(pre_root)
+        .execute(&mut *conn)
+        .await?;
 
         Ok(())
     }
 
     async fn get_id_by_root(self, root: &Hash) -> Result<Option<usize>, Error> {
-        let root_index_query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        let row = sqlx::query(
             r#"
             SELECT id
             FROM identities
@@ -54,9 +58,9 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             LIMIT 1
             "#,
         )
-        .bind(root);
-
-        let row = self.fetch_optional(root_index_query).await?;
+        .bind(root)
+        .fetch_optional(&mut *conn)
+        .await?;
 
         let Some(row) = row else { return Ok(None) };
         let root_id = row.get::<i64, _>(0);
@@ -64,35 +68,35 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         Ok(Some(root_id as usize))
     }
 
-    /// Marks all the identities in the db as
-    #[instrument(skip(self), level = "debug")]
     async fn mark_all_as_pending(self) -> Result<(), Error> {
-        let pending_status = ProcessedStatus::Pending;
+        let mut conn = self.acquire().await?;
 
-        let update_all_identities = sqlx::query(
+        sqlx::query(
             r#"
                 UPDATE identities
                 SET    status = $1, mined_at = NULL
                 WHERE  status <> $1
                 "#,
         )
-        .bind(<&str>::from(pending_status));
-
-        self.execute(update_all_identities).await?;
+        .bind(<&str>::from(ProcessedStatus::Pending))
+        .execute(&mut *conn)
+        .await?;
 
         Ok(())
     }
 
     async fn get_next_leaf_index(self) -> Result<usize, Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        let row = sqlx::query(
             r#"
             SELECT leaf_index FROM identities
             ORDER BY leaf_index DESC
             LIMIT 1
             "#,
-        );
-
-        let row = self.fetch_optional(query).await?;
+        )
+        .fetch_optional(&mut *conn)
+        .await?;
 
         let Some(row) = row else { return Ok(0) };
         let leaf_index = row.get::<i64, _>(0);
@@ -101,7 +105,9 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
     }
 
     async fn get_identity_leaf_index(self, identity: &Hash) -> Result<Option<TreeItem>, Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        let row = sqlx::query(
             r#"
             SELECT leaf_index, status
             FROM identities
@@ -110,9 +116,11 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             LIMIT 1;
             "#,
         )
-        .bind(identity);
+        .bind(identity)
+        .fetch_optional(&mut *conn)
+        .await?;
 
-        let Some(row) = self.fetch_optional(query).await? else {
+        let Some(row) = row else {
             return Ok(None);
         };
 
@@ -130,6 +138,8 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         self,
         status: ProcessedStatus,
     ) -> Result<Vec<TreeUpdate>, Error> {
+        let mut conn = self.acquire().await?;
+
         Ok(sqlx::query_as::<_, TreeUpdate>(
             r#"
             SELECT leaf_index, commitment as element
@@ -139,7 +149,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             "#,
         )
         .bind(<&str>::from(status))
-        .fetch_all(self)
+        .fetch_all(&mut *conn)
         .await?)
     }
 
@@ -147,6 +157,8 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         self,
         statuses: Vec<ProcessedStatus>,
     ) -> Result<Vec<TreeUpdate>, Error> {
+        let mut conn = self.acquire().await?;
+
         let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
         Ok(sqlx::query_as::<_, TreeUpdate>(
             r#"
@@ -157,14 +169,19 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             "#,
         )
         .bind(&statuses[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
-        .fetch_all(self)
+        .fetch_all(&mut *conn)
         .await?)
     }
 
-    async fn get_non_zero_commitments_by_leaf_indexes<I: IntoIterator<Item = usize>>(
+    async fn get_non_zero_commitments_by_leaf_indexes<I>(
         self,
         leaf_indexes: I,
-    ) -> Result<Vec<Hash>, Error> {
+    ) -> Result<Vec<Hash>, Error>
+    where
+        I: IntoIterator<Item = usize> + Send,
+    {
+        let mut conn = self.acquire().await?;
+
         let leaf_indexes: Vec<i64> = leaf_indexes.into_iter().map(|v| v as i64).collect();
 
         Ok(sqlx::query(
@@ -177,7 +194,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         )
         .bind(&leaf_indexes[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
         .bind(Hash::ZERO)
-        .fetch_all(self)
+        .fetch_all(&mut *conn)
         .await?
         .into_iter()
         .map(|row| row.get::<Hash, _>(0))
@@ -188,18 +205,22 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         self,
         status: ProcessedStatus,
     ) -> Result<Option<Hash>, Error> {
+        let mut conn = self.acquire().await?;
+
         Ok(sqlx::query(
             r#"
             SELECT root FROM identities WHERE status = $1 ORDER BY id DESC LIMIT 1
             "#,
         )
         .bind(<&str>::from(status))
-        .fetch_optional(self)
+        .fetch_optional(&mut *conn)
         .await?
         .map(|r| r.get::<Hash, _>(0)))
     }
 
     async fn get_root_state(self, root: &Hash) -> Result<Option<RootItem>, Error> {
+        let mut conn = self.acquire().await?;
+
         // This tries really hard to do everything in one query to prevent race
         // conditions.
         Ok(sqlx::query_as::<_, RootItem>(
@@ -216,19 +237,21 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             "#,
         )
         .bind(root)
-        .fetch_optional(self)
+        .fetch_optional(&mut *conn)
         .await?)
     }
 
     async fn get_latest_insertion(self) -> Result<LatestInsertionEntry, Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        let row = sqlx::query(
             r#"
             SELECT insertion_timestamp
             FROM latest_insertion_timestamp
             WHERE Lock = 'X';"#,
-        );
-
-        let row = self.fetch_optional(query).await?;
+        )
+        .fetch_optional(&mut *conn)
+        .await?;
 
         if let Some(row) = row {
             Ok(LatestInsertionEntry {
@@ -242,37 +265,47 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
     }
 
     async fn count_unprocessed_identities(self) -> Result<i32, Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        let (count,): (i64,) = sqlx::query_as(
             r#"
             SELECT COUNT(*) as unprocessed
             FROM unprocessed_identities
             "#,
-        );
-        let result = self.fetch_one(query).await?;
-        Ok(result.get::<i64, _>(0) as i32)
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+
+        Ok(count as i32)
     }
 
     async fn count_pending_identities(self) -> Result<i32, Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        let (count,): (i64,) = sqlx::query_as(
             r#"
             SELECT COUNT(*) as pending
             FROM identities
             WHERE status = $1
             "#,
         )
-        .bind(<&str>::from(ProcessedStatus::Pending));
-        let result = self.fetch_one(query).await?;
-        Ok(result.get::<i64, _>(0) as i32)
+        .bind(<&str>::from(ProcessedStatus::Pending))
+        .fetch_one(&mut *conn)
+        .await?;
+
+        Ok(count as i32)
     }
 
     async fn get_provers(self) -> Result<HashSet<ProverConfig>, Error> {
+        let mut conn = self.acquire().await?;
+
         Ok(sqlx::query_as(
             r#"
             SELECT batch_size, url, timeout_s, prover_type
             FROM provers
             "#,
         )
-        .fetch_all(self)
+        .fetch_all(&mut *conn)
         .await?
         .into_iter()
         .collect())
@@ -281,36 +314,40 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
     async fn insert_prover_configuration(
         self,
         batch_size: usize,
-        url: impl ToString,
+        url: impl ToString + Send,
         timeout_seconds: u64,
         prover_type: ProverType,
     ) -> Result<(), Error> {
+        let mut conn = self.acquire().await?;
+
         let url = url.to_string();
 
-        let query = sqlx::query(
+        sqlx::query(
             r#"
-                INSERT INTO provers (batch_size, url, timeout_s, prover_type)
-                VALUES ($1, $2, $3, $4)
+            INSERT INTO provers (batch_size, url, timeout_s, prover_type)
+            VALUES ($1, $2, $3, $4)
             "#,
         )
         .bind(batch_size as i64)
         .bind(url)
         .bind(timeout_seconds as i64)
-        .bind(prover_type);
-
-        self.execute(query).await?;
+        .bind(prover_type)
+        .execute(&mut *conn)
+        .await?;
 
         Ok(())
     }
 
     async fn insert_provers(self, provers: HashSet<ProverConfig>) -> Result<(), Error> {
+        let mut conn = self.acquire().await?;
+
         if provers.is_empty() {
             return Ok(());
         }
 
         let mut query_builder = sqlx::QueryBuilder::new(
             r#"
-                  INSERT INTO provers (batch_size, url, timeout_s, prover_type)
+            INSERT INTO provers (batch_size, url, timeout_s, prover_type)
             "#,
         );
 
@@ -323,20 +360,23 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
 
         let query = query_builder.build();
 
-        self.execute(query).await?;
+        conn.execute(query).await?;
+
         Ok(())
     }
 
     async fn remove_prover(self, batch_size: usize, prover_type: ProverType) -> Result<(), Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
-              DELETE FROM provers WHERE batch_size = $1 AND prover_type = $2
+            DELETE FROM provers WHERE batch_size = $1 AND prover_type = $2
             "#,
         )
         .bind(batch_size as i64)
-        .bind(prover_type);
-
-        self.execute(query).await?;
+        .bind(prover_type)
+        .execute(&mut *conn)
+        .await?;
 
         Ok(())
     }
@@ -346,7 +386,9 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         identity: Hash,
         eligibility_timestamp: sqlx::types::chrono::DateTime<Utc>,
     ) -> Result<Hash, Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
             INSERT INTO unprocessed_identities (commitment, status, created_at, eligibility)
             VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
@@ -354,9 +396,10 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         )
         .bind(identity)
         .bind(<&str>::from(UnprocessedStatus::New))
-        .bind(eligibility_timestamp);
+        .bind(eligibility_timestamp)
+        .execute(&mut *conn)
+        .await?;
 
-        self.execute(query).await?;
         Ok(identity)
     }
 
@@ -365,23 +408,29 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         existing_commitment: &Hash,
         new_commitment: &Hash,
     ) -> Result<(), Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
             INSERT INTO recoveries (existing_commitment, new_commitment)
             VALUES ($1, $2)
             "#,
         )
         .bind(existing_commitment)
-        .bind(new_commitment);
-        self.execute(query).await?;
+        .bind(new_commitment)
+        .execute(&mut *conn)
+        .await?;
+
         Ok(())
     }
 
     async fn get_latest_deletion(self) -> Result<LatestDeletionEntry, Error> {
-        let query =
-            sqlx::query("SELECT deletion_timestamp FROM latest_deletion_root WHERE Lock = 'X';");
+        let mut conn = self.acquire().await?;
 
-        let row = self.fetch_optional(query).await?;
+        let row =
+            sqlx::query("SELECT deletion_timestamp FROM latest_deletion_root WHERE Lock = 'X';")
+                .fetch_optional(&mut *conn)
+                .await?;
 
         if let Some(row) = row {
             Ok(LatestDeletionEntry {
@@ -398,7 +447,9 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         self,
         insertion_timestamp: DateTime<Utc>,
     ) -> Result<(), Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
             INSERT INTO latest_insertion_timestamp (Lock, insertion_timestamp)
             VALUES ('X', $1)
@@ -406,14 +457,17 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             DO UPDATE SET insertion_timestamp = EXCLUDED.insertion_timestamp;
             "#,
         )
-        .bind(insertion_timestamp);
+        .bind(insertion_timestamp)
+        .execute(&mut *conn)
+        .await?;
 
-        self.execute(query).await?;
         Ok(())
     }
 
     async fn update_latest_deletion(self, deletion_timestamp: DateTime<Utc>) -> Result<(), Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
             INSERT INTO latest_deletion_root (Lock, deletion_timestamp)
             VALUES ('X', $1)
@@ -421,25 +475,31 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             DO UPDATE SET deletion_timestamp = EXCLUDED.deletion_timestamp;
             "#,
         )
-        .bind(deletion_timestamp);
+        .bind(deletion_timestamp)
+        .execute(&mut *conn)
+        .await?;
 
-        self.execute(query).await?;
         Ok(())
     }
 
     #[cfg(test)]
     async fn get_all_recoveries(self) -> Result<Vec<RecoveryEntry>, Error> {
+        let mut conn = self.acquire().await?;
+
         Ok(
             sqlx::query_as::<_, RecoveryEntry>("SELECT * FROM recoveries")
-                .fetch_all(self)
+                .fetch_all(&mut *conn)
                 .await?,
         )
     }
 
-    async fn delete_recoveries<I: IntoIterator<Item = T>, T: Into<U256>>(
-        self,
-        prev_commits: I,
-    ) -> Result<Vec<RecoveryEntry>, Error> {
+    async fn delete_recoveries<I, T>(self, prev_commits: I) -> Result<Vec<RecoveryEntry>, Error>
+    where
+        I: IntoIterator<Item = T> + Send,
+        T: Into<U256>,
+    {
+        let mut conn = self.acquire().await?;
+
         // TODO: upstream PgHasArrayType impl to ruint
         let prev_commits = prev_commits
             .into_iter()
@@ -455,37 +515,42 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             "#,
         )
         .bind(&prev_commits)
-        .fetch_all(self)
+        .fetch_all(&mut *conn)
         .await?;
 
         Ok(res)
     }
 
     async fn insert_new_deletion(self, leaf_index: usize, identity: &Hash) -> Result<(), Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
             INSERT INTO deletions (leaf_index, commitment)
             VALUES ($1, $2)
             "#,
         )
         .bind(leaf_index as i64)
-        .bind(identity);
+        .bind(identity)
+        .execute(&mut *conn)
+        .await?;
 
-        self.execute(query).await?;
         Ok(())
     }
 
     // TODO: consider using a larger value than i64 for leaf index, ruint should
     // have postgres compatibility for u256
     async fn get_deletions(self) -> Result<Vec<DeletionEntry>, Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        let result = sqlx::query(
             r#"
             SELECT *
             FROM deletions
             "#,
-        );
-
-        let result = self.fetch_all(query).await?;
+        )
+        .fetch_all(&mut *conn)
+        .await?;
 
         Ok(result
             .into_iter()
@@ -498,6 +563,8 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
 
     /// Remove a list of entries from the deletions table
     async fn remove_deletions(self, commitments: &[Hash]) -> Result<(), Error> {
+        let mut conn = self.acquire().await?;
+
         let commitments = commitments
             .iter()
             .map(|c| c.to_be_bytes())
@@ -505,7 +572,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
 
         sqlx::query("DELETE FROM deletions WHERE commitment = Any($1)")
             .bind(commitments)
-            .execute(self)
+            .execute(&mut *conn)
             .await?;
 
         Ok(())
@@ -515,17 +582,19 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         self,
         status: UnprocessedStatus,
     ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        let result = sqlx::query(
             r#"
-                SELECT * FROM unprocessed_identities
-                WHERE status = $1 AND CURRENT_TIMESTAMP > eligibility
-                LIMIT $2
+            SELECT * FROM unprocessed_identities
+            WHERE status = $1 AND CURRENT_TIMESTAMP > eligibility
+            LIMIT $2
             "#,
         )
         .bind(<&str>::from(status))
-        .bind(MAX_UNPROCESSED_FETCH_COUNT);
-
-        let result = self.fetch_all(query).await?;
+        .bind(MAX_UNPROCESSED_FETCH_COUNT)
+        .fetch_all(&mut *conn)
+        .await?;
 
         Ok(result
             .into_iter()
@@ -540,43 +609,43 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             .collect::<Vec<_>>())
     }
 
-    /// Returns the error message from the unprocessed identities table
-    /// if it exists
-    ///
-    /// - The outer option represents the existence of the commitment in the
-    ///   unprocessed_identities table
-    /// - The inner option represents the existence of an error message
-    async fn get_unprocessed_error(
-        self,
-        commitment: &Hash,
-    ) -> Result<Option<Option<String>>, Error> {
-        let query = sqlx::query(
+    async fn get_unprocessed_error(self, commitment: &Hash) -> Result<Option<String>, Error> {
+        let mut conn = self.acquire().await?;
+
+        let result = sqlx::query(
             r#"
-                SELECT error_message FROM unprocessed_identities WHERE commitment = $1
+            SELECT error_message FROM unprocessed_identities WHERE commitment = $1
             "#,
         )
-        .bind(commitment);
+        .bind(commitment)
+        .fetch_optional(&mut *conn)
+        .await?;
 
-        Ok(self
-            .fetch_optional(query)
-            .await?
-            .map(|row| row.get::<Option<String>, _>(0)))
+        if let Some(row) = result {
+            return Ok(Some(row.get::<Option<String>, _>(0).unwrap_or_default()));
+        };
+
+        Ok(None)
     }
 
     async fn remove_unprocessed_identity(self, commitment: &Hash) -> Result<(), Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
-                DELETE FROM unprocessed_identities WHERE commitment = $1
+            DELETE FROM unprocessed_identities WHERE commitment = $1
             "#,
         )
-        .bind(commitment);
-
-        self.execute(query).await?;
+        .bind(commitment)
+        .execute(&mut *conn)
+        .await?;
 
         Ok(())
     }
 
     async fn identity_exists(self, commitment: Hash) -> Result<bool, Error> {
+        let mut conn = self.acquire().await?;
+
         Ok(sqlx::query(
             r#"
             select
@@ -585,22 +654,28 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             "#,
         )
         .bind(commitment)
-        .fetch_one(self)
+        .fetch_one(&mut *conn)
         .await?
         .get::<bool, _>(0))
     }
 
     // TODO: add docs
     async fn identity_is_queued_for_deletion(self, commitment: &Hash) -> Result<bool, Error> {
-        let query_queued_deletion =
+        let mut conn = self.acquire().await?;
+
+        let row_unprocessed =
             sqlx::query(r#"SELECT exists(SELECT 1 FROM deletions where commitment = $1)"#)
-                .bind(commitment);
-        let row_unprocessed = self.fetch_one(query_queued_deletion).await?;
+                .bind(commitment)
+                .fetch_one(&mut *conn)
+                .await?;
+
         Ok(row_unprocessed.get::<bool, _>(0))
     }
 
     async fn insert_new_batch_head(self, next_root: &Hash) -> Result<(), Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
             INSERT INTO batches(
                 id,
@@ -617,9 +692,10 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .bind(sqlx::types::Json::from(BatchEntryData {
             identities: vec![],
             indexes: vec![],
-        }));
+        }))
+        .execute(&mut *conn)
+        .await?;
 
-        self.execute(query).await?;
         Ok(())
     }
 
@@ -631,7 +707,9 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         identities: &[Identity],
         indexes: &[usize],
     ) -> Result<(), Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
             INSERT INTO batches(
                 id,
@@ -649,14 +727,17 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .bind(sqlx::types::Json::from(BatchEntryData {
             identities: identities.to_vec(),
             indexes: indexes.to_vec(),
-        }));
+        }))
+        .execute(&mut *conn)
+        .await?;
 
-        self.execute(query).await?;
         Ok(())
     }
 
     #[cfg(test)]
     async fn get_next_batch(self, prev_root: &Hash) -> Result<Option<BatchEntry>, Error> {
+        let mut conn = self.acquire().await?;
+
         let res = sqlx::query_as::<_, BatchEntry>(
             r#"
             SELECT
@@ -671,13 +752,15 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             "#,
         )
         .bind(prev_root)
-        .fetch_optional(self)
+        .fetch_optional(&mut *conn)
         .await?;
 
         Ok(res)
     }
 
     async fn get_latest_batch(self) -> Result<Option<BatchEntry>, Error> {
+        let mut conn = self.acquire().await?;
+
         let res = sqlx::query_as::<_, BatchEntry>(
             r#"
             SELECT
@@ -692,13 +775,15 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             LIMIT 1
             "#,
         )
-        .fetch_optional(self)
+        .fetch_optional(&mut *conn)
         .await?;
 
         Ok(res)
     }
 
     async fn get_next_batch_without_transaction(self) -> Result<Option<BatchEntry>, Error> {
+        let mut conn = self.acquire().await?;
+
         let res = sqlx::query_as::<_, BatchEntry>(
             r#"
             SELECT
@@ -715,13 +800,15 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             LIMIT 1
             "#,
         )
-        .fetch_optional(self)
+        .fetch_optional(&mut *conn)
         .await?;
 
         Ok(res)
     }
 
     async fn get_batch_head(self) -> Result<Option<BatchEntry>, Error> {
+        let mut conn = self.acquire().await?;
+
         let res = sqlx::query_as::<_, BatchEntry>(
             r#"
             SELECT
@@ -735,7 +822,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             LIMIT 1
             "#,
         )
-        .fetch_optional(self)
+        .fetch_optional(&mut *conn)
         .await?;
 
         Ok(res)
@@ -743,27 +830,33 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
 
     #[instrument(skip(self), level = "debug")]
     async fn delete_batches_after_root(self, root: &Hash) -> Result<(), Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
             DELETE FROM batches
             WHERE prev_root = $1
             "#,
         )
-        .bind(root);
+        .bind(root)
+        .execute(&mut *conn)
+        .await?;
 
-        self.execute(query).await?;
         Ok(())
     }
 
     #[instrument(skip(self), level = "debug")]
     async fn delete_all_batches(self) -> Result<(), Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
             DELETE FROM batches
             "#,
-        );
+        )
+        .execute(&mut *conn)
+        .await?;
 
-        self.execute(query).await?;
         Ok(())
     }
 
@@ -772,7 +865,9 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         transaction_id: &String,
         batch_next_root: &Hash,
     ) -> Result<(), Error> {
-        let query = sqlx::query(
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
             r#"
             INSERT INTO transactions(
                 transaction_id,
@@ -782,9 +877,10 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             "#,
         )
         .bind(transaction_id)
-        .bind(batch_next_root);
+        .bind(batch_next_root)
+        .execute(&mut *conn)
+        .await?;
 
-        self.execute(query).await?;
         Ok(())
     }
 }

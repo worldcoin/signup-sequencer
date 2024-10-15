@@ -21,6 +21,7 @@ use crate::identity_tree::Hash;
 pub mod query;
 pub mod transaction;
 pub mod types;
+pub mod methods;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");

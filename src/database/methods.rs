@@ -68,6 +68,9 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(Some(root_id as usize))
     }
 
+    /// Marks a root and associated entities as processed
+    ///
+    /// This is a composite operation performing multiple queries - it should be ran within a transaction.
     async fn mark_root_as_processed(self, root: &Hash) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 
@@ -109,6 +112,9 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    /// Marks a root and associated identities as mined
+    ///
+    /// This is a composite operation performing multiple queries - it should be ran within a transaction.
     async fn mark_root_as_mined(self, root: &Hash) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 

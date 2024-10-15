@@ -8,7 +8,7 @@ use tokio::task::JoinHandle;
 use tracing::{info, instrument, warn};
 
 use crate::app::App;
-use crate::database::query::DatabaseQuery as _;
+use crate::database::methods::DbMethods as _;
 use crate::database::Database;
 use crate::shutdown::Shutdown;
 

@@ -16,7 +16,7 @@ use crate::config::Config;
 use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangeKind, TreeChangedFilter};
 use crate::contracts::scanner::BlockScanner;
 use crate::contracts::IdentityManager;
-use crate::database::query::DatabaseQuery;
+use crate::database::methods::DbMethods;
 use crate::database::types::{BatchEntry, BatchType};
 use crate::database::{Database, Error};
 use crate::ethereum::{Ethereum, ReadProvider};

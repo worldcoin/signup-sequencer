@@ -8,7 +8,7 @@ publish = false
 
 anyhow = "1.0.72"
 async-trait = "0.1.71"
-axum = "0.6.19"
+axum = "0.7.7"
 chrono = "0.4.26"
 clap = { version = "4.3.14", features = ["env", "derive"] }
 ethers = { version = "2.0.10", features = ["openssl"] }

@@ -46,14 +46,14 @@ pub trait IdentityProcessor: Send + Sync + 'static {
 }
 
 pub struct OnChainIdentityProcessor {
-    ethereum:          Ethereum,
-    config:            Config,
-    database:          Arc<Database>,
-    identity_manager:  Arc<IdentityManager>,
+    ethereum: Ethereum,
+    config: Config,
+    database: Arc<Database>,
+    identity_manager: Arc<IdentityManager>,
     prover_repository: Arc<ProverRepository>,
 
-    mainnet_scanner:    tokio::sync::Mutex<BlockScanner<Arc<ReadProvider>>>,
-    mainnet_address:    Address,
+    mainnet_scanner: tokio::sync::Mutex<BlockScanner<Arc<ReadProvider>>>,
+    mainnet_address: Address,
     secondary_scanners: tokio::sync::Mutex<HashMap<Address, BlockScanner<Arc<ReadProvider>>>>,
 }
 
@@ -141,15 +141,20 @@ impl IdentityProcessor for OnChainIdentityProcessor {
             // Note that we don't have a way of queuing a root here for
             // finalization. so it's going to stay as "processed"
             // until the next root is mined. self.database.
-            self.database
-                .mark_root_as_processed_and_delete_batches_tx(&root_hash)
-                .await?;
+            retry_tx!(self.database.pool, tx, {
+                tx.mark_root_as_processed(&root_hash).await?;
+                tx.delete_batches_after_root(&root_hash).await?;
+
+                Result::<(), Error>::Ok(())
+            })
+            .await?;
         } else {
             // Db is either empty or we're restarting with a new contract/chain
             // so we should mark everything as pending
             retry_tx!(self.database.pool, tx, {
                 tx.mark_all_as_pending().await?;
                 tx.delete_all_batches().await?;
+
                 Result::<(), Error>::Ok(())
             })
             .await?;
@@ -420,9 +425,12 @@ impl OnChainIdentityProcessor {
                 continue;
             }
 
-            self.database
-                .mark_root_as_processed_tx(&post_root.into())
-                .await?;
+            retry_tx!(
+                self.database.pool,
+                tx,
+                tx.mark_root_as_processed(&post_root.into()).await
+            )
+            .await?;
 
             info!(?pre_root, ?post_root, ?kind, "Batch mined");
 
@@ -456,7 +464,12 @@ impl OnChainIdentityProcessor {
                 continue;
             }
 
-            self.database.mark_root_as_mined_tx(&root.into()).await?;
+            retry_tx!(
+                self.database.pool,
+                tx,
+                tx.mark_root_as_mined(&root.into()).await
+            )
+            .await?;
 
             info!(?root, "Root finalized");
         }
@@ -549,7 +562,7 @@ impl OnChainIdentityProcessor {
 
 pub struct OffChainIdentityProcessor {
     committed_batches: Arc<Mutex<Vec<BatchEntry>>>,
-    database:          Arc<Database>,
+    database: Arc<Database>,
 }
 
 #[async_trait]
@@ -575,14 +588,16 @@ impl IdentityProcessor for OffChainIdentityProcessor {
                 self.update_eligible_recoveries(batch).await?;
             }
 
-            // With current flow it is required to mark root as processed first as this is
-            // how required mined_at field is set
-            self.database
-                .mark_root_as_processed_tx(&batch.next_root)
-                .await?;
-            self.database
-                .mark_root_as_mined_tx(&batch.next_root)
-                .await?;
+            retry_tx!(self.database.pool, tx, {
+                // With current flow it is required to mark root as processed first as this is
+                // how required mined_at field is set
+                tx.mark_root_as_processed(&batch.next_root).await?;
+                tx.mark_root_as_mined(&batch.next_root).await?;
+
+                Result::<_, anyhow::Error>::Ok(())
+            })
+            .await?;
+
             processed_tree.apply_updates_up_to(batch.next_root);
         }
 

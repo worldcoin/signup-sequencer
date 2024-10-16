@@ -528,7 +528,16 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
             .collect::<Vec<_>>())
     }
 
-    async fn get_unprocessed_error(self, commitment: &Hash) -> Result<Option<String>, Error> {
+    /// Returns the error message from the unprocessed identities table
+    /// if it exists
+    ///
+    /// - The outer option represents the existence of the commitment in the
+    ///   unprocessed_identities table
+    /// - The inner option represents the existence of an error message
+    async fn get_unprocessed_error(
+        self,
+        commitment: &Hash,
+    ) -> Result<Option<Option<String>>, Error> {
         let query = sqlx::query(
             r#"
                 SELECT error_message FROM unprocessed_identities WHERE commitment = $1
@@ -539,7 +548,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         Ok(self
             .fetch_optional(query)
             .await?
-            .and_then(|row| row.get::<Option<String>, _>(0)))
+            .map(|row| row.get::<Option<String>, _>(0)))
     }
 
     async fn remove_unprocessed_identity(self, commitment: &Hash) -> Result<(), Error> {
@@ -595,7 +604,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .bind(BatchType::Insertion)
         .bind(sqlx::types::Json::from(BatchEntryData {
             identities: vec![],
-            indexes: vec![],
+            indexes:    vec![],
         }));
 
         self.execute(query).await?;
@@ -627,7 +636,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .bind(batch_type)
         .bind(sqlx::types::Json::from(BatchEntryData {
             identities: identities.to_vec(),
-            indexes: indexes.to_vec(),
+            indexes:    indexes.to_vec(),
         }));
 
         self.execute(query).await?;

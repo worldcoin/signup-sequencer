@@ -683,23 +683,30 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             .collect::<Vec<_>>())
     }
 
-    async fn get_unprocessed_error(self, commitment: &Hash) -> Result<Option<String>, Error> {
+    /// Returns the error message from the unprocessed identities table
+    /// if it exists
+    ///
+    /// - The outer option represents the existence of the commitment in the
+    ///   unprocessed_identities table
+    /// - The inner option represents the existence of an error message
+    async fn get_unprocessed_error(
+        self,
+        commitment: &Hash,
+    ) -> Result<Option<Option<String>>, Error> {
         let mut conn = self.acquire().await?;
 
-        let result = sqlx::query(
+        let result: Option<(Option<String>,)> = sqlx::query_as(
             r#"
-            SELECT error_message FROM unprocessed_identities WHERE commitment = $1
+            SELECT error_message
+            FROM unprocessed_identities
+            WHERE commitment = $1
             "#,
         )
         .bind(commitment)
         .fetch_optional(&mut *conn)
         .await?;
 
-        if let Some(row) = result {
-            return Ok(Some(row.get::<Option<String>, _>(0).unwrap_or_default()));
-        };
-
-        Ok(None)
+        Ok(result.map(|(error_message,)| error_message))
     }
 
     async fn remove_unprocessed_identity(self, commitment: &Hash) -> Result<(), Error> {

@@ -17,8 +17,6 @@ use tracing::{error, info, instrument, warn};
 use crate::config::DatabaseConfig;
 use crate::identity_tree::Hash;
 
-// pub mod query;
-// pub mod transaction;
 pub mod types;
 pub mod methods;
 
@@ -36,8 +34,6 @@ impl Deref for Database {
         &self.pool
     }
 }
-
-// impl<'a, T> DatabaseQuery<'a> for T where T: Executor<'a, Database = Postgres> {}
 
 impl Database {
     #[instrument(skip_all)]

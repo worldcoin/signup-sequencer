@@ -536,12 +536,10 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         )
         .bind(commitment);
 
-        let result = self.fetch_optional(query).await?;
-
-        if let Some(row) = result {
-            return Ok(Some(row.get::<Option<String>, _>(0).unwrap_or_default()));
-        };
-        Ok(None)
+        Ok(self
+            .fetch_optional(query)
+            .await?
+            .and_then(|row| row.get::<Option<String>, _>(0)))
     }
 
     async fn remove_unprocessed_identity(self, commitment: &Hash) -> Result<(), Error> {
@@ -597,7 +595,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .bind(BatchType::Insertion)
         .bind(sqlx::types::Json::from(BatchEntryData {
             identities: vec![],
-            indexes:    vec![],
+            indexes: vec![],
         }));
 
         self.execute(query).await?;
@@ -629,7 +627,7 @@ pub trait DatabaseQuery<'a>: Executor<'a, Database = Postgres> {
         .bind(batch_type)
         .bind(sqlx::types::Json::from(BatchEntryData {
             identities: identities.to_vec(),
-            indexes:    indexes.to_vec(),
+            indexes: indexes.to_vec(),
         }));
 
         self.execute(query).await?;

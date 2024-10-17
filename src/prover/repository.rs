@@ -6,7 +6,7 @@ use crate::prover::{Prover, ProverConfig, ProverMap, ProverType};
 
 pub struct ProverRepository {
     insertion_prover_map: RwLock<ProverMap>,
-    deletion_prover_map:  RwLock<ProverMap>,
+    deletion_prover_map: RwLock<ProverMap>,
 }
 
 impl ProverRepository {

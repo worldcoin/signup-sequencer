@@ -16,12 +16,12 @@ pub type Result<T> = std::result::Result<T, error::Error>;
 
 #[derive(Debug)]
 pub struct OzApi {
-    client:           reqwest::Client,
-    api_url:          Url,
+    client: reqwest::Client,
+    api_url: Url,
     expiring_headers: Mutex<ExpiringHeaders>,
-    api_key:          String,
-    api_secret:       String,
-    auth_disabled:    bool,
+    api_key: String,
+    api_secret: String,
+    auth_disabled: bool,
 }
 
 impl OzApi {

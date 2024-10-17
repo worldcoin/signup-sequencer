@@ -265,7 +265,7 @@ async fn main() -> anyhow::Result<()> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SerializedIdentity {
     nullifier: Field,
-    trapdoor:  Field,
+    trapdoor: Field,
 }
 
 async fn load_identity(path: impl AsRef<Path>) -> anyhow::Result<Identity> {
@@ -275,14 +275,14 @@ async fn load_identity(path: impl AsRef<Path>) -> anyhow::Result<Identity> {
 
     Ok(Identity {
         nullifier: identity.nullifier,
-        trapdoor:  identity.trapdoor,
+        trapdoor: identity.trapdoor,
     })
 }
 
 async fn save_identity(path: impl AsRef<Path>, identity: &Identity) -> anyhow::Result<()> {
     let identity = SerializedIdentity {
         nullifier: identity.nullifier,
-        trapdoor:  identity.trapdoor,
+        trapdoor: identity.trapdoor,
     };
 
     let identity = serde_json::to_string_pretty(&identity)?;

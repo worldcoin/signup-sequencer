@@ -19,5 +19,5 @@ pub trait Inner: Send + Sync + 'static {
 
 pub struct TransactionResult {
     pub transaction_id: String,
-    pub hash:           Option<H256>,
+    pub hash: Option<H256>,
 }

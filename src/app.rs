@@ -29,11 +29,11 @@ use crate::server::data::{
 use crate::server::error::Error as ServerError;
 
 pub struct App {
-    pub database:           Arc<Database>,
+    pub database: Arc<Database>,
     pub identity_processor: Arc<dyn IdentityProcessor>,
-    pub prover_repository:  Arc<ProverRepository>,
-    tree_state:             OnceLock<TreeState>,
-    pub config:             Config,
+    pub prover_repository: Arc<ProverRepository>,
+    tree_state: OnceLock<TreeState>,
+    pub config: Config,
 
     pub identity_validator: IdentityValidator,
 }
@@ -293,9 +293,9 @@ impl App {
             .iter()
             .cloned()
             .map(|opt| ProverConfig {
-                url:         opt.url,
-                batch_size:  opt.batch_size,
-                timeout_s:   opt.timeout_s,
+                url: opt.url,
+                batch_size: opt.batch_size,
+                timeout_s: opt.timeout_s,
                 prover_type: opt.prover_type,
             })
             .collect();
@@ -375,8 +375,8 @@ impl App {
 
         if let Some(error_message) = self.database.get_unprocessed_error(commitment).await? {
             return Ok(InclusionProof {
-                root:    None,
-                proof:   None,
+                root: None,
+                proof: None,
                 message: error_message
                     .or_else(|| Some("identity exists but has not yet been processed".to_string())),
             }

@@ -4,7 +4,7 @@ use ethers::types::{Address, BlockNumber, Filter, FilterBlockOption, Log, Topic,
 pub struct BlockScanner<T> {
     read_provider: T,
     current_block: u64,
-    window_size:   u64,
+    window_size: u64,
 
     // How many blocks from the chain head to scan to
     // e.g. if latest block is 20 and offset is set to 3

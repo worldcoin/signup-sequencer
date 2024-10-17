@@ -12,7 +12,7 @@ const POOL_ID: &str = "us-west-2_iLmIggsiy";
 
 #[derive(Clone, Debug)]
 pub struct ExpiringHeaders {
-    pub headers:         HeaderMap,
+    pub headers: HeaderMap,
     /// The timestamp at which the headers will expire in seconds
     pub expiration_time: Instant,
 }
@@ -20,7 +20,7 @@ pub struct ExpiringHeaders {
 impl ExpiringHeaders {
     pub fn empty() -> Self {
         Self {
-            headers:         HeaderMap::new(),
+            headers: HeaderMap::new(),
             expiration_time: Instant::now(),
         }
     }
@@ -29,11 +29,11 @@ impl ExpiringHeaders {
         let now = Instant::now();
 
         let input = CognitoAuthInput {
-            client_id:     CLIENT_ID.to_string(),
-            pool_id:       POOL_ID.to_string(),
-            username:      api_key.to_string(),
-            password:      api_secret.to_string(),
-            mfa:           None,
+            client_id: CLIENT_ID.to_string(),
+            pool_id: POOL_ID.to_string(),
+            username: api_key.to_string(),
+            password: api_secret.to_string(),
+            mfa: None,
             client_secret: None,
         };
 

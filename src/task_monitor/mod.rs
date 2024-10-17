@@ -22,7 +22,7 @@ const INSERT_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const DELETE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 
 struct RunningInstance {
-    handles:         Vec<JoinHandle<()>>,
+    handles: Vec<JoinHandle<()>>,
     shutdown_sender: broadcast::Sender<()>,
 }
 
@@ -78,7 +78,7 @@ pub struct TaskMonitor {
     /// extension the instance.
     instance: RwLock<Option<RunningInstance>>,
     shutdown: Arc<Shutdown>,
-    app:      Arc<App>,
+    app: Arc<App>,
 }
 
 impl TaskMonitor {

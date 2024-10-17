@@ -19,10 +19,10 @@ use crate::utils::index_packing::unpack_indices;
 /// contract.
 #[derive(Debug)]
 pub struct IdentityManager {
-    ethereum:       Ethereum,
-    abi:            WorldId<ReadProvider>,
+    ethereum: Ethereum,
+    abi: WorldId<ReadProvider>,
     secondary_abis: Vec<BridgedWorldId<ReadProvider>>,
-    tree_depth:     usize,
+    tree_depth: usize,
 }
 
 impl IdentityManager {

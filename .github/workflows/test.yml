@@ -47,11 +47,11 @@ jobs:
             target/
           key: ${{ env.RUST_VERSION }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ env.RUST_VERSION }}-cargo-lint-
-      # - name: Check formatting
-      #   uses: actions-rs/cargo@v1
-      #   with:
-      #     command: fmt
-      #     args: --all -- --check
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

@@ -19,10 +19,10 @@ mod write_provider;
 
 #[derive(Clone, Debug)]
 pub struct Ethereum {
-    read_provider:            Arc<ReadProvider>,
+    read_provider: Arc<ReadProvider>,
     // Mapping of chain id to provider
     secondary_read_providers: HashMap<u64, Arc<ReadProvider>>,
-    write_provider:           Arc<WriteProvider>,
+    write_provider: Arc<WriteProvider>,
 }
 
 impl Ethereum {

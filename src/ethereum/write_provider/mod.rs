@@ -20,8 +20,8 @@ mod tx_sitter;
 
 pub struct WriteProvider {
     read_provider: ReadProvider,
-    inner:         Arc<dyn Inner>,
-    address:       Address,
+    inner: Arc<dyn Inner>,
+    address: Address,
 }
 
 impl fmt::Debug for WriteProvider {

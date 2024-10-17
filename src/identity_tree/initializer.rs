@@ -5,7 +5,6 @@ use semaphore::poseidon_tree::LazyPoseidonTree;
 use tracing::{info, instrument, warn};
 
 use crate::config::TreeConfig;
-// use crate::database::query::DatabaseQuery;
 use crate::database::methods::DbMethods;
 use crate::database::Database;
 use crate::identity::processor::IdentityProcessor;

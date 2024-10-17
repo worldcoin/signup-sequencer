@@ -9,7 +9,6 @@ use tracing::{info, instrument, warn};
 
 use crate::config::Config;
 use crate::contracts::IdentityManager;
-// use crate::database::query::DatabaseQuery as _;
 use crate::database::methods::DbMethods as _;
 use crate::database::Database;
 use crate::ethereum::Ethereum;

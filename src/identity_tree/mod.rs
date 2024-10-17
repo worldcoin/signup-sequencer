@@ -22,7 +22,7 @@ pub use self::status::{ProcessedStatus, Status, UnknownStatus, UnprocessedStatus
 pub struct TreeUpdate {
     #[sqlx(try_from = "i64")]
     pub leaf_index: usize,
-    pub element:    Hash,
+    pub element: Hash,
 }
 
 impl TreeUpdate {
@@ -37,32 +37,32 @@ impl TreeUpdate {
 
 #[derive(Debug)]
 pub struct TreeItem {
-    pub status:     ProcessedStatus,
+    pub status: ProcessedStatus,
     pub leaf_index: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct RootItem {
-    pub root:                Field,
+    pub root: Field,
     #[sqlx(try_from = "&'a str")]
-    pub status:              ProcessedStatus,
+    pub status: ProcessedStatus,
     pub pending_valid_as_of: chrono::DateTime<Utc>,
-    pub mined_valid_as_of:   Option<chrono::DateTime<Utc>>,
+    pub mined_valid_as_of: Option<chrono::DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProof {
-    pub root:    Option<Field>,
-    pub proof:   Option<Proof>,
+    pub root: Option<Field>,
+    pub proof: Option<Proof>,
     pub message: Option<String>,
 }
 
 /// Additional data held by the canonical tree version. It includes data
 /// necessary to control garbage collection.
 pub struct CanonicalTreeMetadata {
-    flatten_threshold:        usize,
+    flatten_threshold: usize,
     count_since_last_flatten: usize,
 }
 
@@ -98,10 +98,10 @@ impl AllowedTreeVersionMarker for lazy_merkle_tree::Derived {
 /// next leaf (only used in the latest tree), a pointer to the next version (if
 /// exists) and the metadata specified by the version marker.
 struct TreeVersionData<V: AllowedTreeVersionMarker> {
-    tree:      PoseidonTree<V>,
+    tree: PoseidonTree<V>,
     next_leaf: usize,
-    next:      Option<TreeVersion<AnyDerived>>,
-    metadata:  V::Metadata,
+    next: Option<TreeVersion<AnyDerived>>,
+    metadata: V::Metadata,
 }
 
 /// Basic operations that should be available for all tree versions.
@@ -501,8 +501,8 @@ where
 #[derive(Clone)]
 pub struct TreeState {
     processed: TreeVersion<Canonical>,
-    batching:  TreeVersion<Intermediate>,
-    latest:    TreeVersion<Latest>,
+    batching: TreeVersion<Intermediate>,
+    latest: TreeVersion<Latest>,
 }
 
 impl TreeState {
@@ -551,8 +551,8 @@ impl TreeState {
         let (leaf, root, proof) = self.latest.get_leaf_and_proof(item.leaf_index);
 
         let proof = InclusionProof {
-            root:    Some(root),
-            proof:   Some(proof),
+            root: Some(root),
+            proof: Some(proof),
             message: None,
         };
 
@@ -598,7 +598,7 @@ impl CanonicalTreeBuilder {
                 mmap_file_path
             ).unwrap();
         let metadata = CanonicalTreeMetadata {
-            flatten_threshold:        flattening_threshold,
+            flatten_threshold: flattening_threshold,
             count_since_last_flatten: 0,
         };
         let mut builder = Self(TreeVersionData {
@@ -610,7 +610,7 @@ impl CanonicalTreeBuilder {
         for (index, leaf) in leftover_initial_leaves.iter().enumerate() {
             builder.update(&TreeUpdate {
                 leaf_index: index + initial_leaves_in_dense_count,
-                element:    *leaf,
+                element: *leaf,
             });
         }
         builder
@@ -640,7 +640,7 @@ impl CanonicalTreeBuilder {
             };
 
         let metadata = CanonicalTreeMetadata {
-            flatten_threshold:        flattening_threshold,
+            flatten_threshold: flattening_threshold,
             count_since_last_flatten: 0,
         };
         let next_leaf = last_index.map(|v| v + 1).unwrap_or(0);
@@ -654,7 +654,7 @@ impl CanonicalTreeBuilder {
         for (index, leaf) in leftover_items.iter().enumerate() {
             builder.update(&TreeUpdate {
                 leaf_index: next_leaf + index,
-                element:    *leaf,
+                element: *leaf,
             });
         }
 
@@ -680,7 +680,7 @@ impl CanonicalTreeBuilder {
 /// A helper for building successive tree versions. Exposes a type-safe API over
 /// building a sequence of tree versions efficiently.
 pub struct DerivedTreeBuilder<P: Version> {
-    prev:    TreeVersion<P>,
+    prev: TreeVersion<P>,
     current: TreeVersionData<lazy_merkle_tree::Derived>,
 }
 

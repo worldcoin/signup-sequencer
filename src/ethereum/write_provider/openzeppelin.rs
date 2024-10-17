@@ -16,19 +16,21 @@ use crate::ethereum::TxError;
 use crate::identity::processor::TransactionId;
 
 static TX_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
-    register_int_counter_vec!("eth_tx_count", "The transaction count by bytes4.", &[
-        "bytes4"
-    ])
+    register_int_counter_vec!(
+        "eth_tx_count",
+        "The transaction count by bytes4.",
+        &["bytes4"]
+    )
     .unwrap()
 });
 
 #[derive(Debug)]
 pub struct OzRelay {
-    oz_api:               OzApi,
+    oz_api: OzApi,
     transaction_validity: chrono::Duration,
-    send_timeout:         Duration,
-    mine_timeout:         Duration,
-    gas_limit:            Option<u64>,
+    send_timeout: Duration,
+    mine_timeout: Duration,
+    gas_limit: Option<u64>,
 }
 
 impl OzRelay {
@@ -107,10 +109,10 @@ impl OzRelay {
     ) -> Result<String, Error> {
         let tx: TypedTransaction = tx.into();
         let api_tx = SendBaseTransactionRequest {
-            to:          tx.to(),
-            value:       tx.value(),
-            gas_limit:   tx.gas(),
-            data:        tx.data(),
+            to: tx.to(),
+            value: tx.value(),
+            gas_limit: tx.gas(),
+            data: tx.data(),
             valid_until: Some(chrono::Utc::now() + self.transaction_validity),
         };
 
@@ -233,7 +235,7 @@ impl Inner for OzRelay {
 
         Ok(TransactionResult {
             transaction_id: transaction.transaction_id,
-            hash:           transaction.hash,
+            hash: transaction.hash,
         })
     }
 }

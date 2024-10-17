@@ -31,18 +31,18 @@ pub fn load_config(config_file_path: Option<&Path>) -> anyhow::Result<Config> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
-    pub app:           AppConfig,
-    pub tree:          TreeConfig,
+    pub app: AppConfig,
+    pub tree: TreeConfig,
     #[serde(default)]
-    pub network:       Option<NetworkConfig>,
+    pub network: Option<NetworkConfig>,
     #[serde(default)]
-    pub providers:     Option<ProvidersConfig>,
+    pub providers: Option<ProvidersConfig>,
     #[serde(default)]
-    pub relayer:       Option<RelayerConfig>,
-    pub database:      DatabaseConfig,
-    pub server:        ServerConfig,
+    pub relayer: Option<RelayerConfig>,
+    pub database: DatabaseConfig,
+    pub server: ServerConfig,
     #[serde(default)]
-    pub service:       ServiceConfig,
+    pub service: ServiceConfig,
     #[serde(default)]
     pub offchain_mode: OffchainModeConfig,
 }
@@ -235,7 +235,7 @@ pub struct ServiceConfig {
     // Service name - used for logging, metrics and tracing
     #[serde(default = "default::service_name")]
     pub service_name: String,
-    pub datadog:      Option<DatadogConfig>,
+    pub datadog: Option<DatadogConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

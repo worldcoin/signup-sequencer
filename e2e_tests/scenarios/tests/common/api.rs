@@ -14,7 +14,7 @@ use crate::common::prelude::StatusCode;
 
 pub struct RawResponse {
     pub status_code: StatusCode,
-    pub body:        String,
+    pub body: String,
 }
 
 pub async fn insert_identity(
@@ -118,7 +118,7 @@ pub async fn inclusion_proof_raw(
 
     Ok(RawResponse {
         status_code: response.status(),
-        body:        result,
+        body: result,
     })
 }
 

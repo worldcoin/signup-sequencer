@@ -27,11 +27,11 @@ pub struct Pinhead {
 }
 
 struct PinheadInner {
-    signer:         Arc<PinheadSigner>,
-    is_running:     AtomicBool,
-    tx_id_counter:  AtomicU64,
+    signer: Arc<PinheadSigner>,
+    is_running: AtomicBool,
+    tx_id_counter: AtomicU64,
     txs_to_execute: mpsc::Sender<String>,
-    txs:            Mutex<HashMap<String, Arc<Mutex<RelayerTransactionBase>>>>,
+    txs: Mutex<HashMap<String, Arc<Mutex<RelayerTransactionBase>>>>,
 }
 
 impl Drop for PinheadInner {
@@ -154,16 +154,16 @@ impl Pinhead {
 
         let tx = RelayerTransactionBase {
             transaction_id: tx_id.clone(),
-            to:             tx_request.to.context("Missing to")?,
-            value:          tx_request.value,
-            gas_limit:      tx_request
+            to: tx_request.to.context("Missing to")?,
+            value: tx_request.value,
+            gas_limit: tx_request
                 .gas_limit
                 .map(|gas_limit| gas_limit.as_u32())
                 .unwrap_or(DEFAULT_GAS_LIMIT),
-            data:           tx_request.data,
-            status:         Status::Pending,
-            hash:           None,
-            valid_until:    tx_request
+            data: tx_request.data,
+            status: Status::Pending,
+            hash: None,
+            valid_until: tx_request
                 .valid_until
                 .unwrap_or(Utc::now() + chrono::Duration::hours(24)),
         };

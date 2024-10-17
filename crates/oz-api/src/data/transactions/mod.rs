@@ -44,13 +44,13 @@ impl fmt::Display for Status {
 #[serde(rename_all = "camelCase")]
 pub struct SendBaseTransactionRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub to:          Option<&'a NameOrAddress>,
+    pub to: Option<&'a NameOrAddress>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub value:       Option<&'a U256>,
+    pub value: Option<&'a U256>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub data:        Option<&'a Bytes>,
+    pub data: Option<&'a Bytes>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub gas_limit:   Option<&'a U256>,
+    pub gas_limit: Option<&'a U256>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub valid_until: Option<DateTime<Utc>>,
 }
@@ -63,16 +63,16 @@ pub struct SendBaseTransactionRequest<'a> {
 pub struct SendBaseTransactionRequestOwned {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub to:          Option<NameOrAddress>,
+    pub to: Option<NameOrAddress>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub value:       Option<U256>,
+    pub value: Option<U256>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub data:        Option<Bytes>,
+    pub data: Option<Bytes>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub gas_limit:   Option<U256>,
+    pub gas_limit: Option<U256>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub valid_until: Option<DateTime<Utc>>,
@@ -87,16 +87,16 @@ pub struct SendBaseTransactionRequestOwned {
 pub struct RelayerTransactionBase {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub hash:           Option<H256>,
+    pub hash: Option<H256>,
     pub transaction_id: String,
-    pub to:             NameOrAddress,
+    pub to: NameOrAddress,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub value:          Option<U256>,
-    pub gas_limit:      u32,
+    pub value: Option<U256>,
+    pub gas_limit: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub data:           Option<Bytes>,
-    pub valid_until:    DateTime<Utc>,
-    pub status:         Status,
+    pub data: Option<Bytes>,
+    pub valid_until: DateTime<Utc>,
+    pub status: Status,
 }

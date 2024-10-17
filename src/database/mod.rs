@@ -17,8 +17,8 @@ use tracing::{error, info, instrument, warn};
 use crate::config::DatabaseConfig;
 use crate::identity_tree::Hash;
 
-pub mod types;
 pub mod methods;
+pub mod types;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
@@ -197,8 +197,8 @@ mod test {
         );
 
         let db = Database::new(&DatabaseConfig {
-            database:        SecretUrl::from_str(&url)?,
-            migrate:         true,
+            database: SecretUrl::from_str(&url)?,
+            migrate: true,
             max_connections: 1,
         })
         .await?;
@@ -305,16 +305,16 @@ mod test {
         let mut provers = HashSet::new();
 
         provers.insert(ProverConfig {
-            batch_size:  100,
-            url:         "http://localhost:8080".to_string(),
-            timeout_s:   100,
+            batch_size: 100,
+            url: "http://localhost:8080".to_string(),
+            timeout_s: 100,
             prover_type: ProverType::Insertion,
         });
 
         provers.insert(ProverConfig {
-            batch_size:  100,
-            url:         "http://localhost:8080".to_string(),
-            timeout_s:   100,
+            batch_size: 100,
+            url: "http://localhost:8080".to_string(),
+            timeout_s: 100,
             prover_type: ProverType::Deletion,
         });
 
@@ -327,16 +327,16 @@ mod test {
         let (db, _db_container) = setup_db(&docker).await?;
 
         let mock_prover_configuration_0 = ProverConfig {
-            batch_size:  100,
-            url:         "http://localhost:8080".to_string(),
-            timeout_s:   100,
+            batch_size: 100,
+            url: "http://localhost:8080".to_string(),
+            timeout_s: 100,
             prover_type: ProverType::Insertion,
         };
 
         let mock_prover_configuration_1 = ProverConfig {
-            batch_size:  100,
-            url:         "http://localhost:8081".to_string(),
-            timeout_s:   100,
+            batch_size: 100,
+            url: "http://localhost:8081".to_string(),
+            timeout_s: 100,
             prover_type: ProverType::Deletion,
         };
 
@@ -1252,9 +1252,13 @@ mod test {
         let roots = mock_roots(2);
 
         db.insert_new_batch_head(&roots[0]).await?;
-        db.insert_new_batch(&roots[1], &roots[0], BatchType::Insertion, &identities, &[
-            0,
-        ])
+        db.insert_new_batch(
+            &roots[1],
+            &roots[0],
+            BatchType::Insertion,
+            &identities,
+            &[0],
+        )
         .await?;
 
         Ok(())

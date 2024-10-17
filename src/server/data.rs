@@ -27,13 +27,13 @@ pub struct InsertCommitmentRequest {
 #[serde(deny_unknown_fields)]
 pub struct AddBatchSizeRequest {
     /// The URL of the prover for the provided batch size.
-    pub url:             String,
+    pub url: String,
     /// The batch size to add.
-    pub batch_size:      usize,
+    pub batch_size: usize,
     /// The timeout for communications with the prover service.
     pub timeout_seconds: u64,
     // TODO: add docs
-    pub prover_type:     ProverType,
+    pub prover_type: ProverType,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -41,7 +41,7 @@ pub struct AddBatchSizeRequest {
 #[serde(deny_unknown_fields)]
 pub struct RemoveBatchSizeRequest {
     /// The batch size to remove from the prover map.
-    pub batch_size:  usize,
+    pub batch_size: usize,
     // TODO: add docs
     pub prover_type: ProverType,
 }
@@ -57,11 +57,11 @@ pub struct InclusionProofRequest {
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct VerifySemaphoreProofRequest {
-    pub root:                    Field,
-    pub signal_hash:             Field,
-    pub nullifier_hash:          Field,
+    pub root: Field,
+    pub signal_hash: Field,
+    pub nullifier_hash: Field,
     pub external_nullifier_hash: Field,
-    pub proof:                   Proof,
+    pub proof: Proof,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,7 +87,7 @@ pub struct RecoveryRequest {
     /// The leaf index of the identity commitment to delete.
     pub previous_identity_commitment: Hash,
     /// The new identity commitment to insert.
-    pub new_identity_commitment:      Hash,
+    pub new_identity_commitment: Hash,
 }
 
 impl From<InclusionProof> for InclusionProofResponse {

@@ -36,7 +36,7 @@ struct ListTransactionsQuery {
     #[serde(default)]
     status: Option<Status>,
     #[serde(default)]
-    limit:  Option<usize>,
+    limit: Option<usize>,
 }
 
 async fn list_transactions(
@@ -72,9 +72,9 @@ async fn query_transaction(
 }
 
 pub struct ServerHandle {
-    pinhead:            Pinhead,
-    addr:               SocketAddr,
-    shutdown_notify:    Arc<Notify>,
+    pinhead: Pinhead,
+    addr: SocketAddr,
+    shutdown_notify: Arc<Notify>,
     server_join_handle: JoinHandle<Result<(), hyper::Error>>,
 }
 

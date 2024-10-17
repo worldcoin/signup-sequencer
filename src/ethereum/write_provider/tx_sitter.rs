@@ -15,14 +15,14 @@ use crate::identity::processor::TransactionId;
 const MINING_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub struct TxSitter {
-    client:    TxSitterClient,
+    client: TxSitterClient,
     gas_limit: Option<u64>,
 }
 
 impl TxSitter {
     pub fn new(config: &TxSitterConfig) -> Self {
         Self {
-            client:    TxSitterClient::new(&config.tx_sitter_url),
+            client: TxSitterClient::new(&config.tx_sitter_url),
             gas_limit: config.tx_sitter_gas_limit,
         }
     }
@@ -42,7 +42,7 @@ impl TxSitter {
             if tx.status == Some(TxStatus::Mined) || tx.status == Some(TxStatus::Finalized) {
                 return Ok(TransactionResult {
                     transaction_id: tx.tx_id,
-                    hash:           Some(
+                    hash: Some(
                         tx.tx_hash
                             .context("Missing hash on a mined tx")
                             .map_err(TxError::Send)?,
@@ -70,18 +70,18 @@ impl Inner for TxSitter {
         let tx = self
             .client
             .send_tx(&SendTxRequest {
-                to:        *tx
+                to: *tx
                     .to_addr()
                     .context("Tx receiver must be an address")
                     .map_err(TxError::Send)?,
-                value:     tx.value().copied().unwrap_or(U256::zero()),
-                data:      tx.data().cloned(),
+                value: tx.value().copied().unwrap_or(U256::zero()),
+                data: tx.data().cloned(),
                 gas_limit: *tx
                     .gas()
                     .context("Missing tx gas limit")
                     .map_err(TxError::Send)?,
-                priority:  TransactionPriority::Regular,
-                tx_id:     None,
+                priority: TransactionPriority::Regular,
+                tx_id: None,
             })
             .await
             .context("Error sending transaction")

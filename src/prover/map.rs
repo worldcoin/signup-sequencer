@@ -47,9 +47,9 @@ impl ProverMap {
         self.map
             .iter()
             .map(|(k, v)| ProverConfig {
-                url:         v.url(),
-                timeout_s:   v.timeout_s(),
-                batch_size:  *k,
+                url: v.url(),
+                timeout_s: v.timeout_s(),
+                batch_size: *k,
                 prover_type: v.prover_type(),
             })
             .collect()

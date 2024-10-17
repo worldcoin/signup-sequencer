@@ -25,7 +25,7 @@ type SpecialisedFactory = ContractFactory<SpecialisedClient>;
 pub type SpecialisedContract = Contract<SpecialisedClient>;
 
 pub struct Chain {
-    pub private_key:      SigningKey,
+    pub private_key: SigningKey,
     pub identity_manager: IWorldIDIdentityManager<SpecialisedClient>,
 }
 

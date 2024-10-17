@@ -15,9 +15,9 @@ use crate::identity_tree::{
 use crate::utils::tree_updates::dedup_tree_updates;
 
 pub struct TreeInitializer {
-    pub database:           Arc<Database>,
+    pub database: Arc<Database>,
     pub identity_processor: Arc<dyn IdentityProcessor>,
-    pub config:             TreeConfig,
+    pub config: TreeConfig,
 }
 
 impl TreeInitializer {
@@ -285,7 +285,7 @@ mod test {
 
             identities.push(TreeUpdate {
                 leaf_index: i,
-                element:    identity,
+                element: identity,
             });
         }
 

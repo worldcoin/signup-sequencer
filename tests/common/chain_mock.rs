@@ -22,8 +22,8 @@ use super::{abi as ContractAbi, CompiledContract};
 pub type SpecialisedContract = Contract<SpecialisedClient>;
 
 pub struct MockChain {
-    pub anvil:            AnvilInstance,
-    pub private_key:      SigningKey,
+    pub anvil: AnvilInstance,
+    pub private_key: SigningKey,
     pub identity_manager: IWorldIDIdentityManager<SpecialisedClient>,
 }
 

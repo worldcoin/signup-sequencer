@@ -13,11 +13,11 @@ use cognito_srp::SrpClient;
 use crate::error::CognitoSrpAuthError;
 
 pub struct CognitoAuthInput {
-    pub client_id:     String,
-    pub pool_id:       String,
-    pub username:      String,
-    pub password:      String,
-    pub mfa:           Option<String>,
+    pub client_id: String,
+    pub pool_id: String,
+    pub username: String,
+    pub password: String,
+    pub mfa: Option<String>,
     pub client_secret: Option<String>, // not yet supported
 }
 

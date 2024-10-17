@@ -20,6 +20,7 @@ const MAX_UNPROCESSED_FETCH_COUNT: i64 = 10_000;
 
 #[async_trait]
 pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
+    #[instrument(skip(self), level = "debug")]
     async fn insert_pending_identity(
         self,
         leaf_index: usize,
@@ -46,6 +47,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_id_by_root(self, root: &Hash) -> Result<Option<usize>, Error> {
         let mut conn = self.acquire().await?;
 
@@ -71,6 +73,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     /// Marks a root and associated entities as processed
     ///
     /// This is a composite operation performing multiple queries - it should be ran within a transaction.
+    #[instrument(skip(self), level = "debug")]
     async fn mark_root_as_processed(self, root: &Hash) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 
@@ -115,6 +118,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     /// Marks a root and associated identities as mined
     ///
     /// This is a composite operation performing multiple queries - it should be ran within a transaction.
+    #[instrument(skip(self), level = "debug")]
     async fn mark_root_as_mined(self, root: &Hash) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 
@@ -142,6 +146,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn mark_all_as_pending(self) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 
@@ -159,6 +164,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_next_leaf_index(self) -> Result<usize, Error> {
         let mut conn = self.acquire().await?;
 
@@ -178,6 +184,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok((leaf_index + 1) as usize)
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_identity_leaf_index(self, identity: &Hash) -> Result<Option<TreeItem>, Error> {
         let mut conn = self.acquire().await?;
 
@@ -208,6 +215,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(Some(TreeItem { status, leaf_index }))
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_commitments_by_status(
         self,
         status: ProcessedStatus,
@@ -227,6 +235,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .await?)
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_commitments_by_statuses(
         self,
         statuses: Vec<ProcessedStatus>,
@@ -247,6 +256,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .await?)
     }
 
+    #[instrument(skip(self, leaf_indexes), level = "debug")]
     async fn get_non_zero_commitments_by_leaf_indexes<I>(
         self,
         leaf_indexes: I,
@@ -275,6 +285,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .collect())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_latest_root_by_status(
         self,
         status: ProcessedStatus,
@@ -292,6 +303,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .map(|r| r.get::<Hash, _>(0)))
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_root_state(self, root: &Hash) -> Result<Option<RootItem>, Error> {
         let mut conn = self.acquire().await?;
 
@@ -315,6 +327,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .await?)
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_latest_insertion(self) -> Result<LatestInsertionEntry, Error> {
         let mut conn = self.acquire().await?;
 
@@ -338,6 +351,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         }
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn count_unprocessed_identities(self) -> Result<i32, Error> {
         let mut conn = self.acquire().await?;
 
@@ -353,6 +367,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(count as i32)
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn count_pending_identities(self) -> Result<i32, Error> {
         let mut conn = self.acquire().await?;
 
@@ -370,6 +385,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(count as i32)
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_provers(self) -> Result<HashSet<ProverConfig>, Error> {
         let mut conn = self.acquire().await?;
 
@@ -385,6 +401,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .collect())
     }
 
+    #[instrument(skip(self, url), level = "debug")]
     async fn insert_prover_configuration(
         self,
         batch_size: usize,
@@ -412,6 +429,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn insert_provers(self, provers: HashSet<ProverConfig>) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 
@@ -439,6 +457,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn remove_prover(self, batch_size: usize, prover_type: ProverType) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 
@@ -455,6 +474,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn insert_new_identity(
         self,
         identity: Hash,
@@ -477,6 +497,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(identity)
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn insert_new_recovery(
         self,
         existing_commitment: &Hash,
@@ -498,6 +519,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_latest_deletion(self) -> Result<LatestDeletionEntry, Error> {
         let mut conn = self.acquire().await?;
 
@@ -517,6 +539,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         }
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn update_latest_insertion(
         self,
         insertion_timestamp: DateTime<Utc>,
@@ -538,6 +561,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn update_latest_deletion(self, deletion_timestamp: DateTime<Utc>) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 
@@ -557,6 +581,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[cfg(test)]
+    #[instrument(skip(self), level = "debug")]
     async fn get_all_recoveries(self) -> Result<Vec<RecoveryEntry>, Error> {
         let mut conn = self.acquire().await?;
 
@@ -567,6 +592,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         )
     }
 
+    #[instrument(skip(self, prev_commits), level = "debug")]
     async fn delete_recoveries<I, T>(self, prev_commits: I) -> Result<Vec<RecoveryEntry>, Error>
     where
         I: IntoIterator<Item = T> + Send,
@@ -595,6 +621,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(res)
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn insert_new_deletion(self, leaf_index: usize, identity: &Hash) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 
@@ -614,6 +641,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
 
     // TODO: consider using a larger value than i64 for leaf index, ruint should
     // have postgres compatibility for u256
+    #[instrument(skip(self), level = "debug")]
     async fn get_deletions(self) -> Result<Vec<DeletionEntry>, Error> {
         let mut conn = self.acquire().await?;
 
@@ -636,6 +664,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     /// Remove a list of entries from the deletions table
+    #[instrument(skip(self), level = "debug")]
     async fn remove_deletions(self, commitments: &[Hash]) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 
@@ -652,6 +681,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_eligible_unprocessed_commitments(
         self,
         status: UnprocessedStatus,
@@ -689,6 +719,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     /// - The outer option represents the existence of the commitment in the
     ///   unprocessed_identities table
     /// - The inner option represents the existence of an error message
+    #[instrument(skip(self), level = "debug")]
     async fn get_unprocessed_error(
         self,
         commitment: &Hash,
@@ -709,6 +740,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(result.map(|(error_message,)| error_message))
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn remove_unprocessed_identity(self, commitment: &Hash) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 
@@ -724,6 +756,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn identity_exists(self, commitment: Hash) -> Result<bool, Error> {
         let mut conn = self.acquire().await?;
 
@@ -741,6 +774,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     // TODO: add docs
+    #[instrument(skip(self), level = "debug")]
     async fn identity_is_queued_for_deletion(self, commitment: &Hash) -> Result<bool, Error> {
         let mut conn = self.acquire().await?;
 
@@ -753,6 +787,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(row_unprocessed.get::<bool, _>(0))
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn insert_new_batch_head(self, next_root: &Hash) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 
@@ -780,6 +815,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn insert_new_batch(
         self,
         next_root: &Hash,
@@ -816,6 +852,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[cfg(test)]
+    #[instrument(skip(self), level = "debug")]
     async fn get_next_batch(self, prev_root: &Hash) -> Result<Option<BatchEntry>, Error> {
         let mut conn = self.acquire().await?;
 
@@ -839,6 +876,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(res)
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_latest_batch(self) -> Result<Option<BatchEntry>, Error> {
         let mut conn = self.acquire().await?;
 
@@ -862,6 +900,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(res)
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_next_batch_without_transaction(self) -> Result<Option<BatchEntry>, Error> {
         let mut conn = self.acquire().await?;
 
@@ -887,6 +926,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(res)
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_batch_head(self) -> Result<Option<BatchEntry>, Error> {
         let mut conn = self.acquire().await?;
 
@@ -941,6 +981,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn insert_new_transaction(
         self,
         transaction_id: &String,

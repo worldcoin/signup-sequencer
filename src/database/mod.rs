@@ -15,12 +15,10 @@ use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
 use crate::config::DatabaseConfig;
-use crate::database::query::DatabaseQuery;
 use crate::identity_tree::Hash;
 
-pub mod query;
-pub mod transaction;
 pub mod types;
+pub mod methods;
 
 // Statically link in migration files
 static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
@@ -36,8 +34,6 @@ impl Deref for Database {
         &self.pool
     }
 }
-
-impl<'a, T> DatabaseQuery<'a> for T where T: Executor<'a, Database = Postgres> {}
 
 impl Database {
     #[instrument(skip_all)]
@@ -164,7 +160,7 @@ mod test {
 
     use super::Database;
     use crate::config::DatabaseConfig;
-    use crate::database::query::DatabaseQuery;
+    use crate::database::methods::DbMethods;
     use crate::database::types::BatchType;
     use crate::identity_tree::{Hash, ProcessedStatus, UnprocessedStatus};
     use crate::prover::identity::Identity;
@@ -658,7 +654,9 @@ mod test {
             pre_root = &roots[i];
         }
 
-        db.mark_root_as_processed_tx(&roots[2]).await?;
+        let mut tx = db.begin().await?;
+        tx.mark_root_as_processed(&roots[2]).await?;
+        tx.commit().await?;
 
         db.mark_all_as_pending().await?;
 
@@ -691,7 +689,9 @@ mod test {
             pre_root = &roots[i];
         }
 
-        db.mark_root_as_processed_tx(&roots[2]).await?;
+        let mut tx = db.begin().await?;
+        tx.mark_root_as_processed(&roots[2]).await?;
+        tx.commit().await?;
 
         for root in roots.iter().take(3) {
             let root = db
@@ -737,7 +737,7 @@ mod test {
             pre_root = &roots[i];
         }
 
-        db.mark_root_as_mined_tx(&roots[2]).await?;
+        db.mark_root_as_mined(&roots[2]).await?;
 
         for root in roots.iter().take(3) {
             let root = db
@@ -786,27 +786,27 @@ mod test {
         }
 
         println!("Marking roots up to 2nd as processed");
-        db.mark_root_as_processed_tx(&roots[2]).await?;
+        db.mark_root_as_processed(&roots[2]).await?;
 
         assert_roots_are(&db, &roots[..3], ProcessedStatus::Processed).await?;
         assert_roots_are(&db, &roots[3..], ProcessedStatus::Pending).await?;
 
         println!("Marking roots up to 1st as mined");
-        db.mark_root_as_mined_tx(&roots[1]).await?;
+        db.mark_root_as_mined(&roots[1]).await?;
 
         assert_roots_are(&db, &roots[..2], ProcessedStatus::Mined).await?;
         assert_roots_are(&db, &[roots[2]], ProcessedStatus::Processed).await?;
         assert_roots_are(&db, &roots[3..], ProcessedStatus::Pending).await?;
 
         println!("Marking roots up to 4th as processed");
-        db.mark_root_as_processed_tx(&roots[4]).await?;
+        db.mark_root_as_processed(&roots[4]).await?;
 
         assert_roots_are(&db, &roots[..2], ProcessedStatus::Mined).await?;
         assert_roots_are(&db, &roots[2..5], ProcessedStatus::Processed).await?;
         assert_roots_are(&db, &roots[5..], ProcessedStatus::Pending).await?;
 
         println!("Marking all roots as mined");
-        db.mark_root_as_mined_tx(&roots[num_identities - 1]).await?;
+        db.mark_root_as_mined(&roots[num_identities - 1]).await?;
 
         assert_roots_are(&db, &roots, ProcessedStatus::Mined).await?;
 
@@ -831,10 +831,10 @@ mod test {
         }
 
         // root[2] is somehow erroneously marked as mined
-        db.mark_root_as_processed_tx(&roots[2]).await?;
+        db.mark_root_as_processed(&roots[2]).await?;
 
         // Later we correctly mark the previous root as mined
-        db.mark_root_as_processed_tx(&roots[1]).await?;
+        db.mark_root_as_processed(&roots[1]).await?;
 
         for root in roots.iter().take(2) {
             let root = db
@@ -893,7 +893,7 @@ mod test {
             "Root has not yet been mined"
         );
 
-        db.mark_root_as_processed_tx(&roots[0]).await?;
+        db.mark_root_as_processed(&roots[0]).await?;
 
         let root = db
             .get_root_state(&roots[0])
@@ -937,7 +937,7 @@ mod test {
             pre_root = &roots[i];
         }
 
-        db.mark_root_as_processed_tx(&roots[2]).await?;
+        db.mark_root_as_processed(&roots[2]).await?;
 
         let mined_tree_updates = db
             .get_commitments_by_status(ProcessedStatus::Processed)
@@ -1070,7 +1070,7 @@ mod test {
         db.insert_pending_identity(3, &identities[3], &roots[3], &roots[2])
             .await?;
 
-        db.mark_root_as_processed_tx(&roots[0])
+        db.mark_root_as_processed(&roots[0])
             .await
             .context("Marking root as mined")?;
 

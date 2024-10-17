@@ -9,7 +9,7 @@ use tokio::time;
 use tracing::info;
 
 use crate::app::App;
-use crate::database::query::DatabaseQuery;
+use crate::database::methods::DbMethods;
 use crate::database::types::DeletionEntry;
 use crate::identity_tree::{Hash, TreeVersionReadOps};
 

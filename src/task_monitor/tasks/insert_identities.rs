@@ -7,7 +7,7 @@ use tokio::time;
 use tracing::info;
 
 use crate::app::App;
-use crate::database::query::DatabaseQuery as _;
+use crate::database::methods::DbMethods as _;
 use crate::database::types::UnprocessedCommitment;
 use crate::identity_tree::{Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
 use crate::retry_tx;

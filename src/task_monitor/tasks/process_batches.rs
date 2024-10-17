@@ -5,7 +5,7 @@ use tokio::sync::{mpsc, Notify};
 use tokio::{select, time};
 
 use crate::app::App;
-use crate::database::query::DatabaseQuery as _;
+use crate::database::methods::DbMethods as _;
 use crate::identity::processor::TransactionId;
 
 pub async fn process_batches(

@@ -426,12 +426,12 @@ impl OnChainIdentityProcessor {
                 continue;
             }
 
-            retry_tx!(
-                self.database.pool,
-                tx,
-                tx.mark_root_as_processed(&post_root.into()).await
-            )
-            .await?;
+            let mut tx = self
+                .database
+                .begin_tx(IsolationLevel::ReadCommitted)
+                .await?;
+            tx.mark_root_as_processed(&post_root.into()).await?;
+            tx.commit().await?;
 
             info!(?pre_root, ?post_root, ?kind, "Batch mined");
 
@@ -465,12 +465,12 @@ impl OnChainIdentityProcessor {
                 continue;
             }
 
-            retry_tx!(
-                self.database.pool,
-                tx,
-                tx.mark_root_as_mined(&root.into()).await
-            )
-            .await?;
+            let mut tx = self
+                .database
+                .begin_tx(IsolationLevel::ReadCommitted)
+                .await?;
+            tx.mark_root_as_processed(&root.into()).await?;
+            tx.commit().await?;
 
             info!(?root, "Root finalized");
         }
@@ -589,15 +589,15 @@ impl IdentityProcessor for OffChainIdentityProcessor {
                 self.update_eligible_recoveries(batch).await?;
             }
 
-            retry_tx!(self.database.pool, tx, {
-                // With current flow it is required to mark root as processed first as this is
-                // how required mined_at field is set
-                tx.mark_root_as_processed(&batch.next_root).await?;
-                tx.mark_root_as_mined(&batch.next_root).await?;
+            let mut tx = self
+                .database
+                .begin_tx(IsolationLevel::ReadCommitted)
+                .await?;
 
-                Result::<_, anyhow::Error>::Ok(())
-            })
-            .await?;
+            tx.mark_root_as_processed(&batch.next_root).await?;
+            tx.mark_root_as_mined(&batch.next_root).await?;
+
+            tx.commit().await?;
 
             processed_tree.apply_updates_up_to(batch.next_root);
         }

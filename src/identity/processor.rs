@@ -18,7 +18,7 @@ use crate::contracts::scanner::BlockScanner;
 use crate::contracts::IdentityManager;
 use crate::database::methods::DbMethods;
 use crate::database::types::{BatchEntry, BatchType};
-use crate::database::{Database, Error};
+use crate::database::{Database, IsolationLevel};
 use crate::ethereum::{Ethereum, ReadProvider};
 use crate::identity_tree::{Canonical, Hash, TreeVersion, TreeWithNextVersion};
 use crate::prover::identity::Identity;
@@ -135,30 +135,31 @@ impl IdentityProcessor for OnChainIdentityProcessor {
         let root_hash = self.identity_manager.latest_root().await?;
         let root_hash = root_hash.into();
 
+        // it's enough to run with read committed here
+        // since in the worst case another instance of the sequencer
+        // will try to do the same thing but with a later root
+        // in such a case the state will be corrected later in the program
+        let mut tx = self
+            .database
+            .begin_tx(IsolationLevel::ReadCommitted)
+            .await?;
+
         // We don't store the initial root in the database, so we have to skip this step
         // if the contract root hash is equal to initial root hash
         if root_hash != *initial_root_hash {
             // Note that we don't have a way of queuing a root here for
             // finalization. so it's going to stay as "processed"
             // until the next root is mined. self.database.
-            retry_tx!(self.database.pool, tx, {
-                tx.mark_root_as_processed(&root_hash).await?;
-                tx.delete_batches_after_root(&root_hash).await?;
-
-                Result::<(), Error>::Ok(())
-            })
-            .await?;
+            tx.mark_root_as_processed(&root_hash).await?;
+            tx.delete_batches_after_root(&root_hash).await?; // TODO: We probably shouldn't do this in HA
         } else {
             // Db is either empty or we're restarting with a new contract/chain
             // so we should mark everything as pending
-            retry_tx!(self.database.pool, tx, {
-                tx.mark_all_as_pending().await?;
-                tx.delete_all_batches().await?;
-
-                Result::<(), Error>::Ok(())
-            })
-            .await?;
+            tx.mark_all_as_pending().await?;
+            tx.delete_all_batches().await?; // TODO: We probably shouldn't do this in HA
         }
+
+        tx.commit().await?;
 
         Ok(())
     }

@@ -621,6 +621,9 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(res)
     }
 
+    /// Inserts a new deletion into the deletions table
+    ///
+    /// This method is idempotent and on conflict nothing will happen
     #[instrument(skip(self), level = "debug")]
     async fn insert_new_deletion(self, leaf_index: usize, identity: &Hash) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
@@ -629,6 +632,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             r#"
             INSERT INTO deletions (leaf_index, commitment)
             VALUES ($1, $2)
+            ON CONFLICT DO NOTHING
             "#,
         )
         .bind(leaf_index as i64)
@@ -771,20 +775,6 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .fetch_one(&mut *conn)
         .await?
         .get::<bool, _>(0))
-    }
-
-    // TODO: add docs
-    #[instrument(skip(self), level = "debug")]
-    async fn identity_is_queued_for_deletion(self, commitment: &Hash) -> Result<bool, Error> {
-        let mut conn = self.acquire().await?;
-
-        let row_unprocessed =
-            sqlx::query(r#"SELECT exists(SELECT 1 FROM deletions where commitment = $1)"#)
-                .bind(commitment)
-                .fetch_one(&mut *conn)
-                .await?;
-
-        Ok(row_unprocessed.get::<bool, _>(0))
     }
 
     #[instrument(skip(self), level = "debug")]

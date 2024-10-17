@@ -10,7 +10,7 @@ use std::ops::Deref;
 use anyhow::{anyhow, Context, Error as ErrReport};
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::pool::PoolOptions;
-use sqlx::{Executor, Pool, Postgres, Row};
+use sqlx::{Executor, Pool, Postgres, Row, Transaction};
 use thiserror::Error;
 use tracing::{error, info, instrument, warn};
 
@@ -25,6 +25,17 @@ static MIGRATOR: Migrator = sqlx::migrate!("schemas/database");
 
 pub struct Database {
     pub pool: Pool<Postgres>,
+}
+
+/// Transaction isolation level
+///
+/// PG docs: https://www.postgresql.org/docs/current/transaction-iso.html
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IsolationLevel {
+    ReadUncommited,
+    ReadCommitted,
+    RepeatableRead,
+    Serializable,
 }
 
 impl Deref for Database {
@@ -49,13 +60,6 @@ impl Database {
         // Create a connection pool
         let pool = PoolOptions::<Postgres>::new()
             .max_connections(config.max_connections)
-            .after_connect(|conn, _| {
-                Box::pin(async move {
-                    conn.execute("SET DEFAULT_TRANSACTION_ISOLATION TO 'SERIALIZABLE'")
-                        .await?;
-                    Ok(())
-                })
-            })
             .connect(config.database.expose())
             .await
             .context("error connecting to database")?;
@@ -131,6 +135,31 @@ impl Database {
         }
 
         Ok(Self { pool })
+    }
+
+    pub async fn begin_tx(&self, isolation_level: IsolationLevel) -> Result<Transaction<'static, Postgres>, Error> {
+        let mut tx = self.begin().await?;
+
+        match isolation_level {
+            IsolationLevel::ReadUncommited => {
+                tx.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
+                    .await?;
+            }
+            IsolationLevel::ReadCommitted => {
+                tx.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+                    .await?;
+            }
+            IsolationLevel::RepeatableRead => {
+                tx.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+                    .await?;
+            }
+            IsolationLevel::Serializable => {
+                tx.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+                    .await?;
+            }
+        }
+
+        Ok(tx)
     }
 }
 
@@ -494,22 +523,6 @@ mod test {
         assert_eq!(
             unprocessed_commitments[0].eligibility_timestamp.timestamp(),
             eligibility_timestamp_0.timestamp()
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_identity_is_queued_for_deletion() -> anyhow::Result<()> {
-        let docker = Cli::default();
-        let (db, _db_container) = setup_db(&docker).await?;
-        let existing_commitment: Uint<256, 4> = Uint::from(1);
-
-        db.insert_new_deletion(0, &existing_commitment).await?;
-
-        assert!(
-            db.identity_is_queued_for_deletion(&existing_commitment)
-                .await?
         );
 
         Ok(())

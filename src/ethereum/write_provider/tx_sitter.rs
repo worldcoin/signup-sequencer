@@ -60,28 +60,32 @@ impl Inner for TxSitter {
     async fn send_transaction(
         &self,
         mut tx: TypedTransaction,
+        blob: Option<Vec<u8>>,
         _only_once: bool,
     ) -> Result<TransactionId, TxError> {
         if let Some(gas_limit) = self.gas_limit {
             tx.set_gas(gas_limit);
         }
 
+        let blobs = blob.map(|b| vec![b]);
+
         // TODO: Handle only_once
         let tx = self
             .client
             .send_tx(&SendTxRequest {
-                to:        *tx
+                to: *tx
                     .to_addr()
                     .context("Tx receiver must be an address")
                     .map_err(TxError::Send)?,
-                value:     tx.value().copied().unwrap_or(U256::zero()),
-                data:      tx.data().cloned(),
+                value: tx.value().copied().unwrap_or(U256::zero()),
+                data: tx.data().cloned(),
                 gas_limit: *tx
                     .gas()
                     .context("Missing tx gas limit")
                     .map_err(TxError::Send)?,
-                priority:  TransactionPriority::Regular,
-                tx_id:     None,
+                priority: TransactionPriority::Regular,
+                tx_id: None,
+                blobs,
             })
             .await
             .context("Error sending transaction")

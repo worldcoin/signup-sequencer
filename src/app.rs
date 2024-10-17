@@ -377,7 +377,8 @@ impl App {
             return Ok(InclusionProof {
                 root:    None,
                 proof:   None,
-                message: Some(error_message),
+                message: error_message
+                    .or_else(|| Some("identity exists but has not yet been processed".to_string())),
             }
             .into());
         }

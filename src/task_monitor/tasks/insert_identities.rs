@@ -31,8 +31,9 @@ pub async fn insert_identities(
         // get commits from database
         let unprocessed = app
             .database
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
+            .get_unprocessed_commitments(UnprocessedStatus::New)
             .await?;
+
         if unprocessed.is_empty() {
             continue;
         }

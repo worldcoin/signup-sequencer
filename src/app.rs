@@ -164,7 +164,11 @@ impl App {
             return Err(ServerError::DuplicateCommitment);
         }
 
+<<<<<<< HEAD
         tx.insert_new_identity(commitment, Utc::now()).await?;
+=======
+        tx.insert_unprocessed_identity(commitment, Utc::now()).await?;
+>>>>>>> 428daf1 (WIP)
 
         tx.commit().await?;
 

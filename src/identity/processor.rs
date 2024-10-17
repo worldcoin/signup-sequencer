@@ -554,7 +554,7 @@ impl OnChainIdentityProcessor {
         // For each deletion, if there is a corresponding recovery, insert a new
         // identity with the specified eligibility timestamp
         for recovery in deleted_recoveries {
-            tx.insert_new_identity(recovery.new_commitment, eligibility_timestamp)
+            tx.insert_unprocessed_identity(recovery.new_commitment, eligibility_timestamp)
                 .await?;
         }
 
@@ -656,7 +656,7 @@ impl OffChainIdentityProcessor {
         // For each deletion, if there is a corresponding recovery, insert a new
         // identity with the specified eligibility timestamp
         for recovery in deleted_recoveries {
-            tx.insert_new_identity(recovery.new_commitment, eligibility_timestamp)
+            tx.insert_unprocessed_identity(recovery.new_commitment, eligibility_timestamp)
                 .await?;
         }
 

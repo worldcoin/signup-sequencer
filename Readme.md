@@ -37,17 +37,14 @@ Sequencer has 6 API routes.
    indeed in the tree. The inclusion proof is then returned to the API caller.
 3. `/deleteIdentity` - Takes an identity commitment hash, ensures that it exists and hasn't been deleted yet. This
    identity is then scheduled for deletion.
-4. `/recoverIdentity` - Takes two identity commitment hashes. The first must exist and will be scheduled for deletion
-   and the other will be inserted as a replacement after the first identity has been deleted and a set amount of time (
-   depends on configuration parameters) has passed.
-5. `/verifySemaphoreProof` - This call takes root, signal hash, nullifier hash, external nullifier hash and a proof.
+4. `/verifySemaphoreProof` - This call takes root, signal hash, nullifier hash, external nullifier hash and a proof.
    The proving key is fetched based on the depth index, and verification key as well.
    The list of prime fields is created based on request input mentioned before, and then we proceed to verify the proof.
    Sequencer uses groth16 zk-SNARK implementation.
    The API call returns the proof as a response.
-6. `/addBatchSize` - Adds a prover with specific batch size to a list of provers.
-7. `/removeBatchSize` - Removes the prover based on batch size.
-8. `/listBatchSizes` - Lists all provers that are added to the Sequencer.
+5. `/addBatchSize` - Adds a prover with specific batch size to a list of provers.
+6. `/removeBatchSize` - Removes the prover based on batch size.
+7. `/listBatchSizes` - Lists all provers that are added to the Sequencer.
 
 ## Getting Started
 

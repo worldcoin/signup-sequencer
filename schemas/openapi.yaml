@@ -62,26 +62,6 @@ paths:
                 schema:
                   description: 'Identity could not be queued for deletion'
                   type: 'string'
-  /recoverIdentity:
-      post:
-        summary: 'Queues a recovery request, deleting the previous identity specified and inserting the new one.
-                  New insertions must wait a specified time delay before being included in the merkle tree'
-        requestBody:
-          required: true
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RecoveryRequest'
-        responses:
-          '202':
-            description: 'Identity has been successfully queued for recovery'
-          '400':
-            description: 'Invalid request'
-            content:
-              application/json:
-                schema:
-                  description: 'Identity could not be queued for recovery'
-                  type: 'string'
   /inclusionProof:
     post:
       summary: 'Get Merkle inclusion proof'
@@ -152,15 +132,6 @@ paths:
 
 components:
   schemas:
-    RecoveryRequest:
-      type: object
-      properties:
-        previousIdentityCommitment:
-          type: string
-          pattern: '^[A-F0-9]{64}$'
-        newIdentityCommitment:
-          type: string
-          pattern: '^[A-F0-9]{64}$'
     IdentityCommitment:
       type: object
       properties:

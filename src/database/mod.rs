@@ -281,24 +281,11 @@ mod test {
             .expect("cant convert to u256")
             .into();
 
-        let eligibility_timestamp = Utc::now();
-
-        let hash = db
-            .insert_new_identity(commit_hash, eligibility_timestamp)
-            .await?;
+        let hash = db.insert_unprocessed_identity(commit_hash).await?;
 
         assert_eq!(commit_hash, hash);
 
-        let commit = db
-            .get_unprocessed_error(&commit_hash)
-            .await
-            .expect("expected commitment status");
-        assert_eq!(commit, Some(None));
-
-        let identity_count = db
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
-            .await?
-            .len();
+        let identity_count = db.get_unprocessed_commitments().await?.len();
 
         assert_eq!(identity_count, 1);
 
@@ -318,8 +305,7 @@ mod test {
         let eligibility_timestamp = Utc::now();
 
         for identity in &identities {
-            db.insert_new_identity(*identity, eligibility_timestamp)
-                .await?;
+            db.insert_unprocessed_identity(*identity).await?;
         }
 
         assert_eq!(
@@ -390,7 +376,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_insert_prover_configuration() -> anyhow::Result<()> {
+    async fn insert_prover_configuration() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
 
@@ -433,7 +419,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_insert_provers() -> anyhow::Result<()> {
+    async fn insert_provers() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let mock_provers = mock_provers();
@@ -447,7 +433,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_remove_prover() -> anyhow::Result<()> {
+    async fn remove_prover() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let mock_provers = mock_provers();
@@ -465,27 +451,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_insert_new_recovery() -> anyhow::Result<()> {
-        let docker = Cli::default();
-        let (db, _db_container) = setup_db(&docker).await?;
-
-        let existing_commitment: Uint<256, 4> = Uint::from(1);
-        let new_commitment: Uint<256, 4> = Uint::from(2);
-
-        db.insert_new_recovery(&existing_commitment, &new_commitment)
-            .await?;
-
-        let recoveries = db.get_all_recoveries().await?;
-
-        assert_eq!(recoveries.len(), 1);
-        assert_eq!(recoveries[0].existing_commitment, existing_commitment);
-        assert_eq!(recoveries[0].new_commitment, new_commitment);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_insert_new_deletion() -> anyhow::Result<()> {
+    async fn insert_new_deletion() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let existing_commitment: Uint<256, 4> = Uint::from(1);
@@ -501,26 +467,22 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_eligible_unprocessed_commitments() -> anyhow::Result<()> {
+    async fn get_eligible_unprocessed_commitments() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let commitment_0: Uint<256, 4> = Uint::from(1);
         let eligibility_timestamp_0 = Utc::now();
 
-        db.insert_new_identity(commitment_0, eligibility_timestamp_0)
-            .await?;
+        db.insert_unprocessed_identity(commitment_0).await?;
 
         let commitment_1: Uint<256, 4> = Uint::from(2);
         let eligibility_timestamp_1 = Utc::now()
             .checked_add_days(Days::new(7))
             .expect("Could not create eligibility timestamp");
 
-        db.insert_new_identity(commitment_1, eligibility_timestamp_1)
-            .await?;
+        db.insert_unprocessed_identity(commitment_1).await?;
 
-        let unprocessed_commitments = db
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
-            .await?;
+        let unprocessed_commitments = db.get_unprocessed_commitments().await?;
 
         assert_eq!(unprocessed_commitments.len(), 1);
         assert_eq!(unprocessed_commitments[0], commitment_0);
@@ -529,27 +491,23 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_unprocessed_commitments() -> anyhow::Result<()> {
+    async fn get_unprocessed_commitments() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
 
         // Insert new identity with a valid eligibility timestamp
         let commitment_0: Uint<256, 4> = Uint::from(1);
         let eligibility_timestamp_0 = Utc::now();
-        db.insert_new_identity(commitment_0, eligibility_timestamp_0)
-            .await?;
+        db.insert_unprocessed_identity(commitment_0).await?;
 
         // Insert new identity with eligibility timestamp in the future
         let commitment_1: Uint<256, 4> = Uint::from(2);
         let eligibility_timestamp_1 = Utc::now()
             .checked_add_days(Days::new(7))
             .expect("Could not create eligibility timestamp");
-        db.insert_new_identity(commitment_1, eligibility_timestamp_1)
-            .await?;
+        db.insert_unprocessed_identity(commitment_1).await?;
 
-        let unprocessed_commitments = db
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
-            .await?;
+        let unprocessed_commitments = db.get_unprocessed_commitments().await?;
 
         // Assert unprocessed commitments against expected values
         assert_eq!(unprocessed_commitments.len(), 1);
@@ -559,49 +517,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_update_eligibility_timestamp() -> anyhow::Result<()> {
-        let docker = Cli::default();
-        let (db, _db_container) = setup_db(&docker).await?;
-        let dec = "1234500000000000000";
-        let commit_hash: Hash = U256::from_dec_str(dec)
-            .expect("cant convert to u256")
-            .into();
-
-        // Set eligibility to Utc::now() day and check db entries
-        let eligibility_timestamp = Utc::now();
-        db.insert_new_identity(commit_hash, eligibility_timestamp)
-            .await?;
-
-        let commitments = db
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
-            .await?;
-        assert_eq!(commitments.len(), 1);
-
-        let eligible_commitments = db
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
-            .await?;
-        assert_eq!(eligible_commitments.len(), 1);
-
-        // Set eligibility to Utc::now() + 7 days and check db entries
-        let eligibility_timestamp = Utc::now()
-            .checked_add_days(Days::new(7))
-            .expect("Could not create eligibility timestamp");
-
-        // Insert new identity with an eligibility timestamp in the future
-        let commit_hash: Hash = Hash::from(1);
-        db.insert_new_identity(commit_hash, eligibility_timestamp)
-            .await?;
-
-        let eligible_commitments = db
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
-            .await?;
-        assert_eq!(eligible_commitments.len(), 1);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_insert_deletion() -> anyhow::Result<()> {
+    async fn insert_deletion() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let identities = mock_identities(3);
@@ -613,47 +529,6 @@ mod test {
         let deletions = db.get_deletions().await?;
 
         assert_eq!(deletions.len(), 3);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_insert_recovery() -> anyhow::Result<()> {
-        let docker = Cli::default();
-        let (db, _db_container) = setup_db(&docker).await?;
-
-        let old_identities = mock_identities(3);
-        let new_identities = mock_identities(3);
-
-        for (old, new) in old_identities.into_iter().zip(new_identities) {
-            db.insert_new_recovery(&old, &new).await?;
-        }
-
-        let recoveries = db.get_all_recoveries().await?;
-        assert_eq!(recoveries.len(), 3);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_delete_recoveries() -> anyhow::Result<()> {
-        let docker = Cli::default();
-        let (db, _db_container) = setup_db(&docker).await?;
-
-        let old_identities = mock_identities(3);
-        let new_identities = mock_identities(3);
-
-        for (old, new) in old_identities.clone().into_iter().zip(new_identities) {
-            db.insert_new_recovery(&old, &new).await?;
-        }
-
-        let deleted_recoveries = db
-            .delete_recoveries(old_identities[0..2].iter().cloned())
-            .await?;
-        assert_eq!(deleted_recoveries.len(), 2);
-
-        let remaining = db.get_all_recoveries().await?;
-        assert_eq!(remaining.len(), 1);
 
         Ok(())
     }
@@ -1063,7 +938,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_root_invalidation() -> anyhow::Result<()> {
+    async fn root_invalidation() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
 
@@ -1155,7 +1030,7 @@ mod test {
         // When there's only unprocessed identity
         let eligibility_timestamp = Utc::now();
 
-        db.insert_new_identity(identities[0], eligibility_timestamp)
+        db.insert_unprocessed_identity(identities[0], eligibility_timestamp)
             .await
             .context("Inserting new identity")?;
         assert!(db.identity_exists(identities[0]).await?);
@@ -1171,7 +1046,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_remove_deletions() -> anyhow::Result<()> {
+    async fn remove_deletions() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
 
@@ -1203,7 +1078,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_latest_insertion() -> anyhow::Result<()> {
+    async fn latest_insertion() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
 
@@ -1231,7 +1106,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_latest_deletion() -> anyhow::Result<()> {
+    async fn latest_deletion() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
 
@@ -1280,7 +1155,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_insert_batch() -> anyhow::Result<()> {
+    async fn insert_batch() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let identities: Vec<_> = mock_identities(10)
@@ -1308,7 +1183,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_next_batch() -> anyhow::Result<()> {
+    async fn get_next_batch() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let identities: Vec<_> = mock_identities(10)
@@ -1352,7 +1227,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_next_batch_without_transaction() -> anyhow::Result<()> {
+    async fn get_next_batch_without_transaction() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let identities: Vec<_> = mock_identities(10)
@@ -1400,7 +1275,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_batch_head() -> anyhow::Result<()> {
+    async fn get_batch_head() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let roots = mock_roots(1);
@@ -1431,7 +1306,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_insert_transaction() -> anyhow::Result<()> {
+    async fn insert_transaction() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let roots = mock_roots(1);

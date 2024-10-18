@@ -24,9 +24,8 @@ pub mod data;
 
 use self::data::{
     AddBatchSizeRequest, DeletionRequest, InclusionProofRequest, InclusionProofResponse,
-    InsertCommitmentRequest, ListBatchSizesResponse, RecoveryRequest, RemoveBatchSizeRequest,
-    ToResponseCode, VerifySemaphoreProofQuery, VerifySemaphoreProofRequest,
-    VerifySemaphoreProofResponse,
+    InsertCommitmentRequest, ListBatchSizesResponse, RemoveBatchSizeRequest, ToResponseCode,
+    VerifySemaphoreProofQuery, VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
 };
 
 async fn inclusion_proof(
@@ -84,20 +83,7 @@ async fn delete_identity(
     State(app): State<Arc<App>>,
     Json(req): Json<DeletionRequest>,
 ) -> Result<(), Error> {
-    app.delete_identity_tx(&req.identity_commitment).await?;
-    Ok(())
-}
-
-async fn recover_identity(
-    State(app): State<Arc<App>>,
-    Json(req): Json<RecoveryRequest>,
-) -> Result<(), Error> {
-    app.recover_identity(
-        &req.previous_identity_commitment,
-        &req.new_identity_commitment,
-    )
-    .await?;
-
+    app.delete_identity(&req.identity_commitment).await?;
     Ok(())
 }
 
@@ -174,7 +160,6 @@ pub async fn bind_from_listener(
         .route("/inclusionProof", post(inclusion_proof))
         .route("/insertIdentity", post(insert_identity))
         .route("/deleteIdentity", post(delete_identity))
-        .route("/recoverIdentity", post(recover_identity))
         // Operate on batch sizes
         .route("/addBatchSize", post(add_batch_size))
         .route("/removeBatchSize", post(remove_batch_size))

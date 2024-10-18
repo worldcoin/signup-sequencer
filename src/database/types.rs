@@ -5,17 +5,8 @@ use sqlx::error::BoxDynError;
 use sqlx::prelude::FromRow;
 use sqlx::{Database, Decode, Encode, Postgres, Type};
 
-use crate::identity_tree::{Hash, UnprocessedStatus};
+use crate::identity_tree::Hash;
 use crate::prover::identity::Identity;
-
-pub struct UnprocessedCommitment {
-    pub commitment: Hash,
-    pub status: UnprocessedStatus,
-    pub created_at: DateTime<Utc>,
-    pub processed_at: Option<DateTime<Utc>>,
-    pub error_message: Option<String>,
-    pub eligibility_timestamp: DateTime<Utc>,
-}
 
 #[derive(FromRow)]
 pub struct RecoveryEntry {

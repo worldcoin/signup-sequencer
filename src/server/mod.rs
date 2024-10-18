@@ -24,9 +24,8 @@ pub mod data;
 
 use self::data::{
     AddBatchSizeRequest, DeletionRequest, InclusionProofRequest, InclusionProofResponse,
-    InsertCommitmentRequest, ListBatchSizesResponse, RemoveBatchSizeRequest,
-    ToResponseCode, VerifySemaphoreProofQuery, VerifySemaphoreProofRequest,
-    VerifySemaphoreProofResponse,
+    InsertCommitmentRequest, ListBatchSizesResponse, RemoveBatchSizeRequest, ToResponseCode,
+    VerifySemaphoreProofQuery, VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
 };
 
 async fn inclusion_proof(

@@ -328,7 +328,11 @@ mod test {
         );
 
         for (idx, identity) in identities.iter().copied().enumerate() {
-            db.insert_pending_identity(idx, &identity, &roots[idx], &roots[idx + 1])
+            println!("idx = {idx}");
+            println!("roots[idx] = {}", roots[idx]);
+            println!("roots[idx + 1] = {}", roots[idx + 1]);
+
+            db.insert_pending_identity(idx, &identity, &roots[idx + 1], &roots[idx])
                 .await?;
         }
 

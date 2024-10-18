@@ -24,7 +24,6 @@ use crate::identity_tree::{Canonical, Hash, TreeVersion, TreeWithNextVersion};
 use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;
 use crate::prover::Prover;
-use crate::retry_tx;
 use crate::utils::index_packing::pack_indices;
 
 pub type TransactionId = String;
@@ -516,48 +515,52 @@ impl OnChainIdentityProcessor {
         log: &Log,
         max_epoch_duration: Duration,
     ) -> anyhow::Result<()> {
-        retry_tx!(self.database.pool, tx, {
-            let tx_hash = log.transaction_hash.context("Missing tx hash")?;
-            let commitments = self
-                .identity_manager
-                .fetch_deletion_indices_from_tx(tx_hash)
-                .await
-                .context("Could not fetch deletion indices from tx")?;
+        let tx_hash = log.transaction_hash.context("Missing tx hash")?;
+        let commitments = self
+            .identity_manager
+            .fetch_deletion_indices_from_tx(tx_hash)
+            .await
+            .context("Could not fetch deletion indices from tx")?;
 
-            let commitments = self
-                .database
-                .get_non_zero_commitments_by_leaf_indexes(commitments.iter().copied())
+        let commitments = self
+            .database
+            .get_non_zero_commitments_by_leaf_indexes(commitments.iter().copied())
+            .await?;
+        let commitments: Vec<U256> = commitments.into_iter().map(Into::into).collect();
+
+        // Fetch the root history expiry time on chain
+        let root_history_expiry = self.identity_manager.root_history_expiry().await?;
+
+        // Use the root history expiry to calculate the eligibility timestamp for the
+        // new insertion
+        let root_history_expiry_duration =
+            chrono::Duration::seconds(root_history_expiry.as_u64() as i64);
+        let max_epoch_duration = chrono::Duration::from_std(max_epoch_duration)?;
+
+        let delay = root_history_expiry_duration + max_epoch_duration;
+
+        let eligibility_timestamp = Utc::now() + delay;
+
+        let mut tx = self
+            .database
+            .begin_tx(IsolationLevel::ReadCommitted)
+            .await?;
+
+        // Check if any deleted commitments correspond with entries in the
+        // recoveries table and insert the new commitment into the unprocessed
+        // identities table with the proper eligibility timestamp
+        let deleted_recoveries = tx.delete_recoveries(commitments).await?;
+
+        // For each deletion, if there is a corresponding recovery, insert a new
+        // identity with the specified eligibility timestamp
+        for recovery in deleted_recoveries {
+            tx.insert_new_identity(recovery.new_commitment, eligibility_timestamp)
                 .await?;
-            let commitments: Vec<U256> = commitments.into_iter().map(Into::into).collect();
+        }
 
-            // Fetch the root history expiry time on chain
-            let root_history_expiry = self.identity_manager.root_history_expiry().await?;
+        tx.commit().await?;
 
-            // Use the root history expiry to calculate the eligibility timestamp for the
-            // new insertion
-            let root_history_expiry_duration =
-                chrono::Duration::seconds(root_history_expiry.as_u64() as i64);
-            let max_epoch_duration = chrono::Duration::from_std(max_epoch_duration)?;
-
-            let delay = root_history_expiry_duration + max_epoch_duration;
-
-            let eligibility_timestamp = Utc::now() + delay;
-
-            // Check if any deleted commitments correspond with entries in the
-            // recoveries table and insert the new commitment into the unprocessed
-            // identities table with the proper eligibility timestamp
-            let deleted_recoveries = tx.delete_recoveries(commitments).await?;
-
-            // For each deletion, if there is a corresponding recovery, insert a new
-            // identity with the specified eligibility timestamp
-            for recovery in deleted_recoveries {
-                tx.insert_new_identity(recovery.new_commitment, eligibility_timestamp)
-                    .await?;
-            }
-
-            Result::<_, anyhow::Error>::Ok(())
-        })
-        .await
+        Ok(())
     }
 }
 
@@ -637,25 +640,28 @@ impl OffChainIdentityProcessor {
     }
 
     async fn update_eligible_recoveries(&self, batch: &BatchEntry) -> anyhow::Result<()> {
-        retry_tx!(self.database.pool, tx, {
-            let commitments: Vec<U256> =
-                batch.data.identities.iter().map(|v| v.commitment).collect();
-            let eligibility_timestamp = Utc::now();
+        let commitments: Vec<U256> = batch.data.identities.iter().map(|v| v.commitment).collect();
+        let eligibility_timestamp = Utc::now();
 
-            // Check if any deleted commitments correspond with entries in the
-            // recoveries table and insert the new commitment into the unprocessed
-            // identities table with the proper eligibility timestamp
-            let deleted_recoveries = tx.delete_recoveries(commitments).await?;
+        let mut tx = self
+            .database
+            .begin_tx(IsolationLevel::ReadCommitted)
+            .await?;
 
-            // For each deletion, if there is a corresponding recovery, insert a new
-            // identity with the specified eligibility timestamp
-            for recovery in deleted_recoveries {
-                tx.insert_new_identity(recovery.new_commitment, eligibility_timestamp)
-                    .await?;
-            }
+        // Check if any deleted commitments correspond with entries in the
+        // recoveries table and insert the new commitment into the unprocessed
+        // identities table with the proper eligibility timestamp
+        let deleted_recoveries = tx.delete_recoveries(commitments).await?;
 
-            Result::<_, anyhow::Error>::Ok(())
-        })
-        .await
+        // For each deletion, if there is a corresponding recovery, insert a new
+        // identity with the specified eligibility timestamp
+        for recovery in deleted_recoveries {
+            tx.insert_new_identity(recovery.new_commitment, eligibility_timestamp)
+                .await?;
+        }
+
+        tx.commit().await?;
+
+        Ok(())
     }
 }

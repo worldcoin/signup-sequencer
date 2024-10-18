@@ -520,64 +520,17 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[instrument(skip(self), level = "debug")]
-    async fn get_latest_deletion(self) -> Result<LatestDeletionEntry, Error> {
+    async fn get_last_batch_time(self, batch_type: BatchType) -> Result<Option<DateTime<Utc>>, Error> {
         let mut conn = self.acquire().await?;
 
-        let row =
-            sqlx::query("SELECT deletion_timestamp FROM latest_deletion_root WHERE Lock = 'X';")
-                .fetch_optional(&mut *conn)
-                .await?;
-
-        if let Some(row) = row {
-            Ok(LatestDeletionEntry {
-                timestamp: row.get(0),
-            })
-        } else {
-            Ok(LatestDeletionEntry {
-                timestamp: Utc::now(),
-            })
-        }
-    }
-
-    #[instrument(skip(self), level = "debug")]
-    async fn update_latest_insertion(
-        self,
-        insertion_timestamp: DateTime<Utc>,
-    ) -> Result<(), Error> {
-        let mut conn = self.acquire().await?;
-
-        sqlx::query(
-            r#"
-            INSERT INTO latest_insertion_timestamp (Lock, insertion_timestamp)
-            VALUES ('X', $1)
-            ON CONFLICT (Lock)
-            DO UPDATE SET insertion_timestamp = EXCLUDED.insertion_timestamp;
-            "#,
+        let batch_created_at: Option<(DateTime<Utc>,)> = sqlx::query_as(
+            "SELECT created_at FROM batches WHERE batch_type = $1 ORDER BY id DESC LIMIT 1",
         )
-        .bind(insertion_timestamp)
-        .execute(&mut *conn)
+        .bind(batch_type)
+        .fetch_optional(&mut *conn)
         .await?;
 
-        Ok(())
-    }
-
-    #[instrument(skip(self), level = "debug")]
-    async fn update_latest_deletion(self, deletion_timestamp: DateTime<Utc>) -> Result<(), Error> {
-        let mut conn = self.acquire().await?;
-
-        sqlx::query(
-            r#"
-            INSERT INTO latest_deletion_root (Lock, deletion_timestamp)
-            VALUES ('X', $1)
-            ON CONFLICT (Lock)
-            DO UPDATE SET deletion_timestamp = EXCLUDED.deletion_timestamp;
-            "#,
-        )
-        .bind(deletion_timestamp)
-        .execute(&mut *conn)
-        .await?;
-
-        Ok(())
+        Ok(batch_created_at.map(|(created_at,)| created_at))
     }
 
     #[cfg(test)]

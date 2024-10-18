@@ -10,11 +10,7 @@ use crate::database::methods::DbMethods as _;
 use crate::database::IsolationLevel;
 use crate::identity_tree::{TreeVersionOps, UnprocessedStatus};
 
-// Insertion here differs from delete_identities task. This is because two
-// different flows are created for both tasks. We need to insert identities as
-// fast as possible to the tree to be able to return inclusion proof as our
-// customers depend on it. Flow here is to rewrite from unprocessed_identities
-// into identities every 5 seconds.
+// This task moves identities from the unprocessed table to t
 pub async fn insert_identities(
     app: Arc<App>,
     pending_insertions_mutex: Arc<Mutex<()>>,

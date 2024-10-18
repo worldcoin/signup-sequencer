@@ -10,15 +10,14 @@ use tracing::info;
 
 use crate::app::App;
 use crate::database::methods::DbMethods;
-use crate::database::types::DeletionEntry;
+use crate::database::types::{BatchType, DeletionEntry};
 use crate::identity_tree::{Hash, TreeVersionOps};
 
-// Deletion here differs from insert_identites task. This is because two
-// different flows are created for both tasks. Due to how our prover works
-// (can handle only a batch of same operations types - insertion or deletion)
-// we want to group together insertions and deletions. We are doing it by
-// grouping deletions (as the not need to be put into tree immediately as
-// insertions) and putting them into the tree
+// The reason this task exists at all is batching. We currently don't support mixed batches. A batch can contain either deletions or insertions.
+// At the same time, we want to maximize batch sizes - since that allows us to save on gas.
+// If we naively inserted unprocessed deletions immediately after receiving them we would end up with many small deletion
+// and many small insertino batches interspersed.
+// This task delays the deletion of identities until a certain number of deletions have been accumulated or a certain time has passed.
 pub async fn delete_identities(
     app: Arc<App>,
     pending_insertions_mutex: Arc<Mutex<()>>,
@@ -40,12 +39,22 @@ pub async fn delete_identities(
             continue;
         }
 
-        let last_deletion_timestamp = app.database.get_latest_deletion().await?.timestamp;
+        let last_deletion_timestamp = app
+            .database
+            .get_last_batch_time(BatchType::Deletion)
+            .await?;
+
+        let too_early_for_a_new_deletion_batch = last_deletion_timestamp
+            .map(|timestamp| {
+                let time_since_last_deletion = Utc::now() - timestamp;
+                time_since_last_deletion < batch_deletion_timeout
+            })
+            .unwrap_or(false);
 
         // If the minimum deletions batch size is not reached and the deletion time
         // interval has not elapsed then we can skip
         if deletions.len() < app.config.app.min_batch_deletion_size
-            && Utc::now() - last_deletion_timestamp <= batch_deletion_timeout
+            && too_early_for_a_new_deletion_batch
         {
             continue;
         }

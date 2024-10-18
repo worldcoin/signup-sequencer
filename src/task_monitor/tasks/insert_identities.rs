@@ -1,14 +1,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::{pin, sync::{Mutex, Notify}};
+use tokio::sync::{Mutex, Notify};
 use tokio::time;
 use tracing::info;
 
 use crate::app::App;
 use crate::database::methods::DbMethods as _;
 use crate::database::IsolationLevel;
-use crate::identity_tree::{BasicTreeOps, UnprocessedStatus};
+use crate::identity_tree::{TreeVersionOps, UnprocessedStatus};
 
 // Insertion here differs from delete_identities task. This is because two
 // different flows are created for both tasks. We need to insert identities as
@@ -42,13 +42,9 @@ pub async fn insert_identities(
 
         let mut tx = app.database.begin_tx(IsolationLevel::ReadCommitted).await?;
 
-        // Locks the tree for the duration of the operation
-        let mut tree = latest_tree.get_data();
-        pin!(tree);
+        let next_leaf = latest_tree.next_leaf();
+        let mut pre_root = latest_tree.get_root();
 
-        let mut pre_root = tree.root();
-
-        let next_leaf = tree.next_leaf();
         let next_db_index = tx.get_next_leaf_index().await?;
         assert_eq!(
             next_leaf, next_db_index,
@@ -57,18 +53,21 @@ pub async fn insert_identities(
 
         for (idx, identity) in unprocessed.iter().enumerate() {
             let leaf_idx = next_leaf + idx;
-            tree.update(leaf_idx, identity.commitment);
-            let root = tree.root();
+            latest_tree.update(leaf_idx, *identity);
+            let root = latest_tree.get_root();
 
-            tx.insert_pending_identity(leaf_idx, &identity.commitment, &root, &pre_root)
-                .await?;
+            tx.insert_pending_identity(leaf_idx, identity, &root, &pre_root)
+                .await
+                .expect("Failed to insert identity - tree will be out of sync");
 
             pre_root = root;
         }
 
         tx.trim_unprocessed().await?;
 
-        tx.commit().await?;
+        tx.commit()
+            .await
+            .expect("Committing insert failed - tree will be out of sync");
 
         // Notify the identity processing task, that there are new identities
         wake_up_notify.notify_one();

@@ -398,7 +398,9 @@ impl<V: Version<TreeVersion = lazy_merkle_tree::Derived>> TreeVersion<V> {
 /// The public-facing API for reading from a tree version. It is implemented for
 /// all versions. This being a trait allows us to hide some of the
 /// implementation details.
-pub trait TreeVersionReadOps {
+pub trait TreeVersionOps {
+    fn update(&self, leaf_index: usize, element: Hash);
+
     /// Returns the current tree root.
     fn get_root(&self) -> Hash;
     /// Returns the next free leaf.
@@ -411,10 +413,14 @@ pub trait TreeVersionReadOps {
     fn get_leaf(&self, leaf: usize) -> Hash;
 }
 
-impl<V: Version> TreeVersionReadOps for TreeVersion<V>
+impl<V: Version> TreeVersionOps for TreeVersion<V>
 where
     TreeVersionData<V::TreeVersion>: BasicTreeOps,
 {
+    fn update(&self, leaf_index: usize, element: Hash) {
+        self.get_data().update(leaf_index, element);
+    }
+
     fn get_root(&self) -> Hash {
         self.get_data().get_root()
     }
@@ -444,7 +450,7 @@ where
 }
 
 impl<V: Version> TreeVersion<V> {
-    pub fn get_data(&self) -> MutexGuard<TreeVersionData<V::TreeVersion>> {
+    fn get_data(&self) -> MutexGuard<TreeVersionData<V::TreeVersion>> {
         self.0.lock().expect("no lock poisoning")
     }
 }

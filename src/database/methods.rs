@@ -689,12 +689,12 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     async fn get_eligible_unprocessed_commitments(
         self,
         status: UnprocessedStatus,
-    ) -> Result<Vec<types::UnprocessedCommitment>, Error> {
+    ) -> Result<Vec<Hash>, Error> {
         let mut conn = self.acquire().await?;
 
-        let result = sqlx::query(
+        let result: Vec<(Hash,)> = sqlx::query_as(
             r#"
-            SELECT * FROM unprocessed_identities
+            SELECT commitment FROM unprocessed_identities
             WHERE status = $1 AND CURRENT_TIMESTAMP > eligibility
             LIMIT $2
             "#,
@@ -704,17 +704,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .fetch_all(&mut *conn)
         .await?;
 
-        Ok(result
-            .into_iter()
-            .map(|row| types::UnprocessedCommitment {
-                commitment: row.get::<Hash, _>(0),
-                status,
-                created_at: row.get::<_, _>(2),
-                processed_at: row.get::<_, _>(3),
-                error_message: row.get::<_, _>(4),
-                eligibility_timestamp: row.get::<_, _>(5),
-            })
-            .collect::<Vec<_>>())
+        Ok(result.into_iter().map(|(commitment,)| commitment).collect())
     }
 
     /// Returns the error message from the unprocessed identities table

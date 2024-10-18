@@ -16,7 +16,7 @@ use crate::identity::processor::{
 };
 use crate::identity::validator::IdentityValidator;
 use crate::identity_tree::initializer::TreeInitializer;
-use crate::identity_tree::{Hash, InclusionProof, RootItem, TreeState, TreeVersionReadOps};
+use crate::identity_tree::{Hash, InclusionProof, RootItem, TreeState, TreeVersionOps};
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::repository::ProverRepository;
 use crate::prover::{ProverConfig, ProverType};

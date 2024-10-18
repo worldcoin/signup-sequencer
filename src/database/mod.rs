@@ -519,12 +519,7 @@ mod test {
             .await?;
 
         assert_eq!(unprocessed_commitments.len(), 1);
-        assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
-        assert!(
-            unprocessed_commitments[0].eligibility_timestamp.timestamp()
-                - eligibility_timestamp_0.timestamp()
-                <= 1
-        );
+        assert_eq!(unprocessed_commitments[0], commitment_0);
 
         Ok(())
     }
@@ -554,11 +549,7 @@ mod test {
 
         // Assert unprocessed commitments against expected values
         assert_eq!(unprocessed_commitments.len(), 1);
-        assert_eq!(unprocessed_commitments[0].commitment, commitment_0);
-        assert_eq!(
-            unprocessed_commitments[0].eligibility_timestamp.timestamp(),
-            eligibility_timestamp_0.timestamp()
-        );
+        assert_eq!(unprocessed_commitments[0], commitment_0);
 
         Ok(())
     }

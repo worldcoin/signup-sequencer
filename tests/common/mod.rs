@@ -40,7 +40,7 @@ pub mod prelude {
         AppConfig, Config, DatabaseConfig, OzDefenderConfig, ProvidersConfig, RelayerConfig,
         ServerConfig, TreeConfig, TxSitterConfig,
     };
-    pub use signup_sequencer::identity_tree::{Hash, TreeVersionReadOps};
+    pub use signup_sequencer::identity_tree::{Hash, TreeVersionOps};
     pub use signup_sequencer::prover::ProverType;
     pub use signup_sequencer::server;
     pub use signup_sequencer::shutdown::Shutdown;
@@ -76,7 +76,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use reqwest::{Body, Client, Method, Request, RequestBuilder, StatusCode};
 use semaphore::poseidon_tree::Proof;
-use signup_sequencer::identity_tree::{InclusionProof, TreeState, TreeVersionReadOps};
+use signup_sequencer::identity_tree::{InclusionProof, TreeState, TreeVersionOps};
 use signup_sequencer::server::data::{
     AddBatchSizeRequest, DeletionRequest, InclusionProofRequest, InclusionProofResponse,
     InsertCommitmentRequest, RecoveryRequest, RemoveBatchSizeRequest, VerifySemaphoreProofRequest,

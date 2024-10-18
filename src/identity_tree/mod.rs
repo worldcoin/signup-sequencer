@@ -105,9 +105,13 @@ struct TreeVersionData<V: AllowedTreeVersionMarker> {
 }
 
 /// Basic operations that should be available for all tree versions.
-trait BasicTreeOps {
+pub trait BasicTreeOps {
     /// Updates the tree with the given element at the given leaf index.
     fn update(&mut self, leaf_index: usize, element: Hash);
+
+    fn next_leaf(&self) -> usize;
+    fn proof(&self, leaf_index: usize) -> (Hash, Proof);
+    fn root(&self) -> Hash;
 
     fn apply_diffs(&mut self, diffs: Vec<AppliedTreeUpdate>);
 
@@ -217,6 +221,19 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
         self.metadata.count_since_last_flatten += 1;
     }
 
+    fn next_leaf(&self) -> usize {
+        self.next_leaf
+    }
+
+    fn proof(&self, leaf_index: usize) -> (Hash, Proof) {
+        let proof = self.tree.proof(leaf_index);
+        (self.tree.root(), proof)
+    }
+
+    fn root(&self) -> Hash {
+        self.tree.root()
+    }
+
     fn apply_diffs(&mut self, diffs: Vec<AppliedTreeUpdate>) {
         for applied_update in &diffs {
             let update = &applied_update.update;
@@ -275,6 +292,19 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Derived> {
             },
             result: updated_tree,
         });
+    }
+
+    fn next_leaf(&self) -> usize {
+        self.next_leaf
+    }
+
+    fn proof(&self, leaf_index: usize) -> (Hash, Proof) {
+        let proof = self.tree.proof(leaf_index);
+        (self.tree.root(), proof)
+    }
+
+    fn root(&self) -> Hash {
+        self.tree.root()
     }
 
     fn apply_diffs(&mut self, mut diffs: Vec<AppliedTreeUpdate>) {
@@ -414,7 +444,7 @@ where
 }
 
 impl<V: Version> TreeVersion<V> {
-    fn get_data(&self) -> MutexGuard<TreeVersionData<V::TreeVersion>> {
+    pub fn get_data(&self) -> MutexGuard<TreeVersionData<V::TreeVersion>> {
         self.0.lock().expect("no lock poisoning")
     }
 }
@@ -440,6 +470,8 @@ impl TreeVersion<Latest> {
 
         output
     }
+
+    // pub fn append(&self, identity: Hash)
 
     /// Deletes many identities from the tree, returns a list with the root
     /// and proof of inclusion

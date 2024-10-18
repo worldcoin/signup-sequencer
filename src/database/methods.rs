@@ -761,6 +761,23 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[instrument(skip(self), level = "debug")]
+    async fn trim_unprocessed(self) -> Result<(), Error> {
+        let mut conn = self.acquire().await?;
+
+        sqlx::query(
+            r#"
+            DELETE FROM unprocessed_identities u
+            USING identities i
+            WHERE u.commitment = i.commitment
+            "#,
+        )
+        .execute(&mut *conn)
+        .await?;
+
+        Ok(())
+    }
+
+    #[instrument(skip(self), level = "debug")]
     async fn identity_exists(self, commitment: Hash) -> Result<bool, Error> {
         let mut conn = self.acquire().await?;
 

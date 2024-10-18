@@ -137,7 +137,10 @@ impl Database {
         Ok(Self { pool })
     }
 
-    pub async fn begin_tx(&self, isolation_level: IsolationLevel) -> Result<Transaction<'static, Postgres>, Error> {
+    pub async fn begin_tx(
+        &self,
+        isolation_level: IsolationLevel,
+    ) -> Result<Transaction<'static, Postgres>, Error> {
         let mut tx = self.begin().await?;
 
         match isolation_level {
@@ -300,6 +303,38 @@ mod test {
         assert_eq!(identity_count, 1);
 
         assert!(db.remove_unprocessed_identity(&commit_hash).await.is_ok());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn trim_unprocessed_identities() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+
+        let identities = mock_identities(10);
+        let roots = mock_roots(11);
+
+        let eligibility_timestamp = Utc::now();
+
+        for identity in &identities {
+            db.insert_new_identity(*identity, eligibility_timestamp)
+                .await?;
+        }
+
+        assert_eq!(
+            db.count_unprocessed_identities().await? as usize,
+            identities.len()
+        );
+
+        for (idx, identity) in identities.iter().copied().enumerate() {
+            db.insert_pending_identity(idx, &identity, &roots[idx], &roots[idx + 1])
+                .await?;
+        }
+
+        db.trim_unprocessed().await?;
+
+        assert_eq!(db.count_unprocessed_identities().await?, 0);
 
         Ok(())
     }

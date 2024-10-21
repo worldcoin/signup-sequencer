@@ -27,7 +27,7 @@ async-stream = "0.3.3"
 async-trait = "0.1.64"
 axum = "0.7.7"
 axum-server = "0.7.1"
-bytes = "1.4.0"
+bytes = "1.8.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "901ea26e478c81e10d5d4355ac628ab7b15afca7" }

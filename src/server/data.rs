@@ -80,16 +80,6 @@ pub struct DeletionRequest {
     pub identity_commitment: Hash,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct RecoveryRequest {
-    /// The leaf index of the identity commitment to delete.
-    pub previous_identity_commitment: Hash,
-    /// The new identity commitment to insert.
-    pub new_identity_commitment: Hash,
-}
-
 impl From<InclusionProof> for InclusionProofResponse {
     fn from(value: InclusionProof) -> Self {
         Self(value)

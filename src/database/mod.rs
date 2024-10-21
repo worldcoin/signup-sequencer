@@ -194,7 +194,7 @@ mod test {
     use crate::config::DatabaseConfig;
     use crate::database::methods::DbMethods;
     use crate::database::types::BatchType;
-    use crate::identity_tree::{Hash, ProcessedStatus, UnprocessedStatus};
+    use crate::identity_tree::{Hash, ProcessedStatus};
     use crate::prover::identity::Identity;
     use crate::prover::{ProverConfig, ProverType};
     use crate::utils::secret::SecretUrl;
@@ -301,8 +301,6 @@ mod test {
 
         let identities = mock_identities(10);
         let roots = mock_roots(11);
-
-        let eligibility_timestamp = Utc::now();
 
         for identity in &identities {
             db.insert_unprocessed_identity(*identity).await?;
@@ -467,51 +465,24 @@ mod test {
     }
 
     #[tokio::test]
-    async fn get_eligible_unprocessed_commitments() -> anyhow::Result<()> {
-        let docker = Cli::default();
-        let (db, _db_container) = setup_db(&docker).await?;
-        let commitment_0: Uint<256, 4> = Uint::from(1);
-        let eligibility_timestamp_0 = Utc::now();
-
-        db.insert_unprocessed_identity(commitment_0).await?;
-
-        let commitment_1: Uint<256, 4> = Uint::from(2);
-        let eligibility_timestamp_1 = Utc::now()
-            .checked_add_days(Days::new(7))
-            .expect("Could not create eligibility timestamp");
-
-        db.insert_unprocessed_identity(commitment_1).await?;
-
-        let unprocessed_commitments = db.get_unprocessed_commitments().await?;
-
-        assert_eq!(unprocessed_commitments.len(), 1);
-        assert_eq!(unprocessed_commitments[0], commitment_0);
-
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn get_unprocessed_commitments() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
 
-        // Insert new identity with a valid eligibility timestamp
+        // Insert new identity
         let commitment_0: Uint<256, 4> = Uint::from(1);
-        let eligibility_timestamp_0 = Utc::now();
         db.insert_unprocessed_identity(commitment_0).await?;
 
-        // Insert new identity with eligibility timestamp in the future
+        // Insert new identity
         let commitment_1: Uint<256, 4> = Uint::from(2);
-        let eligibility_timestamp_1 = Utc::now()
-            .checked_add_days(Days::new(7))
-            .expect("Could not create eligibility timestamp");
         db.insert_unprocessed_identity(commitment_1).await?;
 
         let unprocessed_commitments = db.get_unprocessed_commitments().await?;
 
         // Assert unprocessed commitments against expected values
-        assert_eq!(unprocessed_commitments.len(), 1);
+        assert_eq!(unprocessed_commitments.len(), 2);
         assert_eq!(unprocessed_commitments[0], commitment_0);
+        assert_eq!(unprocessed_commitments[1], commitment_1);
 
         Ok(())
     }
@@ -1027,10 +998,7 @@ mod test {
         // When there's no identity
         assert!(!db.identity_exists(identities[0]).await?);
 
-        // When there's only unprocessed identity
-        let eligibility_timestamp = Utc::now();
-
-        db.insert_unprocessed_identity(identities[0], eligibility_timestamp)
+        db.insert_unprocessed_identity(identities[0])
             .await
             .context("Inserting new identity")?;
         assert!(db.identity_exists(identities[0]).await?);

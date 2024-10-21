@@ -69,18 +69,6 @@ pub struct AppConfig {
     #[serde(default = "default::min_batch_deletion_size")]
     pub min_batch_deletion_size: usize,
 
-    /// The parameter to control the delay between mining a deletion batch and
-    /// inserting the recovery identities
-    ///
-    /// The sequencer will insert the recovery identities after
-    /// max_epoch_duration_seconds + root_history_expiry) seconds have passed
-    ///
-    /// By default the value is set to 0 so the sequencer will only use
-    /// root_history_expiry
-    #[serde(with = "humantime_serde")]
-    #[serde(default = "default::max_epoch_duration")]
-    pub max_epoch_duration: Duration,
-
     /// The maximum number of windows to scan for finalization logs
     #[serde(default = "default::scanning_window_size")]
     pub scanning_window_size: u64,

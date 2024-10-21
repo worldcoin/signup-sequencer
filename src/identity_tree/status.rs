@@ -27,22 +27,12 @@ pub enum ProcessedStatus {
     Mined,
 }
 
-/// Status of identity commitments which have not yet been included in the tree
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "camelCase")]
-pub enum UnprocessedStatus {
-    /// Root is unprocessed - i.e. not included in sequencer's
-    /// in-memory tree.
-    New,
-}
-
 /// A status type visible on the API level - contains both the processed and
 /// unprocessed statuses
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 #[serde(untagged)]
-pub enum Status {
-    Unprocessed(UnprocessedStatus),
+pub enum Status { // TODO: Remove
     Processed(ProcessedStatus),
 }
 
@@ -85,38 +75,11 @@ impl FromStr for Status {
     type Err = UnknownStatus;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Ok(s) = UnprocessedStatus::from_str(s) {
-            Ok(Self::Unprocessed(s))
-        } else if let Ok(s) = ProcessedStatus::from_str(s) {
+        if let Ok(s) = ProcessedStatus::from_str(s) {
             Ok(Self::Processed(s))
         } else {
             Err(UnknownStatus)
         }
-    }
-}
-
-impl FromStr for UnprocessedStatus {
-    type Err = UnknownStatus;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "new" => Ok(Self::New),
-            _ => Err(UnknownStatus),
-        }
-    }
-}
-
-impl From<UnprocessedStatus> for &str {
-    fn from(scope: UnprocessedStatus) -> Self {
-        match scope {
-            UnprocessedStatus::New => "new",
-        }
-    }
-}
-
-impl From<UnprocessedStatus> for Status {
-    fn from(status: UnprocessedStatus) -> Self {
-        Self::Unprocessed(status)
     }
 }
 
@@ -134,7 +97,6 @@ mod tests {
 
     #[test_case(Status::Processed(ProcessedStatus::Pending) => "pending")]
     #[test_case(Status::Processed(ProcessedStatus::Mined) => "mined")]
-    #[test_case(Status::Unprocessed(UnprocessedStatus::New) => "new")]
     fn serialize_status(api_status: Status) -> &'static str {
         let s = serde_json::to_string(&api_status).unwrap();
 
@@ -146,7 +108,6 @@ mod tests {
 
     #[test_case("pending" => Status::Processed(ProcessedStatus::Pending))]
     #[test_case("mined" => Status::Processed(ProcessedStatus::Mined))]
-    #[test_case("new" => Status::Unprocessed(UnprocessedStatus::New))]
     fn deserialize_status(s: &str) -> Status {
         // Wrapped because JSON expected `"something"` and not `something`
         let wrapped = format!("\"{s}\"");

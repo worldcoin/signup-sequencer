@@ -5,13 +5,13 @@ use chrono::{DateTime, Utc};
 use ruint::aliases::U256;
 use sqlx::{Acquire, Executor, Postgres, Row};
 use tracing::instrument;
-use types::{DeletionEntry, RecoveryEntry};
+use types::{DeletionEntry};
 
 use super::types::{LatestDeletionEntry, LatestInsertionEntry};
 use crate::database::types::{BatchEntry, BatchEntryData, BatchType};
 use crate::database::{types, Error};
 use crate::identity_tree::{
-    Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate, UnprocessedStatus,
+    Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate,
 };
 use crate::prover::identity::Identity;
 use crate::prover::{ProverConfig, ProverType};

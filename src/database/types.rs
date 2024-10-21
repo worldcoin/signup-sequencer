@@ -8,16 +8,6 @@ use sqlx::{Database, Decode, Encode, Postgres, Type};
 use crate::identity_tree::Hash;
 use crate::prover::identity::Identity;
 
-#[derive(FromRow)]
-pub struct RecoveryEntry {
-    // existing commitment is used in tests only, but recoveries in general
-    // are used in production code via the FromRow trait
-    // so removing this field would break the production code
-    #[allow(unused)]
-    pub existing_commitment: Hash,
-    pub new_commitment: Hash,
-}
-
 pub struct LatestInsertionEntry {
     pub timestamp: DateTime<Utc>,
 }

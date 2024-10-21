@@ -164,11 +164,7 @@ impl App {
             return Err(ServerError::DuplicateCommitment);
         }
 
-<<<<<<< HEAD
-        tx.insert_new_identity(commitment, Utc::now()).await?;
-=======
-        tx.insert_unprocessed_identity(commitment, Utc::now()).await?;
->>>>>>> 428daf1 (WIP)
+        tx.insert_unprocessed_identity(commitment).await?;
 
         tx.commit().await?;
 
@@ -313,16 +309,6 @@ impl App {
     ) -> Result<InclusionProofResponse, ServerError> {
         if self.identity_validator.is_initial_leaf(commitment) {
             return Err(ServerError::InvalidCommitment);
-        }
-
-        if let Some(error_message) = self.database.get_unprocessed_error(commitment).await? {
-            return Ok(InclusionProof {
-                root: None,
-                proof: None,
-                message: error_message
-                    .or_else(|| Some("identity exists but has not yet been processed".to_string())),
-            }
-            .into());
         }
 
         let item = self

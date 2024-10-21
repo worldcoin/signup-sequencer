@@ -79,7 +79,7 @@ use semaphore::poseidon_tree::Proof;
 use signup_sequencer::identity_tree::{InclusionProof, TreeState, TreeVersionOps};
 use signup_sequencer::server::data::{
     AddBatchSizeRequest, DeletionRequest, InclusionProofRequest, InclusionProofResponse,
-    InsertCommitmentRequest, RecoveryRequest, RemoveBatchSizeRequest, VerifySemaphoreProofRequest,
+    InsertCommitmentRequest, RemoveBatchSizeRequest, VerifySemaphoreProofRequest,
 };
 use signup_sequencer::task_monitor::TaskMonitor;
 use testcontainers::clients::Cli;
@@ -593,19 +593,6 @@ fn construct_delete_identity_body(identity_commitment: &Hash) -> Body {
             identity_commitment: *identity_commitment,
         })
         .expect("Cannot serialize DeletionRequest"),
-    )
-}
-
-pub fn construct_recover_identity_body(
-    previous_identity_commitment: &Hash,
-    new_identity_commitment: &Hash,
-) -> Body {
-    Body::from(
-        serde_json::to_string(&RecoveryRequest {
-            previous_identity_commitment: *previous_identity_commitment,
-            new_identity_commitment: *new_identity_commitment,
-        })
-        .expect("Cannot serialize RecoveryRequest"),
     )
 }
 

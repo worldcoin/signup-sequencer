@@ -65,6 +65,9 @@ pub async fn insert_identities(
 
         tx.trim_unprocessed().await?;
 
+        // TODO: This works only while we're not operating in an HA context
+        //       when HA is introduced we need to increase the tx serialization level
+        //       otherwise we'll face too many crashes
         tx.commit()
             .await
             .expect("Committing insert failed - tree will be out of sync");

@@ -144,7 +144,6 @@ impl TestConfigBuilder {
                 batch_insertion_timeout: self.batch_insertion_timeout,
                 batch_deletion_timeout: self.batch_deletion_timeout,
                 min_batch_deletion_size: self.min_batch_deletion_size,
-                max_epoch_duration: default::max_epoch_duration(),
                 scanning_window_size: default::scanning_window_size(),
                 scanning_chain_head_offset: default::scanning_chain_head_offset(),
                 time_between_scans: Duration::from_secs(DEFAULT_TIME_BETWEEN_SCANS_SECONDS),

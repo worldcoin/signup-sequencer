@@ -209,6 +209,13 @@ impl App {
             return Err(ServerError::IdentityAlreadyDeleted);
         }
 
+        // Check if there are any deletions, if not, set the latest deletion timestamp
+        // to now to ensure that the new deletion is processed by the next deletion
+        // interval
+        if tx.get_deletions().await?.is_empty() {
+            tx.update_latest_deletion(Utc::now()).await?;
+        }
+
         tx.insert_new_deletion(leaf_index, commitment).await?;
 
         tx.commit().await?;

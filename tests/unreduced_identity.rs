@@ -74,24 +74,6 @@ async fn test_unreduced_identity(offchain_mode_enabled: bool) -> anyhow::Result<
         body_str
     );
 
-    // Test unreduced identity for recovery
-    let body = common::construct_recover_identity_body(&Hash::ZERO, &ruint::Uint::<256, 4>::MAX);
-    let response = client
-        .post(uri.to_owned() + "/recoverIdentity")
-        .header("Content-Type", "application/json")
-        .body(body)
-        .send()
-        .await
-        .expect("Failed to create insert identity");
-
-    let bytes = response.bytes().await.expect("Failed to read body bytes");
-    let body_str = String::from_utf8_lossy(&bytes);
-
-    assert_eq!(
-        "provided identity commitment is not in reduced form",
-        body_str
-    );
-
     shutdown.shutdown();
     app_handle.await?;
     for (_, prover) in insertion_prover_map.into_iter() {

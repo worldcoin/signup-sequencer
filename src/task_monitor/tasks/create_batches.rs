@@ -15,7 +15,7 @@ use crate::database;
 use crate::database::methods::DbMethods as _;
 use crate::database::Database;
 use crate::identity_tree::{
-    AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
+    AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionOps, TreeWithNextVersion,
 };
 use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;

@@ -4,24 +4,22 @@ use std::sync::{Arc, OnceLock};
 use chrono::{Duration, Utc};
 use ruint::Uint;
 use semaphore::protocol::verify_proof;
-use sqlx::{Postgres, Transaction};
 use tracing::{info, instrument, warn};
 
 use crate::config::Config;
 use crate::contracts::IdentityManager;
 use crate::database::methods::DbMethods as _;
-use crate::database::Database;
+use crate::database::{Database, IsolationLevel};
 use crate::ethereum::Ethereum;
 use crate::identity::processor::{
     IdentityProcessor, OffChainIdentityProcessor, OnChainIdentityProcessor,
 };
 use crate::identity::validator::IdentityValidator;
 use crate::identity_tree::initializer::TreeInitializer;
-use crate::identity_tree::{Hash, InclusionProof, RootItem, TreeState, TreeVersionReadOps};
+use crate::identity_tree::{Hash, InclusionProof, RootItem, TreeState, TreeVersionOps};
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::repository::ProverRepository;
 use crate::prover::{ProverConfig, ProverType};
-use crate::retry_tx;
 use crate::server::data::{
     InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofQuery,
     VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
@@ -157,22 +155,19 @@ impl App {
 
         // TODO: ensure that the id is not in the tree or in unprocessed identities
 
-        if self.database.identity_exists(commitment).await? {
+        let mut tx = self
+            .database
+            .begin_tx(IsolationLevel::ReadCommitted)
+            .await?;
+
+        if tx.identity_exists(commitment).await? {
             return Err(ServerError::DuplicateCommitment);
         }
 
-        self.database
-            .insert_new_identity(commitment, Utc::now())
-            .await?;
+        tx.insert_new_identity(commitment, Utc::now()).await?;
 
-        Ok(())
-    }
+        tx.commit().await?;
 
-    pub async fn delete_identity_tx(&self, commitment: &Hash) -> Result<(), ServerError> {
-        retry_tx!(self.database.pool, tx, {
-            self.delete_identity(&mut tx, commitment).await
-        })
-        .await?;
         Ok(())
     }
 
@@ -182,12 +177,13 @@ impl App {
     ///
     /// Will return `Err` if identity is already queued, not in the tree, or the
     /// queue malfunctions.
-    #[instrument(level = "debug", skip(self, tx))]
-    pub async fn delete_identity(
-        &self,
-        tx: &mut Transaction<'_, Postgres>,
-        commitment: &Hash,
-    ) -> Result<(), ServerError> {
+    #[instrument(level = "debug", skip(self))]
+    pub async fn delete_identity(&self, commitment: &Hash) -> Result<(), ServerError> {
+        let mut tx = self
+            .database
+            .begin_tx(IsolationLevel::RepeatableRead)
+            .await?;
+
         // Ensure that deletion provers exist
         if !self.prover_repository.has_deletion_provers().await {
             warn!(
@@ -213,11 +209,6 @@ impl App {
             return Err(ServerError::IdentityAlreadyDeleted);
         }
 
-        // Check if the id is already queued for deletion
-        if tx.identity_is_queued_for_deletion(commitment).await? {
-            return Err(ServerError::IdentityQueuedForDeletion);
-        }
-
         // Check if there are any deletions, if not, set the latest deletion timestamp
         // to now to ensure that the new deletion is processed by the next deletion
         // interval
@@ -225,64 +216,11 @@ impl App {
             tx.update_latest_deletion(Utc::now()).await?;
         }
 
-        // If the id has not been deleted, insert into the deletions table
         tx.insert_new_deletion(leaf_index, commitment).await?;
 
+        tx.commit().await?;
+
         Ok(())
-    }
-
-    /// Queues a recovery of an identity.
-    ///
-    /// i.e. deletion and reinsertion after a set period of time.
-    ///
-    /// # Errors
-    ///
-    /// Will return `Err` if identity is already queued for deletion, not in the
-    /// tree, or the queue malfunctions.
-    #[instrument(level = "debug", skip(self))]
-    pub async fn recover_identity(
-        &self,
-        existing_commitment: &Hash,
-        new_commitment: &Hash,
-    ) -> Result<(), ServerError> {
-        retry_tx!(self.database.pool, tx, {
-            if self.identity_validator.is_initial_leaf(new_commitment) {
-                warn!(
-                    ?new_commitment,
-                    "Attempt to insert initial leaf in recovery."
-                );
-                return Err(ServerError::InvalidCommitment);
-            }
-
-            if !self.prover_repository.has_insertion_provers().await {
-                warn!(
-                    ?new_commitment,
-                    "Identity Manager has no provers. Add provers with /addBatchSize request."
-                );
-                return Err(ServerError::NoProversOnIdInsert);
-            }
-
-            if !self.identity_validator.is_reduced(*new_commitment) {
-                warn!(
-                    ?new_commitment,
-                    "The new identity commitment is not reduced."
-                );
-                return Err(ServerError::UnreducedCommitment);
-            }
-
-            if tx.identity_exists(*new_commitment).await? {
-                return Err(ServerError::DuplicateCommitment);
-            }
-
-            // Delete the existing id and insert the commitments into the recovery table
-            self.delete_identity(&mut tx, existing_commitment).await?;
-
-            tx.insert_new_recovery(existing_commitment, new_commitment)
-                .await?;
-
-            Ok(())
-        })
-        .await
     }
 
     fn merge_env_provers(

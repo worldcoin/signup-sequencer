@@ -105,9 +105,13 @@ struct TreeVersionData<V: AllowedTreeVersionMarker> {
 }
 
 /// Basic operations that should be available for all tree versions.
-trait BasicTreeOps {
+pub trait BasicTreeOps {
     /// Updates the tree with the given element at the given leaf index.
     fn update(&mut self, leaf_index: usize, element: Hash);
+
+    fn next_leaf(&self) -> usize;
+    fn proof(&self, leaf_index: usize) -> (Hash, Proof);
+    fn root(&self) -> Hash;
 
     fn apply_diffs(&mut self, diffs: Vec<AppliedTreeUpdate>);
 
@@ -217,6 +221,19 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
         self.metadata.count_since_last_flatten += 1;
     }
 
+    fn next_leaf(&self) -> usize {
+        self.next_leaf
+    }
+
+    fn proof(&self, leaf_index: usize) -> (Hash, Proof) {
+        let proof = self.tree.proof(leaf_index);
+        (self.tree.root(), proof)
+    }
+
+    fn root(&self) -> Hash {
+        self.tree.root()
+    }
+
     fn apply_diffs(&mut self, diffs: Vec<AppliedTreeUpdate>) {
         for applied_update in &diffs {
             let update = &applied_update.update;
@@ -275,6 +292,19 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Derived> {
             },
             result: updated_tree,
         });
+    }
+
+    fn next_leaf(&self) -> usize {
+        self.next_leaf
+    }
+
+    fn proof(&self, leaf_index: usize) -> (Hash, Proof) {
+        let proof = self.tree.proof(leaf_index);
+        (self.tree.root(), proof)
+    }
+
+    fn root(&self) -> Hash {
+        self.tree.root()
     }
 
     fn apply_diffs(&mut self, mut diffs: Vec<AppliedTreeUpdate>) {
@@ -368,7 +398,9 @@ impl<V: Version<TreeVersion = lazy_merkle_tree::Derived>> TreeVersion<V> {
 /// The public-facing API for reading from a tree version. It is implemented for
 /// all versions. This being a trait allows us to hide some of the
 /// implementation details.
-pub trait TreeVersionReadOps {
+pub trait TreeVersionOps {
+    fn update(&self, leaf_index: usize, element: Hash);
+
     /// Returns the current tree root.
     fn get_root(&self) -> Hash;
     /// Returns the next free leaf.
@@ -381,10 +413,14 @@ pub trait TreeVersionReadOps {
     fn get_leaf(&self, leaf: usize) -> Hash;
 }
 
-impl<V: Version> TreeVersionReadOps for TreeVersion<V>
+impl<V: Version> TreeVersionOps for TreeVersion<V>
 where
     TreeVersionData<V::TreeVersion>: BasicTreeOps,
 {
+    fn update(&self, leaf_index: usize, element: Hash) {
+        self.get_data().update(leaf_index, element);
+    }
+
     fn get_root(&self) -> Hash {
         self.get_data().get_root()
     }
@@ -440,6 +476,8 @@ impl TreeVersion<Latest> {
 
         output
     }
+
+    // pub fn append(&self, identity: Hash)
 
     /// Deletes many identities from the tree, returns a list with the root
     /// and proof of inclusion

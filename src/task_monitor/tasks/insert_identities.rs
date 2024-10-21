@@ -1,16 +1,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use sqlx::{Postgres, Transaction};
 use tokio::sync::{Mutex, Notify};
 use tokio::time;
 use tracing::info;
 
 use crate::app::App;
 use crate::database::methods::DbMethods as _;
-use crate::database::types::UnprocessedCommitment;
-use crate::identity_tree::{Latest, TreeVersion, TreeVersionReadOps, UnprocessedStatus};
-use crate::retry_tx;
+use crate::database::IsolationLevel;
+use crate::identity_tree::{TreeVersionOps, UnprocessedStatus};
 
 // Insertion here differs from delete_identities task. This is because two
 // different flows are created for both tasks. We need to insert identities as
@@ -42,62 +40,39 @@ pub async fn insert_identities(
         let _guard = pending_insertions_mutex.lock().await;
         let latest_tree = app.tree_state()?.latest_tree();
 
-        retry_tx!(&app.database, tx, {
-            insert_identities_batch(&mut tx, latest_tree, &unprocessed).await
-        })
-        .await?;
+        let mut tx = app.database.begin_tx(IsolationLevel::ReadCommitted).await?;
+
+        let next_leaf = latest_tree.next_leaf();
+        let mut pre_root = latest_tree.get_root();
+
+        let next_db_index = tx.get_next_leaf_index().await?;
+        assert_eq!(
+            next_leaf, next_db_index,
+            "Database and tree are out of sync. Next leaf index in tree is: {next_leaf}, in database: {next_db_index}"
+        );
+
+        for (idx, identity) in unprocessed.iter().enumerate() {
+            let leaf_idx = next_leaf + idx;
+            latest_tree.update(leaf_idx, *identity);
+            let root = latest_tree.get_root();
+
+            tx.insert_pending_identity(leaf_idx, identity, &root, &pre_root)
+                .await
+                .expect("Failed to insert identity - tree will be out of sync");
+
+            pre_root = root;
+        }
+
+        tx.trim_unprocessed().await?;
+
+        // TODO: This works only while we're not operating in an HA context
+        //       when HA is introduced we need to increase the tx serialization level
+        //       otherwise we'll face too many crashes
+        tx.commit()
+            .await
+            .expect("Committing insert failed - tree will be out of sync");
 
         // Notify the identity processing task, that there are new identities
         wake_up_notify.notify_one();
     }
-}
-
-pub async fn insert_identities_batch(
-    tx: &mut Transaction<'_, Postgres>,
-    latest_tree: &TreeVersion<Latest>,
-    identities: &[UnprocessedCommitment],
-) -> Result<(), anyhow::Error> {
-    // Filter out any identities that are already in the `identities` table
-    let mut filtered_identities = vec![];
-    for identity in identities {
-        if tx
-            .get_identity_leaf_index(&identity.commitment)
-            .await?
-            .is_some()
-        {
-            tracing::warn!(?identity.commitment, "Duplicate identity");
-            tx.remove_unprocessed_identity(&identity.commitment).await?;
-        } else {
-            filtered_identities.push(identity.commitment);
-        }
-    }
-
-    let next_leaf = latest_tree.next_leaf();
-
-    let next_db_index = tx.get_next_leaf_index().await?;
-
-    assert_eq!(
-        next_leaf, next_db_index,
-        "Database and tree are out of sync. Next leaf index in tree is: {next_leaf}, in database: \
-         {next_db_index}"
-    );
-
-    let mut pre_root = &latest_tree.get_root();
-    let data = latest_tree.append_many(&filtered_identities);
-
-    assert_eq!(
-        data.len(),
-        filtered_identities.len(),
-        "Length mismatch when appending identities to tree"
-    );
-
-    for ((root, _proof, leaf_index), identity) in data.iter().zip(&filtered_identities) {
-        tx.insert_pending_identity(*leaf_index, identity, root, pre_root)
-            .await?;
-        pre_root = root;
-
-        tx.remove_unprocessed_identity(identity).await?;
-    }
-
-    Ok(())
 }

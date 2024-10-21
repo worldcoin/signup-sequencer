@@ -22,7 +22,7 @@ members = ["crates/*", "e2e_tests/scenarios"]
 default = []
 
 [dependencies]
-anyhow = { version = "1.0.68" }
+anyhow = { version = "1.0.90" }
 async-stream = "0.3.3"
 async-trait = "0.1.64"
 axum = "0.7.7"

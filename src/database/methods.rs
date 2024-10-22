@@ -620,7 +620,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         let result: Vec<(Hash,)> = sqlx::query_as(
             r#"
             SELECT commitment FROM unprocessed_identities
-            LIMIT $2
+            LIMIT $1
             "#,
         )
         .bind(MAX_UNPROCESSED_FETCH_COUNT)

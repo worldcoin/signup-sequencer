@@ -947,12 +947,6 @@ mod test {
         let root_item_1 = db.get_root_state(&roots[1]).await?.unwrap();
 
         assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
-        println!("root_1_inserted_at = {root_1_inserted_at:?}");
-        println!(
-            "root_item_1.pending_valid_as_of = {:?}",
-            root_item_1.pending_valid_as_of
-        );
-
         assert_same_time!(root_item_1.pending_valid_as_of, root_1_inserted_at);
 
         // Test mined roots

@@ -2,18 +2,17 @@
 pub mod abi;
 pub mod scanner;
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, bail};
 use ethers::providers::Middleware;
-use ethers::types::{H256, U256};
+use ethers::types::U256;
 use tracing::{error, info, instrument};
 
-use self::abi::{BridgedWorldId, DeleteIdentitiesCall, WorldId};
+use self::abi::{BridgedWorldId, WorldId};
 use crate::config::Config;
 use crate::ethereum::{Ethereum, ReadProvider};
 use crate::identity::processor::TransactionId;
 use crate::prover::identity::Identity;
 use crate::prover::Proof;
-use crate::utils::index_packing::unpack_indices;
 
 /// A structure representing the interface to the batch-based identity manager
 /// contract.
@@ -22,7 +21,6 @@ pub struct IdentityManager {
     ethereum: Ethereum,
     abi: WorldId<ReadProvider>,
     secondary_abis: Vec<BridgedWorldId<ReadProvider>>,
-    tree_depth: usize,
 }
 
 impl IdentityManager {
@@ -84,20 +82,13 @@ impl IdentityManager {
             secondary_abis.push(abi);
         }
 
-        let tree_depth = config.tree.tree_depth;
-
         let identity_manager = Self {
             ethereum,
             abi,
             secondary_abis,
-            tree_depth,
         };
 
         Ok(identity_manager)
-    }
-
-    pub async fn root_history_expiry(&self) -> anyhow::Result<U256> {
-        Ok(self.abi.get_root_history_expiry().call().await?)
     }
 
     #[instrument(level = "debug", skip(self, identity_commitments, proof_data))]
@@ -169,35 +160,6 @@ impl IdentityManager {
         let latest_root = self.abi.latest_root().call().await?;
 
         Ok(latest_root)
-    }
-
-    /// Fetches the identity commitments from a
-    /// `deleteIdentities` transaction by tx hash
-    #[instrument(level = "debug", skip_all)]
-    pub async fn fetch_deletion_indices_from_tx(
-        &self,
-        tx_hash: H256,
-    ) -> anyhow::Result<Vec<usize>> {
-        let provider = self.ethereum.provider();
-
-        let tx = provider
-            .get_transaction(tx_hash)
-            .await?
-            .context("Missing tx")?;
-
-        use ethers::abi::AbiDecode;
-        let delete_identities = DeleteIdentitiesCall::decode(&tx.input)?;
-
-        let packed_deletion_indices: &[u8] = delete_identities.packed_deletion_indices.as_ref();
-        let indices = unpack_indices(packed_deletion_indices);
-
-        let padding_index = 2u32.pow(self.tree_depth as u32);
-
-        Ok(indices
-            .into_iter()
-            .filter(|idx| *idx != padding_index)
-            .map(|x| x as usize)
-            .collect())
     }
 
     #[instrument(level = "debug", skip_all)]

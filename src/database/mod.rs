@@ -182,7 +182,7 @@ mod test {
     use std::time::Duration;
 
     use anyhow::Context;
-    use chrono::{Days, Utc};
+    use chrono::Utc;
     use ethers::types::U256;
     use postgres_docker_utils::DockerContainer;
     use ruint::Uint;

@@ -27,12 +27,12 @@ pub enum ProcessedStatus {
     Mined,
 }
 
-/// A status type visible on the API level - contains both the processed and
-/// unprocessed statuses
+/// A status type visible on the API level
+// TODO: Remove
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 #[serde(untagged)]
-pub enum Status { // TODO: Remove
+pub enum Status {
     Processed(ProcessedStatus),
 }
 

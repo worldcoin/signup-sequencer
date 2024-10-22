@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use async_trait::async_trait;
-use chrono::Utc;
 use ethers::abi::RawLog;
 use ethers::addressbook::Address;
 use ethers::contract::EthEvent;
@@ -94,11 +92,8 @@ impl IdentityProcessor for OnChainIdentityProcessor {
     ) -> anyhow::Result<()> {
         let mainnet_logs = self.fetch_mainnet_logs().await?;
 
-        self.finalize_mainnet_roots(
-            processed_tree,
-            &mainnet_logs,
-        )
-        .await?;
+        self.finalize_mainnet_roots(processed_tree, &mainnet_logs)
+            .await?;
 
         let mut roots = Self::extract_roots_from_mainnet_logs(mainnet_logs);
         roots.extend(self.fetch_secondary_logs().await?);

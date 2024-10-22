@@ -79,7 +79,7 @@ use semaphore::poseidon_tree::Proof;
 use signup_sequencer::identity_tree::{InclusionProof, TreeState, TreeVersionOps};
 use signup_sequencer::server::data::{
     AddBatchSizeRequest, DeletionRequest, InclusionProofRequest, InclusionProofResponse,
-    InsertCommitmentRequest, RecoveryRequest, RemoveBatchSizeRequest, VerifySemaphoreProofRequest,
+    InsertCommitmentRequest, RemoveBatchSizeRequest, VerifySemaphoreProofRequest,
 };
 use signup_sequencer::task_monitor::TaskMonitor;
 use testcontainers::clients::Cli;
@@ -480,56 +480,6 @@ pub async fn test_delete_identity(
 }
 
 #[instrument(skip_all)]
-pub async fn test_recover_identity(
-    uri: &str,
-    client: &Client,
-    ref_tree: &mut PoseidonTree,
-    test_leaves: &[Field],
-    previous_leaf_index: usize,
-    new_leaf: Field,
-    new_leaf_index: usize,
-    expect_failure: bool,
-) -> (merkle_tree::Proof<PoseidonHash>, Field) {
-    let previous_leaf = test_leaves[previous_leaf_index];
-
-    let body = construct_recover_identity_body(&previous_leaf, &new_leaf);
-
-    let response = client
-        .post(uri.to_owned() + "/recoverIdentity")
-        .header("Content-Type", "application/json")
-        .body(body)
-        .send()
-        .await
-        .expect("Failed to create insert identity");
-
-    let response_status = response.status();
-
-    let bytes = response
-        .bytes()
-        .await
-        .expect("Failed to get response bytes");
-
-    if expect_failure {
-        assert!(!response_status.is_success());
-    } else {
-        assert!(response_status.is_success());
-        assert!(bytes.is_empty());
-    }
-
-    // TODO: Note that recovery order is non-deterministic and therefore we cannot
-    // easily keep the ref_tree in sync with the sequencer's version of the
-    // tree. In the future, we could consider tracking updates to the tree in a
-    // different way like listening to event emission.
-    ref_tree.set(previous_leaf_index, Hash::ZERO);
-    // Continuing on the note above, while the replacement identity is be
-    // inserted as a new identity, it is not deterministic and if there are multiple
-    // recovery requests, it is possible that the sequencer tree is ordered in a
-    // different way than the ref_tree
-    ref_tree.set(new_leaf_index, new_leaf);
-    (ref_tree.proof(new_leaf_index).unwrap(), ref_tree.root())
-}
-
-#[instrument(skip_all)]
 pub async fn test_add_batch_size(
     uri: impl Into<String>,
     prover_url: impl Into<String>,
@@ -643,19 +593,6 @@ fn construct_delete_identity_body(identity_commitment: &Hash) -> Body {
             identity_commitment: *identity_commitment,
         })
         .expect("Cannot serialize DeletionRequest"),
-    )
-}
-
-pub fn construct_recover_identity_body(
-    previous_identity_commitment: &Hash,
-    new_identity_commitment: &Hash,
-) -> Body {
-    Body::from(
-        serde_json::to_string(&RecoveryRequest {
-            previous_identity_commitment: *previous_identity_commitment,
-            new_identity_commitment: *new_identity_commitment,
-        })
-        .expect("Cannot serialize RecoveryRequest"),
     )
 }
 

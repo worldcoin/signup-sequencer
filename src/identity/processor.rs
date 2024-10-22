@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use async_trait::async_trait;
-use chrono::Utc;
 use ethers::abi::RawLog;
 use ethers::addressbook::Address;
 use ethers::contract::EthEvent;
@@ -94,12 +92,8 @@ impl IdentityProcessor for OnChainIdentityProcessor {
     ) -> anyhow::Result<()> {
         let mainnet_logs = self.fetch_mainnet_logs().await?;
 
-        self.finalize_mainnet_roots(
-            processed_tree,
-            &mainnet_logs,
-            self.config.app.max_epoch_duration,
-        )
-        .await?;
+        self.finalize_mainnet_roots(processed_tree, &mainnet_logs)
+            .await?;
 
         let mut roots = Self::extract_roots_from_mainnet_logs(mainnet_logs);
         roots.extend(self.fetch_secondary_logs().await?);
@@ -407,7 +401,6 @@ impl OnChainIdentityProcessor {
         &self,
         processed_tree: &TreeVersion<Canonical>,
         logs: &[Log],
-        max_epoch_duration: Duration,
     ) -> Result<(), anyhow::Error> {
         for log in logs {
             let Some(event) = Self::raw_log_to_tree_changed(log) else {
@@ -433,14 +426,6 @@ impl OnChainIdentityProcessor {
             tx.commit().await?;
 
             info!(?pre_root, ?post_root, ?kind, "Batch mined");
-
-            if kind == TreeChangeKind::Deletion {
-                // NOTE: We must do this before updating the tree
-                //       because we fetch commitments from the processed tree
-                //       before they are deleted
-                self.update_eligible_recoveries(log, max_epoch_duration)
-                    .await?;
-            }
 
             let updates_count = processed_tree.apply_updates_up_to(post_root.into());
 
@@ -509,59 +494,6 @@ impl OnChainIdentityProcessor {
 
         roots
     }
-
-    async fn update_eligible_recoveries(
-        &self,
-        log: &Log,
-        max_epoch_duration: Duration,
-    ) -> anyhow::Result<()> {
-        let tx_hash = log.transaction_hash.context("Missing tx hash")?;
-        let commitments = self
-            .identity_manager
-            .fetch_deletion_indices_from_tx(tx_hash)
-            .await
-            .context("Could not fetch deletion indices from tx")?;
-
-        let commitments = self
-            .database
-            .get_non_zero_commitments_by_leaf_indexes(commitments.iter().copied())
-            .await?;
-        let commitments: Vec<U256> = commitments.into_iter().map(Into::into).collect();
-
-        // Fetch the root history expiry time on chain
-        let root_history_expiry = self.identity_manager.root_history_expiry().await?;
-
-        // Use the root history expiry to calculate the eligibility timestamp for the
-        // new insertion
-        let root_history_expiry_duration =
-            chrono::Duration::seconds(root_history_expiry.as_u64() as i64);
-        let max_epoch_duration = chrono::Duration::from_std(max_epoch_duration)?;
-
-        let delay = root_history_expiry_duration + max_epoch_duration;
-
-        let eligibility_timestamp = Utc::now() + delay;
-
-        let mut tx = self
-            .database
-            .begin_tx(IsolationLevel::ReadCommitted)
-            .await?;
-
-        // Check if any deleted commitments correspond with entries in the
-        // recoveries table and insert the new commitment into the unprocessed
-        // identities table with the proper eligibility timestamp
-        let deleted_recoveries = tx.delete_recoveries(commitments).await?;
-
-        // For each deletion, if there is a corresponding recovery, insert a new
-        // identity with the specified eligibility timestamp
-        for recovery in deleted_recoveries {
-            tx.insert_new_identity(recovery.new_commitment, eligibility_timestamp)
-                .await?;
-        }
-
-        tx.commit().await?;
-
-        Ok(())
-    }
 }
 
 pub struct OffChainIdentityProcessor {
@@ -588,10 +520,6 @@ impl IdentityProcessor for OffChainIdentityProcessor {
         };
 
         for batch in batches.iter() {
-            if batch.batch_type == BatchType::Deletion {
-                self.update_eligible_recoveries(batch).await?;
-            }
-
             let mut tx = self
                 .database
                 .begin_tx(IsolationLevel::ReadCommitted)
@@ -637,31 +565,5 @@ impl OffChainIdentityProcessor {
         let mut committed_batches = self.committed_batches.lock().unwrap();
 
         committed_batches.push(batch_entry);
-    }
-
-    async fn update_eligible_recoveries(&self, batch: &BatchEntry) -> anyhow::Result<()> {
-        let commitments: Vec<U256> = batch.data.identities.iter().map(|v| v.commitment).collect();
-        let eligibility_timestamp = Utc::now();
-
-        let mut tx = self
-            .database
-            .begin_tx(IsolationLevel::ReadCommitted)
-            .await?;
-
-        // Check if any deleted commitments correspond with entries in the
-        // recoveries table and insert the new commitment into the unprocessed
-        // identities table with the proper eligibility timestamp
-        let deleted_recoveries = tx.delete_recoveries(commitments).await?;
-
-        // For each deletion, if there is a corresponding recovery, insert a new
-        // identity with the specified eligibility timestamp
-        for recovery in deleted_recoveries {
-            tx.insert_new_identity(recovery.new_commitment, eligibility_timestamp)
-                .await?;
-        }
-
-        tx.commit().await?;
-
-        Ok(())
     }
 }

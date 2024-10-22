@@ -16,7 +16,7 @@ use crate::identity::processor::{
 };
 use crate::identity::validator::IdentityValidator;
 use crate::identity_tree::initializer::TreeInitializer;
-use crate::identity_tree::{Hash, InclusionProof, RootItem, TreeState, TreeVersionOps};
+use crate::identity_tree::{Hash, RootItem, TreeState, TreeVersionOps};
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::repository::ProverRepository;
 use crate::prover::{ProverConfig, ProverType};
@@ -164,7 +164,7 @@ impl App {
             return Err(ServerError::DuplicateCommitment);
         }
 
-        tx.insert_new_identity(commitment, Utc::now()).await?;
+        tx.insert_unprocessed_identity(commitment).await?;
 
         tx.commit().await?;
 
@@ -309,16 +309,6 @@ impl App {
     ) -> Result<InclusionProofResponse, ServerError> {
         if self.identity_validator.is_initial_leaf(commitment) {
             return Err(ServerError::InvalidCommitment);
-        }
-
-        if let Some(error_message) = self.database.get_unprocessed_error(commitment).await? {
-            return Ok(InclusionProof {
-                root: None,
-                proof: None,
-                message: error_message
-                    .or_else(|| Some("identity exists but has not yet been processed".to_string())),
-            }
-            .into());
         }
 
         let item = self

@@ -8,7 +8,7 @@ use tracing::info;
 use crate::app::App;
 use crate::database::methods::DbMethods as _;
 use crate::database::IsolationLevel;
-use crate::identity_tree::{TreeVersionOps, UnprocessedStatus};
+use crate::identity_tree::TreeVersionOps;
 
 // Insertion here differs from delete_identities task. This is because two
 // different flows are created for both tasks. We need to insert identities as
@@ -29,10 +29,8 @@ pub async fn insert_identities(
         info!("Insertion processor woken due to timeout.");
 
         // get commits from database
-        let unprocessed = app
-            .database
-            .get_eligible_unprocessed_commitments(UnprocessedStatus::New)
-            .await?;
+        let unprocessed = app.database.get_unprocessed_commitments().await?;
+
         if unprocessed.is_empty() {
             continue;
         }

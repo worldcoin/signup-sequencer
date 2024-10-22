@@ -69,18 +69,6 @@ pub struct AppConfig {
     #[serde(default = "default::min_batch_deletion_size")]
     pub min_batch_deletion_size: usize,
 
-    /// The parameter to control the delay between mining a deletion batch and
-    /// inserting the recovery identities
-    ///
-    /// The sequencer will insert the recovery identities after
-    /// max_epoch_duration_seconds + root_history_expiry) seconds have passed
-    ///
-    /// By default the value is set to 0 so the sequencer will only use
-    /// root_history_expiry
-    #[serde(with = "humantime_serde")]
-    #[serde(default = "default::max_epoch_duration")]
-    pub max_epoch_duration: Duration,
-
     /// The maximum number of windows to scan for finalization logs
     #[serde(default = "default::scanning_window_size")]
     pub scanning_window_size: u64,
@@ -284,10 +272,6 @@ pub mod default {
         100
     }
 
-    pub fn max_epoch_duration() -> Duration {
-        Duration::from_secs(0)
-    }
-
     pub fn scanning_window_size() -> u64 {
         100
     }
@@ -375,7 +359,6 @@ mod tests {
         batch_insertion_timeout = "3m"
         batch_deletion_timeout = "1h"
         min_batch_deletion_size = 100
-        max_epoch_duration = "0s"
         scanning_window_size = 100
         scanning_chain_head_offset = 0
         time_between_scans = "30s"
@@ -428,7 +411,6 @@ mod tests {
         batch_insertion_timeout = "3m"
         batch_deletion_timeout = "1h"
         min_batch_deletion_size = 100
-        max_epoch_duration = "0s"
         scanning_window_size = 100
         scanning_chain_head_offset = 0
         time_between_scans = "30s"
@@ -466,7 +448,6 @@ mod tests {
         SEQ__APP__BATCH_INSERTION_TIMEOUT=3m
         SEQ__APP__BATCH_DELETION_TIMEOUT=1h
         SEQ__APP__MIN_BATCH_DELETION_SIZE=100
-        SEQ__APP__MAX_EPOCH_DURATION=0s
         SEQ__APP__SCANNING_WINDOW_SIZE=100
         SEQ__APP__SCANNING_CHAIN_HEAD_OFFSET=0
         SEQ__APP__TIME_BETWEEN_SCANS=30s
@@ -509,7 +490,6 @@ mod tests {
         SEQ__APP__BATCH_INSERTION_TIMEOUT=3m
         SEQ__APP__BATCH_DELETION_TIMEOUT=1h
         SEQ__APP__MIN_BATCH_DELETION_SIZE=100
-        SEQ__APP__MAX_EPOCH_DURATION=0s
         SEQ__APP__SCANNING_WINDOW_SIZE=100
         SEQ__APP__SCANNING_CHAIN_HEAD_OFFSET=0
         SEQ__APP__TIME_BETWEEN_SCANS=30s

@@ -2,17 +2,13 @@ use std::collections::HashSet;
 
 use axum::async_trait;
 use chrono::{DateTime, Utc};
-use ruint::aliases::U256;
 use sqlx::{Acquire, Executor, Postgres, Row};
 use tracing::instrument;
-use types::{DeletionEntry, RecoveryEntry};
 
-use super::types::{LatestDeletionEntry, LatestInsertionEntry};
+use super::types::{DeletionEntry, LatestDeletionEntry, LatestInsertionEntry};
 use crate::database::types::{BatchEntry, BatchEntryData, BatchType};
-use crate::database::{types, Error};
-use crate::identity_tree::{
-    Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate, UnprocessedStatus,
-};
+use crate::database::Error;
+use crate::identity_tree::{Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate};
 use crate::prover::identity::Identity;
 use crate::prover::{ProverConfig, ProverType};
 
@@ -475,48 +471,21 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[instrument(skip(self), level = "debug")]
-    async fn insert_new_identity(
-        self,
-        identity: Hash,
-        eligibility_timestamp: sqlx::types::chrono::DateTime<Utc>,
-    ) -> Result<Hash, Error> {
+    async fn insert_unprocessed_identity(self, identity: Hash) -> Result<Hash, Error> {
         let mut conn = self.acquire().await?;
 
         sqlx::query(
             r#"
-            INSERT INTO unprocessed_identities (commitment, status, created_at, eligibility)
-            VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
+            INSERT INTO unprocessed_identities (commitment, created_at)
+            VALUES ($1, CURRENT_TIMESTAMP)
+            ON CONFLICT DO NOTHING
             "#,
         )
         .bind(identity)
-        .bind(<&str>::from(UnprocessedStatus::New))
-        .bind(eligibility_timestamp)
         .execute(&mut *conn)
         .await?;
 
         Ok(identity)
-    }
-
-    #[instrument(skip(self), level = "debug")]
-    async fn insert_new_recovery(
-        self,
-        existing_commitment: &Hash,
-        new_commitment: &Hash,
-    ) -> Result<(), Error> {
-        let mut conn = self.acquire().await?;
-
-        sqlx::query(
-            r#"
-            INSERT INTO recoveries (existing_commitment, new_commitment)
-            VALUES ($1, $2)
-            "#,
-        )
-        .bind(existing_commitment)
-        .bind(new_commitment)
-        .execute(&mut *conn)
-        .await?;
-
-        Ok(())
     }
 
     #[instrument(skip(self), level = "debug")]
@@ -578,47 +547,6 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .await?;
 
         Ok(())
-    }
-
-    #[cfg(test)]
-    #[instrument(skip(self), level = "debug")]
-    async fn get_all_recoveries(self) -> Result<Vec<RecoveryEntry>, Error> {
-        let mut conn = self.acquire().await?;
-
-        Ok(
-            sqlx::query_as::<_, RecoveryEntry>("SELECT * FROM recoveries")
-                .fetch_all(&mut *conn)
-                .await?,
-        )
-    }
-
-    #[instrument(skip(self, prev_commits), level = "debug")]
-    async fn delete_recoveries<I, T>(self, prev_commits: I) -> Result<Vec<RecoveryEntry>, Error>
-    where
-        I: IntoIterator<Item = T> + Send,
-        T: Into<U256>,
-    {
-        let mut conn = self.acquire().await?;
-
-        // TODO: upstream PgHasArrayType impl to ruint
-        let prev_commits = prev_commits
-            .into_iter()
-            .map(|c| c.into().to_be_bytes())
-            .collect::<Vec<[u8; 32]>>();
-
-        let res = sqlx::query_as::<_, RecoveryEntry>(
-            r#"
-            DELETE
-            FROM recoveries
-            WHERE existing_commitment = ANY($1)
-            RETURNING *
-            "#,
-        )
-        .bind(&prev_commits)
-        .fetch_all(&mut *conn)
-        .await?;
-
-        Ok(res)
     }
 
     /// Inserts a new deletion into the deletions table
@@ -686,52 +614,20 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[instrument(skip(self), level = "debug")]
-    async fn get_eligible_unprocessed_commitments(
-        self,
-        status: UnprocessedStatus,
-    ) -> Result<Vec<Hash>, Error> {
+    async fn get_unprocessed_commitments(self) -> Result<Vec<Hash>, Error> {
         let mut conn = self.acquire().await?;
 
         let result: Vec<(Hash,)> = sqlx::query_as(
             r#"
             SELECT commitment FROM unprocessed_identities
-            WHERE status = $1 AND CURRENT_TIMESTAMP > eligibility
-            LIMIT $2
+            LIMIT $1
             "#,
         )
-        .bind(<&str>::from(status))
         .bind(MAX_UNPROCESSED_FETCH_COUNT)
         .fetch_all(&mut *conn)
         .await?;
 
         Ok(result.into_iter().map(|(commitment,)| commitment).collect())
-    }
-
-    /// Returns the error message from the unprocessed identities table
-    /// if it exists
-    ///
-    /// - The outer option represents the existence of the commitment in the
-    ///   unprocessed_identities table
-    /// - The inner option represents the existence of an error message
-    #[instrument(skip(self), level = "debug")]
-    async fn get_unprocessed_error(
-        self,
-        commitment: &Hash,
-    ) -> Result<Option<Option<String>>, Error> {
-        let mut conn = self.acquire().await?;
-
-        let result: Option<(Option<String>,)> = sqlx::query_as(
-            r#"
-            SELECT error_message
-            FROM unprocessed_identities
-            WHERE commitment = $1
-            "#,
-        )
-        .bind(commitment)
-        .fetch_optional(&mut *conn)
-        .await?;
-
-        Ok(result.map(|(error_message,)| error_message))
     }
 
     #[instrument(skip(self), level = "debug")]

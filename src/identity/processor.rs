@@ -10,12 +10,12 @@ use ethers::middleware::Middleware;
 use ethers::prelude::{Log, Topic, ValueOrArray, U256};
 use tracing::{error, info, instrument};
 
-use crate::config::Config;
+use crate::{config::Config, utils::batch_type::BatchType};
 use crate::contracts::abi::{BridgedWorldId, RootAddedFilter, TreeChangeKind, TreeChangedFilter};
 use crate::contracts::scanner::BlockScanner;
 use crate::contracts::IdentityManager;
 use crate::database::methods::DbMethods;
-use crate::database::types::{BatchEntry, BatchType};
+use crate::database::types::BatchEntry;
 use crate::database::{Database, IsolationLevel};
 use crate::ethereum::{Ethereum, ReadProvider};
 use crate::identity_tree::{Canonical, Hash, TreeVersion, TreeWithNextVersion};

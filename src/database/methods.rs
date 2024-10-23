@@ -5,8 +5,8 @@ use chrono::{DateTime, Utc};
 use sqlx::{Acquire, Executor, Postgres, Row};
 use tracing::instrument;
 
-use super::types::{DeletionEntry, LatestDeletionEntry, LatestInsertionEntry};
-use crate::database::types::{BatchEntry, BatchEntryData, BatchType};
+use super::types::DeletionEntry;
+use crate::{database::types::{BatchEntry, BatchEntryData}, utils::batch_type::BatchType};
 use crate::database::Error;
 use crate::identity_tree::{Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate};
 use crate::prover::identity::Identity;
@@ -321,30 +321,6 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .bind(root)
         .fetch_optional(&mut *conn)
         .await?)
-    }
-
-    #[instrument(skip(self), level = "debug")]
-    async fn get_latest_insertion(self) -> Result<LatestInsertionEntry, Error> {
-        let mut conn = self.acquire().await?;
-
-        let row = sqlx::query(
-            r#"
-            SELECT insertion_timestamp
-            FROM latest_insertion_timestamp
-            WHERE Lock = 'X';"#,
-        )
-        .fetch_optional(&mut *conn)
-        .await?;
-
-        if let Some(row) = row {
-            Ok(LatestInsertionEntry {
-                timestamp: row.get(0),
-            })
-        } else {
-            Ok(LatestInsertionEntry {
-                timestamp: Utc::now(),
-            })
-        }
     }
 
     #[instrument(skip(self), level = "debug")]

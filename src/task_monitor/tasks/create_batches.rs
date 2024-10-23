@@ -11,7 +11,6 @@ use tokio::{select, time};
 use tracing::instrument;
 
 use crate::app::App;
-use crate::database;
 use crate::database::methods::DbMethods as _;
 use crate::database::Database;
 use crate::identity_tree::{
@@ -314,7 +313,7 @@ pub async fn insert_identities(
         .insert_new_batch(
             &post_root,
             &pre_root,
-            database::types::BatchType::Insertion,
+            BatchType::Insertion,
             &identity_commitments,
             &insertion_indices,
         )
@@ -440,7 +439,7 @@ pub async fn delete_identities(
         .insert_new_batch(
             &post_root,
             &pre_root,
-            database::types::BatchType::Deletion,
+            BatchType::Deletion,
             &identity_commitments,
             &deletion_indices,
         )

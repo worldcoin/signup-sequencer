@@ -191,9 +191,8 @@ mod test {
     use testcontainers::clients::Cli;
 
     use super::Database;
-    use crate::config::DatabaseConfig;
+    use crate::{config::DatabaseConfig, utils::batch_type::BatchType};
     use crate::database::methods::DbMethods;
-    use crate::database::types::BatchType;
     use crate::identity_tree::{Hash, ProcessedStatus};
     use crate::prover::identity::Identity;
     use crate::prover::{ProverConfig, ProverType};

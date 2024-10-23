@@ -34,7 +34,6 @@ pub async fn delete_identities(
     loop {
         _ = timer.tick().await;
         info!("Deletion processor woken due to timeout");
-
         let deletions = app.database.get_deletions().await?;
         if deletions.is_empty() {
             continue;

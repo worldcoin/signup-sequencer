@@ -121,10 +121,6 @@ pub async fn create_batches(
                 // we don't trigger again until either we get a full batch
                 // or the timer ticks.
                 timer.reset();
-                last_batch_time = Utc::now();
-                app.database
-                    .update_latest_insertion(last_batch_time)
-                    .await?;
             } else {
                 // Check if the next batch after the current insertion batch is
                 // deletion. The only time that deletions are

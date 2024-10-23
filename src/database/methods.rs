@@ -508,47 +508,6 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         }
     }
 
-    #[instrument(skip(self), level = "debug")]
-    async fn update_latest_insertion(
-        self,
-        insertion_timestamp: DateTime<Utc>,
-    ) -> Result<(), Error> {
-        let mut conn = self.acquire().await?;
-
-        sqlx::query(
-            r#"
-            INSERT INTO latest_insertion_timestamp (Lock, insertion_timestamp)
-            VALUES ('X', $1)
-            ON CONFLICT (Lock)
-            DO UPDATE SET insertion_timestamp = EXCLUDED.insertion_timestamp;
-            "#,
-        )
-        .bind(insertion_timestamp)
-        .execute(&mut *conn)
-        .await?;
-
-        Ok(())
-    }
-
-    #[instrument(skip(self), level = "debug")]
-    async fn update_latest_deletion(self, deletion_timestamp: DateTime<Utc>) -> Result<(), Error> {
-        let mut conn = self.acquire().await?;
-
-        sqlx::query(
-            r#"
-            INSERT INTO latest_deletion_root (Lock, deletion_timestamp)
-            VALUES ('X', $1)
-            ON CONFLICT (Lock)
-            DO UPDATE SET deletion_timestamp = EXCLUDED.deletion_timestamp;
-            "#,
-        )
-        .bind(deletion_timestamp)
-        .execute(&mut *conn)
-        .await?;
-
-        Ok(())
-    }
-
     /// Inserts a new deletion into the deletions table
     ///
     /// This method is idempotent and on conflict nothing will happen

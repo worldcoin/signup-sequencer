@@ -26,6 +26,8 @@ use crate::server::data::{
 };
 use crate::server::error::Error as ServerError;
 
+pub mod batching;
+
 pub struct App {
     pub database: Arc<Database>,
     pub identity_processor: Arc<dyn IdentityProcessor>,
@@ -207,13 +209,6 @@ impl App {
         // Check if the id has already been deleted
         if self.tree_state()?.get_latest_tree().get_leaf(leaf_index) == Uint::ZERO {
             return Err(ServerError::IdentityAlreadyDeleted);
-        }
-
-        // Check if there are any deletions, if not, set the latest deletion timestamp
-        // to now to ensure that the new deletion is processed by the next deletion
-        // interval
-        if tx.get_deletions().await?.is_empty() {
-            tx.update_latest_deletion(Utc::now()).await?;
         }
 
         tx.insert_new_deletion(leaf_index, commitment).await?;

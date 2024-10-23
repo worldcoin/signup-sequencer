@@ -1040,62 +1040,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn latest_insertion() -> anyhow::Result<()> {
-        let docker = Cli::default();
-        let (db, _db_container) = setup_db(&docker).await?;
-
-        // Update with initial timestamp
-        let initial_timestamp = chrono::Utc::now();
-        db.update_latest_insertion(initial_timestamp)
-            .await
-            .context("Inserting initial root")?;
-
-        // Assert values
-        let initial_entry = db.get_latest_insertion().await?;
-        assert!(initial_entry.timestamp.timestamp() - initial_timestamp.timestamp() <= 1);
-
-        // Update with a new timestamp
-        let new_timestamp = chrono::Utc::now();
-        db.update_latest_insertion(new_timestamp)
-            .await
-            .context("Updating with new root")?;
-
-        // Assert values
-        let new_entry = db.get_latest_insertion().await?;
-        assert!((new_entry.timestamp.timestamp() - new_timestamp.timestamp()) <= 1);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn latest_deletion() -> anyhow::Result<()> {
-        let docker = Cli::default();
-        let (db, _db_container) = setup_db(&docker).await?;
-
-        // Update with initial timestamp
-        let initial_timestamp = chrono::Utc::now();
-        db.update_latest_deletion(initial_timestamp)
-            .await
-            .context("Inserting initial root")?;
-
-        // Assert values
-        let initial_entry = db.get_latest_deletion().await?;
-        assert!(initial_entry.timestamp.timestamp() - initial_timestamp.timestamp() <= 1);
-
-        // Update with a new timestamp
-        let new_timestamp = chrono::Utc::now();
-        db.update_latest_deletion(new_timestamp)
-            .await
-            .context("Updating with new root")?;
-
-        // Assert values
-        let new_entry = db.get_latest_deletion().await?;
-        assert!((new_entry.timestamp.timestamp() - new_timestamp.timestamp()) <= 1);
-
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn can_not_insert_same_root_multiple_times() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;

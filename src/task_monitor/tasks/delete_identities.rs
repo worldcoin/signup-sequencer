@@ -40,15 +40,14 @@ pub async fn delete_identities(
             continue;
         }
 
-        let last_deletion_timestamp = app.database.get_latest_deletion().await?.timestamp;
-
         // If the minimum deletions batch size is not reached and the deletion time
         // interval has not elapsed then we can skip
-        if deletions.len() < app.config.app.min_batch_deletion_size
-            && Utc::now() - last_deletion_timestamp <= batch_deletion_timeout
-        {
-            continue;
-        }
+        // TODO: Rebuild this logic
+        // if deletions.len() < app.config.app.min_batch_deletion_size
+        //     && Utc::now() - last_deletion_timestamp <= batch_deletion_timeout
+        // {
+        //     continue;
+        // }
 
         // Dedup deletion entries
         let deletions = deletions.into_iter().collect::<HashSet<DeletionEntry>>();

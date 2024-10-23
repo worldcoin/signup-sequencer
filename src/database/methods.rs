@@ -488,26 +488,6 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(identity)
     }
 
-    #[instrument(skip(self), level = "debug")]
-    async fn get_latest_deletion(self) -> Result<LatestDeletionEntry, Error> {
-        let mut conn = self.acquire().await?;
-
-        let row =
-            sqlx::query("SELECT deletion_timestamp FROM latest_deletion_root WHERE Lock = 'X';")
-                .fetch_optional(&mut *conn)
-                .await?;
-
-        if let Some(row) = row {
-            Ok(LatestDeletionEntry {
-                timestamp: row.get(0),
-            })
-        } else {
-            Ok(LatestDeletionEntry {
-                timestamp: Utc::now(),
-            })
-        }
-    }
-
     /// Inserts a new deletion into the deletions table
     ///
     /// This method is idempotent and on conflict nothing will happen

@@ -80,6 +80,7 @@ tx-sitter-client = { path = "crates/tx-sitter-client" }
 url = { version = "2.2", features = ["serde"] }
 zeroize = "1.6.0"
 dotenvy = "0.15.0"
+strum = { version = "0.25", features = ["derive"] }
 
 [dev-dependencies]
 hex = "0.4.3"

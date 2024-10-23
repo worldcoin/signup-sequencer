@@ -6122,6 +6122,7 @@ dependencies = [
  "serde_json",
  "similar-asserts",
  "sqlx",
+ "strum 0.25.0",
  "take_mut",
  "telemetry-batteries",
  "tempfile",

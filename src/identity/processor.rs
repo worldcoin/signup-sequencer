@@ -453,7 +453,7 @@ impl OnChainIdentityProcessor {
                 .database
                 .begin_tx(IsolationLevel::ReadCommitted)
                 .await?;
-            tx.mark_root_as_processed(&root.into()).await?;
+            tx.mark_root_as_mined(&root.into()).await?;
             tx.commit().await?;
 
             info!(?root, "Root finalized");

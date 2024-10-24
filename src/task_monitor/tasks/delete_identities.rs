@@ -11,7 +11,7 @@ use tracing::info;
 use crate::app::App;
 use crate::database::methods::DbMethods;
 use crate::database::types::DeletionEntry;
-use crate::identity_tree::{Hash, TreeVersionOps};
+use crate::identity_tree::{Hash, TreeVersionReadOps};
 
 // Deletion here differs from insert_identites task. This is because two
 // different flows are created for both tasks. Due to how our prover works

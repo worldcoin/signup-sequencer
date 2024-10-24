@@ -398,9 +398,7 @@ impl<V: Version<TreeVersion = lazy_merkle_tree::Derived>> TreeVersion<V> {
 /// The public-facing API for reading from a tree version. It is implemented for
 /// all versions. This being a trait allows us to hide some of the
 /// implementation details.
-pub trait TreeVersionOps {
-    fn update(&self, leaf_index: usize, element: Hash);
-
+pub trait TreeVersionReadOps {
     /// Returns the current tree root.
     fn get_root(&self) -> Hash;
     /// Returns the next free leaf.
@@ -413,14 +411,10 @@ pub trait TreeVersionOps {
     fn get_leaf(&self, leaf: usize) -> Hash;
 }
 
-impl<V: Version> TreeVersionOps for TreeVersion<V>
+impl<V: Version> TreeVersionReadOps for TreeVersion<V>
 where
     TreeVersionData<V::TreeVersion>: BasicTreeOps,
 {
-    fn update(&self, leaf_index: usize, element: Hash) {
-        self.get_data().update(leaf_index, element);
-    }
-
     fn get_root(&self) -> Hash {
         self.get_data().get_root()
     }
@@ -456,6 +450,11 @@ impl<V: Version> TreeVersion<V> {
 }
 
 impl TreeVersion<Latest> {
+    /// Updates tree by inserting element at leaf index.
+    pub fn update(&self, leaf_index: usize, element: Hash) {
+        self.get_data().update(leaf_index, element);
+    }
+
     /// Appends many identities to the tree, returns a list with the root, proof
     /// of inclusion and leaf index
     #[must_use]

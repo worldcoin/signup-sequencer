@@ -9,7 +9,7 @@ use crate::database::methods::DbMethods;
 use crate::database::Database;
 use crate::identity::processor::IdentityProcessor;
 use crate::identity_tree::{
-    CanonicalTreeBuilder, Hash, ProcessedStatus, TreeState, TreeUpdate, TreeVersionOps,
+    CanonicalTreeBuilder, Hash, ProcessedStatus, TreeState, TreeUpdate, TreeVersionReadOps,
     TreeWithNextVersion,
 };
 use crate::utils::tree_updates::dedup_tree_updates;

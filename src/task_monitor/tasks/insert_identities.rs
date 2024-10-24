@@ -8,7 +8,7 @@ use tracing::info;
 use crate::app::App;
 use crate::database::methods::DbMethods as _;
 use crate::database::IsolationLevel;
-use crate::identity_tree::TreeVersionOps;
+use crate::identity_tree::TreeVersionReadOps;
 
 // Insertion here differs from delete_identities task. This is because two
 // different flows are created for both tasks. We need to insert identities as

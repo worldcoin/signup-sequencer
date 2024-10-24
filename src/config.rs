@@ -85,6 +85,19 @@ pub struct AppConfig {
     /// The number of txs in the channel that we'll be monitoring
     #[serde(default = "default::monitored_txs_capacity")]
     pub monitored_txs_capacity: usize,
+
+    /// The durtaion to wait for tasks to shutdown
+    /// bofore timing out
+    #[serde(with = "humantime_serde")]
+    #[serde(default = "default::shutdown_timeout")]
+    pub shutdown_timeout: Duration,
+
+    /// The minimum amount of time to wait after a shutdown
+    /// is innitiated before the process exits. This is useful to
+    /// give cancelled tasks a chance to get to an await point.
+    #[serde(with = "humantime_serde")]
+    #[serde(default = "default::shutdown_delay")]
+    pub shutdown_delay: Duration,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -284,6 +297,14 @@ pub mod default {
         Duration::from_secs(30)
     }
 
+    pub fn shutdown_timeout() -> Duration {
+        Duration::from_secs(30)
+    }
+
+    pub fn shutdown_delay() -> Duration {
+        Duration::from_secs(1)
+    }
+
     pub fn monitored_txs_capacity() -> usize {
         100
     }
@@ -363,6 +384,8 @@ mod tests {
         scanning_chain_head_offset = 0
         time_between_scans = "30s"
         monitored_txs_capacity = 100
+        shutdown_timeout = "30s"
+        shutdown_delay = "1s"
 
         [tree]
         tree_depth = 30
@@ -415,6 +438,8 @@ mod tests {
         scanning_chain_head_offset = 0
         time_between_scans = "30s"
         monitored_txs_capacity = 100
+        shutdown_timeout = "30s"
+        shutdown_delay = "1s"
 
         [tree]
         tree_depth = 30
@@ -452,6 +477,8 @@ mod tests {
         SEQ__APP__SCANNING_CHAIN_HEAD_OFFSET=0
         SEQ__APP__TIME_BETWEEN_SCANS=30s
         SEQ__APP__MONITORED_TXS_CAPACITY=100
+        SEQ__APP__SHUTDOWN_TIMEOUT=30s
+        SEQ__APP__SHUTDOWN_DELAY=1s
 
         SEQ__TREE__TREE_DEPTH=30
         SEQ__TREE__DENSE_TREE_PREFIX_DEPTH=20
@@ -494,6 +521,8 @@ mod tests {
         SEQ__APP__SCANNING_CHAIN_HEAD_OFFSET=0
         SEQ__APP__TIME_BETWEEN_SCANS=30s
         SEQ__APP__MONITORED_TXS_CAPACITY=100
+        SEQ__APP__SHUTDOWN_TIMEOUT=30s
+        SEQ__APP__SHUTDOWN_DELAY=1s
 
         SEQ__TREE__TREE_DEPTH=30
         SEQ__TREE__DENSE_TREE_PREFIX_DEPTH=20

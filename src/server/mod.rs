@@ -13,6 +13,7 @@ use hyper::header::CONTENT_TYPE;
 use hyper::StatusCode;
 use prometheus::{Encoder, TextEncoder};
 use tokio::net::TcpListener;
+use tower_http::catch_panic::{CatchPanicLayer, ResponseForPanic};
 use tracing::info;
 
 use crate::app::App;
@@ -131,17 +132,40 @@ async fn metrics() -> Result<Response<Body>, Error> {
 /// Will return `Err` if `options.server` URI is not http, incorrectly includes
 /// a path beyond `/`, or cannot be cast into an IP address. Also returns an
 /// `Err` if the server cannot bind to the given address.
-pub async fn run(
-    app: Arc<App>,
-    config: ServerConfig,
-    shutdown: Arc<Shutdown>,
-) -> anyhow::Result<()> {
+pub async fn run(app: Arc<App>, config: ServerConfig, shutdown: Shutdown) -> anyhow::Result<()> {
     info!("Will listen on {}", config.address);
     let listener = TcpListener::bind(config.address).await?;
 
     bind_from_listener(app, config.serve_timeout, listener, shutdown).await?;
 
     Ok(())
+}
+
+#[derive(Clone)]
+struct PanicHandler {
+    shutdown: Shutdown,
+}
+
+impl ResponseForPanic for PanicHandler {
+    type ResponseBody = Body;
+
+    fn response_for_panic(
+        &mut self,
+        error: Box<dyn std::any::Any + Send + 'static>,
+    ) -> hyper::Response<Self::ResponseBody> {
+        tracing::error!(?error, "request panicked");
+        self.shutdown.clone().shutdown();
+        hyper::Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Body::empty())
+            .unwrap()
+    }
+}
+
+impl From<Shutdown> for PanicHandler {
+    fn from(shutdown: Shutdown) -> Self {
+        Self { shutdown }
+    }
 }
 
 /// # Errors
@@ -152,7 +176,7 @@ pub async fn bind_from_listener(
     app: Arc<App>,
     serve_timeout: Duration,
     listener: TcpListener,
-    shutdown: Arc<Shutdown>,
+    shutdown: Shutdown,
 ) -> anyhow::Result<()> {
     let router = Router::new()
         // Operate on identity commitments
@@ -170,6 +194,9 @@ pub async fn bind_from_listener(
         .layer(middleware::from_fn(
             custom_middleware::api_metrics_layer::middleware,
         ))
+        .layer(CatchPanicLayer::custom(PanicHandler {
+            shutdown: shutdown.clone(),
+        }))
         .layer(middleware::from_fn_with_state(
             serve_timeout,
             custom_middleware::timeout_layer::middleware,
@@ -182,9 +209,15 @@ pub async fn bind_from_listener(
         ))
         .with_state(app.clone());
 
-    let server = axum::serve(listener, router).with_graceful_shutdown(shutdown.await_shutdown());
+    let _shutdown_handle = shutdown.handle();
+
+    let server = axum::serve(listener, router).with_graceful_shutdown(async move {
+        shutdown.await_shutdown_begin().await;
+    });
 
     server.await?;
+
+    info!("Server gracefully shutdown");
 
     Ok(())
 }

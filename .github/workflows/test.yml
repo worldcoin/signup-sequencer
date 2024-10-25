@@ -9,12 +9,12 @@ on:
     branches:
       - main
   pull_request:
-    types: [ opened, synchronize, reopened ]
+    types: [opened, synchronize, reopened]
     branches:
       - main
 
 env:
-  RUST_VERSION: "1.81.0"
+  RUST_VERSION: "1.82.0"
   CARGO_TERM_COLOR: always
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
@@ -108,7 +108,7 @@ jobs:
     name: Vet Dependencies
     runs-on: ubuntu-latest
     env:
-      CARGO_VET_VERSION: 0.9.0
+      CARGO_VET_VERSION: 0.9.1
     steps:
       - uses: actions/checkout@master
       - name: Install Rust

@@ -1,11 +1,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 use once_cell::sync::Lazy;
 use prometheus::{linear_buckets, register_gauge, register_histogram, Gauge, Histogram};
-use tokio::sync::{broadcast, mpsc, Mutex, Notify, RwLock};
+use tokio::select;
+use tokio::sync::{mpsc, Mutex, Notify};
 use tokio::task::JoinHandle;
-use tracing::{info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 
 use crate::app::App;
 use crate::database::methods::DbMethods as _;
@@ -20,11 +23,6 @@ const FINALIZE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const QUEUE_MONITOR_BACKOFF: Duration = Duration::from_secs(5);
 const INSERT_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const DELETE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
-
-struct RunningInstance {
-    handles: Vec<JoinHandle<()>>,
-    shutdown_sender: broadcast::Sender<()>,
-}
 
 static PENDING_IDENTITIES: Lazy<Gauge> = Lazy::new(|| {
     register_gauge!("pending_identities", "Identities not submitted on-chain").unwrap()
@@ -47,62 +45,19 @@ static BATCH_SIZES: Lazy<Histogram> = Lazy::new(|| {
     .unwrap()
 });
 
-impl RunningInstance {
-    async fn shutdown(self) -> anyhow::Result<()> {
-        info!("Sending a shutdown signal to the committer.");
-        // Ignoring errors here, since we have two options: either the channel is full,
-        // which is impossible, since this is the only use, and this method takes
-        // ownership, or the channel is closed, which means the committer thread is
-        // already dead.
-        _ = self.shutdown_sender.send(());
-
-        info!("Awaiting tasks to shutdown.");
-        for result in futures::future::join_all(self.handles).await {
-            result?;
-        }
-
-        Ok(())
-    }
-}
-
-/// A worker that commits identities to the blockchain.
+/// A task manager for all long running tasks
 ///
-/// This uses the database to keep track of identities that need to be
-/// committed. It assumes that there's only one such worker spawned at
-/// a time. Spawning multiple worker threads will result in undefined behavior,
+/// It's assumed that there is only one instance at a time.
+/// Spawning multiple `TaskManagers` will result in undefined behavior,
 /// including data duplication.
-pub struct TaskMonitor {
-    /// The instance is kept behind an RwLock<Option<...>> because
-    /// when shutdown is called we want to be able to gracefully
-    /// await the join handles - which requires ownership of the handle and by
-    /// extension the instance.
-    instance: RwLock<Option<RunningInstance>>,
-    shutdown: Arc<Shutdown>,
-    app: Arc<App>,
-}
+pub struct TaskMonitor;
 
 impl TaskMonitor {
-    pub fn new(app: Arc<App>, shutdown: Arc<Shutdown>) -> Self {
-        Self {
-            instance: RwLock::new(None),
-            shutdown,
-            app,
-        }
-    }
-
+    /// Initialize and run the task monitor
     #[instrument(level = "debug", skip_all)]
-    pub async fn start(&self) {
-        let mut instance = self.instance.write().await;
-        if instance.is_some() {
-            warn!("Identity committer already running");
-        }
-
-        // We could use the second element of the tuple as `mut shutdown_receiver`,
-        // but for symmetry's sake we create it for every task with `.subscribe()`
-        let (shutdown_sender, _) = broadcast::channel(1);
-
+    pub async fn init(main_app: Arc<App>, shutdown: Shutdown) {
         let (monitored_txs_sender, monitored_txs_receiver) =
-            mpsc::channel(self.app.config.app.monitored_txs_capacity);
+            mpsc::channel(main_app.clone().config.app.monitored_txs_capacity);
 
         let monitored_txs_sender = Arc::new(monitored_txs_sender);
         let monitored_txs_receiver = Arc::new(Mutex::new(monitored_txs_receiver));
@@ -112,39 +67,36 @@ impl TaskMonitor {
         // in the database
         base_wake_up_notify.notify_one();
 
-        let mut handles = Vec::new();
+        let handles = FuturesUnordered::new();
 
         // Initialize the Tree
-        let app = self.app.clone();
+        let app = main_app.clone();
         let tree_init = move || app.clone().init_tree();
-        let tree_init_handle = crate::utils::spawn_monitored_with_backoff(
+        let tree_init_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
             tree_init,
-            shutdown_sender.clone(),
             TREE_INIT_BACKOFF,
-            self.shutdown.clone(),
+            shutdown.clone(),
         );
 
         handles.push(tree_init_handle);
 
         // Finalize identities
-        let app = self.app.clone();
+        let app = main_app.clone();
         let finalize_identities = move || tasks::finalize_identities::finalize_roots(app.clone());
-        let finalize_identities_handle = crate::utils::spawn_monitored_with_backoff(
+        let finalize_identities_handle = crate::utils::spawn_with_backoff(
             finalize_identities,
-            shutdown_sender.clone(),
             FINALIZE_IDENTITIES_BACKOFF,
-            self.shutdown.clone(),
+            shutdown.clone(),
         );
         handles.push(finalize_identities_handle);
 
         // Report length of the queue of identities
-        let app = self.app.clone();
+        let app = main_app.clone();
         let queue_monitor = move || tasks::monitor_queue::monitor_queue(app.clone());
-        let queue_monitor_handle = crate::utils::spawn_monitored_with_backoff(
+        let queue_monitor_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
             queue_monitor,
-            shutdown_sender.clone(),
             QUEUE_MONITOR_BACKOFF,
-            self.shutdown.clone(),
+            shutdown.clone(),
         );
         handles.push(queue_monitor_handle);
 
@@ -152,7 +104,7 @@ impl TaskMonitor {
         let base_next_batch_notify = Arc::new(Notify::new());
 
         // Create batches
-        let app = self.app.clone();
+        let app = main_app.clone();
         let next_batch_notify = base_next_batch_notify.clone();
         let wake_up_notify = base_wake_up_notify.clone();
 
@@ -163,16 +115,15 @@ impl TaskMonitor {
                 wake_up_notify.clone(),
             )
         };
-        let create_batches_handle = crate::utils::spawn_monitored_with_backoff(
+        let create_batches_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
             create_batches,
-            shutdown_sender.clone(),
             PROCESS_IDENTITIES_BACKOFF,
-            self.shutdown.clone(),
+            shutdown.clone(),
         );
         handles.push(create_batches_handle);
 
         // Process batches
-        let app = self.app.clone();
+        let app = main_app.clone();
         let next_batch_notify = base_next_batch_notify.clone();
         let wake_up_notify = base_wake_up_notify.clone();
 
@@ -184,30 +135,28 @@ impl TaskMonitor {
                 wake_up_notify.clone(),
             )
         };
-        let process_identities_handle = crate::utils::spawn_monitored_with_backoff(
+        let process_identities_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
             process_identities,
-            shutdown_sender.clone(),
             PROCESS_IDENTITIES_BACKOFF,
-            self.shutdown.clone(),
+            shutdown.clone(),
         );
         handles.push(process_identities_handle);
 
         // Monitor transactions
-        let app = self.app.clone();
+        let app = main_app.clone();
         let monitor_txs =
             move || tasks::monitor_txs::monitor_txs(app.clone(), monitored_txs_receiver.clone());
-        let monitor_txs_handle = crate::utils::spawn_monitored_with_backoff(
+        let monitor_txs_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
             monitor_txs,
-            shutdown_sender.clone(),
             PROCESS_IDENTITIES_BACKOFF,
-            self.shutdown.clone(),
+            shutdown.clone(),
         );
         handles.push(monitor_txs_handle);
 
         let pending_insertion_mutex = Arc::new(Mutex::new(()));
 
         // Insert identities
-        let app = self.app.clone();
+        let app = main_app.clone();
         let wake_up_notify = base_wake_up_notify.clone();
         let insertion_mutex = pending_insertion_mutex.clone();
         let insert_identities = move || {
@@ -218,16 +167,15 @@ impl TaskMonitor {
             )
         };
 
-        let insert_identities_handle = crate::utils::spawn_monitored_with_backoff(
+        let insert_identities_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
             insert_identities,
-            shutdown_sender.clone(),
             INSERT_IDENTITIES_BACKOFF,
-            self.shutdown.clone(),
+            shutdown.clone(),
         );
         handles.push(insert_identities_handle);
 
         // Delete identities
-        let app = self.app.clone();
+        let app = main_app.clone();
         let wake_up_notify = base_wake_up_notify.clone();
         let delete_identities = move || {
             self::tasks::delete_identities::delete_identities(
@@ -237,19 +185,43 @@ impl TaskMonitor {
             )
         };
 
-        let delete_identities_handle = crate::utils::spawn_monitored_with_backoff(
+        let delete_identities_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
             delete_identities,
-            shutdown_sender.clone(),
             DELETE_IDENTITIES_BACKOFF,
-            self.shutdown.clone(),
+            shutdown.clone(),
         );
         handles.push(delete_identities_handle);
 
-        // Create the instance
-        *instance = Some(RunningInstance {
-            handles,
-            shutdown_sender,
-        });
+        tokio::spawn(Self::monitor_shutdown(handles, shutdown.clone()));
+    }
+
+    async fn monitor_shutdown(mut handles: FuturesUnordered<JoinHandle<()>>, shutdown: Shutdown) {
+        select! {
+            // Wait for the shutdown signal
+            _ = shutdown.await_shutdown_begin() => {
+             }
+            // Or wait for a task to panic
+            _ = Self::await_task_panic(&mut handles, shutdown.clone()) => {}
+        };
+    }
+
+    async fn await_task_panic(handles: &mut FuturesUnordered<JoinHandle<()>>, shutdown: Shutdown) {
+        while let Some(result) = handles.next().await {
+            if !shutdown.is_shutting_down() {
+                match result {
+                    Ok(_) => {
+                        info!("task exited");
+                    }
+                    Err(error) => {
+                        error!(?error, "task panicked");
+                        // Instruct the rest of the app to shutdown
+                        shutdown.clone().shutdown();
+                        return;
+                    }
+                }
+            }
+        }
+        warn!("all tasks have returned unexpectedly");
     }
 
     async fn log_pending_identities_count(database: &Database) -> anyhow::Result<()> {
@@ -273,19 +245,5 @@ impl TaskMonitor {
     #[allow(clippy::cast_precision_loss)]
     fn log_batch_size(size: usize) {
         BATCH_SIZES.observe(size as f64);
-    }
-
-    /// # Errors
-    ///
-    /// Will return an Error if the committer thread cannot be shut down
-    /// gracefully.
-    pub async fn shutdown(&self) -> anyhow::Result<()> {
-        let mut instance = self.instance.write().await;
-        if let Some(instance) = instance.take() {
-            instance.shutdown().await?;
-        } else {
-            info!("Committer not running.");
-        }
-        Ok(())
     }
 }

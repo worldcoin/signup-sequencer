@@ -27,6 +27,7 @@ async-stream = "0.3.3"
 async-trait = "0.1.64"
 axum = "0.7.7"
 axum-server = "0.7.1"
+tower-http = { version = "0.6.1", features = ["catch-panic"] }
 bytes = "1.4.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "4.0", features = ["derive", "env"] }
@@ -103,10 +104,6 @@ tracing-test = "0.2"
 ruint = { git = "https://github.com/Dzejkop/uint", rev = "9a1a6019c519e9cd76add2494190d21fc5f574f9" }
 
 [profile.release]
-panic = "abort"
 overflow-checks = true
 lto = "thin"
 debug = true
-
-[profile.dev]
-panic = "abort"

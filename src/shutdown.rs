@@ -63,7 +63,7 @@ impl Shutdown {
 
     /// Wait for the shutdown to begin.
     ///
-    /// If the caller down not already own a `Receiver`
+    /// If the caller does not already own a `Receiver`
     /// then the process may abort immediately when this returns.
     pub async fn await_shutdown_begin(&self) {
         let _ = self.await_shutdown_begin_with_handle().await;

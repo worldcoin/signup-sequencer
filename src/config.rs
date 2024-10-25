@@ -87,7 +87,7 @@ pub struct AppConfig {
     pub monitored_txs_capacity: usize,
 
     /// The durtaion to wait for tasks to shutdown
-    /// bofore timing out
+    /// before timing out
     #[serde(with = "humantime_serde")]
     #[serde(default = "default::shutdown_timeout")]
     pub shutdown_timeout: Duration,

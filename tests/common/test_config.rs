@@ -18,6 +18,8 @@ pub const DEFAULT_BATCH_DELETION_TIMEOUT_SECONDS: u64 = 10;
 pub const DEFAULT_TREE_DEPTH: usize = 20;
 pub const DEFAULT_TREE_DENSE_PREFIX_DEPTH: usize = 10;
 pub const DEFAULT_TIME_BETWEEN_SCANS_SECONDS: u64 = 1;
+pub const DEFAULT_SHUTDOWN_TIMEOUT_SECONDS: u64 = 5;
+pub const DEFAULT_SHUTDOWN_DELAY_SECONDS: u64 = 1;
 
 pub struct TestConfigBuilder {
     tree_depth: usize,
@@ -25,6 +27,8 @@ pub struct TestConfigBuilder {
     prover_urls: Vec<ProverConfig>,
     batch_insertion_timeout: Duration,
     batch_deletion_timeout: Duration,
+    shutdown_timeout: Duration,
+    shutdown_delay: Duration,
     min_batch_deletion_size: usize,
     db_url: Option<String>,
     oz_api_url: Option<String>,
@@ -43,6 +47,8 @@ impl TestConfigBuilder {
             prover_urls: vec![],
             batch_insertion_timeout: Duration::from_secs(DEFAULT_BATCH_INSERTION_TIMEOUT_SECONDS),
             batch_deletion_timeout: Duration::from_secs(DEFAULT_BATCH_DELETION_TIMEOUT_SECONDS),
+            shutdown_timeout: Duration::from_secs(DEFAULT_SHUTDOWN_TIMEOUT_SECONDS),
+            shutdown_delay: Duration::from_secs(DEFAULT_SHUTDOWN_DELAY_SECONDS),
             min_batch_deletion_size: 1,
             db_url: None,
             oz_api_url: None,
@@ -148,6 +154,8 @@ impl TestConfigBuilder {
                 scanning_chain_head_offset: default::scanning_chain_head_offset(),
                 time_between_scans: Duration::from_secs(DEFAULT_TIME_BETWEEN_SCANS_SECONDS),
                 monitored_txs_capacity: default::monitored_txs_capacity(),
+                shutdown_timeout: self.shutdown_timeout,
+                shutdown_delay: self.shutdown_delay,
             },
             tree: TreeConfig {
                 tree_depth: self.tree_depth,

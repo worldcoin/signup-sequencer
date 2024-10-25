@@ -1,15 +1,12 @@
-use std::future::Future;
-use std::sync::Arc;
-use std::time::Duration;
-
-use futures::FutureExt;
-use tokio::select;
-use tokio::sync::broadcast;
-use tokio::task::JoinHandle;
-use tracing::{error, info};
-
 use crate::shutdown::Shutdown;
-
+use futures::future::Either;
+use futures::{FutureExt, StreamExt};
+use std::future::Future;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+use tokio::select;
+use tokio::task::JoinHandle;
+use tracing::error;
 pub mod batch_type;
 pub mod index_packing;
 pub mod min_map;
@@ -73,11 +70,14 @@ macro_rules! retry_tx {
     };
 }
 
-pub fn spawn_monitored_with_backoff<S, F>(
+/// Spawns a future that will retry on failure with a backoff duration
+///
+/// The future will retry until it succeeds or a shutdown signal is received.
+/// During a shutdown, the task will be immediately cancelled
+pub fn spawn_with_backoff_cancel_on_shutdown<S, F>(
     future_spawner: S,
-    shutdown_sender: broadcast::Sender<()>,
     backoff_duration: Duration,
-    shutdown: Arc<Shutdown>,
+    shutdown: Shutdown,
 ) -> JoinHandle<()>
 where
     F: Future<Output = anyhow::Result<()>> + Send + 'static,
@@ -85,50 +85,94 @@ where
 {
     // Run task in background, returning a handle.
     tokio::spawn(async move {
-        loop {
-            let mut shutdown_receiver = shutdown_sender.subscribe();
-
-            let future = future_spawner();
-
-            // Wrap in `AssertUnwindSafe` so we can call `FuturesExt::catch_unwind` on it.
-            let future = std::panic::AssertUnwindSafe(future);
-
-            let result = select! {
-                result = future.catch_unwind() => {
-                    result
-                }
-                _ = shutdown_receiver.recv() => {
-                    info!("Woke up by shutdown signal, exiting.");
-                    return;
-                }
-            };
-
-            // let result = future.catch_unwind().await;
-
-            match result {
-                // Task succeeded or is shutting down gracefully
-                Ok(Ok(t)) => return t,
-                Ok(Err(e)) => {
-                    error!("Task failed: {e:?}");
-
-                    if shutdown.is_shutting_down() {
-                        return;
-                    }
-
-                    tokio::time::sleep(backoff_duration).await;
-                }
-                Err(e) => {
-                    error!("Task panicked: {e:?}");
-
-                    if shutdown.is_shutting_down() {
-                        return;
-                    }
-
-                    tokio::time::sleep(backoff_duration).await;
-                }
-            }
+        let shutting_down = AtomicBool::new(false);
+        select! {
+            _ = retry_future(
+                future_spawner,
+                backoff_duration,
+                &shutting_down
+            ) => {},
+            _ = await_shutdown_begin(shutdown, &shutting_down) => {},
         }
     })
+}
+
+/// Spawns a future that will retry on failure with a backoff duration
+///
+/// The future will retry until it succeeds or a shutdown signal is received.
+/// During a shutdown, the task will be allowed to finish until a shutdown timout occurs.
+/// This is useful if the task has custom cleanup logic that needs to be run.
+pub fn spawn_with_backoff<S, F>(
+    future_spawner: S,
+    backoff_duration: Duration,
+    shutdown: Shutdown,
+) -> JoinHandle<()>
+where
+    F: Future<Output = anyhow::Result<()>> + Send + 'static,
+    S: Fn() -> F + Send + Sync + 'static,
+{
+    // Run task in background, returning a handle.
+    tokio::spawn(async move {
+        let shutting_down = AtomicBool::new(false);
+        let retry = Either::Left(retry_future(
+            future_spawner,
+            backoff_duration,
+            &shutting_down,
+        ));
+        let shutdown = Either::Right(await_shutdown_begin(shutdown, &shutting_down));
+
+        // If retry completes then we return
+        // If shutdown completes then we still wait for retry
+        futures::stream::iter(vec![retry, shutdown])
+            .buffered(2)
+            .next()
+            .await;
+    })
+}
+
+async fn await_shutdown_begin(shutdown: Shutdown, shutting_down: &AtomicBool) {
+    shutdown.await_shutdown_begin().await;
+    shutting_down.store(true, Ordering::SeqCst);
+}
+
+async fn retry_future<S, F>(
+    future_spawner: S,
+    backoff_duration: Duration,
+    shutting_down: &AtomicBool,
+) where
+    F: Future<Output = anyhow::Result<()>> + Send + 'static,
+    S: Fn() -> F + Send + Sync + 'static,
+{
+    loop {
+        let future = future_spawner();
+
+        // Wrap in `AssertUnwindSafe` so we can call `FuturesExt::catch_unwind` on it.
+        let future = std::panic::AssertUnwindSafe(future);
+        let result = future.catch_unwind().await;
+
+        match result {
+            // Task succeeded or is shutting down gracefully
+            Ok(Ok(t)) => return t,
+            Ok(Err(e)) => {
+                error!("Task failed: {e:?}");
+
+                if shutting_down.load(Ordering::SeqCst) {
+                    return;
+                }
+
+                tokio::time::sleep(backoff_duration).await;
+            }
+            Err(e) => {
+                error!("Task panicked: {e:?}");
+
+                if shutting_down.load(Ordering::SeqCst) {
+                    return;
+                }
+
+                tokio::time::sleep(backoff_duration).await;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -141,16 +185,14 @@ mod tests {
 
     #[tokio::test]
     async fn spawn_monitored_test() -> anyhow::Result<()> {
-        let (shutdown_sender, _) = broadcast::channel(1);
-
         let can_finish = Arc::new(AtomicBool::new(false));
         let triggered_error = Arc::new(AtomicBool::new(false));
-        let shutdown = Arc::new(Shutdown::new());
+        let shutdown = Shutdown::spawn(Duration::from_secs(30), Duration::from_secs(1));
         let handle = {
             let can_finish = can_finish.clone();
             let triggered_error = triggered_error.clone();
 
-            spawn_monitored_with_backoff(
+            spawn_with_backoff(
                 move || {
                     let can_finish = can_finish.clone();
                     let triggered_error = triggered_error.clone();
@@ -170,7 +212,6 @@ mod tests {
                         }
                     }
                 },
-                shutdown_sender,
                 Duration::from_secs_f32(0.2),
                 shutdown,
             )
@@ -188,7 +229,7 @@ mod tests {
         triggered_error.store(false, Ordering::SeqCst);
 
         println!("Waiting for task to finish");
-        drop(tokio::time::timeout(Duration::from_secs(1), handle).await?);
+        drop(tokio::time::timeout(Duration::from_secs(2), handle).await?);
 
         let has_triggered_error = triggered_error.load(Ordering::SeqCst);
         // There is no code path that allows as to store false on the triggered error

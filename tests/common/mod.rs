@@ -628,13 +628,12 @@ fn construct_verify_proof_body(
 #[allow(clippy::type_complexity)]
 pub async fn spawn_app(
     config: Config,
-) -> anyhow::Result<(Arc<App>, JoinHandle<()>, SocketAddr, Arc<Shutdown>)> {
+) -> anyhow::Result<(Arc<App>, JoinHandle<()>, SocketAddr, Shutdown)> {
     let server_config = config.server.clone();
     let app = App::new(config).await.expect("Failed to create App");
-    let shutdown = Arc::new(Shutdown::new());
+    let shutdown = Shutdown::spawn(Duration::from_secs(30), Duration::from_secs(1));
 
-    let task_monitor = TaskMonitor::new(app.clone(), shutdown.clone());
-    task_monitor.start().await;
+    TaskMonitor::init(app.clone(), shutdown.clone()).await;
 
     let listener = TcpListener::bind(server_config.address)
         .await

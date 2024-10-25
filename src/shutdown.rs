@@ -82,7 +82,7 @@ impl Shutdown {
     /// Spawn a task that will monitor the shutdown signal.
     ///
     /// This should only be called once.
-    /// Will force a shutdown with `std::process::exit(1)` if shutdown takes to long.
+    /// Will force a shutdown with `std::process::exit(1)` if shutdown takes too long.
     /// Otherwise will exit with code 0.
     fn spawn_monitor(self, timeout: Duration, delay: Duration) {
         tokio::spawn(async move {

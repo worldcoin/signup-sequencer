@@ -630,6 +630,24 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(result.into_iter().map(|(commitment,)| commitment).collect())
     }
 
+    async fn get_unprocessed_commitment(self, commitment: &Hash) -> Result<Option<Hash>, Error> {
+        let mut conn = self.acquire().await?;
+
+        let result = sqlx::query(
+            r#"
+                SELECT commitment FROM unprocessed_identities WHERE commitment = $1
+            "#,
+        )
+        .bind(commitment)
+        .fetch_optional(&mut *conn)
+        .await?;
+
+        if let Some(row) = result {
+            return Ok(Some(row.get::<Hash, _>(0)));
+        };
+        Ok(None)
+    }
+
     #[instrument(skip(self), level = "debug")]
     async fn remove_unprocessed_identity(self, commitment: &Hash) -> Result<(), Error> {
         let mut conn = self.acquire().await?;

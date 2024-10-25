@@ -122,7 +122,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         1,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[1], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
+            .expect("Failed to parse Hash from test leaf 1"),
         false,
         offchain_mode_enabled,
     )
@@ -134,7 +134,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         2,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[2], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
+            .expect("Failed to parse Hash from test leaf 2"),
         false,
         offchain_mode_enabled,
     )
@@ -156,7 +156,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         3,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[3], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
+            .expect("Failed to parse Hash from test leaf 3"),
         false,
         offchain_mode_enabled,
     )
@@ -168,7 +168,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         4,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[4], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
+            .expect("Failed to parse Hash from test leaf 4"),
         false,
         offchain_mode_enabled,
     )
@@ -207,7 +207,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         4,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[4], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
+            .expect("Failed to parse Hash from test leaf 4"),
         false,
         offchain_mode_enabled,
     )
@@ -247,7 +247,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         4,
         &ref_tree,
         &Hash::from_str_radix(&test_identities[4], 16)
-            .expect("Failed to parse Hash from test leaf 0"),
+            .expect("Failed to parse Hash from test leaf 4"),
         false,
         offchain_mode_enabled,
     )

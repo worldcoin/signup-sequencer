@@ -1,19 +1,30 @@
+use chrono::Utc;
 use hyper::StatusCode;
 use semaphore::protocol::Proof;
 use semaphore::Field;
 use serde::{Deserialize, Serialize};
 
-use crate::identity_tree::{Hash, InclusionProof, RootItem};
+use crate::identity_tree::{Hash, InclusionProof, ProcessedStatus, RootItem, Status};
 use crate::prover::{ProverConfig, ProverType};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct InclusionProofResponse(pub InclusionProof);
+pub struct InclusionProofResponse {
+    pub status: Status,
+    pub root: Option<Field>,
+    pub proof: Option<semaphore::poseidon_tree::Proof>,
+    pub message: Option<String>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ListBatchSizesResponse(pub Vec<ProverConfig>);
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct VerifySemaphoreProofResponse(pub RootItem);
+pub struct VerifySemaphoreProofResponse {
+    pub root: Field,
+    pub status: ProcessedStatus,
+    pub pending_valid_as_of: chrono::DateTime<Utc>,
+    pub mined_valid_as_of: Option<chrono::DateTime<Utc>>,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -82,7 +93,17 @@ pub struct DeletionRequest {
 
 impl From<InclusionProof> for InclusionProofResponse {
     fn from(value: InclusionProof) -> Self {
-        Self(value)
+        Self {
+            status: match value.status {
+                Status::Processed(ProcessedStatus::Processed) => {
+                    Status::Processed(ProcessedStatus::Pending)
+                }
+                v => v,
+            },
+            root: value.root,
+            proof: value.proof,
+            message: value.message,
+        }
     }
 }
 
@@ -106,7 +127,15 @@ impl ToResponseCode for ListBatchSizesResponse {
 
 impl From<RootItem> for VerifySemaphoreProofResponse {
     fn from(value: RootItem) -> Self {
-        Self(value)
+        Self {
+            root: value.root,
+            status: match value.status {
+                ProcessedStatus::Processed => ProcessedStatus::Pending,
+                v => v,
+            },
+            pending_valid_as_of: value.pending_valid_as_of,
+            mined_valid_as_of: value.mined_valid_as_of,
+        }
     }
 }
 

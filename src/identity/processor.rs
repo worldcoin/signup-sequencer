@@ -259,7 +259,7 @@ impl OnChainIdentityProcessor {
             )
             .await
             .map_err(|e| {
-                error!(?e, "Failed to insert identity to contract.");
+                error!(?e, "Failed to insert identity  to contract.");
                 e
             })?;
 

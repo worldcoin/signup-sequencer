@@ -585,7 +585,12 @@ impl TreeState {
 
     #[must_use]
     pub fn get_proof_for(&self, item: &TreeItem) -> (Field, InclusionProof) {
-        let (leaf, root, proof) = self.latest.get_leaf_and_proof(item.leaf_index);
+        let (leaf, root, proof) = match item.status {
+            ProcessedStatus::Processed | ProcessedStatus::Mined => {
+                self.processed.get_leaf_and_proof(item.leaf_index)
+            }
+            ProcessedStatus::Pending => self.latest.get_leaf_and_proof(item.leaf_index),
+        };
 
         let proof = InclusionProof {
             root: Some(root),

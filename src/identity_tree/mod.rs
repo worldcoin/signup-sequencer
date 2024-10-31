@@ -16,7 +16,7 @@ mod status;
 pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
 pub type Hash = <PoseidonHash as Hasher>::Hash;
 
-pub use self::status::{ProcessedStatus, Status, UnknownStatus};
+pub use self::status::{ProcessedStatus, Status, UnknownStatus, UnprocessedStatus};
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, FromRow)]
 pub struct TreeUpdate {
@@ -54,6 +54,7 @@ pub struct RootItem {
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct InclusionProof {
+    pub status: Status,
     pub root: Option<Field>,
     pub proof: Option<Proof>,
     pub message: Option<String>,
@@ -537,7 +538,8 @@ where
 
 #[derive(Clone)]
 pub struct TreeState {
-    processed: TreeVersion<Canonical>,
+    mined: TreeVersion<Canonical>,
+    processed: TreeVersion<Intermediate>,
     batching: TreeVersion<Intermediate>,
     latest: TreeVersion<Latest>,
 }
@@ -545,11 +547,13 @@ pub struct TreeState {
 impl TreeState {
     #[must_use]
     pub const fn new(
-        processed: TreeVersion<Canonical>,
+        mined: TreeVersion<Canonical>,
+        processed: TreeVersion<Intermediate>,
         batching: TreeVersion<Intermediate>,
         latest: TreeVersion<Latest>,
     ) -> Self {
         Self {
+            mined,
             processed,
             batching,
             latest,
@@ -566,15 +570,6 @@ impl TreeState {
     }
 
     #[must_use]
-    pub fn get_processed_tree(&self) -> TreeVersion<Canonical> {
-        self.processed.clone()
-    }
-
-    pub fn processed_tree(&self) -> &TreeVersion<Canonical> {
-        &self.processed
-    }
-
-    #[must_use]
     pub fn get_batching_tree(&self) -> TreeVersion<Intermediate> {
         self.batching.clone()
     }
@@ -584,10 +579,33 @@ impl TreeState {
     }
 
     #[must_use]
+    pub fn get_processed_tree(&self) -> TreeVersion<Intermediate> {
+        self.processed.clone()
+    }
+
+    pub fn processed_tree(&self) -> &TreeVersion<Intermediate> {
+        &self.processed
+    }
+
+    #[must_use]
+    pub fn get_mined_tree(&self) -> TreeVersion<Canonical> {
+        self.mined.clone()
+    }
+
+    pub fn mined_tree(&self) -> &TreeVersion<Canonical> {
+        &self.mined
+    }
+
+    #[must_use]
     pub fn get_proof_for(&self, item: &TreeItem) -> (Field, InclusionProof) {
-        let (leaf, root, proof) = self.latest.get_leaf_and_proof(item.leaf_index);
+        let (leaf, root, proof) = match item.status {
+            ProcessedStatus::Pending => self.latest.get_leaf_and_proof(item.leaf_index),
+            ProcessedStatus::Processed => self.processed.get_leaf_and_proof(item.leaf_index),
+            ProcessedStatus::Mined => self.mined.get_leaf_and_proof(item.leaf_index),
+        };
 
         let proof = InclusionProof {
+            status: item.status.into(),
             root: Some(root),
             proof: Some(proof),
             message: None,

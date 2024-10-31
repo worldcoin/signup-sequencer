@@ -16,7 +16,9 @@ use crate::identity::processor::{
 };
 use crate::identity::validator::IdentityValidator;
 use crate::identity_tree::initializer::TreeInitializer;
-use crate::identity_tree::{Hash, RootItem, TreeState, TreeVersionReadOps};
+use crate::identity_tree::{
+    Hash, ProcessedStatus, RootItem, TreeState, TreeVersionReadOps, UnprocessedStatus,
+};
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::repository::ProverRepository;
 use crate::prover::{ProverConfig, ProverType};
@@ -311,6 +313,20 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
+        if self
+            .database
+            .get_unprocessed_commitment(commitment)
+            .await?
+            .is_some()
+        {
+            return Ok(InclusionProofResponse {
+                status: UnprocessedStatus::New.into(),
+                root: None,
+                proof: None,
+                message: None,
+            });
+        }
+
         let item = self
             .database
             .get_identity_leaf_index(commitment)
@@ -370,16 +386,44 @@ impl App {
     ) -> Result<(), ServerError> {
         let tree_state = self.tree_state()?;
         let latest_root = tree_state.get_latest_tree().get_root();
+        let batching_root = tree_state.get_batching_tree().get_root();
+        let processed_root = tree_state.get_processed_tree().get_root();
+        let mined_root = tree_state.get_mined_tree().get_root();
 
         info!("Validating age max_root_age: {max_root_age:?}");
 
         let root = root_state.root;
-        if latest_root == root {
-            return Ok(());
+        match root_state.status {
+            // Pending status implies the batching or latest tree
+            ProcessedStatus::Pending if latest_root == root || batching_root == root => {
+                warn!("Root is pending - skipping");
+                return Ok(());
+            }
+            // Processed status is hidden - this should never happen
+            ProcessedStatus::Processed if processed_root == root => {
+                warn!("Root is processed - skipping");
+                return Ok(());
+            }
+            // Processed status is hidden, so it could be either processed or mined
+            ProcessedStatus::Mined if processed_root == root || mined_root == root => {
+                warn!("Root is mined - skipping");
+                return Ok(());
+            }
+            _ => (),
         }
 
         let now = Utc::now();
-        let root_age = now - root_state.pending_valid_as_of;
+        let root_age = if matches!(
+            root_state.status,
+            ProcessedStatus::Pending | ProcessedStatus::Processed
+        ) {
+            now - root_state.pending_valid_as_of
+        } else {
+            let mined_at = root_state
+                .mined_valid_as_of
+                .ok_or(ServerError::InvalidRoot)?;
+            now - mined_at
+        };
 
         warn!("Root age: {root_age:?}");
 

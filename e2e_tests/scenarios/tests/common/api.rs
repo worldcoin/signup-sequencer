@@ -116,21 +116,32 @@ pub async fn inclusion_proof_raw(
     let result = String::from_utf8(bytes.into_iter().collect())
         .expect("Could not parse response bytes to utf-8");
 
-    Ok(RawResponse {
+    let raw_response = RawResponse {
         status_code: response.status(),
         body: result,
-    })
+    };
+
+    debug!(
+        "Response status={}, body={}",
+        raw_response.status_code, raw_response.body
+    );
+
+    Ok(raw_response)
 }
 
 pub async fn inclusion_proof(
     client: &Client<HttpConnector>,
     uri: &String,
     commitment: &Hash,
-) -> anyhow::Result<InclusionProofResponse> {
+) -> anyhow::Result<Option<InclusionProofResponse>> {
     let result = inclusion_proof_raw(client, uri, commitment).await?;
+
+    if result.status_code == StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
 
     let result_json = serde_json::from_str::<InclusionProofResponse>(&result.body)
         .expect("Failed to parse response as json");
 
-    Ok(result_json)
+    Ok(Some(result_json))
 }

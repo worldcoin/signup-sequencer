@@ -52,6 +52,31 @@ pub async fn delete_identities(
 
         // Dedup deletion entries
         let deletions = deletions.into_iter().collect::<HashSet<DeletionEntry>>();
+        let mut deletions = deletions.into_iter().collect::<Vec<DeletionEntry>>();
+
+        // Check if the deletion batch could potentially create:
+        // - duplicate root on the tree when inserting to identities
+        // - duplicate root on batch
+        // Such situation may happen only when deletions are done from the last inserted leaf in
+        // decreasing order (each next leaf is decreased by 1) - same root for identities, or when
+        // deletions are going to create same tree state - continuous deletions.
+        // To avoid such situation we sort then in ascending order and only check the scenario when
+        // they are continuous ending with last leaf index
+        deletions.sort_by(|d1, d2| d1.leaf_index.cmp(&d2.leaf_index));
+
+        if let Some(last_leaf_index) = app.tree_state()?.latest_tree().next_leaf().checked_sub(1) {
+            let indices_are_continuous = deletions
+                .windows(2)
+                .all(|w| w[1].leaf_index == w[0].leaf_index + 1);
+
+            if indices_are_continuous && deletions.last().unwrap().leaf_index == last_leaf_index {
+                tracing::warn!(
+                    "Deletion batch could potentially create a duplicate root batch. Deletion \
+                 batch will be postponed"
+                );
+                continue;
+            }
+        }
 
         let (leaf_indices, previous_commitments): (Vec<usize>, Vec<Hash>) = deletions
             .iter()
@@ -59,22 +84,6 @@ pub async fn delete_identities(
             .unzip();
 
         let _guard = pending_insertions_mutex.lock().await;
-
-        // Check if the deletion batch could potentially create a duplicate root batch
-        if let Some(last_leaf_index) = app.tree_state()?.latest_tree().next_leaf().checked_sub(1) {
-            let mut sorted_indices = leaf_indices.clone();
-            sorted_indices.sort();
-
-            let indices_are_continuous = sorted_indices.windows(2).all(|w| w[1] == w[0] + 1);
-
-            if indices_are_continuous && sorted_indices.last().unwrap() == &last_leaf_index {
-                tracing::warn!(
-                    "Deletion batch could potentially create a duplicate root batch. Deletion \
-                     batch will be postponed"
-                );
-                continue;
-            }
-        }
 
         let mut pre_root = app.tree_state()?.latest_tree().get_root();
         // Delete the commitments at the target leaf indices in the latest tree,

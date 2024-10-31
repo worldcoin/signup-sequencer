@@ -18,7 +18,7 @@ use crate::database::methods::DbMethods;
 use crate::database::types::{BatchEntry, BatchType};
 use crate::database::{Database, IsolationLevel};
 use crate::ethereum::{Ethereum, ReadProvider};
-use crate::identity_tree::{Canonical, Hash, TreeVersion, TreeWithNextVersion};
+use crate::identity_tree::{Canonical, Hash, Intermediate, TreeVersion, TreeWithNextVersion};
 use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;
 use crate::prover::Prover;
@@ -32,7 +32,8 @@ pub trait IdentityProcessor: Send + Sync + 'static {
 
     async fn finalize_identities(
         &self,
-        processed_tree: &TreeVersion<Canonical>,
+        processed_tree: &TreeVersion<Intermediate>,
+        mined_tree: &TreeVersion<Canonical>,
     ) -> anyhow::Result<()>;
 
     async fn await_clean_slate(&self) -> anyhow::Result<()>;
@@ -88,7 +89,8 @@ impl IdentityProcessor for OnChainIdentityProcessor {
 
     async fn finalize_identities(
         &self,
-        processed_tree: &TreeVersion<Canonical>,
+        processed_tree: &TreeVersion<Intermediate>,
+        mined_tree: &TreeVersion<Canonical>,
     ) -> anyhow::Result<()> {
         let mainnet_logs = self.fetch_mainnet_logs().await?;
 
@@ -98,7 +100,7 @@ impl IdentityProcessor for OnChainIdentityProcessor {
         let mut roots = Self::extract_roots_from_mainnet_logs(mainnet_logs);
         roots.extend(self.fetch_secondary_logs().await?);
 
-        self.finalize_secondary_roots(roots).await?;
+        self.finalize_secondary_roots(mined_tree, roots).await?;
 
         Ok(())
     }
@@ -399,7 +401,7 @@ impl OnChainIdentityProcessor {
     #[instrument(level = "info", skip_all)]
     async fn finalize_mainnet_roots(
         &self,
-        processed_tree: &TreeVersion<Canonical>,
+        processed_tree: &TreeVersion<Intermediate>,
         logs: &[Log],
     ) -> Result<(), anyhow::Error> {
         for log in logs {
@@ -436,7 +438,11 @@ impl OnChainIdentityProcessor {
     }
 
     #[instrument(level = "info", skip_all)]
-    async fn finalize_secondary_roots(&self, roots: Vec<U256>) -> Result<(), anyhow::Error> {
+    async fn finalize_secondary_roots(
+        &self,
+        mined_tree: &TreeVersion<Canonical>,
+        roots: Vec<U256>,
+    ) -> Result<(), anyhow::Error> {
         for root in roots {
             info!(?root, "Finalizing root");
 
@@ -455,6 +461,8 @@ impl OnChainIdentityProcessor {
                 .await?;
             tx.mark_root_as_mined(&root.into()).await?;
             tx.commit().await?;
+
+            mined_tree.apply_updates_up_to(root.into());
 
             info!(?root, "Root finalized");
         }
@@ -510,7 +518,8 @@ impl IdentityProcessor for OffChainIdentityProcessor {
 
     async fn finalize_identities(
         &self,
-        processed_tree: &TreeVersion<Canonical>,
+        processed_tree: &TreeVersion<Intermediate>,
+        mined_tree: &TreeVersion<Canonical>,
     ) -> anyhow::Result<()> {
         let batches = {
             let mut committed_batches = self.committed_batches.lock().unwrap();
@@ -531,6 +540,7 @@ impl IdentityProcessor for OffChainIdentityProcessor {
             tx.commit().await?;
 
             processed_tree.apply_updates_up_to(batch.next_root);
+            mined_tree.apply_updates_up_to(batch.next_root);
         }
 
         Ok(())

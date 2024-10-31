@@ -72,11 +72,19 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::{Arc, Once};
 
+use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
+use self::prelude::*;
+use crate::common::abi::{IWorldIDIdentityManager, RootInfo};
+use crate::common::chain_mock::SpecialisedClient;
+use crate::server::error::Error as ServerError;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use reqwest::{Body, Client, Method, Request, RequestBuilder, StatusCode};
 use semaphore::poseidon_tree::Proof;
-use signup_sequencer::identity_tree::{InclusionProof, TreeState, TreeVersionReadOps};
+use signup_sequencer::identity_tree::ProcessedStatus::Mined;
+use signup_sequencer::identity_tree::{
+    InclusionProof, ProcessedStatus, Status, TreeState, TreeVersionReadOps,
+};
 use signup_sequencer::server::data::{
     AddBatchSizeRequest, DeletionRequest, InclusionProofRequest, InclusionProofResponse,
     InsertCommitmentRequest, RemoveBatchSizeRequest, VerifySemaphoreProofRequest,
@@ -85,12 +93,6 @@ use signup_sequencer::task_monitor::TaskMonitor;
 use testcontainers::clients::Cli;
 use tokio::net::TcpListener;
 use tracing::trace;
-
-use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
-use self::prelude::*;
-use crate::common::abi::{IWorldIDIdentityManager, RootInfo};
-use crate::common::chain_mock::SpecialisedClient;
-use crate::server::error::Error as ServerError;
 
 const NUM_ATTEMPTS_FOR_INCLUSION_PROOF: usize = 20;
 
@@ -278,11 +280,21 @@ pub async fn test_inclusion_proof(
         let result = serde_json::from_str::<InclusionProofResponse>(&result)
             .expect("Failed to parse response as json");
 
-        if let Some(root) = result.0.root {
+        if let Some(root) = result.root {
             if offchain_mode_enabled {
+                if result.status != Status::from(Mined) {
+                    info!("Got pending, waiting 5 seconds, iteration {}", i);
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+
                 // For offchain mode returning root in inclusion proof response means the proof
                 // is valid.
-                let proof_json = generate_reference_proof(ref_tree, leaf_index);
+                let proof_json = generate_reference_proof(
+                    ref_tree,
+                    leaf_index,
+                    result.status, // for off-chain mode status doesn't matter
+                );
                 assert_eq!(result, proof_json);
 
                 return;
@@ -297,14 +309,21 @@ pub async fn test_inclusion_proof(
                 .expect("Failed to call method queryRoot on mocked chain.");
 
             if root != U256::zero() {
-                let proof_json = generate_reference_proof(ref_tree, leaf_index);
+                let proof_json = generate_reference_proof(ref_tree, leaf_index, result.status);
                 assert_eq!(result, proof_json);
 
                 return;
             }
         }
 
-        assert_eq!(result, generate_reference_proof(ref_tree, leaf_index));
+        assert_eq!(
+            result,
+            generate_reference_proof(
+                ref_tree,
+                leaf_index,
+                Status::Processed(ProcessedStatus::Pending)
+            )
+        );
         assert_eq!(response_status, StatusCode::OK);
         info!("Got pending, waiting 5 seconds, iteration {}", i);
         tokio::time::sleep(Duration::from_secs(5)).await;
@@ -353,8 +372,14 @@ pub async fn test_inclusion_proof_mined(
         let result = serde_json::from_str::<InclusionProofResponse>(&result)
             .expect("Failed to parse response as json");
 
-        if let Some(root) = result.0.root {
+        if let Some(root) = result.root {
             if offchain_mode_enabled {
+                if result.status != Status::from(Mined) {
+                    info!("Got pending, waiting 5 seconds, iteration {}", i);
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+
                 // For offchain mode returning root in inclusion proof response means the proof
                 // is valid.
                 return;
@@ -407,7 +432,7 @@ pub async fn test_not_in_tree(uri: &str, client: &Client, leaf: &Hash) {
     let result = serde_json::from_str::<InclusionProofResponse>(&result)
         .expect("Failed to parse InclusionProofResponse");
 
-    assert_eq!(result.0.root, None);
+    assert_eq!(result.root, None);
 }
 
 #[instrument(skip_all)]
@@ -434,7 +459,7 @@ pub async fn test_in_tree(uri: &str, client: &Client, leaf: &Hash) {
     let result = serde_json::from_str::<InclusionProofResponse>(&result)
         .expect("Failed to parse InclusionProofResponse");
 
-    let root: U256 = result.0.root.expect("Failed to get root").into();
+    let root: U256 = result.root.expect("Failed to get root").into();
 
     assert_ne!(root, U256::zero(), "Hash is not zero");
 }
@@ -843,12 +868,14 @@ pub fn init_tracing_subscriber() {
 pub fn generate_reference_proof(
     ref_tree: &PoseidonTree,
     leaf_idx: usize,
+    status: Status,
 ) -> InclusionProofResponse {
-    InclusionProofResponse(InclusionProof {
+    InclusionProofResponse {
+        status,
         root: Some(ref_tree.root()),
         proof: ref_tree.proof(leaf_idx),
         message: None,
-    })
+    }
 }
 
 /// Generates identities for the purposes of testing. The identities are encoded
@@ -880,6 +907,15 @@ pub async fn test_same_tree_states(
     tree_state1: &TreeState,
     tree_state2: &TreeState,
 ) -> anyhow::Result<()> {
+    assert_eq!(
+        tree_state1.mined_tree().next_leaf(),
+        tree_state2.mined_tree().next_leaf()
+    );
+    assert_eq!(
+        tree_state1.mined_tree().get_root(),
+        tree_state2.mined_tree().get_root()
+    );
+
     assert_eq!(
         tree_state1.processed_tree().next_leaf(),
         tree_state2.processed_tree().next_leaf()

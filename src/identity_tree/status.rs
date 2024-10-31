@@ -27,6 +27,15 @@ pub enum ProcessedStatus {
     Mined,
 }
 
+/// Status of identity commitments which have not yet been included in the tree
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
+pub enum UnprocessedStatus {
+    /// Root is unprocessed - i.e. not included in sequencer's
+    /// in-memory tree.
+    New,
+}
+
 /// A status type visible on the API level
 // TODO: Remove
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -34,6 +43,7 @@ pub enum ProcessedStatus {
 #[serde(untagged)]
 pub enum Status {
     Processed(ProcessedStatus),
+    Unprocessed(UnprocessedStatus),
 }
 
 #[derive(Debug, Error)]
@@ -53,11 +63,44 @@ impl FromStr for ProcessedStatus {
     }
 }
 
+impl FromStr for UnprocessedStatus {
+    type Err = UnknownStatus;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "new" => Ok(Self::New),
+            _ => Err(UnknownStatus),
+        }
+    }
+}
+
+impl FromStr for Status {
+    type Err = UnknownStatus;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(s) = UnprocessedStatus::from_str(s) {
+            Ok(Self::Unprocessed(s))
+        } else if let Ok(s) = ProcessedStatus::from_str(s) {
+            Ok(Self::Processed(s))
+        } else {
+            Err(UnknownStatus)
+        }
+    }
+}
+
 impl TryFrom<&str> for ProcessedStatus {
     type Error = UnknownStatus;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         ProcessedStatus::from_str(s)
+    }
+}
+
+impl TryFrom<&str> for UnprocessedStatus {
+    type Error = UnknownStatus;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        UnprocessedStatus::from_str(s)
     }
 }
 
@@ -71,14 +114,10 @@ impl From<ProcessedStatus> for &str {
     }
 }
 
-impl FromStr for Status {
-    type Err = UnknownStatus;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Ok(s) = ProcessedStatus::from_str(s) {
-            Ok(Self::Processed(s))
-        } else {
-            Err(UnknownStatus)
+impl From<UnprocessedStatus> for &str {
+    fn from(scope: UnprocessedStatus) -> Self {
+        match scope {
+            UnprocessedStatus::New => "new",
         }
     }
 }
@@ -86,6 +125,12 @@ impl FromStr for Status {
 impl From<ProcessedStatus> for Status {
     fn from(status: ProcessedStatus) -> Self {
         Self::Processed(status)
+    }
+}
+
+impl From<UnprocessedStatus> for Status {
+    fn from(status: UnprocessedStatus) -> Self {
+        Self::Unprocessed(status)
     }
 }
 

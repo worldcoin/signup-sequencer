@@ -178,7 +178,7 @@ async fn main() -> anyhow::Result<()> {
 
             let response: InclusionProofResponse = response.json().await?;
 
-            let proof: Proof = response.0.proof.context("Missing proof")?;
+            let proof: Proof = response.proof.context("Missing proof")?;
             let proof_serialized = serde_json::to_string_pretty(&proof)?;
 
             if let Some(inclusion_proof_file) = args.inclusion_proof_file.as_ref() {
@@ -229,14 +229,14 @@ async fn main() -> anyhow::Result<()> {
 
             let response: InclusionProofResponse = response.json().await?;
 
-            let root = response.0.root.context("Missing root")?;
+            let root = response.root.context("Missing root")?;
 
             let nullifier_hash =
                 semaphore::protocol::generate_nullifier_hash(&identity, x.external_nullifier_hash);
 
             let proof = semaphore::protocol::generate_proof(
                 &identity,
-                &response.0.proof.context("Missing proof")?,
+                &response.proof.context("Missing proof")?,
                 x.external_nullifier_hash,
                 x.signal_hash,
             )?;

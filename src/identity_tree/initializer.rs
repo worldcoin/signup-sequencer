@@ -47,27 +47,39 @@ impl TreeInitializer {
             .await?;
 
         let timer = Instant::now();
-        let mut tree_state = self.restore_or_initialize_tree(initial_root_hash).await?;
+        info!("Tree state initialization started");
+        let tree_state = self
+            .restore_or_initialize_tree(initial_root_hash, self.config.force_cache_purge)
+            .await?;
         info!("Tree state initialization took: {:?}", timer.elapsed());
 
         let tree_root = tree_state.get_processed_tree().get_root();
-
-        if tree_root != initial_root_hash {
-            warn!(
-                "Cached tree root is different from the contract root. Purging cache and \
+        match self.identity_processor.latest_root().await? {
+            Some(root) if root == tree_root => Ok(tree_state),
+            None if initial_root_hash == tree_root => Ok(tree_state),
+            _ => {
+                warn!(
+                    "Cached tree root is different from the contract root. Purging cache and \
                  reinitializing."
-            );
+                );
 
-            tree_state = self.restore_or_initialize_tree(initial_root_hash).await?;
+                let timer = Instant::now();
+                info!("Tree state initialization started");
+                let tree_state = self
+                    .restore_or_initialize_tree(initial_root_hash, true)
+                    .await?;
+                info!("Tree state initialization took: {:?}", timer.elapsed());
+
+                Ok(tree_state)
+            }
         }
-
-        Ok(tree_state)
     }
 
     #[instrument(skip(self))]
     async fn restore_or_initialize_tree(
         &self,
         initial_root_hash: Hash,
+        force_cache_purge: bool,
     ) -> anyhow::Result<TreeState> {
         let mut mined_items = self
             .database
@@ -78,7 +90,7 @@ impl TreeInitializer {
 
         let mined_items = dedup_tree_updates(mined_items);
 
-        if !self.config.force_cache_purge {
+        if !force_cache_purge {
             info!("Attempting to restore tree from cache");
             if let Some(tree_state) = self
                 .get_cached_tree_state(&mined_items, initial_root_hash)

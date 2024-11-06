@@ -18,7 +18,9 @@ use crate::database::methods::DbMethods;
 use crate::database::types::{BatchEntry, BatchType};
 use crate::database::{Database, IsolationLevel};
 use crate::ethereum::{Ethereum, ReadProvider};
-use crate::identity_tree::{Canonical, Hash, Intermediate, TreeVersion, TreeWithNextVersion};
+use crate::identity_tree::{
+    Canonical, Hash, Intermediate, ProcessedStatus, TreeVersion, TreeWithNextVersion,
+};
 use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;
 use crate::prover::Prover;
@@ -41,6 +43,8 @@ pub trait IdentityProcessor: Send + Sync + 'static {
     async fn mine_transaction(&self, transaction_id: TransactionId) -> anyhow::Result<bool>;
 
     async fn tree_init_correction(&self, initial_root_hash: &Hash) -> anyhow::Result<()>;
+
+    async fn latest_root(&self) -> anyhow::Result<Option<Hash>>;
 }
 
 pub struct OnChainIdentityProcessor {
@@ -157,6 +161,10 @@ impl IdentityProcessor for OnChainIdentityProcessor {
         tx.commit().await?;
 
         Ok(())
+    }
+
+    async fn latest_root(&self) -> anyhow::Result<Option<Hash>> {
+        Ok(Some(self.identity_manager.latest_root().await?.into()))
     }
 }
 
@@ -560,6 +568,13 @@ impl IdentityProcessor for OffChainIdentityProcessor {
     async fn tree_init_correction(&self, _initial_root_hash: &Hash) -> anyhow::Result<()> {
         // For off chain mode we don't correct tree at all
         Ok(())
+    }
+
+    async fn latest_root(&self) -> anyhow::Result<Option<Hash>> {
+        Ok(self
+            .database
+            .get_latest_root_by_status(ProcessedStatus::Mined)
+            .await?)
     }
 }
 

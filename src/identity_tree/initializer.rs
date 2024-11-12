@@ -165,11 +165,11 @@ impl TreeInitializer {
             return Ok(None);
         };
 
-        let (mined, processed_builder) = mined_builder.seal();
+        let (mined, mut processed_builder) = mined_builder.seal();
 
         match self
             .database
-            .get_latest_root_by_status(ProcessedStatus::Processed)
+            .get_latest_root_by_status(ProcessedStatus::Mined)
             .await?
         {
             Some(root) => {
@@ -182,6 +182,15 @@ impl TreeInitializer {
                     return Ok(None);
                 }
             }
+        }
+
+        let processed_items = self
+            .database
+            .get_commitments_by_status(ProcessedStatus::Processed)
+            .await?;
+
+        for processed_item in processed_items {
+            processed_builder.update(&processed_item);
         }
 
         let (processed, batching_builder) = processed_builder.seal_and_continue();

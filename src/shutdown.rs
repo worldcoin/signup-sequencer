@@ -102,7 +102,6 @@ impl Shutdown {
                 _ = self.await_shutdown_complete() => {
                     let elapsed = start.elapsed();
                     info!("shutdown channel closed, gracefully shut down in {:?}", elapsed);
-                    std::process::exit(0);
                 },
                 _ = tokio::time::sleep(timeout) => {
                     error!("shutdown monitor timed out");

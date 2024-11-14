@@ -5,9 +5,11 @@ CREATE TABLE recoveries (
 
 ALTER TABLE unprocessed_identities
     ADD COLUMN eligibility TIMESTAMPTZ,
-    ADD COLUMN status VARCHAR(50) NOT NULL,
+    ADD COLUMN status VARCHAR(50),
     ADD COLUMN processed_at TIMESTAMPTZ,
     ADD COLUMN error_message TEXT;
 
+UPDATE unprocessed_identities SET status = 'new', eligibility = CURRENT_TIMESTAMP WHERE status IS NULL;
+
 ALTER TABLE unprocessed_identities
-    DROP CONSTRAINT unique_commitment;
+    ALTER COLUMN status SET NOT NULL;

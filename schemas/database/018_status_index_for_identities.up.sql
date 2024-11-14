@@ -1,0 +1,1 @@
+CREATE INDEX identities_status on identities(status);

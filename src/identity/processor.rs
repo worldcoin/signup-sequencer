@@ -566,7 +566,27 @@ impl IdentityProcessor for OffChainIdentityProcessor {
     }
 
     async fn tree_init_correction(&self, _initial_root_hash: &Hash) -> anyhow::Result<()> {
-        // For off chain mode we don't correct tree at all
+        // it's enough to run with read committed here
+        // since in the worst case another instance of the sequencer
+        // will try to do the same thing but with a later root
+        // in such a case the state will be corrected later in the program
+        let mut tx = self
+            .database
+            .begin_tx(IsolationLevel::ReadCommitted)
+            .await?;
+
+        let root_hash = tx
+            .get_latest_root_by_status(ProcessedStatus::Processed)
+            .await?;
+
+        if let Some(root_hash) = root_hash {
+            // This deletion is required as when tree is being initialized we do not read batches.
+            // Just restarting from last processed tree.
+            tx.delete_batches_after_root(&root_hash).await?; // TODO: We probably shouldn't do this in HA
+        }
+
+        tx.commit().await?;
+
         Ok(())
     }
 

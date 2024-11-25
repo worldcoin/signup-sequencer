@@ -1,12 +1,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::{mpsc, Notify};
-use tokio::{select, time};
-
 use crate::app::App;
 use crate::database::methods::DbMethods as _;
 use crate::identity::processor::TransactionId;
+use tokio::sync::{mpsc, Notify};
+use tokio::time::MissedTickBehavior;
+use tokio::{select, time};
 
 pub async fn process_batches(
     app: Arc<App>,
@@ -23,6 +23,7 @@ pub async fn process_batches(
     tracing::info!("Starting identity processor.");
 
     let mut timer = time::interval(Duration::from_secs(5));
+    timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     loop {
         // We wait either for a timer tick or a full batch

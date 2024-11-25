@@ -7,6 +7,7 @@ use semaphore::poseidon_tree::{Branch, PoseidonHash};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
+use tokio::time::MissedTickBehavior;
 use tokio::{select, time};
 use tracing::instrument;
 
@@ -40,7 +41,7 @@ pub async fn create_batches(
     // We start a timer and force it to perform one initial tick to avoid an
     // immediate trigger.
     let mut timer = time::interval(Duration::from_secs(5));
-    timer.tick().await;
+    timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     // When both futures are woken at once, the choice is made
     // non-deterministically. This could, in the worst case, result in users waiting

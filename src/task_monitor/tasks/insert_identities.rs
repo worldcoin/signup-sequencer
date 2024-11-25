@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::{Mutex, Notify};
-use tokio::time;
+use tokio::{select, time};
 use tracing::info;
 
 use crate::app::App;
@@ -25,8 +25,11 @@ pub async fn insert_identities(
     let mut timer = time::interval(Duration::from_secs(5));
 
     loop {
-        _ = timer.tick().await;
-        info!("Insertion processor woken due to timeout.");
+        select! {
+            _ = timer.tick() => {
+                info!("Insertion processor woken due to timeout.");
+            }
+        }
 
         // get commits from database
         let unprocessed = app.database.get_unprocessed_commitments().await?;

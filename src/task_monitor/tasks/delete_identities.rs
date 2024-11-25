@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::Context;
 use chrono::Utc;
 use tokio::sync::{Mutex, Notify};
-use tokio::time;
+use tokio::{select, time};
 use tracing::info;
 
 use crate::app::App;
@@ -32,8 +32,11 @@ pub async fn delete_identities(
     let mut timer = time::interval(Duration::from_secs(5));
 
     loop {
-        _ = timer.tick().await;
-        info!("Deletion processor woken due to timeout");
+        select! {
+            _ = timer.tick() => {
+                info!("Deletion processor woken due to timeout");
+            }
+        }
 
         let deletions = app.database.get_deletions().await?;
         if deletions.is_empty() {

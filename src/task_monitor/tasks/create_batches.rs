@@ -1,11 +1,11 @@
-use std::sync::Arc;
-
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use ethers::prelude::U256;
 use ruint::Uint;
 use semaphore::merkle_tree::Proof;
 use semaphore::poseidon_tree::{Branch, PoseidonHash};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::{select, time};
 use tracing::instrument;
@@ -39,7 +39,7 @@ pub async fn create_batches(
 
     // We start a timer and force it to perform one initial tick to avoid an
     // immediate trigger.
-    let mut timer = time::interval(app.config.app.batch_insertion_timeout);
+    let mut timer = time::interval(Duration::from_secs(5));
     timer.tick().await;
 
     // When both futures are woken at once, the choice is made

@@ -5,6 +5,7 @@ use std::time::Duration;
 use anyhow::Context;
 use chrono::Utc;
 use tokio::sync::{Mutex, Notify};
+use tokio::time::MissedTickBehavior;
 use tokio::{select, time};
 use tracing::info;
 
@@ -30,6 +31,7 @@ pub async fn delete_identities(
         .context("Invalid batch deletion timeout duration")?;
 
     let mut timer = time::interval(Duration::from_secs(5));
+    timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     loop {
         select! {

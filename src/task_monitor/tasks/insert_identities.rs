@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::{Mutex, Notify};
+use tokio::time::MissedTickBehavior;
 use tokio::{select, time};
 use tracing::info;
 
@@ -23,6 +24,7 @@ pub async fn insert_identities(
     info!("Starting insertion processor task.");
 
     let mut timer = time::interval(Duration::from_secs(5));
+    timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     loop {
         select! {

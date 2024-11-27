@@ -223,7 +223,13 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert!(handle.is_finished(), "Task should be finished");
 
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        panic!("The process should have exited already");
+        select! {
+                _ = shutdown.await_shutdown_complete() => {
+                    Ok(())
+                },
+                _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                    panic!("The process should have exited already");
+                }
+        }
     }
 }

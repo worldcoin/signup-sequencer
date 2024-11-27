@@ -3,6 +3,7 @@
 mod common;
 
 use common::prelude::*;
+use tokio::select;
 
 const IDLE_TIME: u64 = 5;
 
@@ -64,6 +65,12 @@ async fn graceful_shutdown(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
     shutdown.shutdown();
 
-    tokio::time::sleep(Duration::from_secs(5)).await;
-    panic!("error: process took longer than 5 seconds to shutdown");
+    select! {
+            _ = shutdown.await_shutdown_complete() => {
+                Ok(())
+            },
+            _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                panic!("error: process took longer than 5 seconds to shutdown");
+            }
+    }
 }

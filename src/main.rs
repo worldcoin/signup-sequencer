@@ -57,6 +57,8 @@ async fn sequencer_app(args: Args) -> anyhow::Result<()> {
     tracing::info!("Shutting down");
     shutdown.shutdown();
 
+    shutdown.await_shutdown_complete().await;
+
     Ok(())
 }
 

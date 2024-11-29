@@ -644,6 +644,7 @@ impl CanonicalTreeBuilder {
         let (initial_leaves_in_dense, leftover_initial_leaves) =
             initial_leaves.split_at(initial_leaves_in_dense_count);
 
+        info!("Creating mmap dense tree");
         let tree =
             PoseidonTree::<lazy_merkle_tree::Canonical>::new_mmapped_with_dense_prefix_with_init_values(
                 tree_depth,
@@ -652,6 +653,8 @@ impl CanonicalTreeBuilder {
                 initial_leaves_in_dense,
                 mmap_file_path
             ).unwrap();
+
+        info!("Applying leaves not in dense tree");
         let metadata = CanonicalTreeMetadata {
             flatten_threshold: flattening_threshold,
             count_since_last_flatten: 0,
@@ -662,12 +665,19 @@ impl CanonicalTreeBuilder {
             metadata,
             next: None,
         });
+        let last_leaf_index = leftover_initial_leaves.len() + initial_leaves_in_dense_count;
         for (index, leaf) in leftover_initial_leaves.iter().enumerate() {
+            let leaf_index = index + initial_leaves_in_dense_count;
+            if leaf_index % 10000 == 0 {
+                info!("Current index {leaf_index}/{last_leaf_index}");
+            }
             builder.update(&TreeUpdate {
-                leaf_index: index + initial_leaves_in_dense_count,
+                leaf_index,
                 element: *leaf,
             });
         }
+
+        info!("Tree created");
         builder
     }
 
@@ -680,6 +690,7 @@ impl CanonicalTreeBuilder {
         flattening_threshold: usize,
         mmap_file_path: &str,
     ) -> Option<Self> {
+        info!("Restoring tree from file");
         let tree: LazyMerkleTree<PoseidonHash, lazy_merkle_tree::Canonical> =
             match PoseidonTree::<lazy_merkle_tree::Canonical>::attempt_dense_mmap_restore(
                 tree_depth,
@@ -694,6 +705,7 @@ impl CanonicalTreeBuilder {
                 }
             };
 
+        info!("Applying leaves not in dense tree");
         let metadata = CanonicalTreeMetadata {
             flatten_threshold: flattening_threshold,
             count_since_last_flatten: 0,
@@ -706,13 +718,19 @@ impl CanonicalTreeBuilder {
             next: None,
         });
 
+        let last_leaf_index = leftover_items.len() + next_leaf;
         for (index, leaf) in leftover_items.iter().enumerate() {
+            let leaf_index = index + next_leaf;
+            if index % 10000 == 0 {
+                info!("Current index {leaf_index}/{last_leaf_index}");
+            }
             builder.update(&TreeUpdate {
-                leaf_index: next_leaf + index,
+                leaf_index,
                 element: *leaf,
             });
         }
 
+        info!("Tree restored");
         Some(builder)
     }
 

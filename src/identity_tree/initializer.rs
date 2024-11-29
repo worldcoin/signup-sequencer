@@ -81,6 +81,7 @@ impl TreeInitializer {
         initial_root_hash: Hash,
         force_cache_purge: bool,
     ) -> anyhow::Result<TreeState> {
+        info!("Getting mined commitments from DB");
         let mut mined_items = self
             .database
             .get_commitments_by_status(ProcessedStatus::Mined)
@@ -90,8 +91,13 @@ impl TreeInitializer {
 
         let mined_items = dedup_tree_updates(mined_items);
 
+        info!("Retrieved {} mined commitments from DB", mined_items.len());
+
         if !force_cache_purge {
-            info!("Attempting to restore tree from cache");
+            info!(
+                "Attempting to restore tree from cache (file={})",
+                &self.config.cache_file
+            );
             if let Some(tree_state) = self
                 .get_cached_tree_state(&mined_items, initial_root_hash)
                 .await?
@@ -118,10 +124,12 @@ impl TreeInitializer {
             vec![]
         } else {
             let max_leaf = mined_items.last().map(|item| item.leaf_index).unwrap();
-            // if the last index is greater then dense_prefix_depth, 1 << dense_prefix_depth
+            // if the last index is greater than dense_prefix_depth, 1 << dense_prefix_depth
             // should be the last index in restored tree
             let last_index = std::cmp::min(max_leaf, (1 << dense_prefix_depth) - 1);
             *index = Some(last_index);
+
+            info!("calculated last dense tree index: {}", last_index);
 
             if max_leaf - last_index == 0 {
                 return vec![];
@@ -138,6 +146,11 @@ impl TreeInitializer {
             leaves
         };
 
+        info!(
+            "number of leaves not included in the dense tree: {}",
+            leftover_items.len()
+        );
+
         leftover_items
     }
 
@@ -146,12 +159,16 @@ impl TreeInitializer {
         mined_items: &[TreeUpdate],
         initial_root_hash: Hash,
     ) -> anyhow::Result<Option<TreeState>> {
+        info!("Restoring tree from cache");
+
         let mut last_mined_index_in_dense: Option<usize> = None;
         let leftover_items = Self::get_leftover_leaves_and_update_index(
             &mut last_mined_index_in_dense,
             self.config.dense_tree_prefix_depth,
             mined_items,
         );
+
+        info!("Restoring canonical mined tree");
 
         let Some(mined_builder) = CanonicalTreeBuilder::restore(
             self.config.tree_depth,
@@ -174,15 +191,19 @@ impl TreeInitializer {
         {
             Some(root) => {
                 if !mined.get_root().eq(&root) {
+                    info!("Cached tree root differs from root in database");
                     return Ok(None);
                 }
             }
             None => {
                 if !mined.get_root().eq(&initial_root_hash) {
+                    info!("Cached tree root differs from init root");
                     return Ok(None);
                 }
             }
         }
+
+        info!("Restoring derived processed and batching tree");
 
         let processed_items = self
             .database
@@ -196,6 +217,8 @@ impl TreeInitializer {
         let (processed, batching_builder) = processed_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
 
+        info!("Restoring derived latest tree");
+
         let pending_items = self
             .database
             .get_commitments_by_status(ProcessedStatus::Pending)
@@ -205,6 +228,8 @@ impl TreeInitializer {
         }
         let latest = latest_builder.seal();
 
+        info!("Batching tree correction");
+
         let batch = self.database.get_latest_batch().await?;
         if let Some(batch) = batch {
             if batching.get_root() != batch.next_root {
@@ -213,11 +238,15 @@ impl TreeInitializer {
             assert_eq!(batching.get_root(), batch.next_root);
         }
 
+        info!("Tree restored.");
+
         Ok(Some(TreeState::new(mined, processed, batching, latest)))
     }
 
     #[instrument(skip_all)]
     async fn initialize_tree(&self, mined_items: Vec<TreeUpdate>) -> anyhow::Result<TreeState> {
+        info!("Creating tree from the database");
+
         let initial_leaf_value = self.config.initial_leaf_value;
 
         let initial_leaves = if mined_items.is_empty() {
@@ -233,11 +262,12 @@ impl TreeInitializer {
             leaves
         };
 
-        info!("Creating mined tree");
         let tree_depth = self.config.tree_depth;
         let dense_tree_prefix_depth = self.config.dense_tree_prefix_depth;
         let tree_gc_threshold = self.config.tree_gc_threshold;
         let cache_file = self.config.cache_file.clone();
+
+        info!("Creating canonical mined tree");
 
         let mined_builder = tokio::task::spawn_blocking(move || {
             CanonicalTreeBuilder::new(
@@ -253,12 +283,13 @@ impl TreeInitializer {
 
         let (mined, mut processed_builder) = mined_builder.seal();
 
+        info!("Creating derived processed and batching tree");
+
         let processed_items = self
             .database
             .get_commitments_by_status(ProcessedStatus::Processed)
             .await?;
 
-        info!("Updating processed tree");
         let processed_builder = tokio::task::spawn_blocking(move || {
             for processed_item in processed_items {
                 processed_builder.update(&processed_item);
@@ -271,12 +302,13 @@ impl TreeInitializer {
         let (processed, batching_builder) = processed_builder.seal_and_continue();
         let (batching, mut latest_builder) = batching_builder.seal_and_continue();
 
+        info!("Creating derived latest tree");
+
         let pending_items = self
             .database
             .get_commitments_by_status(ProcessedStatus::Pending)
             .await?;
 
-        info!("Updating latest tree");
         let latest_builder = tokio::task::spawn_blocking(move || {
             for update in pending_items {
                 latest_builder.update(&update);
@@ -288,6 +320,7 @@ impl TreeInitializer {
 
         let latest = latest_builder.seal();
 
+        info!("Batching tree correction");
         let batch = self.database.get_latest_batch().await?;
         if let Some(batch) = batch {
             if batching.get_root() != batch.next_root {
@@ -295,6 +328,8 @@ impl TreeInitializer {
             }
             assert_eq!(batching.get_root(), batch.next_root);
         }
+
+        info!("Tree created.");
 
         Ok(TreeState::new(mined, processed, batching, latest))
     }

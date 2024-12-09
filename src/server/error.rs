@@ -80,6 +80,7 @@ impl Error {
             Self::IndexOutOfBounds | Self::InvalidCommitment | Self::InvalidSerialization(_) => {
                 StatusCode::BAD_REQUEST
             }
+            Self::InvalidProof => StatusCode::UNPROCESSABLE_ENTITY,
             Self::IdentityAlreadyDeleted
             | Self::IdentityQueuedForDeletion
             | Self::DuplicateCommitment => StatusCode::CONFLICT,

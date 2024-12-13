@@ -142,9 +142,7 @@ pub async fn run(app: Arc<App>, config: ServerConfig, shutdown: Shutdown) -> any
 }
 
 #[derive(Clone)]
-struct PanicHandler {
-    shutdown: Shutdown,
-}
+struct PanicHandler {}
 
 impl ResponseForPanic for PanicHandler {
     type ResponseBody = Body;
@@ -154,17 +152,10 @@ impl ResponseForPanic for PanicHandler {
         error: Box<dyn std::any::Any + Send + 'static>,
     ) -> hyper::Response<Self::ResponseBody> {
         tracing::error!(?error, "request panicked");
-        self.shutdown.clone().shutdown();
         hyper::Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(Body::empty())
             .unwrap()
-    }
-}
-
-impl From<Shutdown> for PanicHandler {
-    fn from(shutdown: Shutdown) -> Self {
-        Self { shutdown }
     }
 }
 
@@ -194,9 +185,7 @@ pub async fn bind_from_listener(
         .layer(middleware::from_fn(
             custom_middleware::api_metrics_layer::middleware,
         ))
-        .layer(CatchPanicLayer::custom(PanicHandler {
-            shutdown: shutdown.clone(),
-        }))
+        .layer(CatchPanicLayer::custom(PanicHandler {}))
         .layer(middleware::from_fn_with_state(
             serve_timeout,
             custom_middleware::timeout_layer::middleware,

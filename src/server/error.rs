@@ -93,7 +93,7 @@ impl IntoResponse for Error {
         let status_code = self.to_status_code();
 
         let body = if let Self::Other(err) = self {
-            format!("{err:?}")
+            format!("{err}")
         } else {
             self.to_string()
         };

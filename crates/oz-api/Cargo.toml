@@ -11,7 +11,7 @@ cognitoauth = { path = "../cognitoauth" }
 ethers = { version = "2.0.10", features = [ "ws", "ipc", "openssl", "abigen" ] }
 hyper = { version = "^0.14.17", features = ["server", "tcp", "http1", "http2"] }
 reqwest = "0.11.14"
-serde = { version = "1.0.154", features = ["derive"] }
+serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.94"
 thiserror = "1.0.39"
 tokio = { version = "1.17", features = ["full"] }

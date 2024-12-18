@@ -345,9 +345,13 @@ mod test {
     use crate::identity_tree::TreeUpdate;
 
     pub fn generate_test_identities_with_index(identity_count: usize) -> Vec<TreeUpdate> {
+        generate_test_identities_with_range(0, identity_count)
+    }
+
+    pub fn generate_test_identities_with_range(start: usize, end: usize) -> Vec<TreeUpdate> {
         let mut identities = vec![];
 
-        for i in 1..=identity_count {
+        for i in start..end {
             let bytes: [u8; 32] = U256::from(rand::random::<u64>()).into();
             let identity = Uint::<256, 4>::from_le_bytes(bytes);
 
@@ -369,7 +373,7 @@ mod test {
         let more_identities_count = 2usize.pow(dense_prefix_depth.try_into().unwrap()) + 2;
 
         // test if empty case is handled correctly (it means no last mined index as no
-        // indecies at all)
+        // indices at all)
         let identities: Vec<TreeUpdate> = vec![];
 
         let mut last_mined_index_in_dense: Option<usize> = None;
@@ -385,7 +389,7 @@ mod test {
         // since there are no identities at all the leaves should be 0
         assert_eq!(leaves.len(), 0);
 
-        // first test with less then dense prefix
+        // first test with less than dense prefix
         let identities = generate_test_identities_with_index(less_identities_count);
 
         last_mined_index_in_dense = None;
@@ -397,12 +401,12 @@ mod test {
         );
 
         // check if the index is correct
-        assert_eq!(last_mined_index_in_dense, Some(identities.len()));
-        // since there are less identities then dense prefix, the leavs should be empty
+        assert_eq!(last_mined_index_in_dense, Some(identities.len() - 1));
+        // since there are fewer identities than dense prefix, the leaves should be empty
         // vector
         assert!(leaves.is_empty());
 
-        // lets try now with more identities then dense prefix supports
+        // let's try now with more identities than dense prefix supports
 
         // this should generate 2^dense_prefix + 2
         let identities = generate_test_identities_with_index(more_identities_count);
@@ -420,12 +424,136 @@ mod test {
             Some((1 << dense_prefix_depth) - 1)
         );
 
-        // since there are more identities then dense prefix, the leavs should be 2
+        // since there are more identities than dense prefix, the leaves should be 2
         assert_eq!(leaves.len(), 2);
 
         // additional check for correctness
         assert_eq!(leaves[0], identities[8].element);
         assert_eq!(leaves[1], identities[9].element);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_index_logic_with_leaf_gap_1() -> anyhow::Result<()> {
+        // test if empty case is handled correctly (it means no last mined index as no
+        // indices at all)
+
+        // supports 8 identities (2^3)
+        let dense_prefix_depth: usize = 3;
+
+        let identities: Vec<TreeUpdate> = vec![];
+
+        let mut last_mined_index_in_dense: Option<usize> = None;
+        let leaves = TreeInitializer::get_leftover_leaves_and_update_index(
+            &mut last_mined_index_in_dense,
+            dense_prefix_depth,
+            &identities,
+        );
+
+        // check if the index is correct
+        assert_eq!(last_mined_index_in_dense, None);
+
+        // since there are no identities at all the leaves should be 0
+        assert_eq!(leaves.len(), 0);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_index_logic_with_leaf_gap_2() -> anyhow::Result<()> {
+        // first test with less than dense prefix
+
+        // supports 8 identities (2^3)
+        let dense_prefix_depth: usize = 3;
+
+        let mut identities = generate_test_identities_with_range(0, 2);
+        identities.append(&mut generate_test_identities_with_range(4, 6));
+
+        let mut last_mined_index_in_dense: Option<usize> = None;
+        let leaves = TreeInitializer::get_leftover_leaves_and_update_index(
+            &mut last_mined_index_in_dense,
+            dense_prefix_depth,
+            &identities,
+        );
+
+        // check if the index is correct
+        assert_eq!(last_mined_index_in_dense, Some(5));
+        // since there are fewer identities than dense prefix, the leaves should be empty
+        // vector
+        assert!(leaves.is_empty());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_index_logic_with_leaf_gap_3() -> anyhow::Result<()> {
+        // let's try now with more identities than dense prefix supports
+
+        // supports 8 identities (2^3)
+        let dense_prefix_depth: usize = 3;
+
+        // this should generate 2^dense_prefix + 2
+        let mut identities = generate_test_identities_with_range(0, 2);
+        identities.append(&mut generate_test_identities_with_range(4, 12));
+
+        let mut last_mined_index_in_dense: Option<usize> = None;
+        let leaves = TreeInitializer::get_leftover_leaves_and_update_index(
+            &mut last_mined_index_in_dense,
+            dense_prefix_depth,
+            &identities,
+        );
+
+        // check if the index is correct
+        assert_eq!(
+            last_mined_index_in_dense,
+            Some((1 << dense_prefix_depth) - 1)
+        );
+
+        // since there are more identities than dense prefix, the leaves should be 2
+        assert_eq!(leaves.len(), 4);
+
+        // additional check for correctness
+        assert_eq!(leaves[0], identities[6].element);
+        assert_eq!(leaves[1], identities[7].element);
+        assert_eq!(leaves[2], identities[8].element);
+        assert_eq!(leaves[3], identities[9].element);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_index_logic_with_leaf_gap_4() -> anyhow::Result<()> {
+        // let's try now with more identities that should fit in dense prefix but won't due to leaf index
+
+        // supports 8 identities (2^3)
+        let dense_prefix_depth: usize = 3;
+
+        // this should generate 2^dense_prefix + 2
+        let mut identities = generate_test_identities_with_range(0, 2);
+        identities.append(&mut generate_test_identities_with_range(8, 12));
+
+        let mut last_mined_index_in_dense: Option<usize> = None;
+        let leaves = TreeInitializer::get_leftover_leaves_and_update_index(
+            &mut last_mined_index_in_dense,
+            dense_prefix_depth,
+            &identities,
+        );
+
+        // check if the index is correct
+        assert_eq!(
+            last_mined_index_in_dense,
+            Some((1 << dense_prefix_depth) - 1)
+        );
+
+        // since there are more identities than dense prefix, the leaves should be 2
+        assert_eq!(leaves.len(), 4);
+
+        // additional check for correctness
+        assert_eq!(leaves[0], identities[2].element);
+        assert_eq!(leaves[1], identities[3].element);
+        assert_eq!(leaves[2], identities[4].element);
+        assert_eq!(leaves[3], identities[5].element);
 
         Ok(())
     }

@@ -1,0 +1,57 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" version="26.0.4" pages="2">
+  <diagram name="On-chain" id="FWv6cVuVJNYOb9oH0ozy">
+    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="TtGFQs7OhR55lzlgiGBG-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="TtGFQs7OhR55lzlgiGBG-1" target="TtGFQs7OhR55lzlgiGBG-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="TtGFQs7OhR55lzlgiGBG-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="TtGFQs7OhR55lzlgiGBG-1" target="TtGFQs7OhR55lzlgiGBG-10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="TtGFQs7OhR55lzlgiGBG-1" value="signup-sequencer" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="130" y="340" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="TtGFQs7OhR55lzlgiGBG-2" value="PostgreSQL" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=21;" vertex="1" parent="1">
+          <mxGeometry x="150" y="140" width="80" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="TtGFQs7OhR55lzlgiGBG-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="TtGFQs7OhR55lzlgiGBG-1" target="TtGFQs7OhR55lzlgiGBG-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="TtGFQs7OhR55lzlgiGBG-5" value="tx-sitter-monolith" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="250" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="TtGFQs7OhR55lzlgiGBG-7" value="Ethereum" style="shape=cube;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;darkOpacity2=0.1;" vertex="1" parent="1">
+          <mxGeometry x="530" y="310" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="TtGFQs7OhR55lzlgiGBG-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0;entryDx=0;entryDy=30;entryPerimeter=0;" edge="1" parent="1" source="TtGFQs7OhR55lzlgiGBG-5" target="TtGFQs7OhR55lzlgiGBG-7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="TtGFQs7OhR55lzlgiGBG-9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.588;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="TtGFQs7OhR55lzlgiGBG-1" target="TtGFQs7OhR55lzlgiGBG-7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="TtGFQs7OhR55lzlgiGBG-10" value="semaphore-mtb" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="130" y="520" width="120" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="Off-chain" id="AhmKjAiLeuziNkAp_4c1">
+    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="F2VMFshncvbWUpVj8S3X-0" />
+        <mxCell id="F2VMFshncvbWUpVj8S3X-1" parent="F2VMFshncvbWUpVj8S3X-0" />
+        <mxCell id="F2VMFshncvbWUpVj8S3X-4" value="signup-sequencer" style="rounded=0;whiteSpace=wrap;html=1;" parent="F2VMFshncvbWUpVj8S3X-1" vertex="1">
+          <mxGeometry x="130" y="340" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="F2VMFshncvbWUpVj8S3X-5" value="PostgreSQL" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=21;" parent="F2VMFshncvbWUpVj8S3X-1" vertex="1">
+          <mxGeometry x="150" y="140" width="80" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="F2VMFshncvbWUpVj8S3X-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;entryPerimeter=0;" parent="F2VMFshncvbWUpVj8S3X-1" source="F2VMFshncvbWUpVj8S3X-4" target="F2VMFshncvbWUpVj8S3X-5" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

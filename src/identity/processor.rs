@@ -435,17 +435,17 @@ impl OnChainIdentityProcessor {
                 // how required mined_at field is set, We set proper state only if not set
                 // previously.
                 let root_state = tx.get_root_state(&post_root).await?;
-                match root_state {
-                    Some(root_state) if root_state.status == ProcessedStatus::Processed => {}
-                    Some(root_state) if root_state.status == ProcessedStatus::Mined => {}
-                    _ => {
-                        tx.mark_root_as_processed(&post_root).await?;
+                if let Some(root_state) = root_state {
+                    if root_state.status == ProcessedStatus::Processed || root_state.status == ProcessedStatus::Mined {
+                        return Ok::<(), anyhow::Error>(());
                     }
                 }
 
+                tx.mark_root_as_processed(&post_root).await?;
+
                 Ok::<(), anyhow::Error>(())
             })
-            .await?;
+                .await?;
 
             info!(?pre_root, ?post_root, ?kind, "Batch mined");
 

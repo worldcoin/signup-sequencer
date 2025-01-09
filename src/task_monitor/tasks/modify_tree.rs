@@ -34,7 +34,7 @@ pub async fn modify_tree(
     let mut timer = time::interval(Duration::from_secs(5));
 
     loop {
-        // We wait either for a timer tick or a full batch
+        // We wait either for a timer tick or a event that tree was synchronized
         select! {
             _ = timer.tick() => {
                 info!("Modify tree task woken due to timeout");

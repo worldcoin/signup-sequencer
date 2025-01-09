@@ -312,10 +312,10 @@ fn parse_exposed_port(s: String) -> anyhow::Result<u32> {
         .filter(|s| !s.is_empty())
         .collect();
 
-    let port = parts.last().and_then(|v| v.split(':').last());
-
-    match port {
-        Some(port) => port.parse::<u32>().map_err(|err| anyhow!(err)),
-        None => Err(anyhow!("Port not found in string.")),
-    }
+    Ok(parts
+        .last()
+        .and_then(|v| v.split(':').last())
+        .unwrap()
+        .parse::<u32>()
+        .unwrap())
 }

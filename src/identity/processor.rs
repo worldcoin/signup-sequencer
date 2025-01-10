@@ -436,7 +436,9 @@ impl OnChainIdentityProcessor {
                 // previously.
                 let root_state = tx.get_root_state(&post_root).await?;
                 if let Some(root_state) = root_state {
-                    if root_state.status == ProcessedStatus::Processed || root_state.status == ProcessedStatus::Mined {
+                    if root_state.status == ProcessedStatus::Processed
+                        || root_state.status == ProcessedStatus::Mined
+                    {
                         return Ok::<(), anyhow::Error>(());
                     }
                 }
@@ -445,7 +447,7 @@ impl OnChainIdentityProcessor {
 
                 Ok::<(), anyhow::Error>(())
             })
-                .await?;
+            .await?;
 
             info!(?pre_root, ?post_root, ?kind, "Batch mined");
 

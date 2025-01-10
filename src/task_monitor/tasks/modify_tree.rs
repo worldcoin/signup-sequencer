@@ -23,7 +23,7 @@ use crate::retry_tx;
 pub async fn modify_tree(
     app: Arc<App>,
     sync_tree_notify: Arc<Notify>,
-    mut tree_synced_rx: Receiver<bool>,
+    mut tree_synced_rx: Receiver<()>,
 ) -> anyhow::Result<()> {
     info!("Starting modify tree task.");
 

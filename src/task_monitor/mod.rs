@@ -72,9 +72,9 @@ impl TaskMonitor {
         // Immediately notify, so we can start processing if we have pending operations
         base_sync_tree_notify.notify_one();
 
-        let (base_tree_synced_tx, base_tree_synced_rx) = watch::channel(false);
+        let (base_tree_synced_tx, base_tree_synced_rx) = watch::channel(());
         // Immediately notify, so we can start processing if we have pending operations
-        let _ = base_tree_synced_tx.send(true);
+        let _ = base_tree_synced_tx.send(());
 
         let handles = FuturesUnordered::new();
 

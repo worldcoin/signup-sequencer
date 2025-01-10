@@ -32,7 +32,7 @@ pub async fn create_batches(
     app: Arc<App>,
     next_batch_notify: Arc<Notify>,
     sync_tree_notify: Arc<Notify>,
-    mut tree_synced_rx: Receiver<bool>,
+    mut tree_synced_rx: Receiver<()>,
 ) -> anyhow::Result<()> {
     tracing::info!("Awaiting for a clean slate");
     app.identity_processor.await_clean_slate().await?;

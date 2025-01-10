@@ -10,7 +10,7 @@ use tokio::{select, time};
 pub async fn sync_tree_state_with_db(
     app: Arc<App>,
     sync_tree_notify: Arc<Notify>,
-    tree_synced_tx: Sender<bool>,
+    tree_synced_tx: Sender<()>,
 ) -> anyhow::Result<()> {
     tracing::info!("Awaiting for a clean slate");
     app.identity_processor.await_clean_slate().await?;
@@ -38,6 +38,6 @@ pub async fn sync_tree_state_with_db(
 
         tracing::info!("TreeState synced with DB");
 
-        tree_synced_tx.send(true)?;
+        tree_synced_tx.send(())?;
     }
 }

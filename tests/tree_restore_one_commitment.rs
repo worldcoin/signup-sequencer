@@ -1,6 +1,5 @@
 mod common;
 
-use anyhow::anyhow;
 use common::prelude::*;
 
 const IDLE_TIME: u64 = 7;
@@ -76,19 +75,7 @@ async fn tree_restore_one_commitment(offchain_mode_enabled: bool) -> anyhow::Res
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
     // Await for tree to be mined in app
-    let tree_state = {
-        let number_of_tries = 30;
-        let mut tree_state = None;
-        for _ in 0..number_of_tries {
-            if app.tree_state()?.mined_tree().next_leaf() == 1 {
-                tree_state = Some(app.tree_state()?);
-                break;
-            }
-
-            tokio::time::sleep(Duration::from_secs(2)).await;
-        }
-        tree_state.ok_or(anyhow!("Cannot get tree state"))?
-    };
+    let tree_state = await_tree_state_with_mined_leafs_size(&app, 1).await?;
 
     assert_eq!(tree_state.latest_tree().next_leaf(), 1);
 

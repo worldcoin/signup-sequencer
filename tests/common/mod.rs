@@ -58,25 +58,21 @@ pub mod prelude {
         DEFAULT_TREE_DENSE_PREFIX_DEPTH, DEFAULT_TREE_DEPTH,
     };
     pub use super::{
-        abi as ContractAbi, generate_reference_proof, generate_test_identities,
-        init_tracing_subscriber, spawn_app, spawn_deps, spawn_mock_deletion_prover,
-        spawn_mock_insertion_prover, test_inclusion_proof, test_insert_identity, test_verify_proof,
-        test_verify_proof_on_chain,
+        abi as ContractAbi, await_tree_state_with_mined_leafs_size, generate_reference_proof,
+        generate_test_identities, init_tracing_subscriber, spawn_app, spawn_deps,
+        spawn_mock_deletion_prover, spawn_mock_insertion_prover, test_inclusion_proof,
+        test_insert_identity, test_verify_proof, test_verify_proof_on_chain,
     };
     pub use crate::common::chain_mock::spawn_mock_chain;
     pub use crate::common::test_same_tree_states;
 }
-
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::str::FromStr;
-use std::sync::{Arc, Once};
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
 use crate::common::abi::{IWorldIDIdentityManager, RootInfo};
 use crate::common::chain_mock::SpecialisedClient;
 use crate::server::error::Error as ServerError;
+use anyhow::anyhow;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use reqwest::{Body, Client, Method, Request, RequestBuilder, StatusCode};
@@ -90,6 +86,10 @@ use signup_sequencer::server::data::{
     InsertCommitmentRequest, RemoveBatchSizeRequest, VerifySemaphoreProofRequest,
 };
 use signup_sequencer::task_monitor::TaskMonitor;
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::str::FromStr;
+use std::sync::{Arc, Once};
 use testcontainers::clients::Cli;
 use tokio::net::TcpListener;
 use tracing::trace;
@@ -961,4 +961,25 @@ pub async fn test_same_tree_states(
     );
 
     Ok(())
+}
+
+pub async fn await_tree_state_with_mined_leafs_size(
+    app: &App,
+    mined_leafs_size: usize,
+) -> anyhow::Result<&TreeState> {
+    let number_of_tries = 30;
+    let mut tree_state = None;
+    for _ in 0..number_of_tries {
+        if app.tree_state()?.mined_tree().next_leaf() == mined_leafs_size {
+            tree_state = Some(app.tree_state()?);
+            break;
+        }
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+
+    match tree_state {
+        Some(tree_state) => Ok(tree_state),
+        None => Err(anyhow!("Cannot get tree state")),
+    }
 }

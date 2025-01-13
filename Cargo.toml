@@ -32,7 +32,7 @@ bytes = "1.4.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "901ea26e478c81e10d5d4355ac628ab7b15afca7" }
-config = "0.13.4"
+config = "0.15.5"
 ethers = { version = "2.0.10", features = ["ws", "ipc", "openssl", "abigen"] }
 ethers-solc = "2.0.10"
 eyre = "0.6"

@@ -7,6 +7,6 @@ publish = false
 [dependencies]
 anyhow = "1.0"
 test-case = "3.1.0"
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.43", features = ["full"] }
 testcontainers = "0.15.0"
 testcontainers-modules = {  version = "0.3.7", features = ["postgres"] }

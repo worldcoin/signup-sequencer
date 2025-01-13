@@ -1,6 +1,9 @@
+use std::fmt;
+
+use anyhow::bail;
 use data::{GetTxResponse, SendTxRequest, SendTxResponse, TxStatus};
 use reqwest::header::HeaderMap;
-use reqwest::{RequestBuilder, Response};
+use reqwest::{RequestBuilder, Response, StatusCode};
 use telemetry_batteries::tracing::trace_to_headers;
 use tracing::instrument;
 
@@ -9,6 +12,22 @@ pub mod data;
 pub struct TxSitterClient {
     client: reqwest::Client,
     url: String,
+}
+
+#[derive(Debug)]
+pub struct HttpError {
+    pub status: StatusCode,
+    pub body: String,
+}
+
+impl fmt::Display for HttpError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Response failed with status {} - {}",
+            self.status, self.body
+        )
+    }
 }
 
 impl TxSitterClient {
@@ -61,9 +80,7 @@ impl TxSitterClient {
             let body = response.text().await?;
 
             tracing::error!("Response failed with status {} - {}", status, body);
-            return Err(anyhow::anyhow!(
-                "Response failed with status {status} - {body}"
-            ));
+            bail!(HttpError { body, status });
         }
 
         Ok(response)
@@ -81,9 +98,7 @@ impl TxSitterClient {
 
     #[instrument(skip(self))]
     pub async fn get_txs(&self) -> anyhow::Result<Vec<GetTxResponse>> {
-        let url = format!("{}/txs", self.url);
-
-        self.json_get(&url).await
+        self.json_get(&format!("{}/txs", self.url)).await
     }
 
     #[instrument(skip(self))]
@@ -91,16 +106,14 @@ impl TxSitterClient {
         &self,
         tx_status: TxStatus,
     ) -> anyhow::Result<Vec<GetTxResponse>> {
-        let url = format!("{}/txs?status={}", self.url, tx_status);
-
-        self.json_get(&url).await
+        self.json_get(&format!("{}/txs?status={}", self.url, tx_status))
+            .await
     }
 
     #[instrument(skip(self))]
     pub async fn get_unsent_txs(&self) -> anyhow::Result<Vec<GetTxResponse>> {
-        let url = format!("{}/txs?unsent=true", self.url);
-
-        self.json_get(&url).await
+        self.json_get(&format!("{}/txs?unsent=true", self.url))
+            .await
     }
 
     pub fn rpc_url(&self) -> String {

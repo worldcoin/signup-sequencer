@@ -14,7 +14,7 @@ use signup_sequencer::identity_tree::ProcessedStatus::Mined;
 use signup_sequencer::identity_tree::{Hash, Status};
 use signup_sequencer::server::data::InclusionProofResponse;
 use tokio::time::sleep;
-use tracing::error;
+use tracing::{error, info};
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::time::Uptime;
 
@@ -141,21 +141,30 @@ pub async fn mined_inclusion_proof_with_retries(
     commitment: &Hash,
     retries_count: usize,
     retries_interval: f32,
+    offchain_mode: bool,
 ) -> anyhow::Result<()> {
     let mut last_res = None;
     for _i in 0..retries_count {
         last_res = Some(inclusion_proof(client, uri, commitment).await?);
 
-        if let Some(Some(ref inclusion_proof_json)) = last_res {
-            if let Some(root) = inclusion_proof_json.root {
-                let (root, ..) = chain
-                    .identity_manager
-                    .query_root(root.into())
-                    .call()
-                    .await?;
+        if let Some((status_code, ref inclusion_proof_json)) = last_res {
+            if status_code.is_success() {
+                if let Some(inclusion_proof_json) = inclusion_proof_json {
+                    if offchain_mode {
+                        if inclusion_proof_json.status == Status::Processed(Mined) {
+                            return Ok(());
+                        }
+                    } else if let Some(root) = inclusion_proof_json.root {
+                        let (root, ..) = chain
+                            .identity_manager
+                            .query_root(root.into())
+                            .call()
+                            .await?;
 
-                if root != U256::zero() {
-                    return Ok(());
+                        if root != U256::zero() {
+                            return Ok(());
+                        }
+                    }
                 }
             }
         };
@@ -167,7 +176,11 @@ pub async fn mined_inclusion_proof_with_retries(
         return Err(anyhow!("No calls at all"));
     }
 
-    Err(anyhow!("Inclusion proof not found on chain"))
+    if offchain_mode {
+        Err(anyhow!("Inclusion proof with status mined not found"))
+    } else {
+        Err(anyhow!("Inclusion proof not found on chain"))
+    }
 }
 
 pub async fn bad_request_inclusion_proof_with_retries(

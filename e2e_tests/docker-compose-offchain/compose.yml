@@ -1,0 +1,56 @@
+services:
+  sequencer-db:
+    image: postgres:latest
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=sequencer
+    ports:
+      - ${SEQUENCER_DB_PORT:-5461}:5432
+    volumes:
+      - sequencer_db_data:/var/lib/postgresql/data
+  signup-sequencer-balancer:
+    image: haproxy:3.0.0
+    hostname: signup-sequencer-balancer
+    restart: always
+    profiles: [ e2e-ha ]
+    ports:
+      - ${SIGNUP_SEQUENCER_BALANCER_PORT:-8080}:8080
+    volumes:
+      - ./haproxy:/usr/local/etc/haproxy
+    depends_on:
+      - signup-sequencer-0
+  signup-sequencer-0: &signup-sequencer-def
+    image: signup-sequencer
+    hostname: signup-sequencer-0
+    profiles: [ e2e-ha ]
+    build:
+      context: ./../../
+    depends_on:
+      - sequencer-db
+    restart: always
+    ports:
+      - ${SIGNUP_SEQUENCER_0_PORT:-9080}:8080
+    volumes:
+      - ./signup_sequencer/config.toml:/config.toml
+    command: [ "/config.toml" ]
+    environment:
+      - RUST_LOG=debug
+  signup-sequencer-1:
+    <<: *signup-sequencer-def
+    hostname: signup-sequencer-1
+    ports:
+      - ${SIGNUP_SEQUENCER_1_PORT:-9081}:8080
+  signup-sequencer-2:
+    <<: *signup-sequencer-def
+    hostname: signup-sequencer-2
+    ports:
+      - ${SIGNUP_SEQUENCER_2_PORT:-9082}:8080
+  signup-sequencer-3:
+    <<: *signup-sequencer-def
+    hostname: signup-sequencer-3
+    ports:
+      - ${SIGNUP_SEQUENCER_3_PORT:-9083}:8080
+volumes:
+  sequencer_db_data:
+    driver: local

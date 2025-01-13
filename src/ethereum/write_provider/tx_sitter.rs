@@ -4,8 +4,9 @@ use anyhow::Context;
 use async_trait::async_trait;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::U256;
+use reqwest::StatusCode;
 use tx_sitter_client::data::{SendTxRequest, TransactionPriority, TxStatus};
-use tx_sitter_client::TxSitterClient;
+use tx_sitter_client::{HttpError, TxSitterClient};
 
 use super::inner::{Inner, TransactionResult};
 use crate::config::TxSitterConfig;
@@ -50,7 +51,7 @@ impl TxSitter {
                 });
             }
 
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 }
@@ -61,13 +62,14 @@ impl Inner for TxSitter {
         &self,
         mut tx: TypedTransaction,
         _only_once: bool,
+        tx_id: Option<String>,
     ) -> Result<TransactionId, TxError> {
         if let Some(gas_limit) = self.gas_limit {
             tx.set_gas(gas_limit);
         }
 
         // TODO: Handle only_once
-        let tx = self
+        let res = self
             .client
             .send_tx(&SendTxRequest {
                 to: *tx
@@ -81,9 +83,24 @@ impl Inner for TxSitter {
                     .context("Missing tx gas limit")
                     .map_err(TxError::Send)?,
                 priority: TransactionPriority::Regular,
-                tx_id: None,
+                tx_id: tx_id.clone(),
             })
-            .await
+            .await;
+
+        let res = match res {
+            Err(err) => match err.downcast_ref::<HttpError>() {
+                Some(http_err) if http_err.status == StatusCode::CONFLICT => {
+                    if let Some(tx_id) = tx_id {
+                        return Ok(tx_id);
+                    }
+                    Err(err)
+                }
+                _ => Err(err),
+            },
+            res => res,
+        };
+
+        let tx = res
             .context("Error sending transaction")
             .map_err(TxError::Send)?;
 

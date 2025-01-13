@@ -74,7 +74,8 @@ async fn tree_restore_one_commitment(offchain_mode_enabled: bool) -> anyhow::Res
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
-    let tree_state = app.tree_state()?.clone();
+    // Await for tree to be mined in app
+    let tree_state = await_tree_state_with_mined_leafs_size(&app, 1).await?;
 
     assert_eq!(tree_state.latest_tree().next_leaf(), 1);
 
@@ -90,7 +91,7 @@ async fn tree_restore_one_commitment(offchain_mode_enabled: bool) -> anyhow::Res
 
     let restored_tree_state = app.tree_state()?.clone();
 
-    test_same_tree_states(&tree_state, &restored_tree_state).await?;
+    test_same_tree_states(tree_state, &restored_tree_state).await?;
 
     // Shutdown the app properly for the final time
     shutdown.shutdown();

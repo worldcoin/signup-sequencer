@@ -6,7 +6,7 @@ use futures::StreamExt;
 use once_cell::sync::Lazy;
 use prometheus::{linear_buckets, register_gauge, register_histogram, Gauge, Histogram};
 use tokio::select;
-use tokio::sync::{mpsc, Mutex, Notify};
+use tokio::sync::{mpsc, watch, Mutex, Notify};
 use tokio::task::JoinHandle;
 use tracing::{error, info, instrument, warn};
 
@@ -18,11 +18,13 @@ use crate::shutdown::Shutdown;
 pub mod tasks;
 
 const TREE_INIT_BACKOFF: Duration = Duration::from_secs(5);
-const PROCESS_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
+const CREATE_BATCHES_BACKOFF: Duration = Duration::from_secs(5);
+const PROCESS_BATCHES_BACKOFF: Duration = Duration::from_secs(5);
+const MONITOR_TXS_BACKOFF: Duration = Duration::from_secs(5);
 const FINALIZE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
 const QUEUE_MONITOR_BACKOFF: Duration = Duration::from_secs(5);
-const INSERT_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
-const DELETE_IDENTITIES_BACKOFF: Duration = Duration::from_secs(5);
+const MODIFY_TREE_BACKOFF: Duration = Duration::from_secs(5);
+const SYNC_TREE_STATE_WITH_DB_BACKOFF: Duration = Duration::from_secs(5);
 
 static PENDING_IDENTITIES: Lazy<Gauge> = Lazy::new(|| {
     register_gauge!("pending_identities", "Identities not submitted on-chain").unwrap()
@@ -62,10 +64,17 @@ impl TaskMonitor {
         let monitored_txs_sender = Arc::new(monitored_txs_sender);
         let monitored_txs_receiver = Arc::new(Mutex::new(monitored_txs_receiver));
 
-        let base_wake_up_notify = Arc::new(Notify::new());
-        // Immediately notify so we can start processing if we have pending identities
-        // in the database
-        base_wake_up_notify.notify_one();
+        let base_next_batch_notify = Arc::new(Notify::new());
+        // Immediately notify, so we can start processing if we have pending operations
+        base_next_batch_notify.notify_one();
+
+        let base_sync_tree_notify = Arc::new(Notify::new());
+        // Immediately notify, so we can start processing if we have pending operations
+        base_sync_tree_notify.notify_one();
+
+        let (base_tree_synced_tx, base_tree_synced_rx) = watch::channel(());
+        // Immediately notify, so we can start processing if we have pending operations
+        let _ = base_tree_synced_tx.send(());
 
         let handles = FuturesUnordered::new();
 
@@ -82,8 +91,12 @@ impl TaskMonitor {
 
         // Finalize identities
         let app = main_app.clone();
-        let finalize_identities = move || tasks::finalize_identities::finalize_roots(app.clone());
-        let finalize_identities_handle = crate::utils::spawn_with_backoff(
+        let sync_tree_notify = base_sync_tree_notify.clone();
+
+        let finalize_identities = move || {
+            tasks::finalize_identities::finalize_roots(app.clone(), sync_tree_notify.clone())
+        };
+        let finalize_identities_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
             finalize_identities,
             FINALIZE_IDENTITIES_BACKOFF,
             shutdown.clone(),
@@ -100,24 +113,23 @@ impl TaskMonitor {
         );
         handles.push(queue_monitor_handle);
 
-        // Process identities
-        let base_next_batch_notify = Arc::new(Notify::new());
-
         // Create batches
         let app = main_app.clone();
         let next_batch_notify = base_next_batch_notify.clone();
-        let wake_up_notify = base_wake_up_notify.clone();
+        let sync_tree_notify = base_sync_tree_notify.clone();
+        let tree_synced_rx = base_tree_synced_rx.clone();
 
         let create_batches = move || {
             tasks::create_batches::create_batches(
                 app.clone(),
                 next_batch_notify.clone(),
-                wake_up_notify.clone(),
+                sync_tree_notify.clone(),
+                tree_synced_rx.clone(),
             )
         };
         let create_batches_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
             create_batches,
-            PROCESS_IDENTITIES_BACKOFF,
+            CREATE_BATCHES_BACKOFF,
             shutdown.clone(),
         );
         handles.push(create_batches_handle);
@@ -125,22 +137,20 @@ impl TaskMonitor {
         // Process batches
         let app = main_app.clone();
         let next_batch_notify = base_next_batch_notify.clone();
-        let wake_up_notify = base_wake_up_notify.clone();
 
-        let process_identities = move || {
+        let process_batches = move || {
             tasks::process_batches::process_batches(
                 app.clone(),
                 monitored_txs_sender.clone(),
                 next_batch_notify.clone(),
-                wake_up_notify.clone(),
             )
         };
-        let process_identities_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
-            process_identities,
-            PROCESS_IDENTITIES_BACKOFF,
+        let process_batches_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
+            process_batches,
+            PROCESS_BATCHES_BACKOFF,
             shutdown.clone(),
         );
-        handles.push(process_identities_handle);
+        handles.push(process_batches_handle);
 
         // Monitor transactions
         let app = main_app.clone();
@@ -148,49 +158,48 @@ impl TaskMonitor {
             move || tasks::monitor_txs::monitor_txs(app.clone(), monitored_txs_receiver.clone());
         let monitor_txs_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
             monitor_txs,
-            PROCESS_IDENTITIES_BACKOFF,
+            MONITOR_TXS_BACKOFF,
             shutdown.clone(),
         );
         handles.push(monitor_txs_handle);
 
-        let pending_insertion_mutex = Arc::new(Mutex::new(()));
-
-        // Insert identities
+        // Modify tree
         let app = main_app.clone();
-        let wake_up_notify = base_wake_up_notify.clone();
-        let insertion_mutex = pending_insertion_mutex.clone();
-        let insert_identities = move || {
-            self::tasks::insert_identities::insert_identities(
+        let sync_tree_notify = base_sync_tree_notify.clone();
+        let tree_synced_notify = base_tree_synced_rx.clone();
+
+        let modify_tree = move || {
+            tasks::modify_tree::modify_tree(
                 app.clone(),
-                insertion_mutex.clone(),
-                wake_up_notify.clone(),
+                sync_tree_notify.clone(),
+                tree_synced_notify.clone(),
             )
         };
-
-        let insert_identities_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
-            insert_identities,
-            INSERT_IDENTITIES_BACKOFF,
+        let modify_tree_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
+            modify_tree,
+            MODIFY_TREE_BACKOFF,
             shutdown.clone(),
         );
-        handles.push(insert_identities_handle);
+        handles.push(modify_tree_handle);
 
-        // Delete identities
+        // Sync tree state with DB
         let app = main_app.clone();
-        let wake_up_notify = base_wake_up_notify.clone();
-        let delete_identities = move || {
-            self::tasks::delete_identities::delete_identities(
+        let sync_tree_notify = base_sync_tree_notify.clone();
+        let tree_synced_tx = base_tree_synced_tx.clone();
+
+        let sync_tree_state_with_db = move || {
+            tasks::sync_tree_state_with_db::sync_tree_state_with_db(
                 app.clone(),
-                pending_insertion_mutex.clone(),
-                wake_up_notify.clone(),
+                sync_tree_notify.clone(),
+                tree_synced_tx.clone(),
             )
         };
-
-        let delete_identities_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
-            delete_identities,
-            DELETE_IDENTITIES_BACKOFF,
+        let sync_tree_state_with_db_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
+            sync_tree_state_with_db,
+            SYNC_TREE_STATE_WITH_DB_BACKOFF,
             shutdown.clone(),
         );
-        handles.push(delete_identities_handle);
+        handles.push(sync_tree_state_with_db_handle);
 
         tokio::spawn(Self::monitor_shutdown(handles, shutdown.clone()));
     }
@@ -221,7 +230,9 @@ impl TaskMonitor {
                 }
             }
         }
-        warn!("all tasks have returned unexpectedly");
+        if !shutdown.is_shutting_down() {
+            warn!("all tasks have returned unexpectedly");
+        }
     }
 
     async fn log_pending_identities_count(database: &Database) -> anyhow::Result<()> {

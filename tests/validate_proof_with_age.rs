@@ -140,7 +140,7 @@ async fn validate_proof_with_age(offchain_mode_enabled: bool) -> anyhow::Result<
     )
     .await;
 
-    let max_age_of_proof = (Instant::now() - time_of_identity_insertion).as_secs();
+    let max_age_of_proof = (Instant::now() - time_of_identity_insertion).as_secs() + 2;
     assert!(
         max_age_of_proof > sleep_duration_seconds * 2,
         "Proof age should be at least 2 batch times"

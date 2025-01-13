@@ -1,5 +1,5 @@
-use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -7,7 +7,8 @@ use ethers::abi::RawLog;
 use ethers::addressbook::Address;
 use ethers::contract::EthEvent;
 use ethers::middleware::Middleware;
-use ethers::prelude::{Log, Topic, ValueOrArray, U256};
+use ethers::prelude::{Log, Topic, ValueOrArray};
+use tokio::sync::Notify;
 use tracing::{error, info, instrument};
 
 use crate::config::Config;
@@ -18,12 +19,11 @@ use crate::database::methods::DbMethods;
 use crate::database::types::{BatchEntry, BatchType};
 use crate::database::{Database, IsolationLevel};
 use crate::ethereum::{Ethereum, ReadProvider};
-use crate::identity_tree::{
-    Canonical, Hash, Intermediate, ProcessedStatus, TreeVersion, TreeWithNextVersion,
-};
+use crate::identity_tree::{Hash, ProcessedStatus};
 use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;
 use crate::prover::Prover;
+use crate::retry_tx;
 use crate::utils::index_packing::pack_indices;
 
 pub type TransactionId = String;
@@ -32,11 +32,7 @@ pub type TransactionId = String;
 pub trait IdentityProcessor: Send + Sync + 'static {
     async fn commit_identities(&self, batch: &BatchEntry) -> anyhow::Result<TransactionId>;
 
-    async fn finalize_identities(
-        &self,
-        processed_tree: &TreeVersion<Intermediate>,
-        mined_tree: &TreeVersion<Canonical>,
-    ) -> anyhow::Result<()>;
+    async fn finalize_identities(&self, sync_tree_notify: &Arc<Notify>) -> anyhow::Result<()>;
 
     async fn await_clean_slate(&self) -> anyhow::Result<()>;
 
@@ -91,20 +87,17 @@ impl IdentityProcessor for OnChainIdentityProcessor {
         }
     }
 
-    async fn finalize_identities(
-        &self,
-        processed_tree: &TreeVersion<Intermediate>,
-        mined_tree: &TreeVersion<Canonical>,
-    ) -> anyhow::Result<()> {
+    async fn finalize_identities(&self, sync_tree_notify: &Arc<Notify>) -> anyhow::Result<()> {
         let mainnet_logs = self.fetch_mainnet_logs().await?;
 
-        self.finalize_mainnet_roots(processed_tree, &mainnet_logs)
+        self.finalize_mainnet_roots(sync_tree_notify, &mainnet_logs)
             .await?;
 
         let mut roots = Self::extract_roots_from_mainnet_logs(mainnet_logs);
         roots.extend(self.fetch_secondary_logs().await?);
 
-        self.finalize_secondary_roots(mined_tree, roots).await?;
+        self.finalize_secondary_roots(sync_tree_notify, roots)
+            .await?;
 
         Ok(())
     }
@@ -236,16 +229,16 @@ impl OnChainIdentityProcessor {
     ) -> anyhow::Result<TransactionId> {
         self.validate_merkle_proofs(&batch.data.0.identities)?;
         let start_index = *batch.data.0.indexes.first().expect("Should exist.");
-        let pre_root: U256 = batch.prev_root.expect("Should exist.").into();
-        let post_root: U256 = batch.next_root.into();
+        let pre_root: Hash = batch.prev_root.expect("Should exist.");
+        let post_root: Hash = batch.next_root;
 
         // We prepare the proof before reserving a slot in the pending identities
         let proof = crate::prover::proof::prepare_insertion_proof(
             prover,
             start_index,
-            pre_root,
+            pre_root.into(),
             &batch.data.0.identities,
-            post_root,
+            post_root.into(),
         )
         .await?;
 
@@ -262,8 +255,8 @@ impl OnChainIdentityProcessor {
             .identity_manager
             .register_identities(
                 start_index,
-                pre_root,
-                post_root,
+                pre_root.into(),
+                post_root.into(),
                 batch.data.0.identities.clone(),
                 proof,
             )
@@ -291,17 +284,17 @@ impl OnChainIdentityProcessor {
         batch: &BatchEntry,
     ) -> anyhow::Result<TransactionId> {
         self.validate_merkle_proofs(&batch.data.0.identities)?;
-        let pre_root: U256 = batch.prev_root.expect("Should exist.").into();
-        let post_root: U256 = batch.next_root.into();
+        let pre_root: Hash = batch.prev_root.expect("Should exist.");
+        let post_root: Hash = batch.next_root;
         let deletion_indices: Vec<_> = batch.data.0.indexes.iter().map(|&v| v as u32).collect();
 
         // We prepare the proof before reserving a slot in the pending identities
         let proof = crate::prover::proof::prepare_deletion_proof(
             prover,
-            pre_root,
+            pre_root.into(),
             deletion_indices.clone(),
             batch.data.0.identities.clone(),
-            post_root,
+            post_root.into(),
         )
         .await?;
 
@@ -313,7 +306,12 @@ impl OnChainIdentityProcessor {
         // identity manager and wait for that transaction to be mined.
         let transaction_id = self
             .identity_manager
-            .delete_identities(proof, packed_deletion_indices, pre_root, post_root)
+            .delete_identities(
+                proof,
+                packed_deletion_indices,
+                pre_root.into(),
+                post_root.into(),
+            )
             .await
             .map_err(|e| {
                 error!(?e, "Failed to insert identity to contract.");
@@ -376,7 +374,7 @@ impl OnChainIdentityProcessor {
         Ok(mainnet_logs)
     }
 
-    async fn fetch_secondary_logs(&self) -> anyhow::Result<Vec<U256>>
+    async fn fetch_secondary_logs(&self) -> anyhow::Result<Vec<Hash>>
     where
         <ReadProvider as Middleware>::Error: 'static,
     {
@@ -409,7 +407,7 @@ impl OnChainIdentityProcessor {
     #[instrument(level = "info", skip_all)]
     async fn finalize_mainnet_roots(
         &self,
-        processed_tree: &TreeVersion<Intermediate>,
+        sync_tree_notify: &Arc<Notify>,
         logs: &[Log],
     ) -> Result<(), anyhow::Error> {
         for log in logs {
@@ -417,29 +415,43 @@ impl OnChainIdentityProcessor {
                 continue;
             };
 
-            let pre_root = event.pre_root;
-            let post_root = event.post_root;
+            let pre_root: Hash = event.pre_root.into();
+            let post_root: Hash = event.post_root.into();
             let kind = TreeChangeKind::from(event.kind);
 
             info!(?pre_root, ?post_root, ?kind, "Mining batch");
 
             // Double check
-            if !self.identity_manager.is_root_mined(post_root).await? {
+            if !self
+                .identity_manager
+                .is_root_mined(post_root.into())
+                .await?
+            {
                 continue;
             }
 
-            let mut tx = self
-                .database
-                .begin_tx(IsolationLevel::ReadCommitted)
-                .await?;
-            tx.mark_root_as_processed(&post_root.into()).await?;
-            tx.commit().await?;
+            retry_tx!(self.database.pool, tx, {
+                // With current flow it is required to mark root as processed first as this is
+                // how required mined_at field is set, We set proper state only if not set
+                // previously.
+                let root_state = tx.get_root_state(&post_root).await?;
+                if let Some(root_state) = root_state {
+                    if root_state.status == ProcessedStatus::Processed
+                        || root_state.status == ProcessedStatus::Mined
+                    {
+                        return Ok::<(), anyhow::Error>(());
+                    }
+                }
+
+                tx.mark_root_as_processed(&post_root).await?;
+
+                Ok::<(), anyhow::Error>(())
+            })
+            .await?;
 
             info!(?pre_root, ?post_root, ?kind, "Batch mined");
 
-            let updates_count = processed_tree.apply_updates_up_to(post_root.into());
-
-            info!(updates_count, ?pre_root, ?post_root, "Mined tree updated");
+            sync_tree_notify.notify_one();
         }
 
         Ok(())
@@ -448,8 +460,8 @@ impl OnChainIdentityProcessor {
     #[instrument(level = "info", skip_all)]
     async fn finalize_secondary_roots(
         &self,
-        mined_tree: &TreeVersion<Canonical>,
-        roots: Vec<U256>,
+        sync_tree_notify: &Arc<Notify>,
+        roots: Vec<Hash>,
     ) -> Result<(), anyhow::Error> {
         for root in roots {
             info!(?root, "Finalizing root");
@@ -457,28 +469,37 @@ impl OnChainIdentityProcessor {
             // Check if mined on all L2s
             if !self
                 .identity_manager
-                .is_root_mined_multi_chain(root)
+                .is_root_mined_multi_chain(root.into())
                 .await?
             {
                 continue;
             }
 
-            let mut tx = self
-                .database
-                .begin_tx(IsolationLevel::ReadCommitted)
-                .await?;
-            tx.mark_root_as_mined(&root.into()).await?;
-            tx.commit().await?;
+            retry_tx!(self.database.pool, tx, {
+                // With current flow it is required to mark root as processed first as this is
+                // how required mined_at field is set, We set proper state only if not set
+                // previously.
+                let root_state = tx.get_root_state(&root).await?;
+                match root_state {
+                    Some(root_state) if root_state.status == ProcessedStatus::Mined => {}
+                    _ => {
+                        tx.mark_root_as_mined(&root).await?;
+                    }
+                }
 
-            mined_tree.apply_updates_up_to(root.into());
+                Ok::<(), anyhow::Error>(())
+            })
+            .await?;
 
             info!(?root, "Root finalized");
+
+            sync_tree_notify.notify_one();
         }
 
         Ok(())
     }
 
-    fn extract_roots_from_mainnet_logs(mainnet_logs: Vec<Log>) -> Vec<U256> {
+    fn extract_roots_from_mainnet_logs(mainnet_logs: Vec<Log>) -> Vec<Hash> {
         let mut roots = vec![];
         for log in mainnet_logs {
             let Some(event) = Self::raw_log_to_tree_changed(&log) else {
@@ -487,7 +508,7 @@ impl OnChainIdentityProcessor {
 
             let post_root = event.post_root;
 
-            roots.push(post_root);
+            roots.push(post_root.into());
         }
         roots
     }
@@ -498,13 +519,13 @@ impl OnChainIdentityProcessor {
         TreeChangedFilter::decode_log(&raw_log).ok()
     }
 
-    fn extract_roots_from_secondary_logs(logs: &[Log]) -> Vec<U256> {
+    fn extract_roots_from_secondary_logs(logs: &[Log]) -> Vec<Hash> {
         let mut roots = vec![];
 
         for log in logs {
             let raw_log = RawLog::from((log.topics.clone(), log.data.to_vec()));
             if let Ok(event) = RootAddedFilter::decode_log(&raw_log) {
-                roots.push(event.root);
+                roots.push(event.root.into());
             }
         }
 
@@ -513,38 +534,33 @@ impl OnChainIdentityProcessor {
 }
 
 pub struct OffChainIdentityProcessor {
-    committed_batches: Arc<Mutex<VecDeque<BatchEntry>>>,
     database: Arc<Database>,
 }
 
 #[async_trait]
 impl IdentityProcessor for OffChainIdentityProcessor {
     async fn commit_identities(&self, batch: &BatchEntry) -> anyhow::Result<TransactionId> {
-        self.add_batch(batch.clone());
         Ok(batch.id.to_string())
     }
 
-    async fn finalize_identities(
-        &self,
-        processed_tree: &TreeVersion<Intermediate>,
-        mined_tree: &TreeVersion<Canonical>,
-    ) -> anyhow::Result<()> {
+    async fn finalize_identities(&self, sync_tree_notify: &Arc<Notify>) -> anyhow::Result<()> {
         loop {
-            let batch = {
-                let mut committed_batches = self.committed_batches.lock().unwrap();
-                committed_batches.pop_front()
-            };
+            let mut tx = self
+                .database
+                .begin_tx(IsolationLevel::RepeatableRead)
+                .await?;
+            let batch = tx.get_latest_batch().await?;
 
             let Some(batch) = batch else {
+                tx.commit().await?;
                 return Ok(());
             };
 
-            let mut tx = self
-                .database
-                .begin_tx(IsolationLevel::ReadCommitted)
-                .await?;
-
+            // With current flow it is required to mark root as processed first as this is
+            // how required mined_at field is set, We set proper state only if not set
+            // previously.
             let root_state = tx.get_root_state(&batch.next_root).await?;
+
             if root_state.is_none() {
                 // If root is not in identities table we can't mark it as processed or mined.
                 // It happens sometimes as we do not have atomic operation for database and tree
@@ -554,13 +570,19 @@ impl IdentityProcessor for OffChainIdentityProcessor {
                 return Ok(());
             }
 
-            tx.mark_root_as_processed(&batch.next_root).await?;
-            tx.mark_root_as_mined(&batch.next_root).await?;
+            match root_state {
+                Some(root_state) if root_state.status == ProcessedStatus::Processed => {
+                    tx.mark_root_as_mined(&batch.next_root).await?;
+                }
+                Some(root_state) if root_state.status == ProcessedStatus::Mined => {}
+                _ => {
+                    tx.mark_root_as_processed(&batch.next_root).await?;
+                    tx.mark_root_as_mined(&batch.next_root).await?;
+                }
+            }
 
             tx.commit().await?;
-
-            processed_tree.apply_updates_up_to(batch.next_root);
-            mined_tree.apply_updates_up_to(batch.next_root);
+            sync_tree_notify.notify_one();
         }
     }
 
@@ -610,15 +632,6 @@ impl IdentityProcessor for OffChainIdentityProcessor {
 
 impl OffChainIdentityProcessor {
     pub async fn new(database: Arc<Database>) -> anyhow::Result<Self> {
-        Ok(OffChainIdentityProcessor {
-            committed_batches: Arc::new(Mutex::new(Default::default())),
-            database,
-        })
-    }
-
-    fn add_batch(&self, batch_entry: BatchEntry) {
-        let mut committed_batches = self.committed_batches.lock().unwrap();
-
-        committed_batches.push_back(batch_entry);
+        Ok(OffChainIdentityProcessor { database })
     }
 }

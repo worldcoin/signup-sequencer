@@ -3,7 +3,7 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Error};
+use anyhow::{anyhow, Context, Error};
 use hyper::{Body, Client};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -26,6 +26,9 @@ pub struct DockerComposeGuard<'a> {
     semaphore_insertion_port: u32,
     semaphore_deletion_port: u32,
     signup_sequencer_0_port: u32,
+    signup_sequencer_1_port: u32,
+    signup_sequencer_2_port: u32,
+    signup_sequencer_3_port: u32,
     signup_sequencer_balancer_port: u32,
 }
 
@@ -50,6 +53,8 @@ impl<'a> DockerComposeGuard<'a> {
             "Docker compose rstart output:\n stdout:\n{}\nstderr:\n{}\n",
             stdout, stderr
         );
+
+        tokio::time::sleep(Duration::from_secs(5)).await;
 
         await_running(self).await
     }
@@ -81,6 +86,18 @@ impl<'a> DockerComposeGuard<'a> {
         res.insert(
             String::from("SIGNUP_SEQUENCER_0_PORT"),
             self.signup_sequencer_0_port.to_string(),
+        );
+        res.insert(
+            String::from("SIGNUP_SEQUENCER_1_PORT"),
+            self.signup_sequencer_1_port.to_string(),
+        );
+        res.insert(
+            String::from("SIGNUP_SEQUENCER_2_PORT"),
+            self.signup_sequencer_2_port.to_string(),
+        );
+        res.insert(
+            String::from("SIGNUP_SEQUENCER_3_PORT"),
+            self.signup_sequencer_3_port.to_string(),
         );
         res.insert(
             String::from("SIGNUP_SEQUENCER_BALANCER_PORT"),
@@ -118,7 +135,7 @@ impl<'a> DockerComposeGuard<'a> {
             stdout, stderr
         );
 
-        Ok(parse_exposed_port(stdout))
+        parse_exposed_port(stdout)
     }
 }
 
@@ -141,7 +158,7 @@ impl<'a> Drop for DockerComposeGuard<'a> {
 ///
 /// Note that we're using sync code here so we'll block the executor - but this
 /// is fine, because the spawned container will still run in the background.
-pub async fn setup(cwd: &str) -> anyhow::Result<DockerComposeGuard> {
+pub async fn setup(cwd: &str, offchain_mode: bool) -> anyhow::Result<DockerComposeGuard> {
     let mut res = DockerComposeGuard {
         cwd,
         project_name: generate_project_name(),
@@ -152,6 +169,9 @@ pub async fn setup(cwd: &str) -> anyhow::Result<DockerComposeGuard> {
         semaphore_insertion_port: 0,
         semaphore_deletion_port: 0,
         signup_sequencer_0_port: 0,
+        signup_sequencer_1_port: 0,
+        signup_sequencer_2_port: 0,
+        signup_sequencer_3_port: 0,
         signup_sequencer_balancer_port: 0,
     };
 
@@ -171,11 +191,29 @@ pub async fn setup(cwd: &str) -> anyhow::Result<DockerComposeGuard> {
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let balancer_port = res.get_mapped_port("signup-sequencer-balancer", 8080)?;
-    res.update_balancer_port(balancer_port);
+    let mut balancer_port = Err(anyhow!("Balancer port not queried."));
+    for _ in 0..3 {
+        balancer_port = res.get_mapped_port("signup-sequencer-balancer", 8080);
+        if balancer_port.is_ok() {
+            break;
+        }
 
-    let chain_port = res.get_mapped_port("chain", 8545)?;
-    res.update_chain_port(chain_port);
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    res.update_balancer_port(balancer_port?);
+
+    if !offchain_mode {
+        let mut chain_port = Err(anyhow!("Chain port not queried."));
+        for _ in 0..3 {
+            chain_port = res.get_mapped_port("chain", 8545);
+            if chain_port.is_ok() {
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+        res.update_chain_port(chain_port?);
+    }
 
     await_running(&res).await?;
 
@@ -192,8 +230,8 @@ fn generate_project_name() -> String {
 }
 
 async fn await_running(docker_compose_guard: &DockerComposeGuard<'_>) -> anyhow::Result<()> {
-    let timeout = Duration::from_secs_f32(30.0);
-    let check_interval = Duration::from_secs_f32(2.0);
+    let timeout = Duration::from_secs_f32(300.0);
+    let check_interval = Duration::from_secs_f32(1.0);
     let min_success_counts = 5;
     let mut success_counter = 0;
 
@@ -202,6 +240,7 @@ async fn await_running(docker_compose_guard: &DockerComposeGuard<'_>) -> anyhow:
         let healthy = check_health(docker_compose_guard.get_local_addr()).await;
         if healthy.is_ok() && healthy.unwrap() {
             success_counter += 1;
+            info!("Health check passed (success_counter={})", success_counter);
         }
 
         if success_counter >= min_success_counts {
@@ -266,19 +305,17 @@ fn run_cmd(cwd: &str, envs: HashMap<String, String>, cmd_str: String) -> anyhow:
     Ok(())
 }
 
-fn parse_exposed_port(s: String) -> u32 {
+fn parse_exposed_port(s: String) -> anyhow::Result<u32> {
     let parts: Vec<_> = s
         .split_whitespace()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .collect();
 
-    parts
-        .last()
-        .unwrap()
-        .split(':')
-        .last()
-        .unwrap()
-        .parse::<u32>()
-        .unwrap()
+    let port = parts.last().and_then(|v| v.split(':').last());
+
+    match port {
+        Some(port) => port.parse::<u32>().map_err(|err| anyhow!(err)),
+        None => Err(anyhow!("Port not found in string.")),
+    }
 }

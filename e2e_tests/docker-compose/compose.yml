@@ -27,6 +27,13 @@ services:
       - ${SEQUENCER_DB_PORT:-5461}:5432
     volumes:
       - sequencer_db_data:/var/lib/postgresql/data
+  #    blkio_config:
+  #      device_read_iops:
+  #        - path: /dev/<device>
+  #          rate: 12000
+  #      device_write_iops:
+  #        - path: /dev/<device>
+  #          rate: 12000
   tx-sitter:
     image: ghcr.io/worldcoin/tx-sitter-monolith:latest
     #    image: tx-sitter-monolith
@@ -121,6 +128,9 @@ services:
       - ./haproxy:/usr/local/etc/haproxy
     depends_on:
       - signup-sequencer-0
+      - signup-sequencer-1
+      - signup-sequencer-2
+      - signup-sequencer-3
   signup-sequencer-0: &signup-sequencer-def
     image: signup-sequencer
     hostname: signup-sequencer-0

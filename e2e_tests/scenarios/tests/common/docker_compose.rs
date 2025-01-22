@@ -230,7 +230,7 @@ fn generate_project_name() -> String {
 }
 
 async fn await_running(docker_compose_guard: &DockerComposeGuard<'_>) -> anyhow::Result<()> {
-    let timeout = Duration::from_secs_f32(300.0);
+    let timeout = Duration::from_secs_f32(600.0);
     let check_interval = Duration::from_secs_f32(1.0);
     let min_success_counts = 5;
     let mut success_counter = 0;

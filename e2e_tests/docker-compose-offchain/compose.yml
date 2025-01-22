@@ -20,6 +20,9 @@ services:
       - ./haproxy:/usr/local/etc/haproxy
     depends_on:
       - signup-sequencer-0
+      - signup-sequencer-1
+      - signup-sequencer-2
+      - signup-sequencer-3
   signup-sequencer-0: &signup-sequencer-def
     image: signup-sequencer
     hostname: signup-sequencer-0

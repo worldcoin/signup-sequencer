@@ -544,46 +544,46 @@ impl IdentityProcessor for OffChainIdentityProcessor {
     }
 
     async fn finalize_identities(&self, sync_tree_notify: &Arc<Notify>) -> anyhow::Result<()> {
-        loop {
-            let mut tx = self
-                .database
-                .begin_tx(IsolationLevel::RepeatableRead)
-                .await?;
-            let batch = tx.get_latest_batch().await?;
+        let mut tx = self
+            .database
+            .begin_tx(IsolationLevel::RepeatableRead)
+            .await?;
+        let batch = tx.get_latest_batch().await?;
 
-            let Some(batch) = batch else {
-                tx.commit().await?;
-                return Ok(());
-            };
-
-            // With current flow it is required to mark root as processed first as this is
-            // how required mined_at field is set, We set proper state only if not set
-            // previously.
-            let root_state = tx.get_root_state(&batch.next_root).await?;
-
-            if root_state.is_none() {
-                // If root is not in identities table we can't mark it as processed or mined.
-                // It happens sometimes as we do not have atomic operation for database and tree
-                // insertion.
-                // TODO: check if this is still possible after HA being done
-                tx.commit().await?;
-                return Ok(());
-            }
-
-            match root_state {
-                Some(root_state) if root_state.status == ProcessedStatus::Processed => {
-                    tx.mark_root_as_mined(&batch.next_root).await?;
-                }
-                Some(root_state) if root_state.status == ProcessedStatus::Mined => {}
-                _ => {
-                    tx.mark_root_as_processed(&batch.next_root).await?;
-                    tx.mark_root_as_mined(&batch.next_root).await?;
-                }
-            }
-
+        let Some(batch) = batch else {
             tx.commit().await?;
-            sync_tree_notify.notify_one();
+            return Ok(());
+        };
+
+        // With current flow it is required to mark root as processed first as this is
+        // how required mined_at field is set, We set proper state only if not set
+        // previously.
+        let root_state = tx.get_root_state(&batch.next_root).await?;
+
+        if root_state.is_none() {
+            // If root is not in identities table we can't mark it as processed or mined.
+            // It happens sometimes as we do not have atomic operation for database and tree
+            // insertion.
+            // TODO: check if this is still possible after HA being done
+            tx.commit().await?;
+            return Ok(());
         }
+
+        match root_state {
+            Some(root_state) if root_state.status == ProcessedStatus::Processed => {
+                tx.mark_root_as_mined(&batch.next_root).await?;
+            }
+            Some(root_state) if root_state.status == ProcessedStatus::Mined => {}
+            _ => {
+                tx.mark_root_as_processed(&batch.next_root).await?;
+                tx.mark_root_as_mined(&batch.next_root).await?;
+            }
+        }
+
+        tx.commit().await?;
+        sync_tree_notify.notify_one();
+
+        Ok(())
     }
 
     async fn await_clean_slate(&self) -> anyhow::Result<()> {

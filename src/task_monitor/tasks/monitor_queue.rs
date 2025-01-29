@@ -1,4 +1,5 @@
-use crate::task_monitor::{App, TaskMonitor};
+use crate::monitoring::Monitoring;
+use crate::task_monitor::App;
 use std::sync::Arc;
 use tokio::time;
 use tokio::time::{Duration, MissedTickBehavior};
@@ -15,6 +16,6 @@ pub async fn monitor_queue(app: Arc<App>) -> anyhow::Result<()> {
         timer.tick().await;
         info!("Monitor queue woken due to timeout.");
 
-        TaskMonitor::log_identities_queues(&app.database).await?;
+        Monitoring::log_identities_queues(&app.database).await?;
     }
 }

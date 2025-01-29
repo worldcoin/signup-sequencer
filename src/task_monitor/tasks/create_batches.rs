@@ -19,9 +19,9 @@ use crate::database::Database;
 use crate::identity_tree::{
     AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
+use crate::monitoring::Monitoring;
 use crate::prover::identity::Identity;
 use crate::prover::repository::ProverRepository;
-use crate::task_monitor::TaskMonitor;
 use crate::utils::batch_type::BatchType;
 
 /// The number of seconds either side of the timer tick to treat as enough to
@@ -361,7 +361,7 @@ pub async fn insert_identities(
 
     next_batch_notify.notify_one();
 
-    TaskMonitor::log_batch_size(updates.len());
+    Monitoring::log_batch_size(updates.len());
 
     sync_tree_notify.notify_one();
 
@@ -497,7 +497,7 @@ pub async fn delete_identities(
 
     next_batch_notify.notify_one();
 
-    TaskMonitor::log_batch_size(updates.len());
+    Monitoring::log_batch_size(updates.len());
 
     sync_tree_notify.notify_one();
 

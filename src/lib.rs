@@ -7,9 +7,9 @@ pub mod config;
 mod contracts;
 mod database;
 mod ethereum;
-
 mod identity;
 pub mod identity_tree;
+pub mod monitoring;
 pub mod prover;
 pub mod server;
 pub mod shutdown;

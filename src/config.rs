@@ -4,7 +4,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use ethers::types::{Address, H160};
-use semaphore::Field;
+use semaphore_rs::Field;
 use serde::{Deserialize, Serialize};
 
 use crate::prover::ProverConfig;
@@ -341,8 +341,8 @@ pub mod default {
         false
     }
 
-    pub fn initial_leaf_value() -> semaphore::Field {
-        semaphore::Field::from_be_bytes(hex_literal::hex!(
+    pub fn initial_leaf_value() -> semaphore_rs::Field {
+        semaphore_rs::Field::from_be_bytes(hex_literal::hex!(
             "0000000000000000000000000000000000000000000000000000000000000000"
         ))
     }

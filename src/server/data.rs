@@ -1,7 +1,7 @@
 use chrono::Utc;
 use hyper::StatusCode;
-use semaphore::protocol::Proof;
-use semaphore::Field;
+use semaphore_rs::protocol::Proof;
+use semaphore_rs::Field;
 use serde::{Deserialize, Serialize};
 
 use crate::identity_tree::{Hash, InclusionProof, ProcessedStatus, RootItem, Status};
@@ -11,7 +11,7 @@ use crate::prover::{ProverConfig, ProverType};
 pub struct InclusionProofResponse {
     pub status: Status,
     pub root: Option<Field>,
-    pub proof: Option<semaphore::poseidon_tree::Proof>,
+    pub proof: Option<semaphore_rs::poseidon_tree::Proof>,
     pub message: Option<String>,
 }
 

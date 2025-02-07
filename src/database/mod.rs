@@ -186,8 +186,8 @@ mod test {
     use ethers::types::U256;
     use postgres_docker_utils::DockerContainer;
     use ruint::Uint;
-    use semaphore::poseidon_tree::LazyPoseidonTree;
-    use semaphore::Field;
+    use semaphore_rs::poseidon_tree::LazyPoseidonTree;
+    use semaphore_rs::Field;
     use testcontainers::clients::Cli;
 
     use super::Database;

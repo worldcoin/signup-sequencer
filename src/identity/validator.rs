@@ -1,5 +1,5 @@
 use ruint::uint;
-use semaphore::Field;
+use semaphore_rs::Field;
 
 use crate::config::Config;
 use crate::identity_tree::Hash;

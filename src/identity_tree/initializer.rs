@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use semaphore::poseidon_tree::LazyPoseidonTree;
+use semaphore_rs::poseidon_tree::LazyPoseidonTree;
 use tracing::{info, instrument, warn};
 
 use crate::config::TreeConfig;

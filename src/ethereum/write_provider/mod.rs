@@ -1,21 +1,18 @@
 use std::fmt;
 use std::sync::Arc;
 
-use ethers::providers::Middleware;
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::{Address, U64};
+use alloy::consensus::TypedTransaction;
+use alloy::primitives::{Address, U64};
+use alloy::providers::Provider;
 use tracing::{info, warn};
 
 use self::inner::Inner;
-use self::openzeppelin::OzRelay;
 use self::tx_sitter::TxSitter;
 use super::{ReadProvider, TxError};
 use crate::config::RelayerConfig;
 use crate::identity::processor::TransactionId;
 
-mod error;
 mod inner;
-mod openzeppelin;
 mod tx_sitter;
 
 pub struct WriteProvider {
@@ -39,10 +36,6 @@ impl WriteProvider {
         let address = config.address();
 
         let inner: Arc<dyn Inner> = match config {
-            RelayerConfig::OzDefender(oz_config) => {
-                tracing::info!("Initializing OZ Relayer");
-                Arc::new(OzRelay::new(oz_config).await?)
-            }
             RelayerConfig::TxSitter(tx_sitter_config) => {
                 tracing::info!("Initializing TxSitter");
                 Arc::new(TxSitter::new(tx_sitter_config))

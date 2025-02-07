@@ -1,4 +1,4 @@
-use ethers::types::{Address, Bytes, H256, U256};
+use alloy::primitives::{Address, Bytes, B256, U256};
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
@@ -57,7 +57,7 @@ pub struct GetTxResponse {
 
     // Sent tx data
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tx_hash: Option<H256>,
+    pub tx_hash: Option<B256>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<TxStatus>,
 }

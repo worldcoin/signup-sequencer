@@ -33,8 +33,11 @@ chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "901ea26e478c81e10d5d4355ac628ab7b15afca7" }
 config = "0.13.4"
-ethers = { version = "2.0.10", features = ["ws", "ipc", "openssl", "abigen"] }
-ethers-solc = "2.0.10"
+alloy = { version = "0.11", features = [
+    "node-bindings",
+    "rpc-client",
+    "json-abi",
+] }
 eyre = "0.6"
 futures = "0.3"
 futures-util = { version = "^0.3" }
@@ -50,9 +53,10 @@ oz-api = { path = "crates/oz-api" }
 prometheus = "0.13.3"
 reqwest = { version = "0.12.8", features = ["json"] }
 ruint = { version = "1.12.3", features = ["primitive-types", "sqlx"] }
-semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "251e908d89d598c976901306bc29f06ab59e799d", features = [
-    "depth_30",
-] }
+semaphore-rs = { version = "0.3.0", features = ["depth_30"] }
+semaphore-rs-poseidon = { version = "0.3.0" }
+semaphore-rs-trees = { version = "0.3.0" }
+semaphore-rs-hasher = { version = "0.3.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sqlx = { version = "0.8.2", features = [
@@ -89,9 +93,7 @@ maplit = "1.0.2"
 micro-oz = { path = "crates/micro-oz" }
 postgres-docker-utils = { path = "crates/postgres-docker-utils" }
 regex = { version = "1.7.1", features = ["std"] }
-semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "251e908d89d598c976901306bc29f06ab59e799d", features = [
-    "depth_20",
-] }
+semaphore-rs = { version = "0.3.0", features = ["depth_30"] }
 similar-asserts = "1.5.0"
 test-case = "3.0"
 testcontainers = "0.15.0"

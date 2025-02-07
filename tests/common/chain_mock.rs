@@ -3,6 +3,7 @@ use std::io::BufReader;
 use std::sync::Arc;
 use std::time::Duration;
 
+use alloy::json_abi::ContractObject;
 use ethers::abi::AbiEncode;
 use ethers::contract::Contract;
 use ethers::core::k256::ecdsa::SigningKey;
@@ -16,8 +17,8 @@ use ethers::utils::{Anvil, AnvilInstance};
 use ethers_solc::artifacts::BytecodeObject;
 use tracing::{info, instrument};
 
+use super::abi as ContractAbi;
 use super::abi::IWorldIDIdentityManager;
-use super::{abi as ContractAbi, CompiledContract};
 
 pub type SpecialisedContract = Contract<SpecialisedClient>;
 
@@ -63,7 +64,7 @@ pub async fn spawn_mock_chain(
     let verifier_file =
         File::open(verifier_path).unwrap_or_else(|_| panic!("Failed to open `{verifier_path}`"));
 
-    let verifier_contract_json: CompiledContract =
+    let verifier_contract_json: ContractObject =
         serde_json::from_reader(BufReader::new(verifier_file))
             .unwrap_or_else(|_| panic!("Could not parse the compiled contract at {verifier_path}"));
 
@@ -229,14 +230,14 @@ fn load_and_build_contract(
     let contract_file = File::open(&path_string)
         .unwrap_or_else(|_| panic!("Failed to open `{pth}`", pth = &path_string));
 
-    let contract_json: CompiledContract = serde_json::from_reader(BufReader::new(contract_file))
+    let contract_json: ContractObject = serde_json::from_reader(BufReader::new(contract_file))
         .unwrap_or_else(|_| {
             panic!(
                 "Could not parse the compiled contract at {pth}",
                 pth = &path_string
             )
         });
-    let contract_bytecode = contract_json.bytecode.object.as_bytes().unwrap_or_else(|| {
+    let contract_bytecode = contract_json.bytecode.unwrap_or_else(|| {
         panic!(
             "Could not parse the bytecode for the contract at {pth}",
             pth = &path_string

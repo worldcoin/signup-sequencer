@@ -1,4 +1,4 @@
-use semaphore::Field;
+use semaphore_rs::Field;
 
 use crate::identity_tree::{
     Canonical, InclusionProof, Intermediate, Latest, ProcessedStatus, TreeItem, TreeVersion,

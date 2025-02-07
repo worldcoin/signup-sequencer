@@ -1,9 +1,9 @@
 use std::time::Duration;
 
+use alloy::consensus::TypedTransaction;
+use alloy::primitives::U256;
 use anyhow::Context;
 use async_trait::async_trait;
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::U256;
 use reqwest::StatusCode;
 use tx_sitter_client::data::{SendTxRequest, TransactionPriority, TxStatus};
 use tx_sitter_client::{HttpError, TxSitterClient};

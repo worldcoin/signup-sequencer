@@ -25,7 +25,7 @@ pub fn dedup_tree_updates(updates: Vec<TreeUpdate>) -> Vec<TreeUpdate> {
 
 #[cfg(test)]
 mod tests {
-    use semaphore::Field;
+    use semaphore_rs::Field;
 
     use super::*;
     use crate::identity_tree::Hash;

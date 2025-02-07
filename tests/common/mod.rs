@@ -6,11 +6,13 @@ pub mod abi;
 mod chain_mock;
 mod prover_mock;
 pub mod test_config;
+pub mod contracts;
 
 #[allow(unused)]
 pub mod prelude {
     pub use std::time::Duration;
 
+    pub use alloy::primitives::{Bytes, B256, U128, U256};
     pub use anyhow::Context;
     pub use clap::Parser;
     pub use ethers::abi::{AbiEncode, Address};
@@ -22,17 +24,19 @@ pub mod prelude {
         SignerMiddleware, Wallet,
     };
     pub use ethers::providers::Middleware;
-    pub use ethers::types::{Bytes, H256, U128, U256};
-    pub use ethers::utils::{Anvil, AnvilInstance};
+
+    pub use alloy::node_bindings::{Anvil, AnvilInstance};
     pub use ethers_solc::artifacts::{Bytecode, BytecodeObject};
     pub use once_cell::sync::Lazy;
     pub use postgres_docker_utils::DockerContainer;
     pub use reqwest::{Client, StatusCode};
-    pub use semaphore::identity::Identity;
-    pub use semaphore::merkle_tree::{self, Branch};
-    pub use semaphore::poseidon_tree::{PoseidonHash, PoseidonTree};
-    pub use semaphore::protocol::{self, generate_nullifier_hash, generate_proof};
-    pub use semaphore::{hash_to_field, Field};
+    pub use semaphore_rs::identity::Identity;
+    pub use semaphore_rs::poseidon_tree::PoseidonTree;
+    pub use semaphore_rs::protocol::{self, generate_nullifier_hash, generate_proof};
+    pub use semaphore_rs::{hash_to_field, Field};
+    pub use semaphore_rs_poseidon::Poseidon as PoseidonHash;
+    pub use semaphore_rs_trees::Branch;
+    pub use semaphore_rs_trees::InclusionProof as MerkleTreeProof;
     pub use serde::{Deserialize, Serialize};
     pub use serde_json::json;
     pub use signup_sequencer::app::App;
@@ -76,7 +80,7 @@ use anyhow::anyhow;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use reqwest::{Body, Client, Method, Request, RequestBuilder, StatusCode};
-use semaphore::poseidon_tree::Proof;
+use semaphore_rs::poseidon_tree::Proof;
 use signup_sequencer::identity_tree::ProcessedStatus::Mined;
 use signup_sequencer::identity_tree::{
     InclusionProof, ProcessedStatus, Status, TreeState, TreeVersionReadOps,
@@ -498,7 +502,7 @@ pub async fn test_delete_identity(
     test_leaves: &[Field],
     leaf_index: usize,
     expect_failure: bool,
-) -> (merkle_tree::Proof<PoseidonHash>, Field) {
+) -> (MerkleTreeProof<PoseidonHash>, Field) {
     api_delete_identity(uri, client, &test_leaves[leaf_index], expect_failure).await;
     ref_tree.set(leaf_index, Hash::ZERO);
     (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())
@@ -595,7 +599,7 @@ pub async fn test_insert_identity(
     ref_tree: &mut PoseidonTree,
     test_leaves: &[Field],
     leaf_index: usize,
-) -> (merkle_tree::Proof<PoseidonHash>, Field) {
+) -> (MerkleTreeProof<PoseidonHash>, Field) {
     api_insert_identity(uri, client, &test_leaves[leaf_index]).await;
 
     ref_tree.set(leaf_index, test_leaves[leaf_index]);
@@ -748,12 +752,6 @@ pub async fn check_health(socket_addr: &SocketAddr) -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-struct CompiledContract {
-    abi: Abi,
-    bytecode: Bytecode,
 }
 
 pub async fn spawn_deps<'a, 'b, 'c>(

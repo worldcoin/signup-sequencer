@@ -1,8 +1,7 @@
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::H256;
-
 use crate::ethereum::TxError;
 use crate::identity::processor::TransactionId;
+use alloy::consensus::TypedTransaction;
+use alloy::primitives::B256;
 
 #[async_trait::async_trait]
 pub trait Inner: Send + Sync + 'static {
@@ -20,5 +19,5 @@ pub trait Inner: Send + Sync + 'static {
 
 pub struct TransactionResult {
     pub transaction_id: String,
-    pub hash: Option<H256>,
+    pub hash: Option<B256>,
 }

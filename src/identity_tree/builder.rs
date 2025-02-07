@@ -1,9 +1,9 @@
 use std::cmp::min;
 use std::sync::{Arc, Mutex};
 
-use semaphore::lazy_merkle_tree::LazyMerkleTree;
-use semaphore::poseidon_tree::PoseidonHash;
-use semaphore::{lazy_merkle_tree, Field};
+use semaphore_rs::Field;
+use semaphore_rs_poseidon::Poseidon as PoseidonHash;
+use semaphore_rs_trees::lazy::{self, LazyMerkleTree};
 use tracing::{info, warn};
 
 use crate::identity_tree::{
@@ -13,7 +13,7 @@ use crate::identity_tree::{
 
 /// A helper for building the first tree version. Exposes a type-safe API over
 /// building a sequence of tree versions efficiently.
-pub struct CanonicalTreeBuilder(TreeVersionData<lazy_merkle_tree::Canonical>);
+pub struct CanonicalTreeBuilder(TreeVersionData<lazy::Canonical>);
 
 impl CanonicalTreeBuilder {
     /// Creates a new builder with the given parameters.
@@ -46,17 +46,22 @@ impl CanonicalTreeBuilder {
             initial_leaves.split_at(initial_leaves_in_dense_count);
 
         info!("Creating mmap dense tree");
-        let tree =
-            PoseidonTree::<lazy_merkle_tree::Canonical>::new_mmapped_with_dense_prefix_with_init_values(
-                tree_depth,
-                dense_prefix_depth,
-                &default_leaf,
-                &initial_leaves_in_dense
-                    .iter()
-                    .map(|tree_update| tree_update.as_ref().map(|v| v.element).unwrap_or(default_leaf))
-                    .collect::<Vec<Field>>(),
-                mmap_file_path
-            ).unwrap();
+        let tree = PoseidonTree::<lazy::Canonical>::new_mmapped_with_dense_prefix_with_init_values(
+            tree_depth,
+            dense_prefix_depth,
+            &default_leaf,
+            &initial_leaves_in_dense
+                .iter()
+                .map(|tree_update| {
+                    tree_update
+                        .as_ref()
+                        .map(|v| v.element)
+                        .unwrap_or(default_leaf)
+                })
+                .collect::<Vec<Field>>(),
+            mmap_file_path,
+        )
+        .unwrap();
 
         info!("Applying leaves not in dense tree");
         let metadata = CanonicalTreeMetadata {
@@ -100,8 +105,8 @@ impl CanonicalTreeBuilder {
         mmap_file_path: &str,
     ) -> Option<Self> {
         info!("Restoring tree from file");
-        let tree: LazyMerkleTree<PoseidonHash, lazy_merkle_tree::Canonical> =
-            match PoseidonTree::<lazy_merkle_tree::Canonical>::attempt_dense_mmap_restore(
+        let tree: LazyMerkleTree<PoseidonHash, lazy::Canonical> =
+            match PoseidonTree::<lazy::Canonical>::attempt_dense_mmap_restore(
                 tree_depth,
                 dense_prefix_depth,
                 default_leaf,
@@ -164,13 +169,13 @@ impl CanonicalTreeBuilder {
 /// building a sequence of tree versions efficiently.
 pub struct DerivedTreeBuilder<P: Version> {
     prev: TreeVersion<P>,
-    current: TreeVersionData<lazy_merkle_tree::Derived>,
+    current: TreeVersionData<lazy::Derived>,
 }
 
 impl<P: Version> DerivedTreeBuilder<P> {
     #[must_use]
     fn new<Prev: Version>(
-        state: TreeVersionState<lazy_merkle_tree::Derived>,
+        state: TreeVersionState<lazy::Derived>,
         prev: TreeVersion<Prev>,
     ) -> DerivedTreeBuilder<Prev> {
         let metadata = DerivedTreeMetadata {

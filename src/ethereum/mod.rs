@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use alloy::consensus::TypedTransaction;
+use alloy::primitives::Address;
 use anyhow::bail;
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::Address;
 pub use read::ReadProvider;
 use tracing::instrument;
 pub use write::TxError;

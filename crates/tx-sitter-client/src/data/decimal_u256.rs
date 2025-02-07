@@ -1,4 +1,4 @@
-use ethers::types::U256;
+use alloy::primitives::U256;
 
 pub fn serialize<S>(u256: &U256, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -13,7 +13,7 @@ where
     D: serde::Deserializer<'de>,
 {
     let s: &str = serde::Deserialize::deserialize(deserializer)?;
-    let u256 = U256::from_dec_str(s).map_err(serde::de::Error::custom)?;
+    let u256 = U256::from_str_radix(s, 10).map_err(serde::de::Error::custom)?;
     Ok(u256)
 }
 

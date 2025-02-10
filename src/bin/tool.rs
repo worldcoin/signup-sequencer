@@ -231,8 +231,10 @@ async fn main() -> anyhow::Result<()> {
 
             let root = response.root.context("Missing root")?;
 
-            let nullifier_hash =
-                semaphore_rs::protocol::generate_nullifier_hash(&identity, x.external_nullifier_hash);
+            let nullifier_hash = semaphore_rs::protocol::generate_nullifier_hash(
+                &identity,
+                x.external_nullifier_hash,
+            );
 
             let proof = semaphore_rs::protocol::generate_proof(
                 &identity,

@@ -33,7 +33,7 @@ async fn more_identities_than_dense_prefix(offchain_mode_enabled: bool) -> anyho
 
     let num_batches_total = num_identities_total / batch_size;
 
-    let mut ref_tree = PoseidonTree::new(tree_depth + 1, ruint::Uint::ZERO);
+    let mut ref_tree = PoseidonTree::new(tree_depth, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let docker = Cli::default();

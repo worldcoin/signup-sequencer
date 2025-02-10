@@ -91,7 +91,7 @@ async fn serializable_transaction() -> Result<(), anyhow::Error> {
     let insertion_batch_size: usize = 500;
     let deletion_batch_size: usize = 10;
 
-    let ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
+    let ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let docker = Cli::default();

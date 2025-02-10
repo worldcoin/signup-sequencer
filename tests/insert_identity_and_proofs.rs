@@ -21,7 +21,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
 
     let batch_size: usize = 3;
 
-    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
+    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let docker = Cli::default();

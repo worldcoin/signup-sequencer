@@ -18,7 +18,7 @@ async fn unavailable_prover(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     init_tracing_subscriber();
     info!("Starting unavailable prover test");
 
-    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
+    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let batch_size: usize = 3;

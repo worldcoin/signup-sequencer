@@ -90,7 +90,7 @@ maplit = "1.0.2"
 micro-oz = { path = "crates/micro-oz" }
 postgres-docker-utils = { path = "crates/postgres-docker-utils" }
 regex = { version = "1.7.1", features = ["std"] }
-semaphore-rs = { version = "0.3.0", features = ["depth_30"] }
+semaphore-rs = { version = "0.3.0", features = ["depth_20"] }
 similar-asserts = "1.5.0"
 test-case = "3.0"
 testcontainers = "0.15.0"

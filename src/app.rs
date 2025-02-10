@@ -363,7 +363,6 @@ impl App {
 
         let proof = if request.is_proof_padded() {
             let proof_flat = request.proof.flatten();
-            //let compressed_proof =
             let compressed_flat = [proof_flat[0], proof_flat[1], proof_flat[2], proof_flat[3]];
             let compressed = CompressedProof::from_flat(compressed_flat);
             semaphore_rs::protocol::compression::decompress_proof(compressed)

@@ -1,11 +1,14 @@
 use chrono::Utc;
 use hyper::StatusCode;
+use semaphore_rs::protocol::compression::CompressedProof;
 use semaphore_rs::protocol::Proof;
 use semaphore_rs::Field;
 use serde::{Deserialize, Serialize};
 
 use crate::identity_tree::{Hash, InclusionProof, ProcessedStatus, RootItem, Status};
 use crate::prover::{ProverConfig, ProverType};
+
+use super::error::Error;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct InclusionProofResponse {
@@ -78,6 +81,17 @@ pub struct VerifySemaphoreProofRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
+pub struct VerifyCompressedSemaphoreProofRequest {
+    pub root: Field,
+    pub signal_hash: Field,
+    pub nullifier_hash: Field,
+    pub external_nullifier_hash: Field,
+    pub proof: CompressedProof,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 pub struct VerifySemaphoreProofQuery {
     #[serde(default)]
     pub max_root_age_seconds: Option<i64>,
@@ -89,6 +103,37 @@ pub struct VerifySemaphoreProofQuery {
 pub struct DeletionRequest {
     /// The identity commitment to delete.
     pub identity_commitment: Hash,
+}
+
+impl VerifySemaphoreProofRequest {
+    pub fn is_proof_padded(&self) -> bool {
+        let Proof(_g1a, g2, g1b) = &self.proof;
+
+        g2.1[0].is_zero() && g2.1[1].is_zero() && g1b.0.is_zero() && g1b.1.is_zero()
+    }
+}
+
+impl VerifyCompressedSemaphoreProofRequest {
+    pub fn decompress(self) -> Result<VerifySemaphoreProofRequest, Error> {
+        let Self {
+            root,
+            signal_hash,
+            nullifier_hash,
+            external_nullifier_hash,
+            proof,
+        } = self;
+
+        let proof = semaphore_rs::protocol::compression::decompress_proof(proof)
+            .ok_or_else(|| Error::InvalidProof)?;
+
+        Ok(VerifySemaphoreProofRequest {
+            root,
+            signal_hash,
+            nullifier_hash,
+            external_nullifier_hash,
+            proof,
+        })
+    }
 }
 
 impl From<InclusionProof> for InclusionProofResponse {

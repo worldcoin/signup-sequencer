@@ -3,7 +3,7 @@ use std::sync::{Arc, OnceLock};
 
 use chrono::{Duration, Utc};
 use ruint::Uint;
-use semaphore::protocol::verify_proof;
+use semaphore_rs::protocol::verify_proof;
 use tracing::{info, instrument, warn};
 
 use crate::config::Config;

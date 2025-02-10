@@ -2,8 +2,9 @@ use anyhow::Context;
 use chrono::{DateTime, Utc};
 use ethers::prelude::U256;
 use ruint::Uint;
-use semaphore::merkle_tree::Proof;
-use semaphore::poseidon_tree::{Branch, PoseidonHash};
+use semaphore_rs::poseidon_tree::Branch;
+use semaphore_rs_poseidon::Poseidon as PoseidonHash;
+use semaphore_rs_trees::InclusionProof;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch::Receiver;
@@ -459,7 +460,7 @@ pub async fn delete_identities(
         commitments.extend(vec![U256::zero(); padding]);
         deletion_indices.extend(vec![pad_index; padding]);
 
-        let zeroed_proof = Proof(vec![
+        let zeroed_proof = InclusionProof(vec![
             Branch::Left(Uint::ZERO);
             latest_tree_from_updates.depth()
         ]);
@@ -521,7 +522,7 @@ fn determine_batch_type(tree: &TreeVersion<Intermediate>) -> Option<BatchType> {
 
 fn zip_commitments_and_proofs(
     commitments: Vec<U256>,
-    merkle_proofs: Vec<Proof<PoseidonHash>>,
+    merkle_proofs: Vec<InclusionProof<PoseidonHash>>,
 ) -> Vec<Identity> {
     commitments
         .iter()

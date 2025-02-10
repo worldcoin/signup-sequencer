@@ -1,10 +1,12 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use chrono::Utc;
-use semaphore::lazy_merkle_tree::LazyMerkleTree;
-use semaphore::merkle_tree::Hasher;
-use semaphore::poseidon_tree::{PoseidonHash, Proof};
-use semaphore::{lazy_merkle_tree, Field};
+use semaphore_rs::poseidon_tree::Proof;
+use semaphore_rs::Field;
+use semaphore_rs_hasher::Hasher;
+use semaphore_rs_poseidon::Poseidon as PoseidonHash;
+use semaphore_rs_trees::lazy;
+use semaphore_rs_trees::lazy::LazyMerkleTree;
 use serde::{Deserialize, Serialize};
 use sqlx::prelude::FromRow;
 use tracing::{info, warn};
@@ -84,28 +86,28 @@ pub struct CanonicalTreeMetadata {
 /// updates performed since previous version.
 pub struct DerivedTreeMetadata {
     diff: Vec<AppliedTreeUpdate>,
-    ref_state: TreeVersionState<lazy_merkle_tree::Derived>,
+    ref_state: TreeVersionState<lazy::Derived>,
 }
 
 #[derive(Clone)]
 pub struct AppliedTreeUpdate {
     pub update: TreeUpdate,
-    pub post_state: TreeVersionState<lazy_merkle_tree::Derived>,
+    pub post_state: TreeVersionState<lazy::Derived>,
 }
 
 /// Trait used to associate a version marker with its metadata type.
 pub trait AllowedTreeVersionMarker
 where
-    Self: lazy_merkle_tree::VersionMarker,
+    Self: lazy::VersionMarker,
 {
     type Metadata;
 }
 
-impl AllowedTreeVersionMarker for lazy_merkle_tree::Canonical {
+impl AllowedTreeVersionMarker for lazy::Canonical {
     type Metadata = CanonicalTreeMetadata;
 }
 
-impl AllowedTreeVersionMarker for lazy_merkle_tree::Derived {
+impl AllowedTreeVersionMarker for lazy::Derived {
     type Metadata = DerivedTreeMetadata;
 }
 
@@ -115,8 +117,8 @@ pub struct TreeVersionState<V: AllowedTreeVersionMarker> {
     pub last_sequence_id: usize,
 }
 
-impl TreeVersionState<lazy_merkle_tree::Canonical> {
-    fn derived(&self) -> TreeVersionState<lazy_merkle_tree::Derived> {
+impl TreeVersionState<lazy::Canonical> {
+    fn derived(&self) -> TreeVersionState<lazy::Derived> {
         TreeVersionState {
             tree: self.tree.derived(),
             next_leaf: self.next_leaf,
@@ -125,7 +127,7 @@ impl TreeVersionState<lazy_merkle_tree::Canonical> {
     }
 }
 
-impl Clone for TreeVersionState<lazy_merkle_tree::Derived> {
+impl Clone for TreeVersionState<lazy::Derived> {
     fn clone(&self) -> Self {
         TreeVersionState {
             tree: self.tree.clone(),
@@ -164,7 +166,7 @@ pub trait BasicTreeOps {
 
 impl<V> TreeVersionData<V>
 where
-    V: lazy_merkle_tree::VersionMarker + AllowedTreeVersionMarker,
+    V: lazy::VersionMarker + AllowedTreeVersionMarker,
     Self: BasicTreeOps,
 {
     /// Gets the current tree root.
@@ -257,7 +259,7 @@ where
     }
 }
 
-impl TreeVersionData<lazy_merkle_tree::Derived>
+impl TreeVersionData<lazy::Derived>
 where
     Self: BasicTreeOps,
 {
@@ -309,7 +311,7 @@ where
     }
 }
 
-impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
+impl BasicTreeOps for TreeVersionData<lazy::Canonical> {
     fn update(&mut self, sequence_id: usize, leaf_index: usize, element: Hash) {
         take_mut::take(&mut self.state.tree, |tree| {
             tree.update_with_mutation(leaf_index, &element)
@@ -362,11 +364,11 @@ impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Canonical> {
     }
 }
 
-impl TreeVersionData<lazy_merkle_tree::Derived> {
+impl TreeVersionData<lazy::Derived> {
     /// This method recalculate tree to use different tree version as a base.
     /// The tree itself is same in terms of root hash but differs how
     /// internally is stored in memory and on disk.
-    fn rebuild_on(&mut self, mut tree: PoseidonTree<lazy_merkle_tree::Derived>) {
+    fn rebuild_on(&mut self, mut tree: PoseidonTree<lazy::Derived>) {
         self.metadata.ref_state.tree = tree.clone();
         for update in &mut self.metadata.diff {
             tree = tree.update(update.update.leaf_index, &update.update.element);
@@ -380,7 +382,7 @@ impl TreeVersionData<lazy_merkle_tree::Derived> {
     }
 }
 
-impl BasicTreeOps for TreeVersionData<lazy_merkle_tree::Derived> {
+impl BasicTreeOps for TreeVersionData<lazy::Derived> {
     fn update(&mut self, sequence_id: usize, leaf_index: usize, element: Hash) {
         let updated_tree = self.state.tree.update(leaf_index, &element);
         let updated_next_leaf = if element != Hash::ZERO {
@@ -462,7 +464,7 @@ where
 #[derive(Clone)]
 pub struct Canonical;
 impl Version for Canonical {
-    type TreeVersion = lazy_merkle_tree::Canonical;
+    type TreeVersion = lazy::Canonical;
 }
 impl HasNextVersion for Canonical {}
 
@@ -471,7 +473,7 @@ impl HasNextVersion for Canonical {}
 #[derive(Clone)]
 pub struct Intermediate;
 impl Version for Intermediate {
-    type TreeVersion = lazy_merkle_tree::Derived;
+    type TreeVersion = lazy::Derived;
 }
 impl HasNextVersion for Intermediate {}
 
@@ -481,7 +483,7 @@ impl HasNextVersion for Intermediate {}
 #[derive(Clone)]
 pub struct Latest;
 impl Version for Latest {
-    type TreeVersion = lazy_merkle_tree::Derived;
+    type TreeVersion = lazy::Derived;
 }
 
 /// Marker for any tree version that has a predecessor. It is useful internally
@@ -490,7 +492,7 @@ impl Version for Latest {
 #[derive(Clone)]
 struct AnyDerived;
 impl Version for AnyDerived {
-    type TreeVersion = lazy_merkle_tree::Derived;
+    type TreeVersion = lazy::Derived;
 }
 
 /// The most important public-facing type of this library. Exposes a type-safe
@@ -504,7 +506,7 @@ impl<V: Version> Clone for TreeVersion<V> {
     }
 }
 
-impl<V: Version<TreeVersion = lazy_merkle_tree::Derived>> TreeVersion<V> {
+impl<V: Version<TreeVersion = lazy::Derived>> TreeVersion<V> {
     /// Only used internally to upcast a compatible tree version to
     /// `AnyDerived`.
     fn as_derived(&self) -> TreeVersion<AnyDerived> {
@@ -678,7 +680,7 @@ pub trait ReversibleVersion {
     fn rewind_updates_up_to(&self, root: Hash) -> usize;
 }
 
-impl<V: Version<TreeVersion = lazy_merkle_tree::Derived>> ReversibleVersion for TreeVersion<V> {
+impl<V: Version<TreeVersion = lazy::Derived>> ReversibleVersion for TreeVersion<V> {
     fn rewind_updates_up_to(&self, root: Hash) -> usize {
         self.get_data().rewind_updates_up_to(root)
     }

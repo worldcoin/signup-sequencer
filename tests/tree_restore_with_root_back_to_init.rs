@@ -18,7 +18,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
 
     let batch_size: usize = 3;
 
-    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
+    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let docker = Cli::default();

@@ -11,7 +11,7 @@ use axum_server::Handle;
 use ethers::types::U256;
 use ethers::utils::keccak256;
 use hyper::StatusCode;
-use semaphore::poseidon_tree::{Branch, Proof as TreeProof};
+use semaphore_rs::poseidon_tree::{Branch, Proof as TreeProof};
 use serde::{Deserialize, Serialize};
 use signup_sequencer::prover::ProverType;
 use signup_sequencer::utils::index_packing::pack_indices;

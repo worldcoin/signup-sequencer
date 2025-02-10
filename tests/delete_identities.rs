@@ -26,7 +26,7 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     let insertion_batch_size: usize = 8;
     let deletion_batch_size: usize = 3;
 
-    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH + 1, ruint::Uint::ZERO);
+    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let docker = Cli::default();

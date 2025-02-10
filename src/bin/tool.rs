@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use clap::Parser;
 use ethers::core::rand::{thread_rng, RngCore};
-use semaphore::identity::Identity;
-use semaphore::poseidon_tree::Proof;
-use semaphore::Field;
+use semaphore_rs::identity::Identity;
+use semaphore_rs::poseidon_tree::Proof;
+use semaphore_rs::Field;
 use serde::{Deserialize, Serialize};
 use signup_sequencer::server::data::{
     InclusionProofRequest, InclusionProofResponse, InsertCommitmentRequest,
@@ -231,10 +231,12 @@ async fn main() -> anyhow::Result<()> {
 
             let root = response.root.context("Missing root")?;
 
-            let nullifier_hash =
-                semaphore::protocol::generate_nullifier_hash(&identity, x.external_nullifier_hash);
+            let nullifier_hash = semaphore_rs::protocol::generate_nullifier_hash(
+                &identity,
+                x.external_nullifier_hash,
+            );
 
-            let proof = semaphore::protocol::generate_proof(
+            let proof = semaphore_rs::protocol::generate_proof(
                 &identity,
                 &response.proof.context("Missing proof")?,
                 x.external_nullifier_hash,

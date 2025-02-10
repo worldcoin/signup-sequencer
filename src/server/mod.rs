@@ -8,6 +8,7 @@ use axum::extract::{Query, State};
 use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{middleware, Json, Router};
+use data::VerifyCompressedSemaphoreProofRequest;
 use error::Error;
 use hyper::header::CONTENT_TYPE;
 use hyper::StatusCode;
@@ -63,6 +64,21 @@ async fn verify_semaphore_proof(
         .await?;
 
     Ok((result.to_response_code(), Json(result)))
+}
+
+async fn verify_compressed_semaphore_proof(
+    State(app): State<Arc<App>>,
+    Query(verify_semaphore_proof_query): Query<VerifySemaphoreProofQuery>,
+    Json(verify_semaphore_proof_request): Json<VerifyCompressedSemaphoreProofRequest>,
+) -> Result<(StatusCode, Json<VerifySemaphoreProofResponse>), Error> {
+    let verify_semaphore_proof_request = verify_semaphore_proof_request.decompress()?;
+
+    verify_semaphore_proof(
+        State(app),
+        Query(verify_semaphore_proof_query),
+        Json(verify_semaphore_proof_request),
+    )
+    .await
 }
 
 async fn add_batch_size(
@@ -172,6 +188,10 @@ pub async fn bind_from_listener(
     let router = Router::new()
         // Operate on identity commitments
         .route("/verifySemaphoreProof", post(verify_semaphore_proof))
+        .route(
+            "/verifyCompressedSemaphoreProof",
+            post(verify_compressed_semaphore_proof),
+        )
         .route("/inclusionProof", post(inclusion_proof))
         .route("/insertIdentity", post(insert_identity))
         .route("/deleteIdentity", post(delete_identity))

@@ -3,6 +3,7 @@ use std::sync::{Arc, OnceLock};
 
 use chrono::{Duration, Utc};
 use ruint::Uint;
+use semaphore_rs::protocol::compression::CompressedProof;
 use semaphore_rs::protocol::verify_proof;
 use tracing::{info, instrument, warn};
 
@@ -360,12 +361,23 @@ impl App {
             self.validate_root_age(max_root_age, &root_state)?;
         }
 
+        let proof = if request.is_proof_padded() {
+            let proof_flat = request.proof.flatten();
+            //let compressed_proof =
+            let compressed_flat = [proof_flat[0], proof_flat[1], proof_flat[2], proof_flat[3]];
+            let compressed = CompressedProof::from_flat(compressed_flat);
+            semaphore_rs::protocol::compression::decompress_proof(compressed)
+                .ok_or_else(|| ServerError::InvalidProof)?
+        } else {
+            request.proof
+        };
+
         let checked = verify_proof(
             request.root,
             request.nullifier_hash,
             request.signal_hash,
             request.external_nullifier_hash,
-            &request.proof,
+            &proof,
             self.config.tree.tree_depth,
         );
 

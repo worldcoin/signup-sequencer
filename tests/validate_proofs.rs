@@ -106,17 +106,17 @@ async fn validate_proofs(offchain_mode_enabled: bool) -> anyhow::Result<()> {
 
     let proof = proof_task.await.unwrap();
 
-    test_verify_proof(
-        &uri,
-        &client,
-        root,
-        signal_hash,
-        nullifier_hash,
-        external_nullifier_hash,
-        proof,
-        None,
-    )
-    .await;
+    let test_builder = test_verify_proof_builder()
+        .uri(&uri)
+        .client(&client)
+        .root(root)
+        .signal_hash(signal_hash)
+        .nullifier_hash(nullifier_hash)
+        .external_nullifier_hash(external_nullifier_hash)
+        .proof(proof);
+
+    test_builder.clone().call().await;
+    test_builder.clone().compressed(false).call().await;
 
     test_inclusion_proof(
         &mock_chain,
@@ -147,17 +147,18 @@ async fn validate_proofs(offchain_mode_enabled: bool) -> anyhow::Result<()> {
 
     let invalid_nullifier_hash = generate_nullifier_hash(&IDENTITIES[1], external_nullifier_hash);
 
-    test_verify_proof(
-        &uri,
-        &client,
-        root,
-        signal_hash,
-        invalid_nullifier_hash,
-        external_nullifier_hash,
-        proof,
-        Some("invalid semaphore proof"),
-    )
-    .await;
+    // TODO:: Reuse the main builder once https://github.com/elastio/bon/issues/149 is stabilized
+    test_verify_proof_builder()
+        .uri(&uri)
+        .client(&client)
+        .root(root)
+        .signal_hash(signal_hash)
+        .nullifier_hash(invalid_nullifier_hash)
+        .external_nullifier_hash(external_nullifier_hash)
+        .proof(proof)
+        .expected_failure("invalid semaphore proof")
+        .call()
+        .await;
 
     if !offchain_mode_enabled {
         test_verify_proof_on_chain(
@@ -187,17 +188,17 @@ async fn validate_proofs(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     )
     .unwrap();
 
-    test_verify_proof(
-        &uri,
-        &client,
-        root,
-        signal_hash,
-        new_nullifier_hash,
-        external_nullifier_hash,
-        new_proof,
-        Some("invalid semaphore proof"),
-    )
-    .await;
+    test_verify_proof_builder()
+        .uri(&uri)
+        .client(&client)
+        .root(root)
+        .signal_hash(signal_hash)
+        .nullifier_hash(new_nullifier_hash)
+        .external_nullifier_hash(external_nullifier_hash)
+        .proof(new_proof)
+        .expected_failure("invalid semaphore proof")
+        .call()
+        .await;
 
     if !offchain_mode_enabled {
         test_verify_proof_on_chain(
@@ -216,17 +217,17 @@ async fn validate_proofs(offchain_mode_enabled: bool) -> anyhow::Result<()> {
 
     let new_root = ref_tree.root();
 
-    test_verify_proof(
-        &uri,
-        &client,
-        new_root,
-        signal_hash,
-        new_nullifier_hash,
-        external_nullifier_hash,
-        new_proof,
-        Some("invalid root"),
-    )
-    .await;
+    test_verify_proof_builder()
+        .uri(&uri)
+        .client(&client)
+        .root(new_root)
+        .signal_hash(signal_hash)
+        .nullifier_hash(new_nullifier_hash)
+        .external_nullifier_hash(external_nullifier_hash)
+        .proof(new_proof)
+        .expected_failure("invalid root")
+        .call()
+        .await;
 
     if !offchain_mode_enabled {
         test_verify_proof_on_chain(

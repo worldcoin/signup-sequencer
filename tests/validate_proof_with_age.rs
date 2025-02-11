@@ -4,8 +4,6 @@ use std::time::Instant;
 
 use common::prelude::*;
 
-use crate::common::test_verify_proof_with_age;
-
 #[tokio::test]
 async fn validate_proof_with_age_onchain() -> anyhow::Result<()> {
     validate_proof_with_age(false).await
@@ -106,19 +104,17 @@ async fn validate_proof_with_age(offchain_mode_enabled: bool) -> anyhow::Result<
     // Wait so the proof is at least 2 seconds old
     tokio::time::sleep(Duration::from_secs(2)).await;
 
+    let test_builder = test_verify_proof_builder()
+        .uri(&uri)
+        .client(&client)
+        .root(root)
+        .signal_hash(signal_hash)
+        .nullifier_hash(nullifier_hash)
+        .external_nullifier_hash(external_nullifier_hash)
+        .proof(proof);
+
     // Proof will be older than 2 seconds, but it's the latest root
-    test_verify_proof_with_age(
-        &uri,
-        &client,
-        root,
-        signal_hash,
-        nullifier_hash,
-        external_nullifier_hash,
-        proof,
-        2,
-        None,
-    )
-    .await;
+    test_builder.clone().max_root_age_seconds(2).call().await;
 
     // Insert the 2nd identity to produce new root
     test_insert_identity(&uri, &client, &mut ref_tree, &test_leaves, 1).await;
@@ -127,18 +123,12 @@ async fn validate_proof_with_age(offchain_mode_enabled: bool) -> anyhow::Result<
     tokio::time::sleep(Duration::from_secs(sleep_duration_seconds)).await;
 
     // Now the old proof root is too old (definitely older than 2 seconds)
-    test_verify_proof_with_age(
-        &uri,
-        &client,
-        root,
-        signal_hash,
-        nullifier_hash,
-        external_nullifier_hash,
-        proof,
-        2,
-        Some("Root provided in semaphore proof is too old."),
-    )
-    .await;
+    test_builder
+        .clone()
+        .max_root_age_seconds(2)
+        .expected_failure("Root provided in semaphore proof is too old.")
+        .call()
+        .await;
 
     let max_age_of_proof = (Instant::now() - time_of_identity_insertion).as_secs() + 2;
     assert!(
@@ -147,18 +137,10 @@ async fn validate_proof_with_age(offchain_mode_enabled: bool) -> anyhow::Result<
     );
 
     // Test proof which is new enough
-    test_verify_proof_with_age(
-        &uri,
-        &client,
-        root,
-        signal_hash,
-        nullifier_hash,
-        external_nullifier_hash,
-        proof,
-        max_age_of_proof as i64,
-        None,
-    )
-    .await;
+    test_builder
+        .max_root_age_seconds(max_age_of_proof as i64)
+        .call()
+        .await;
 
     // Shutdown the app properly for the final time
     shutdown.shutdown();

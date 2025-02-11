@@ -29,6 +29,7 @@ axum = "0.7.7"
 axum-server = "0.7.1"
 tower-http = { version = "0.6.1", features = ["catch-panic"] }
 bytes = "1.4.0"
+bon = "3"
 chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "901ea26e478c81e10d5d4355ac628ab7b15afca7" }

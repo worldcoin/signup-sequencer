@@ -321,6 +321,14 @@ criteria = "safe-to-deploy"
 version = "1.42.0-rc.3"
 criteria = "safe-to-deploy"
 
+[[exemptions.bon]]
+version = "3.3.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.bon-macros]]
+version = "3.3.2"
+criteria = "safe-to-deploy"
+
 [[exemptions.bs58]]
 version = "0.5.0"
 criteria = "safe-to-deploy"

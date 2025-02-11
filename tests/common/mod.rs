@@ -63,7 +63,7 @@ pub mod prelude {
         abi as ContractAbi, await_tree_state_with_mined_leafs_size, generate_reference_proof,
         generate_test_identities, init_tracing_subscriber, spawn_app, spawn_deps,
         spawn_mock_deletion_prover, spawn_mock_insertion_prover, test_inclusion_proof,
-        test_insert_identity, test_verify_proof, test_verify_proof_on_chain,
+        test_insert_identity, test_verify_proof_builder, test_verify_proof_on_chain,
     };
     pub use crate::common::chain_mock::spawn_mock_chain;
     pub use crate::common::test_same_tree_states;
@@ -75,9 +75,11 @@ use crate::common::abi::{IWorldIDIdentityManager, RootInfo};
 use crate::common::chain_mock::SpecialisedClient;
 use crate::server::error::Error as ServerError;
 use anyhow::anyhow;
+use bon::builder;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use reqwest::{Body, Client, Method, Request, RequestBuilder, StatusCode};
+use server::data::VerifyCompressedSemaphoreProofRequest;
 use signup_sequencer::identity_tree::ProcessedStatus::Mined;
 use signup_sequencer::identity_tree::{
     InclusionProof, ProcessedStatus, Status, TreeState, TreeVersionReadOps,
@@ -97,62 +99,8 @@ use tracing::trace;
 
 const NUM_ATTEMPTS_FOR_INCLUSION_PROOF: usize = 20;
 
-#[allow(clippy::too_many_arguments)]
-#[instrument(skip_all)]
-pub async fn test_verify_proof(
-    uri: &str,
-    client: &Client,
-    root: Field,
-    signal_hash: Field,
-    nullifier_hash: Field,
-    external_nullifier_hash: Field,
-    proof: protocol::Proof,
-    expected_failure: Option<&str>,
-) {
-    test_verify_proof_inner(
-        uri,
-        client,
-        root,
-        signal_hash,
-        nullifier_hash,
-        external_nullifier_hash,
-        proof,
-        None,
-        expected_failure,
-    )
-    .await
-}
-
-#[allow(clippy::too_many_arguments)]
-#[instrument(skip_all)]
-pub async fn test_verify_proof_with_age(
-    uri: &str,
-    client: &Client,
-    root: Field,
-    signal_hash: Field,
-    nullifier_hash: Field,
-    external_nullifier_hash: Field,
-    proof: protocol::Proof,
-    max_root_age_seconds: i64,
-    expected_failure: Option<&str>,
-) {
-    test_verify_proof_inner(
-        uri,
-        client,
-        root,
-        signal_hash,
-        nullifier_hash,
-        external_nullifier_hash,
-        proof,
-        Some(max_root_age_seconds),
-        expected_failure,
-    )
-    .await
-}
-
-#[allow(clippy::too_many_arguments)]
-#[instrument(skip_all)]
-async fn test_verify_proof_inner(
+#[builder(derive(Clone, Debug))]
+pub async fn test_verify_proof_builder(
     uri: &str,
     client: &Client,
     root: Field,
@@ -162,21 +110,42 @@ async fn test_verify_proof_inner(
     proof: protocol::Proof,
     max_root_age_seconds: Option<i64>,
     expected_failure: Option<&str>,
+    #[builder(default)] compressed: bool,
 ) {
-    let body = construct_verify_proof_body(
-        root,
-        signal_hash,
-        nullifier_hash,
-        external_nullifier_hash,
-        proof,
-    );
+    let body = if compressed {
+        let proof = semaphore_rs::protocol::compression::compress_proof(proof)
+            .expect("Failed to compress proof");
 
-    let uri = match max_root_age_seconds {
-        Some(max_root_age_seconds) => {
-            format!("{uri}/verifySemaphoreProof?maxRootAgeSeconds={max_root_age_seconds}")
-        }
-        None => format!("{uri}/verifySemaphoreProof"),
+        serde_json::to_string(&VerifyCompressedSemaphoreProofRequest {
+            root,
+            signal_hash,
+            nullifier_hash,
+            external_nullifier_hash,
+            proof,
+        })
+        .expect("Cannot serialize VerifySemaphoreProofRequest")
+    } else {
+        serde_json::to_string(&VerifySemaphoreProofRequest {
+            root,
+            signal_hash,
+            nullifier_hash,
+            external_nullifier_hash,
+            proof,
+        })
+        .expect("Cannot serialize VerifySemaphoreProofRequest")
     };
+
+    let body = Body::from(body);
+
+    let mut uri = if compressed {
+        format!("{uri}/verifyCompressedSemaphoreProof")
+    } else {
+        format!("{uri}/verifySemaphoreProof")
+    };
+
+    if let Some(max_root_age) = max_root_age_seconds {
+        uri = format!("{uri}?maxRootAgeSeconds={max_root_age}");
+    }
 
     let response = client
         .request(Method::POST, uri)

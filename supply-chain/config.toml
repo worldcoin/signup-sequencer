@@ -161,6 +161,10 @@ criteria = "safe-to-deploy"
 version = "0.3.6"
 criteria = "safe-to-deploy"
 
+[[exemptions.async-trait]]
+version = "0.1.86"
+criteria = "safe-to-deploy"
+
 [[exemptions.async_io_stream]]
 version = "0.3.3"
 criteria = "safe-to-deploy"
@@ -905,16 +909,32 @@ criteria = "safe-to-deploy"
 version = "0.23.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.metrics]]
+version = "0.24.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.metrics-exporter-prometheus]]
 version = "0.15.3"
+criteria = "safe-to-deploy"
+
+[[exemptions.metrics-exporter-prometheus]]
+version = "0.16.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.metrics-exporter-statsd]]
 version = "0.8.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.metrics-exporter-statsd]]
+version = "0.9.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.metrics-util]]
 version = "0.17.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.metrics-util]]
+version = "0.19.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.minimal-lexical]]
@@ -989,20 +1009,40 @@ criteria = "safe-to-deploy"
 version = "0.24.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.opentelemetry]]
+version = "0.26.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.opentelemetry-datadog]]
 version = "0.13.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.opentelemetry-datadog]]
+version = "0.14.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.opentelemetry-http]]
 version = "0.13.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.opentelemetry-http]]
+version = "0.26.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.opentelemetry-semantic-conventions]]
 version = "0.25.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.opentelemetry-semantic-conventions]]
+version = "0.26.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.opentelemetry_sdk]]
 version = "0.24.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.opentelemetry_sdk]]
+version = "0.26.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.option-ext]]
@@ -1179,6 +1219,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.rand]]
 version = "0.8.5"
+criteria = "safe-to-deploy"
+
+[[exemptions.rand_xoshiro]]
+version = "0.6.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.raw-cpuid]]
@@ -1441,6 +1485,10 @@ criteria = "safe-to-deploy"
 version = "0.2.2"
 criteria = "safe-to-deploy"
 
+[[exemptions.sketches-ddsketch]]
+version = "0.3.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.slab]]
 version = "0.4.9"
 criteria = "safe-to-deploy"
@@ -1509,6 +1557,10 @@ criteria = "safe-to-deploy"
 version = "0.3.5"
 criteria = "safe-to-deploy"
 
+[[exemptions.syn]]
+version = "2.0.98"
+criteria = "safe-to-deploy"
+
 [[exemptions.syn-solidity]]
 version = "0.8.20"
 criteria = "safe-to-deploy"
@@ -1567,6 +1619,14 @@ criteria = "safe-to-deploy"
 
 [[exemptions.testcontainers-modules]]
 version = "0.3.7"
+criteria = "safe-to-deploy"
+
+[[exemptions.thiserror]]
+version = "2.0.11"
+criteria = "safe-to-deploy"
+
+[[exemptions.thiserror-impl]]
+version = "2.0.11"
 criteria = "safe-to-deploy"
 
 [[exemptions.time]]
@@ -1647,6 +1707,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.tracing-opentelemetry]]
 version = "0.25.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.tracing-opentelemetry]]
+version = "0.27.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.tracing-serde]]

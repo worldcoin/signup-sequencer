@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "901ea26e478c81e10d5d4355ac628ab7b15afca7" }
+telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "aca13762368bcb7ac57c356e03a0586d20e89723" }
 
 anyhow = "1.0"
 ethers = { version = "2.0.10", features = [ ] }

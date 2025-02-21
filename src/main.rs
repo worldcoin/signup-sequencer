@@ -48,7 +48,7 @@ async fn sequencer_app(args: Args) -> anyhow::Result<()> {
     // Create App struct
     let app = App::new(config).await?;
 
-    TaskMonitor::init(app.clone(), shutdown.clone()).await;
+    TaskMonitor::init(app.clone(), shutdown.clone()).await?;
 
     // Start server (will stop on shutdown signal)
     server::run(app, server_config, shutdown.clone()).await?;

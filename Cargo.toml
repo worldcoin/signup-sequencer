@@ -24,7 +24,7 @@ default = []
 [dependencies]
 anyhow = { version = "1.0.68" }
 async-stream = "0.3.3"
-async-trait = "0.1.64"
+async-trait = "0.1.86"
 axum = "0.7.7"
 axum-server = "0.7.1"
 tower-http = { version = "0.6.1", features = ["catch-panic"] }
@@ -32,7 +32,7 @@ bytes = "1.4.0"
 bon = "3"
 chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "4.0", features = ["derive", "env"] }
-telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "901ea26e478c81e10d5d4355ac628ab7b15afca7" }
+telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "aca13762368bcb7ac57c356e03a0586d20e89723" }
 config = "0.13.4"
 ethers = { version = "2.0.10", features = ["ws", "ipc", "openssl", "abigen"] }
 ethers-solc = "2.0.10"

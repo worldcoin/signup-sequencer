@@ -1,20 +1,7 @@
 
 # cargo-vet audits file
 
-[[audits.retry]]
-who = "Piotr Heilman <piotr.heilman@gmail.com>"
-criteria = "safe-to-deploy"
-version = "2.0.0"
-
-[[audits.tracing-test]]
-who = "Piotr Heilman <piotr.heilman@gmail.com>"
-criteria = "safe-to-deploy"
-version = "0.2.4"
-
-[[audits.tracing-test-macro]]
-who = "Piotr Heilman <piotr.heilman@gmail.com>"
-criteria = "safe-to-deploy"
-version = "0.2.4"
+[audits]
 
 [[trusted.anstream]]
 criteria = "safe-to-deploy"
@@ -126,7 +113,7 @@ end = "2024-11-09"
 
 [[trusted.equivalent]]
 criteria = "safe-to-deploy"
-user-id = 539 # Josh Stone (cuviper)
+user-id = 539
 start = "2023-02-05"
 end = "2024-11-09"
 
@@ -174,7 +161,7 @@ end = "2024-11-09"
 
 [[trusted.indexmap]]
 criteria = "safe-to-deploy"
-user-id = 539 # Josh Stone (cuviper)
+user-id = 539
 start = "2020-01-15"
 end = "2024-11-09"
 
@@ -312,7 +299,7 @@ end = "2024-11-09"
 
 [[trusted.tokio]]
 criteria = "safe-to-deploy"
-user-id = 6741 # Alice Ryhl (Darksonn)
+user-id = 6741
 start = "2020-12-25"
 end = "2024-11-09"
 

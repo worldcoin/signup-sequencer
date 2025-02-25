@@ -957,7 +957,7 @@ mod test {
             .await
             .context("Marking root as mined")?;
 
-        let root_2_mined_at = Utc::now();
+        let root_0_mined_at = Utc::now();
 
         tokio::time::sleep(Duration::from_secs(2)).await; // sleep enough for the database time resolution
 
@@ -968,12 +968,12 @@ mod test {
         let root_item_1 = db.get_root_state(&roots[1]).await?.unwrap();
         assert_eq!(root_item_1.status, ProcessedStatus::Pending);
         assert!(root_item_1.mined_valid_as_of.is_none());
-        assert!(root_item_1.pending_valid_as_of < root_2_mined_at);
+        assert!(root_item_1.pending_valid_as_of < root_0_mined_at);
 
         let root_item_0 = db.get_root_state(&roots[0]).await?.unwrap();
         assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
         assert_eq!(root_item_0.status, ProcessedStatus::Processed);
-        assert!(root_item_0.mined_valid_as_of.unwrap() < root_2_mined_at);
+        assert_same_time!(root_item_0.mined_valid_as_of.unwrap(), root_0_mined_at);
         assert!(root_item_0.mined_valid_as_of.unwrap() > root_1_inserted_at);
         assert!(root_item_0.pending_valid_as_of < root_1_inserted_at);
 

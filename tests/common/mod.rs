@@ -645,7 +645,7 @@ pub async fn spawn_app_returning_initialized_tree(
     let app = App::new(config).await.expect("Failed to create App");
     let shutdown = Shutdown::spawn(Duration::from_secs(30), Duration::from_secs(1));
 
-    TaskMonitor::init(app.clone(), shutdown.clone()).await;
+    TaskMonitor::init(app.clone(), shutdown.clone()).await?;
 
     let listener = TcpListener::bind(server_config.address)
         .await

@@ -13,7 +13,6 @@ use crate::shutdown::Shutdown;
 
 pub mod tasks;
 
-const TREE_INIT_BACKOFF: Duration = Duration::from_secs(5);
 const CREATE_BATCHES_BACKOFF: Duration = Duration::from_secs(5);
 const PROCESS_BATCHES_BACKOFF: Duration = Duration::from_secs(5);
 const MONITOR_TXS_BACKOFF: Duration = Duration::from_secs(5);
@@ -32,7 +31,7 @@ pub struct TaskMonitor;
 impl TaskMonitor {
     /// Initialize and run the task monitor
     #[instrument(level = "debug", skip_all)]
-    pub async fn init(main_app: Arc<App>, shutdown: Shutdown) {
+    pub async fn init(main_app: Arc<App>, shutdown: Shutdown) -> anyhow::Result<()> {
         let (monitored_txs_sender, monitored_txs_receiver) =
             mpsc::channel(main_app.clone().config.app.monitored_txs_capacity);
 
@@ -55,14 +54,7 @@ impl TaskMonitor {
 
         // Initialize the Tree
         let app = main_app.clone();
-        let tree_init = move || app.clone().init_tree();
-        let tree_init_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
-            tree_init,
-            TREE_INIT_BACKOFF,
-            shutdown.clone(),
-        );
-
-        handles.push(tree_init_handle);
+        app.init_tree().await?;
 
         // Finalize identities
         let app = main_app.clone();
@@ -177,6 +169,8 @@ impl TaskMonitor {
         handles.push(sync_tree_state_with_db_handle);
 
         tokio::spawn(Self::monitor_shutdown(handles, shutdown.clone()));
+
+        Ok(())
     }
 
     async fn monitor_shutdown(mut handles: FuturesUnordered<JoinHandle<()>>, shutdown: Shutdown) {

@@ -334,6 +334,19 @@ impl App {
             .await?
             .ok_or(ServerError::IdentityCommitmentNotFound)?;
 
+        let tree_state = self.tree_state()?;
+        if tree_state.latest_tree().get_last_sequence_id() < item.sequence_id {
+            // If tree change was not yet applied to latest tree we treat it as it would be
+            // unprocessed.
+            return Ok(InclusionProofResponse {
+                status: UnprocessedStatus::New.into(),
+                root: None,
+                proof: None,
+                message: None,
+            });
+        }
+
+        // If tree change was applied to latest tree we then look in the trees we have for proof
         let (leaf, proof) = self.tree_state()?.get_proof_for(&item);
 
         if leaf != *commitment {

@@ -52,8 +52,10 @@ impl TreeUpdate {
 
 #[derive(Debug)]
 pub struct TreeItem {
+    pub sequence_id: usize,
     pub status: ProcessedStatus,
     pub leaf_index: usize,
+    pub element: Hash,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]

@@ -186,7 +186,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
 
         let row = sqlx::query(
             r#"
-            SELECT leaf_index, status
+            SELECT leaf_index, status, id as sequence_id, commitment as element
             FROM identities
             WHERE commitment = $1
             ORDER BY id DESC
@@ -208,7 +208,15 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             .parse()
             .expect("Status is unreadable, database is corrupt");
 
-        Ok(Some(TreeItem { status, leaf_index }))
+        let sequence_id = row.get::<i64, _>(2) as usize;
+        let element = row.get::<Hash, _>(3);
+
+        Ok(Some(TreeItem {
+            status,
+            leaf_index,
+            sequence_id,
+            element,
+        }))
     }
 
     #[instrument(skip(self), level = "debug")]

@@ -67,19 +67,41 @@ impl TreeState {
 
     #[must_use]
     pub fn get_proof_for(&self, item: &TreeItem) -> (Field, InclusionProof) {
-        let (leaf, root, proof) = match item.status {
-            ProcessedStatus::Pending => self.latest.get_leaf_and_proof(item.leaf_index),
-            ProcessedStatus::Processed => self.processed.get_leaf_and_proof(item.leaf_index),
-            ProcessedStatus::Mined => self.mined.get_leaf_and_proof(item.leaf_index),
-        };
+        let (leaf, root, proof) = self.mined.get_leaf_and_proof(item.leaf_index);
+        if leaf == item.element {
+            return (
+                leaf,
+                InclusionProof {
+                    status: ProcessedStatus::Mined.into(),
+                    root: Some(root),
+                    proof: Some(proof),
+                    message: None,
+                },
+            );
+        }
 
-        let proof = InclusionProof {
-            status: item.status.into(),
-            root: Some(root),
-            proof: Some(proof),
-            message: None,
-        };
+        let (leaf, root, proof) = self.processed.get_leaf_and_proof(item.leaf_index);
+        if leaf == item.element {
+            return (
+                leaf,
+                InclusionProof {
+                    status: ProcessedStatus::Processed.into(),
+                    root: Some(root),
+                    proof: Some(proof),
+                    message: None,
+                },
+            );
+        }
 
-        (leaf, proof)
+        let (leaf, root, proof) = self.latest.get_leaf_and_proof(item.leaf_index);
+        (
+            leaf,
+            InclusionProof {
+                status: ProcessedStatus::Pending.into(),
+                root: Some(root),
+                proof: Some(proof),
+                message: None,
+            },
+        )
     }
 }

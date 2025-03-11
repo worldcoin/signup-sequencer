@@ -202,7 +202,7 @@ impl App {
 
         // Get the leaf index for the id commitment
         let leaf_index = tx
-            .get_identity_leaf_index(commitment)
+            .get_tree_item(commitment)
             .await?
             .ok_or(ServerError::IdentityCommitmentNotFound)?
             .leaf_index;
@@ -330,7 +330,7 @@ impl App {
 
         let item = self
             .database
-            .get_identity_leaf_index(commitment)
+            .get_tree_item(commitment)
             .await?
             .ok_or(ServerError::IdentityCommitmentNotFound)?;
 

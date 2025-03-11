@@ -32,12 +32,20 @@ pub async fn sync_tree_state_with_db(
             },
         }
 
-        let tree_state = app.tree_state()?;
+        run_sync_tree(&app).await?;
 
-        retry_tx!(&app.database, tx, sync_tree(&mut tx, tree_state).await).await?;
-
-        tracing::info!("TreeState synced with DB");
+        // gather metrics about synced commitments in latest tree
 
         tree_synced_tx.send(())?;
     }
+}
+
+async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<()> {
+    let tree_state = app.tree_state()?;
+
+    retry_tx!(&app.database, tx, sync_tree(&mut tx, tree_state).await).await?;
+
+    tracing::info!("TreeState synced with DB");
+
+    Ok(())
 }

@@ -8,7 +8,7 @@ info:
 servers:
   - url: http://localhost:8080
 paths:
-  /health:
+  /v2/health:
     servers:
       - url: http://localhost:9998
     get:
@@ -23,7 +23,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /metrics:
+  /v2/metrics:
     servers:
       - url: http://localhost:9998
     get:
@@ -55,7 +55,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /identities:
+  /v2/identities:
     post:
       summary: Add new identity to the queue
       tags: ["identities"]
@@ -81,7 +81,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /identities/{commitment}:
+  /v2/identities/{commitment}:
     delete:
       tags: ["identities"]
       summary: Add identity removal to the queue
@@ -104,7 +104,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /identities/{commitment}/inclusion-proof:
+  /v2/identities/{commitment}/inclusion-proof:
     get:
       summary: Get inclusion proof of identity
       tags: ["identities"]
@@ -131,7 +131,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /semaphore-proof/verify:
+  /v2/semaphore-proof/verify:
     post:
       summary: Verify semaphore proof
       tags: ["semaphore-proof"]

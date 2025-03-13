@@ -1,0 +1,296 @@
+openapi: 3.1.0
+info:
+  version: '2.0.0'
+  title: 'signup-sequencer'
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://localhost:8080
+paths:
+  /v2/health:
+    servers:
+      - url: http://localhost:9998
+    get:
+      summary: 'Always returns OK response'
+      tags: ["management"]
+      responses:
+        200:
+          description: OK
+        500:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v2/metrics:
+    servers:
+      - url: http://localhost:9998
+    get:
+      summary: 'Returns Prometheus application metrics'
+      tags: ["management"]
+      responses:
+        200:
+          description: OK
+          content:
+            text/plain:
+              example: |
+                api_latency_seconds_bucket{le="0.005"} 94829
+                api_latency_seconds_bucket{le="0.01"} 94873
+                api_latency_seconds_bucket{le="0.025"} 94879
+                api_latency_seconds_bucket{le="0.05"} 94882
+                api_latency_seconds_bucket{le="0.1"} 94885
+                api_latency_seconds_bucket{le="0.25"} 94885
+                api_latency_seconds_bucket{le="0.5"} 94886
+                api_latency_seconds_bucket{le="1"} 94886
+                api_latency_seconds_bucket{le="2.5"} 94886
+                api_latency_seconds_bucket{le="5"} 94886
+                api_latency_seconds_bucket{le="10"} 94886
+                api_latency_seconds_bucket{le="+Inf"} 94886
+                api_latency_seconds_sum 5.789901002999933
+                api_latency_seconds_count 94886
+        500:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v2/identities:
+    post:
+      summary: Add new identity to the queue
+      tags: ["identities"]
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/Identity'
+      responses:
+        202:
+          description: Accepted
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        409:
+          description: Identity already added to sequencer
+        500:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v2/identities/{commitment}:
+    delete:
+      tags: ["identities"]
+      summary: Add identity removal to the queue
+      parameters:
+        - name: commitment
+          in: path
+          description: Identity commitment
+          required: true
+          schema:
+            type: string
+            pattern: &commitment_pattern '^(0x)?[a-fA-F0-9]{64}$'
+      responses:
+        202:
+          description: Accepted
+        404:
+          description: Not found
+        500:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v2/identities/{commitment}/inclusion-proof:
+    get:
+      summary: Get inclusion proof of identity
+      tags: ["identities"]
+      parameters:
+        - name: commitment
+          in: path
+          description: Identity commitment
+          required: true
+          schema:
+            type: string
+            pattern: *commitment_pattern
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InclusionProof'
+        404:
+          description: Not found
+        500:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v2/semaphore-proof/verify:
+    post:
+      summary: Verify semaphore proof
+      tags: ["semaphore-proof"]
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/VerifySemaphoreProofRequest'
+                - $ref: '#/components/schemas/VerifyCompressedSemaphoreProofRequest'
+      responses:
+        200:
+          description: OK
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        500:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    FieldElement:
+      type: string
+      pattern: *commitment_pattern
+    G1:
+      type: array
+      items:
+        $ref: '#/components/schemas/FieldElement'
+      minItems: 2
+      maxItems: 2
+      additionalItems: false
+    G2:
+      type: array
+      items:
+        type: array
+        items:
+          $ref: '#/components/schemas/FieldElement'
+        minItems: 2
+        maxItems: 2
+        additionalItems: false
+      minItems: 2
+      maxItems: 2
+      additionalItems: false
+    Identity:
+      type: object
+      properties:
+        commitment: { $ref: '#/components/schemas/FieldElement' }
+      required:
+        - commitment
+      example:
+        commitment: '0x000059f0ea2281ab7d12fbd9348ba352014746e813ed46ba59aa59b2e092218d'
+    InclusionProof:
+      type: object
+      properties:
+        root: { $ref: '#/components/schemas/FieldElement' }
+        proof:
+          type: array
+          items:
+            oneOf:
+              - type: object
+                properties:
+                  Left: { $ref: '#/components/schemas/FieldElement' }
+              - type: object
+                properties:
+                  Right: { $ref: '#/components/schemas/FieldElement' }
+      example:
+        - Left: "0x0000e2cb684d4920c07142c03ad80c2a98bbb9b58f3baec8ce82c327bab10150"
+        - Left: "0x0000bc7b1c5d70381dba382d88acf3c2ebcbe67eac41aaa27c6b8b350cee158e"
+        - Right: "0x00003acaf3335688e800b6a79ca6b2ebb81c006f805995fd78b332c8a7f78139"
+        - Left: "0x0000bb1b1689d30a5cebce9c9b29b625cdd39cc316cf652b38417cee8275fbf0"
+    SemaphoreProof:
+      type: array
+      prefixItems:
+        - $ref: '#/components/schemas/G1'
+        - $ref: '#/components/schemas/G2'
+        - $ref: '#/components/schemas/G1'
+      minItems: 3
+      maxItems: 3
+      additionalItems: false
+      example:
+        - [ "0x000051b5e0275c6e126665006471dee6630e5a76401fc6b65849de8a205639dd", "0x0000bfc6eb8f5f84683ba52e0d270a3de95e467ac553b694285d0037d39a1563" ]
+        - [ [ "0x0000a410a87cc0d9407a07504d7d3df18ac57c6aabb57925346b13f77d21e518", "0x00003b1df48d9af00b97d09b9caffa52fcacddec5f8ba9c47c9d5a7b025982ae" ],  [ "0x00006593891b72f27c921afe6e61ef7fa4e53862903d982df48b50ea37681d62", "0x0000fd4c94999aa36b8c8ceb3c04639a6e5c0870fcb246dbc2e5574a6c99f15b" ]]
+        - [ "0x00006fc8253888b3ca15b2d1af876add2384a371fb266a9219ba2d82351fb7a8", "0x000084659bc928034795a4f8a0558ea74378630f2a9676f0fb0ebebfe6868584" ]
+    CompressedSemaphoreProof:
+      type: array
+      prefixItems:
+        - $ref: '#/components/schemas/FieldElement'
+        - type: array
+          items: { $ref: '#/components/schemas/FieldElement' }
+          minItems: 2
+          maxItems: 2
+          additionalItems: false
+        - $ref: '#/components/schemas/FieldElement'
+      minItems: 3
+      maxItems: 3
+      additionalItems: false
+      example:
+        - "0x000051b5e0275c6e126665006471dee6630e5a76401fc6b65849de8a205639dd"
+        - [ "0x0000a410a87cc0d9407a07504d7d3df18ac57c6aabb57925346b13f77d21e518", "0x00003b1df48d9af00b97d09b9caffa52fcacddec5f8ba9c47c9d5a7b025982ae" ]
+        - "0x00006fc8253888b3ca15b2d1af876add2384a371fb266a9219ba2d82351fb7a8"
+    VerifySemaphoreProofRequest:
+      type: object
+      properties:
+        root: { $ref: '#/components/schemas/FieldElement' }
+        signalHash: { $ref: '#/components/schemas/FieldElement' }
+        nullifierHash: { $ref: '#/components/schemas/FieldElement' }
+        externalNullifierHash: { $ref: '#/components/schemas/FieldElement' }
+        proof: { $ref: '#/components/schemas/SemaphoreProof' }
+      required:
+        - root
+        - signalHash
+        - nullifierHash
+        - externalNullifierHash
+        - proof
+      example:
+        root: "0x00000abbda2bb9080713c20975bd1b711ebcd413e52a2a5d4c1d6114cb179b0f"
+        signal_hash: "0x000041b9e22987d04f56445733b5b351693afd82f0584e3442de71adfcd408ca"
+        nullifier_hash: "0x000012e8498adcc7a2e04ac3c4ef82ee13db7a710a7174b9623fdb8c8ccd38fd"
+        external_nullifier_hash: "0x000003282d8e4502363cf69bf7d236bd777b8aab7a232bb96b1a17ec2bbb029a"
+        proof:
+          - [ "0x000012bab4c2b8ee80203b053f7edd25408ce4898f9ee48cd1cf5fa05b382258", "0x0000ffed4784db6fd39228c98015be3332bf594460340301dd02e05ccad3a7e5" ]
+          - [ [ "0x0000ba984420b405e2102ec8a3f991d207ae29b65804d4b9ab41f752fcd6f9b0", "0x000072d536482dd3f680a869050426cb0230b0aaf999b89206848406c6b070ac" ],  [ "0x000059f64d1f40212a4be836ec09c1bc675b3315e2f0a6343f7c3c96dac99941", "0x0000ea95958f6182420c86be4e1507f640d77ba9f377bbf3025ff196067411a3" ]]
+          - [ "0x00007c66ab60056f9e021d55f98ea3e6e9ce8db0ef5ca3af6b2c8db1b3018425", "0x0000c0eb8ef9f315815947adce6ed324f49b58a544a37a77185eab9a7202ca1b" ]
+    VerifyCompressedSemaphoreProofRequest:
+      type: object
+      properties:
+        root: { $ref: '#/components/schemas/FieldElement' }
+        signal_hash: { $ref: '#/components/schemas/FieldElement' }
+        nullifier_hash: { $ref: '#/components/schemas/FieldElement' }
+        external_nullifier_hash: { $ref: '#/components/schemas/FieldElement' }
+        compressed_proof: { $ref: '#/components/schemas/CompressedSemaphoreProof' }
+      required:
+        - root
+        - signalHash
+        - nullifierHash
+        - externalNullifierHash
+        - compressed_proof
+      example:
+        root: "0x00000abbda2bb9080713c20975bd1b711ebcd413e52a2a5d4c1d6114cb179b0f"
+        signalHash: "0x000041b9e22987d04f56445733b5b351693afd82f0584e3442de71adfcd408ca"
+        nullifierHash: "0x000012e8498adcc7a2e04ac3c4ef82ee13db7a710a7174b9623fdb8c8ccd38fd"
+        externalNullifierHash: "0x000003282d8e4502363cf69bf7d236bd777b8aab7a232bb96b1a17ec2bbb029a"
+        compressed_proof:
+          - "0x0000ba984420b405e2102ec8a3f991d207ae29b65804d4b9ab41f752fcd6f9b0"
+          - [ "0x000012bab4c2b8ee80203b053f7edd25408ce4898f9ee48cd1cf5fa05b382258", "0x0000ffed4784db6fd39228c98015be3332bf594460340301dd02e05ccad3a7e5" ]
+          - "0x00007c66ab60056f9e021d55f98ea3e6e9ce8db0ef5ca3af6b2c8db1b3018425"
+    Error:
+      type: object
+      properties:
+        error_id:
+          type: string
+        error_message:
+          type: string
+      example:
+        error_id: "RootTooOld"
+        error_message: "Root provided in semaphore proof is too old."

@@ -9,9 +9,11 @@ use crate::database::methods::DbMethods;
 use crate::database::Database;
 use crate::identity::processor::IdentityProcessor;
 use crate::identity_tree::builder::CanonicalTreeBuilder;
+use crate::identity_tree::db_sync::sync_tree;
 use crate::identity_tree::{
     Hash, ProcessedStatus, TreeState, TreeUpdate, TreeVersionReadOps, TreeWithNextVersion,
 };
+use crate::retry_tx;
 use crate::utils::tree_updates::dedup_tree_updates;
 
 pub struct TreeInitializer {
@@ -200,44 +202,21 @@ impl TreeInitializer {
             }
         }
 
-        info!("Restoring derived processed and batching tree");
-
-        let processed_items = self
-            .database
-            .get_commitments_by_status(ProcessedStatus::Processed)
-            .await?;
-
-        for processed_item in processed_items {
-            processed_builder.update(&processed_item);
-        }
+        info!("Restoring derived processed, batching and latest tree");
 
         let (processed, batching_builder) = processed_builder.seal_and_continue();
-        let (batching, mut latest_builder) = batching_builder.seal_and_continue();
-
-        info!("Restoring derived latest tree");
-
-        let pending_items = self
-            .database
-            .get_commitments_by_status(ProcessedStatus::Pending)
-            .await?;
-        for update in pending_items {
-            latest_builder.update(&update);
-        }
+        let (batching, latest_builder) = batching_builder.seal_and_continue();
         let latest = latest_builder.seal();
 
-        info!("Batching tree correction");
+        let tree_state = TreeState::new(mined, processed, batching, latest);
 
-        let batch = self.database.get_latest_batch().await?;
-        if let Some(batch) = batch {
-            if batching.get_root() != batch.next_root {
-                batching.apply_updates_up_to(batch.next_root);
-            }
-            assert_eq!(batching.get_root(), batch.next_root);
-        }
+        info!("Initial tree state created. Syncing tree.");
+
+        retry_tx!(&self.database, tx, sync_tree(&mut tx, &tree_state).await).await?;
 
         info!("Tree restored.");
 
-        Ok(Some(TreeState::new(mined, processed, batching, latest)))
+        Ok(Some(tree_state))
     }
 
     #[instrument(skip_all)]
@@ -279,57 +258,23 @@ impl TreeInitializer {
         })
         .await?;
 
-        let (mined, mut processed_builder) = mined_builder.seal();
+        let (mined, processed_builder) = mined_builder.seal();
 
-        info!("Creating derived processed and batching tree");
-
-        let processed_items = self
-            .database
-            .get_commitments_by_status(ProcessedStatus::Processed)
-            .await?;
-
-        let processed_builder = tokio::task::spawn_blocking(move || {
-            for processed_item in processed_items {
-                processed_builder.update(&processed_item);
-            }
-
-            processed_builder
-        })
-        .await?;
+        info!("Creating derived processed, batching and latest tree");
 
         let (processed, batching_builder) = processed_builder.seal_and_continue();
-        let (batching, mut latest_builder) = batching_builder.seal_and_continue();
-
-        info!("Creating derived latest tree");
-
-        let pending_items = self
-            .database
-            .get_commitments_by_status(ProcessedStatus::Pending)
-            .await?;
-
-        let latest_builder = tokio::task::spawn_blocking(move || {
-            for update in pending_items {
-                latest_builder.update(&update);
-            }
-
-            latest_builder
-        })
-        .await?;
-
+        let (batching, latest_builder) = batching_builder.seal_and_continue();
         let latest = latest_builder.seal();
 
-        info!("Batching tree correction");
-        let batch = self.database.get_latest_batch().await?;
-        if let Some(batch) = batch {
-            if batching.get_root() != batch.next_root {
-                batching.apply_updates_up_to(batch.next_root);
-            }
-            assert_eq!(batching.get_root(), batch.next_root);
-        }
+        let tree_state = TreeState::new(mined, processed, batching, latest);
+
+        info!("Initial tree state created. Syncing tree.");
+
+        retry_tx!(&self.database, tx, sync_tree(&mut tx, &tree_state).await).await?;
 
         info!("Tree created.");
 
-        Ok(TreeState::new(mined, processed, batching, latest))
+        Ok(tree_state)
     }
 }
 

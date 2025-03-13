@@ -55,86 +55,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /batches:
-    get:
-      summary: List all batch sizes
-      tags: ["batches"]
-      responses:
-        200:
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/BatchSize"
-        500:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-    post:
-      summary: Add new batch
-      tags: ["batches"]
-      requestBody:
-        content:
-          'application/json':
-            schema:
-              $ref: '#/components/schemas/BatchSize'
-      responses:
-        204:
-          description: Created
-        400:
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        409:
-          description: Batch size with same type already exists
-        500:
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /batches/{type}/{size}:
-    delete:
-      summary: Remove batch
-      tags: ["batches"]
-      parameters:
-        - name: type
-          in: path
-          description: Prover type of batch size
-          required: true
-          schema:
-            type: string
-            pattern: &commitment_pattern '^(0x)?[a-fA-F0-9]{64}$'
-        - name: size
-          in: path
-          description: Size of batch
-          required: true
-          schema:
-            type: integer
-            minimum: 1
-      responses:
-        204:
-          description: Created
-        400:
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        404:
-          description: Not Found
-        500:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
   /identities:
     post:
       summary: Add new identity to the queue
@@ -172,7 +92,7 @@ paths:
           required: true
           schema:
             type: string
-            pattern: *commitment_pattern
+            pattern: &commitment_pattern '^(0x)?[a-fA-F0-9]{64}$'
       responses:
         202:
           description: Accepted
@@ -261,26 +181,6 @@ components:
       minItems: 2
       maxItems: 2
       additionalItems: false
-    BatchSize:
-      type: object
-      properties:
-        url:
-          type: string
-        timeout_seconds:
-          type: integer
-        batch_size:
-          type: integer
-        prover_type:
-          type: string
-          enum: [insertion, deletion]
-      required:
-        - batch_size
-        - prover_type
-      example:
-        url: "https://semaphore-b100.example.dev/"
-        batch_size: 100
-        timeout_seconds: 30
-        prover_type: "insertion"
     Identity:
       type: object
       properties:

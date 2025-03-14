@@ -1,0 +1,1 @@
+DROP INDEX idx_status_not_processed_or_mined;

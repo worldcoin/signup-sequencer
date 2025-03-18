@@ -146,9 +146,7 @@ pub async fn get_deletions(
             .windows(2)
             .all(|w| w[1].leaf_index == w[0].leaf_index + 1);
 
-        if indices_are_continuous
-            && deletions.last().unwrap().leaf_index as usize == last_leaf_index
-        {
+        if indices_are_continuous && deletions.last().unwrap().leaf_index == last_leaf_index {
             warn!(
                 "Deletion batch could potentially create a duplicate root batch. Deletion \
                  batch will be postponed"

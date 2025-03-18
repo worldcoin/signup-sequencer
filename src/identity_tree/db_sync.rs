@@ -89,7 +89,7 @@ async fn update_latest_tree<F: Fn() -> anyhow::Result<()>>(
         Ordering::Greater => {
             debug!("Applying latest tree updates up to {}", new_sequence_id);
             let tree_updates = tx
-                .get_commitments_after_id(latest_tree.get_last_sequence_id())
+                .get_tree_updates_after_id(latest_tree.get_last_sequence_id())
                 .await?;
             latest_tree.apply_updates(&tree_updates);
 

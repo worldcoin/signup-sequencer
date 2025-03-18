@@ -198,7 +198,7 @@ pub async fn test_verify_proof_on_chain(
     };
     let proof_tok: [U256; 8] = proof_tok
         .into_iter()
-        .map(|x| U256::from(x))
+        .map(U256::from)
         .collect::<Vec<_>>()
         .try_into()
         .unwrap();

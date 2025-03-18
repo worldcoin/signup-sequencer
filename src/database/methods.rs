@@ -5,7 +5,9 @@ use chrono::{DateTime, Utc};
 use sqlx::{Acquire, Executor, Postgres, Row};
 use tracing::instrument;
 
-use super::types::{DeletionEntry, LatestDeletionEntry, LatestInsertionEntry};
+use super::types::{
+    DeletionEntry, LatestDeletionEntry, LatestInsertionEntry, UnprocessedIdentityEntry,
+};
 use crate::database::types::{BatchEntry, BatchEntryData, BatchType};
 use crate::database::Error;
 use crate::identity_tree::{Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate};
@@ -21,6 +23,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         self,
         leaf_index: usize,
         identity: &Hash,
+        received_at: Option<DateTime<Utc>>,
         root: &Hash,
         pre_root: &Hash,
     ) -> Result<(), Error> {
@@ -28,12 +31,22 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
 
         sqlx::query(
             r#"
-            INSERT INTO identities (leaf_index, commitment, root, status, pending_as_of, pre_root)
-            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5)
+            INSERT INTO identities (
+                leaf_index,
+                commitment,
+                received_at,
+                inserted_at,
+                root,
+                status,
+                pending_as_of,
+                pre_root
+            )
+            VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, CURRENT_TIMESTAMP, $6)
             "#,
         )
         .bind(leaf_index as i64)
         .bind(identity)
+        .bind(received_at)
         .bind(root)
         .bind(<&str>::from(ProcessedStatus::Pending))
         .bind(pre_root)
@@ -181,7 +194,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[instrument(skip(self), level = "debug")]
-    async fn get_identity_leaf_index(self, identity: &Hash) -> Result<Option<TreeItem>, Error> {
+    async fn get_tree_item(self, identity: &Hash) -> Result<Option<TreeItem>, Error> {
         let mut conn = self.acquire().await?;
 
         let row = sqlx::query(
@@ -220,13 +233,13 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[instrument(skip(self), level = "debug")]
-    async fn get_commitments_by_status(
+    async fn get_tree_updates_by_status(
         self,
         status: ProcessedStatus,
     ) -> Result<Vec<TreeUpdate>, Error> {
         let mut conn = self.acquire().await?;
 
-        Ok(sqlx::query_as::<_, TreeUpdate>(
+        Ok(sqlx::query_as(
             r#"
             SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
             FROM identities
@@ -239,31 +252,10 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .await?)
     }
 
-    #[instrument(skip(self), level = "debug")]
-    async fn get_commitments_by_statuses(
-        self,
-        statuses: Vec<ProcessedStatus>,
-    ) -> Result<Vec<TreeUpdate>, Error> {
+    async fn get_tree_updates_after_id(self, id: usize) -> Result<Vec<TreeUpdate>, Error> {
         let mut conn = self.acquire().await?;
 
-        let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
-        Ok(sqlx::query_as::<_, TreeUpdate>(
-            r#"
-            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
-            FROM identities
-            WHERE status = ANY($1)
-            ORDER BY id ASC;
-            "#,
-        )
-        .bind(&statuses[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
-        .fetch_all(&mut *conn)
-        .await?)
-    }
-
-    async fn get_commitments_after_id(self, id: usize) -> Result<Vec<TreeUpdate>, Error> {
-        let mut conn = self.acquire().await?;
-
-        Ok(sqlx::query_as::<_, TreeUpdate>(
+        Ok(sqlx::query_as(
             r#"
             SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
             FROM identities
@@ -276,33 +268,41 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .await?)
     }
 
-    #[instrument(skip(self, leaf_indexes), level = "debug")]
-    async fn get_non_zero_commitments_by_leaf_indexes<I: IntoIterator<Item = usize>>(
+    async fn get_latest_tree_update_by_statuses(
         self,
-        leaf_indexes: I,
-    ) -> Result<Vec<Hash>, Error>
-    where
-        I: IntoIterator<Item = usize> + Send,
-    {
+        statuses: Vec<ProcessedStatus>,
+    ) -> Result<Option<TreeUpdate>, Error> {
         let mut conn = self.acquire().await?;
 
-        let leaf_indexes: Vec<i64> = leaf_indexes.into_iter().map(|v| v as i64).collect();
-
-        Ok(sqlx::query(
+        let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
+        Ok(sqlx::query_as(
             r#"
-            SELECT commitment
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
             FROM identities
-            WHERE leaf_index = ANY($1)
-            AND commitment != $2
+            WHERE status = ANY($1)
+            ORDER BY id DESC
+            LIMIT 1;
             "#,
         )
-        .bind(&leaf_indexes[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
-        .bind(Hash::ZERO)
-        .fetch_all(&mut *conn)
-        .await?
-        .into_iter()
-        .map(|row| row.get::<Hash, _>(0))
-        .collect())
+        .bind(&statuses[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
+        .fetch_optional(&mut *conn)
+        .await?)
+    }
+
+    async fn get_tree_update_by_root(self, root: &Hash) -> Result<Option<TreeUpdate>, Error> {
+        let mut conn = self.acquire().await?;
+
+        Ok(sqlx::query_as(
+            r#"
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            FROM identities
+            WHERE root = $1
+            LIMIT 1;
+            "#,
+        )
+        .bind(root) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
+        .fetch_optional(&mut *conn)
+        .await?)
     }
 
     #[instrument(skip(self), level = "debug")]
@@ -329,7 +329,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
 
         // This tries really hard to do everything in one query to prevent race
         // conditions.
-        Ok(sqlx::query_as::<_, RootItem>(
+        Ok(sqlx::query_as(
             r#"
             SELECT
                 root,
@@ -343,43 +343,6 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             "#,
         )
         .bind(root)
-        .fetch_optional(&mut *conn)
-        .await?)
-    }
-
-    async fn get_latest_tree_update_by_statuses(
-        self,
-        statuses: Vec<ProcessedStatus>,
-    ) -> Result<Option<TreeUpdate>, Error> {
-        let mut conn = self.acquire().await?;
-
-        let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
-        Ok(sqlx::query_as::<_, TreeUpdate>(
-            r#"
-            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
-            FROM identities
-            WHERE status = ANY($1)
-            ORDER BY id DESC
-            LIMIT 1;
-            "#,
-        )
-        .bind(&statuses[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
-        .fetch_optional(&mut *conn)
-        .await?)
-    }
-
-    async fn get_tree_update_by_root(self, root: &Hash) -> Result<Option<TreeUpdate>, Error> {
-        let mut conn = self.acquire().await?;
-
-        Ok(sqlx::query_as::<_, TreeUpdate>(
-            r#"
-            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
-            FROM identities
-            WHERE root = $1
-            LIMIT 1;
-            "#,
-        )
-        .bind(root) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
         .fetch_optional(&mut *conn)
         .await?)
     }
@@ -532,7 +495,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[instrument(skip(self), level = "debug")]
-    async fn insert_unprocessed_identity(self, identity: Hash) -> Result<Hash, Error> {
+    async fn insert_unprocessed_identity(self, identity: Hash) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
 
         sqlx::query(
@@ -546,7 +509,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .execute(&mut *conn)
         .await?;
 
-        Ok(identity)
+        Ok(())
     }
 
     #[instrument(skip(self), level = "debug")]
@@ -619,8 +582,8 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
 
         sqlx::query(
             r#"
-            INSERT INTO deletions (leaf_index, commitment)
-            VALUES ($1, $2)
+            INSERT INTO deletions (leaf_index, commitment, created_at)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
             ON CONFLICT DO NOTHING
             "#,
         )
@@ -638,22 +601,14 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     async fn get_deletions(self) -> Result<Vec<DeletionEntry>, Error> {
         let mut conn = self.acquire().await?;
 
-        let result = sqlx::query(
+        Ok(sqlx::query_as(
             r#"
-            SELECT *
+            SELECT leaf_index, commitment, created_at
             FROM deletions
             "#,
         )
         .fetch_all(&mut *conn)
-        .await?;
-
-        Ok(result
-            .into_iter()
-            .map(|row| DeletionEntry {
-                leaf_index: row.get::<i64, _>(0) as usize,
-                commitment: row.get::<Hash, _>(1),
-            })
-            .collect::<Vec<DeletionEntry>>())
+        .await?)
     }
 
     /// Remove a list of entries from the deletions table
@@ -675,20 +630,18 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[instrument(skip(self), level = "debug")]
-    async fn get_unprocessed_commitments(self) -> Result<Vec<Hash>, Error> {
+    async fn get_unprocessed_identities(self) -> Result<Vec<UnprocessedIdentityEntry>, Error> {
         let mut conn = self.acquire().await?;
 
-        let result: Vec<(Hash,)> = sqlx::query_as(
+        Ok(sqlx::query_as(
             r#"
-            SELECT commitment FROM unprocessed_identities
+            SELECT commitment, created_at FROM unprocessed_identities
             LIMIT $1
             "#,
         )
         .bind(MAX_UNPROCESSED_FETCH_COUNT)
         .fetch_all(&mut *conn)
-        .await?;
-
-        Ok(result.into_iter().map(|(commitment,)| commitment).collect())
+        .await?)
     }
 
     async fn get_unprocessed_commitment(self, commitment: &Hash) -> Result<Option<Hash>, Error> {
@@ -707,22 +660,6 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             return Ok(Some(row.get::<Hash, _>(0)));
         };
         Ok(None)
-    }
-
-    #[instrument(skip(self), level = "debug")]
-    async fn remove_unprocessed_identity(self, commitment: &Hash) -> Result<(), Error> {
-        let mut conn = self.acquire().await?;
-
-        sqlx::query(
-            r#"
-            DELETE FROM unprocessed_identities WHERE commitment = $1
-            "#,
-        )
-        .bind(commitment)
-        .execute(&mut *conn)
-        .await?;
-
-        Ok(())
     }
 
     #[instrument(skip(self), level = "debug")]
@@ -828,7 +765,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     async fn get_next_batch(self, prev_root: &Hash) -> Result<Option<BatchEntry>, Error> {
         let mut conn = self.acquire().await?;
 
-        let res = sqlx::query_as::<_, BatchEntry>(
+        Ok(sqlx::query_as(
             r#"
             SELECT
                 id,
@@ -843,16 +780,14 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         )
         .bind(prev_root)
         .fetch_optional(&mut *conn)
-        .await?;
-
-        Ok(res)
+        .await?)
     }
 
     #[instrument(skip(self), level = "debug")]
     async fn get_latest_batch(self) -> Result<Option<BatchEntry>, Error> {
         let mut conn = self.acquire().await?;
 
-        let res = sqlx::query_as::<_, BatchEntry>(
+        Ok(sqlx::query_as(
             r#"
             SELECT
                 id,
@@ -867,9 +802,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             "#,
         )
         .fetch_optional(&mut *conn)
-        .await?;
-
-        Ok(res)
+        .await?)
     }
 
     async fn count_not_finalized_batches(self) -> Result<i32, Error> {
@@ -895,7 +828,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     async fn get_next_batch_without_transaction(self) -> Result<Option<BatchEntry>, Error> {
         let mut conn = self.acquire().await?;
 
-        let res = sqlx::query_as::<_, BatchEntry>(
+        Ok(sqlx::query_as(
             r#"
             SELECT
                 batches.id,
@@ -912,16 +845,14 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             "#,
         )
         .fetch_optional(&mut *conn)
-        .await?;
-
-        Ok(res)
+        .await?)
     }
 
     #[instrument(skip(self), level = "debug")]
     async fn get_batch_head(self) -> Result<Option<BatchEntry>, Error> {
         let mut conn = self.acquire().await?;
 
-        let res = sqlx::query_as::<_, BatchEntry>(
+        Ok(sqlx::query_as(
             r#"
             SELECT
                 id,
@@ -935,9 +866,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             "#,
         )
         .fetch_optional(&mut *conn)
-        .await?;
-
-        Ok(res)
+        .await?)
     }
 
     #[instrument(skip(self), level = "debug")]

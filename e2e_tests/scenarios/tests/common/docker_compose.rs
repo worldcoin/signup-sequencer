@@ -139,7 +139,7 @@ impl<'a> DockerComposeGuard<'a> {
     }
 }
 
-impl<'a> Drop for DockerComposeGuard<'a> {
+impl Drop for DockerComposeGuard<'_> {
     fn drop(&mut self) {
         // May run when compose is not up but better to be sure its down.
         // Parameter '-v' is removing all volumes and networks.

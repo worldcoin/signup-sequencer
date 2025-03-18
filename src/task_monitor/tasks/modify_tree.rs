@@ -163,7 +163,7 @@ pub async fn run_insertions(
     tx: &mut Transaction<'_, Postgres>,
     tree_state: &TreeState,
 ) -> anyhow::Result<bool> {
-    let unprocessed = tx.get_unprocessed_commitments().await?;
+    let unprocessed = tx.get_unprocessed_identities().await?;
     if unprocessed.is_empty() {
         return Ok(false);
     }
@@ -171,7 +171,12 @@ pub async fn run_insertions(
     let latest_tree = tree_state.latest_tree();
 
     let mut pre_root = &latest_tree.get_root();
-    let data = latest_tree.clone().simulate_append_many(&unprocessed);
+    let data = latest_tree.clone().simulate_append_many(
+        &unprocessed
+            .iter()
+            .map(|v| v.commitment)
+            .collect::<Vec<Hash>>(),
+    );
 
     assert_eq!(
         data.len(),
@@ -180,8 +185,14 @@ pub async fn run_insertions(
     );
 
     for ((root, _proof, leaf_index), identity) in data.iter().zip(&unprocessed) {
-        tx.insert_pending_identity(*leaf_index, identity, root, pre_root)
-            .await?;
+        tx.insert_pending_identity(
+            *leaf_index,
+            &identity.commitment,
+            identity.created_at,
+            root,
+            pre_root,
+        )
+        .await?;
 
         pre_root = root;
     }
@@ -217,9 +228,9 @@ pub async fn run_deletions(
     );
 
     // Insert the new items into pending identities
-    let items = data.into_iter().zip(leaf_indices);
-    for ((root, _proof), leaf_index) in items {
-        tx.insert_pending_identity(leaf_index, &Hash::ZERO, &root, &pre_root)
+    let items = data.into_iter().zip(deletions);
+    for ((root, _proof), d) in items {
+        tx.insert_pending_identity(d.leaf_index, &Hash::ZERO, d.created_at, &root, &pre_root)
             .await?;
         pre_root = root;
     }

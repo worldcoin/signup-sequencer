@@ -10,9 +10,7 @@ use crate::database::Database;
 use crate::identity::processor::IdentityProcessor;
 use crate::identity_tree::builder::CanonicalTreeBuilder;
 use crate::identity_tree::db_sync::sync_tree;
-use crate::identity_tree::{
-    Hash, ProcessedStatus, TreeState, TreeUpdate, TreeVersionReadOps, TreeWithNextVersion,
-};
+use crate::identity_tree::{Hash, ProcessedStatus, TreeState, TreeUpdate, TreeVersionReadOps};
 use crate::retry_tx;
 use crate::utils::tree_updates::dedup_tree_updates;
 
@@ -86,7 +84,7 @@ impl TreeInitializer {
         info!("Getting mined commitments from DB");
         let mut mined_items = self
             .database
-            .get_commitments_by_status(ProcessedStatus::Mined)
+            .get_tree_updates_by_status(ProcessedStatus::Mined)
             .await?;
 
         mined_items.sort_by_key(|item| item.leaf_index);
@@ -181,7 +179,7 @@ impl TreeInitializer {
             return Ok(None);
         };
 
-        let (mined, mut processed_builder) = mined_builder.seal();
+        let (mined, processed_builder) = mined_builder.seal();
 
         match self
             .database

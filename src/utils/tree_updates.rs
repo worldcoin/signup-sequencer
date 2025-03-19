@@ -29,7 +29,6 @@ mod tests {
     use semaphore_rs::Field;
 
     use super::*;
-    
 
     fn new_tree_update(sequence_id: usize, leaf_index: usize) -> TreeUpdate {
         TreeUpdate::new(

@@ -41,7 +41,11 @@ pub async fn sync_tree_state_with_db(
                 .received_at
                 .clone()
                 .map(|v| Utc::now().timestamp_millis() - v.timestamp_millis());
-            tracing::info!(commitment = format!("{:x}", tree_update.element), status = ?ProcessedStatus::Pending, took = ?took, "Commitment added to latest tree.");
+            if took.is_some() {
+                tracing::info!(commitment = format!("{:x}", tree_update.element), status = ?ProcessedStatus::Pending, took = took.unwrap(), "Commitment added to latest tree.");
+            } else {
+                tracing::info!(commitment = format!("{:x}", tree_update.element), status = ?ProcessedStatus::Pending, "Commitment added to latest tree.");
+            }
         }
 
         tree_synced_tx.send(())?;

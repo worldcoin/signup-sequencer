@@ -3,9 +3,9 @@ use crate::identity_tree::{ProcessedStatus, TreeUpdate};
 use crate::retry_tx;
 use crate::task_monitor::App;
 use chrono::Utc;
-use std::sync::Arc;
 use semaphore_rs::hash::Hash;
 use semaphore_rs_poseidon::poseidon;
+use std::sync::Arc;
 use tokio::sync::watch::Sender;
 use tokio::sync::Notify;
 use tokio::time::Duration;
@@ -76,5 +76,4 @@ fn log_synced_commitment(tree_update: TreeUpdate) {
             "Commitment added to latest tree."
         );
     }
-
 }

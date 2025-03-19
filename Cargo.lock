@@ -1862,20 +1862,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cxx"
-version = "1.0.141"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bc580dceb395cae0efdde0a88f034cfd8a276897e40c693a7b87bed17971d33"
-dependencies = [
- "cc",
- "cxxbridge-cmd",
- "cxxbridge-flags",
- "cxxbridge-macro",
- "foldhash",
- "link-cplusplus",
-]
-
-[[package]]
 name = "cxx-build"
 version = "1.0.141"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1886,37 +1872,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "scratch",
- "syn 2.0.98",
-]
-
-[[package]]
-name = "cxxbridge-cmd"
-version = "1.0.141"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e43afb0e3b2ef293492a31ecd796af902112460d53e5f923f7804f348a769f9c"
-dependencies = [
- "clap",
- "codespan-reporting",
- "proc-macro2",
- "quote",
- "syn 2.0.98",
-]
-
-[[package]]
-name = "cxxbridge-flags"
-version = "1.0.141"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0257ad2096a2474fe877e9e055ab69603851c3d6b394efcc7e0443899c2492ce"
-
-[[package]]
-name = "cxxbridge-macro"
-version = "1.0.141"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b46cbd7358a46b760609f1cb5093683328e58ca50e594a308716f5403fdc03e5"
-dependencies = [
- "proc-macro2",
- "quote",
- "rustversion",
  "syn 2.0.98",
 ]
 
@@ -3803,15 +3758,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "link-cplusplus"
-version = "1.0.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d240c6f7e1ba3a28b0249f774e6a9dd0175054b52dfbb61b16eb8505c3785c9"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "linked-hash-map"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5581,9 +5527,9 @@ dependencies = [
 
 [[package]]
 name = "semaphore-rs"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e6b715a53e4af54ab58e55801b3005a2d9b74a2d424869688eee67c6771d2da"
+checksum = "9b47ba971a6088a498d78316854aab2f3833ca031722d369378220cdbbc75ca2"
 dependencies = [
  "alloy-core",
  "ark-bn254",
@@ -5627,9 +5573,9 @@ dependencies = [
 
 [[package]]
 name = "semaphore-rs-ark-circom"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "155acb29dd517ef21be92fbac33651f7142dd142ae029adfe060bc52b1da2dd3"
+checksum = "590c00fa015e2f7f03f4f0f4123bbe38a7cded0f4497cdd67b7874e8a37887f3"
 dependencies = [
  "ark-bn254",
  "ark-crypto-primitives",
@@ -5648,9 +5594,9 @@ dependencies = [
 
 [[package]]
 name = "semaphore-rs-ark-zkey"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f230330aff01da23b6353423c934dc4355a08b1325e0eb496cfb74c9c374cd80"
+checksum = "d9c5486a113b07b9f4c003a81f4efaca98159498bb7acff34b3b8c6fb022132b"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -5665,15 +5611,15 @@ dependencies = [
 
 [[package]]
 name = "semaphore-rs-depth-config"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd6dbf929c187e33b49f78e51a09dde41c83ce29ff68c2429c667197c44cc94c"
+checksum = "4b250534726c9a2785bfb8fcb498540ef47fb0f732824bb640994dcaa40547f6"
 
 [[package]]
 name = "semaphore-rs-depth-macros"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20a45ed5423e5be175d5decb21795000942d650d0101bb956c80f9a39edaf4c1"
+checksum = "3fa8ad8e24071abbc3c554db3c940e2af2dd676259ab702b8b7f516d162986fb"
 dependencies = [
  "itertools 0.13.0",
  "proc-macro2",
@@ -5684,18 +5630,18 @@ dependencies = [
 
 [[package]]
 name = "semaphore-rs-hasher"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6b02a3b00d098acca0cca813a9f5496a2bc4d45237073a1c4b24ead4aba3fb2"
+checksum = "11442fee48d178242d0e22715253821fb23ee0a770cf7ce3d13079718f4231e9"
 dependencies = [
  "bytemuck",
 ]
 
 [[package]]
 name = "semaphore-rs-keccak"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "feb628e36918a9da7bcbc25ce6ce8020d1cddb30ed988a70b8197b3daf20845b"
+checksum = "c9d5efcb970e069bd434c7dc1dad4d715e0ec9208c10d66d81076cc5d57f7b78"
 dependencies = [
  "semaphore-rs-hasher",
  "tiny-keccak",
@@ -5703,9 +5649,9 @@ dependencies = [
 
 [[package]]
 name = "semaphore-rs-poseidon"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a594e94da9449556005e8824949406a3d5bf1276fe018c1dc1213ce8cb09d14a"
+checksum = "7d26e9b66d2fcf52621d2d86786bca4e09f080c902d6c9f53587bb3c97dd812e"
 dependencies = [
  "ark-bn254",
  "ark-ff 0.4.2",
@@ -5716,9 +5662,9 @@ dependencies = [
 
 [[package]]
 name = "semaphore-rs-proof"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44e899840b5a4416fbc381fa2c0179b86ce353f669ef2da6380e3be71022c041"
+checksum = "d7bf4c50a78e3ce61761e6c5bdd21f1f640845cf416bc4d9705f0657c3b1a931"
 dependencies = [
  "alloy-core",
  "ark-bn254",
@@ -5736,9 +5682,9 @@ dependencies = [
 
 [[package]]
 name = "semaphore-rs-storage"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65aac877363808f49a6691a802fd88e0fa43ea6c2b5cb03320008b3b207ad525"
+checksum = "7843420192065a5a4789285e984df9239a294e9553631717c03cbb66b141ff91"
 dependencies = [
  "bytemuck",
  "color-eyre",
@@ -5748,9 +5694,9 @@ dependencies = [
 
 [[package]]
 name = "semaphore-rs-trees"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e3335573c2d6c4aecba365f89cf95ca9f5f458f5e3e0cf51467362a149cbb3e"
+checksum = "ca2a2bc89c277b8761b46ed6953a6995d01ecadb87164f5b499a2c67846ea517"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -5778,9 +5724,9 @@ dependencies = [
 
 [[package]]
 name = "semaphore-rs-utils"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b0205612de0f4fad0fdb333f2a2d425d06c9b967f62bd57b8c3d8ff17aa413f"
+checksum = "eb67bdd9e07446957225c963228a4be98a60bf80389fbb335eda61e749a15306"
 dependencies = [
  "hex",
  "serde",
@@ -5789,16 +5735,15 @@ dependencies = [
 
 [[package]]
 name = "semaphore-rs-witness"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "819939478c7cb60f98bab6b7920f59f75c3d6bf1423363118361c7453039ac36"
+checksum = "014e1212ea105aa3be44b7c0d318234794dec47e23a926b088e742cfc9f89fa3"
 dependencies = [
  "ark-bn254",
  "ark-ff 0.4.2",
  "ark-serialize 0.4.2",
  "byteorder",
  "color-eyre",
- "cxx",
  "cxx-build",
  "hex",
  "postcard",

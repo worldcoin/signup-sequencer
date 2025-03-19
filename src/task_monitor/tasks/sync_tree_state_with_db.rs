@@ -1,9 +1,11 @@
 use crate::identity_tree::db_sync::{sync_tree, SyncTreeResult};
-use crate::identity_tree::ProcessedStatus;
+use crate::identity_tree::{ProcessedStatus, TreeUpdate};
 use crate::retry_tx;
 use crate::task_monitor::App;
 use chrono::Utc;
 use std::sync::Arc;
+use semaphore_rs::hash::Hash;
+use semaphore_rs_poseidon::poseidon;
 use tokio::sync::watch::Sender;
 use tokio::sync::Notify;
 use tokio::time::Duration;
@@ -37,15 +39,7 @@ pub async fn sync_tree_state_with_db(
         let res = run_sync_tree(&app).await?;
 
         for tree_update in res.latest_tree_updates {
-            let took = tree_update
-                .received_at
-                .clone()
-                .map(|v| Utc::now().timestamp_millis() - v.timestamp_millis());
-            if took.is_some() {
-                tracing::info!(commitment = format!("{:x}", tree_update.element), status = ?ProcessedStatus::Pending, took = took.unwrap(), "Commitment added to latest tree.");
-            } else {
-                tracing::info!(commitment = format!("{:x}", tree_update.element), status = ?ProcessedStatus::Pending, "Commitment added to latest tree.");
-            }
+            log_synced_commitment(tree_update);
         }
 
         tree_synced_tx.send(())?;
@@ -60,4 +54,27 @@ async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
     tracing::info!("TreeState synced with DB");
 
     Ok(res)
+}
+
+fn log_synced_commitment(tree_update: TreeUpdate) {
+    let took = tree_update
+        .received_at
+        .clone()
+        .map(|v| Utc::now().timestamp_millis() - v.timestamp_millis());
+    let hashed_commitment_str = format!("{:x}", poseidon::hash1(tree_update.element));
+    if let Some(took) = took {
+        tracing::info!(
+            hashed_commitment = hashed_commitment_str,
+            status = ?ProcessedStatus::Pending,
+            took,
+            "Commitment added to latest tree."
+        );
+    } else {
+        tracing::info!(
+            commitment = hashed_commitment_str,
+            status = ?ProcessedStatus::Pending,
+            "Commitment added to latest tree."
+        );
+    }
+
 }

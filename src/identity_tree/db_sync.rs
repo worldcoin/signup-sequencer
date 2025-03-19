@@ -8,12 +8,16 @@ use sqlx::{Postgres, Transaction};
 use std::cmp::Ordering;
 use tracing::debug;
 
+pub struct SyncTreeResult {
+    pub latest_tree_updates: Vec<TreeUpdate>,
+}
+
 /// Order of operations in sync tree is very important as it ensures we can
 /// apply new updates or rewind them properly.
 pub async fn sync_tree(
     tx: &mut Transaction<'_, Postgres>,
     tree_state: &TreeState,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<SyncTreeResult> {
     let mined_tree = tree_state.mined_tree();
     let processed_tree = tree_state.processed_tree();
     let batching_tree = tree_state.batching_tree();
@@ -57,16 +61,19 @@ pub async fn sync_tree(
     };
 
     // And then update trees
-    update_latest_tree(tx, latest_tree, &latest_pending_tree_update, || {
-        update_batching_tree(batching_tree, &latest_batching_tree_update, || {
-            update_processed_tree(processed_tree, &latest_processed_tree_update, || {
-                update_mined_tree(mined_tree, &latest_mined_tree_update)
+    let latest_tree_updates =
+        update_latest_tree(tx, latest_tree, &latest_pending_tree_update, || {
+            update_batching_tree(batching_tree, &latest_batching_tree_update, || {
+                update_processed_tree(processed_tree, &latest_processed_tree_update, || {
+                    update_mined_tree(mined_tree, &latest_mined_tree_update)
+                })
             })
         })
-    })
-    .await?;
+        .await?;
 
-    Ok(())
+    Ok(SyncTreeResult {
+        latest_tree_updates,
+    })
 }
 
 async fn update_latest_tree<F: Fn() -> anyhow::Result<()>>(
@@ -74,18 +81,18 @@ async fn update_latest_tree<F: Fn() -> anyhow::Result<()>>(
     latest_tree: &TreeVersion<Latest>,
     latest_tree_update: &Option<TreeUpdate>,
     update_batching_tree: F,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<TreeUpdate>> {
     let Some(latest_tree_update) = latest_tree_update else {
         debug!("No latest tree update.");
         update_batching_tree()?;
 
-        return Ok(());
+        return Ok(vec![]);
     };
 
     let current_sequence_id = latest_tree.get_last_sequence_id();
     let new_sequence_id = latest_tree_update.sequence_id;
 
-    match new_sequence_id.cmp(&current_sequence_id) {
+    let tree_updates = match new_sequence_id.cmp(&current_sequence_id) {
         Ordering::Greater => {
             debug!("Applying latest tree updates up to {}", new_sequence_id);
             let tree_updates = tx
@@ -94,21 +101,27 @@ async fn update_latest_tree<F: Fn() -> anyhow::Result<()>>(
             latest_tree.apply_updates(&tree_updates);
 
             update_batching_tree()?;
+
+            tree_updates
         }
         Ordering::Less => {
             debug!("Rewinding latest tree updates up to {}", new_sequence_id);
             update_batching_tree()?;
 
             latest_tree.rewind_updates_up_to(latest_tree_update.post_root);
+
+            vec![]
         }
         Ordering::Equal => {
             debug!("Latest tree already up to date {}", new_sequence_id);
 
             update_batching_tree()?;
-        }
-    }
 
-    Ok(())
+            vec![]
+        }
+    };
+
+    Ok(tree_updates)
 }
 
 fn update_batching_tree<F: Fn() -> anyhow::Result<()>>(

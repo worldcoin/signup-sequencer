@@ -241,7 +241,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
 
         Ok(sqlx::query_as(
             r#"
-            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root, received_at
             FROM identities
             WHERE status = $1
             ORDER BY id ASC;
@@ -257,7 +257,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
 
         Ok(sqlx::query_as(
             r#"
-            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root, received_at
             FROM identities
             WHERE id > $1
             ORDER BY id ASC;
@@ -277,7 +277,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
         Ok(sqlx::query_as(
             r#"
-            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root, received_at
             FROM identities
             WHERE status = ANY($1)
             ORDER BY id DESC
@@ -294,7 +294,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
 
         Ok(sqlx::query_as(
             r#"
-            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root
+            SELECT id as sequence_id, leaf_index, commitment as element, root as post_root, received_at
             FROM identities
             WHERE root = $1
             LIMIT 1;

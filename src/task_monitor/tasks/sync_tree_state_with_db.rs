@@ -1,6 +1,8 @@
-use crate::identity_tree::db_sync::sync_tree;
+use crate::identity_tree::db_sync::{sync_tree, SyncTreeResult};
+use crate::identity_tree::ProcessedStatus;
 use crate::retry_tx;
 use crate::task_monitor::App;
+use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::watch::Sender;
 use tokio::sync::Notify;
@@ -32,20 +34,26 @@ pub async fn sync_tree_state_with_db(
             },
         }
 
-        run_sync_tree(&app).await?;
+        let res = run_sync_tree(&app).await?;
 
-        // gather metrics about synced commitments in latest tree
+        for tree_update in res.latest_tree_updates {
+            let took = tree_update
+                .received_at
+                .clone()
+                .map(|v| Utc::now().timestamp_millis() - v.timestamp_millis());
+            tracing::info!(commitment = format!("{:x}", tree_update.element), status = ?ProcessedStatus::Pending, took = ?took, "Commitment added to latest tree.");
+        }
 
         tree_synced_tx.send(())?;
     }
 }
 
-async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<()> {
+async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
     let tree_state = app.tree_state()?;
 
-    retry_tx!(&app.database, tx, sync_tree(&mut tx, tree_state).await).await?;
+    let res = retry_tx!(&app.database, tx, sync_tree(&mut tx, tree_state).await).await?;
 
     tracing::info!("TreeState synced with DB");
 
-    Ok(())
+    Ok(res)
 }

@@ -278,6 +278,7 @@ impl TreeInitializer {
 
 #[cfg(test)]
 mod test {
+    use chrono::Utc;
     use ethers::prelude::rand;
     use ethers::types::U256;
     use ruint::Uint;
@@ -297,6 +298,7 @@ mod test {
                 leaf_index: i,
                 element: identity,
                 post_root: identity,
+                received_at: Some(Utc::now()),
             });
         }
 

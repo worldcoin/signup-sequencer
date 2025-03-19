@@ -151,8 +151,12 @@ impl CanonicalTreeBuilder {
 
     /// Updates a leaf in the resulting tree.
     pub fn update(&mut self, update: &TreeUpdate) {
-        self.0
-            .update(update.sequence_id, update.leaf_index, update.element);
+        self.0.update(
+            update.sequence_id,
+            update.leaf_index,
+            update.element,
+            update.received_at,
+        );
     }
 
     /// Seals this version and returns a builder for the next version.
@@ -194,8 +198,12 @@ impl<P: Version> DerivedTreeBuilder<P> {
 
     /// Updates a leaf in the resulting tree.
     pub fn update(&mut self, update: &TreeUpdate) {
-        self.current
-            .update(update.sequence_id, update.leaf_index, update.element);
+        self.current.update(
+            update.sequence_id,
+            update.leaf_index,
+            update.element,
+            update.received_at,
+        );
     }
 
     /// Seals this version and returns a builder for the next version.

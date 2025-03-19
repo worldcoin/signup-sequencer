@@ -1,6 +1,10 @@
-use crate::identity_tree::db_sync::sync_tree;
+use crate::identity_tree::db_sync::{sync_tree, SyncTreeResult};
+use crate::identity_tree::{ProcessedStatus, TreeUpdate};
 use crate::retry_tx;
 use crate::task_monitor::App;
+use chrono::Utc;
+use semaphore_rs::hash::Hash;
+use semaphore_rs_poseidon::poseidon;
 use std::sync::Arc;
 use tokio::sync::watch::Sender;
 use tokio::sync::Notify;
@@ -32,20 +36,44 @@ pub async fn sync_tree_state_with_db(
             },
         }
 
-        run_sync_tree(&app).await?;
+        let res = run_sync_tree(&app).await?;
 
-        // gather metrics about synced commitments in latest tree
+        for tree_update in res.latest_tree_updates {
+            log_synced_commitment(tree_update);
+        }
 
         tree_synced_tx.send(())?;
     }
 }
 
-async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<()> {
+async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
     let tree_state = app.tree_state()?;
 
-    retry_tx!(&app.database, tx, sync_tree(&mut tx, tree_state).await).await?;
+    let res = retry_tx!(&app.database, tx, sync_tree(&mut tx, tree_state).await).await?;
 
     tracing::info!("TreeState synced with DB");
 
-    Ok(())
+    Ok(res)
+}
+
+fn log_synced_commitment(tree_update: TreeUpdate) {
+    let took = tree_update
+        .received_at
+        .clone()
+        .map(|v| Utc::now().timestamp_millis() - v.timestamp_millis());
+    let hashed_commitment_str = format!("{:x}", poseidon::hash1(tree_update.element));
+    if let Some(took) = took {
+        tracing::info!(
+            hashed_commitment = hashed_commitment_str,
+            status = ?ProcessedStatus::Pending,
+            took,
+            "Commitment added to latest tree."
+        );
+    } else {
+        tracing::info!(
+            commitment = hashed_commitment_str,
+            status = ?ProcessedStatus::Pending,
+            "Commitment added to latest tree."
+        );
+    }
 }

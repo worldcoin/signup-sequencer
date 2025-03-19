@@ -1,6 +1,7 @@
+use std::fmt::Debug;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use semaphore_rs::poseidon_tree::Proof;
 use semaphore_rs::Field;
 use semaphore_rs_hasher::Hasher;
@@ -17,11 +18,11 @@ pub mod initializer;
 pub mod state;
 mod status;
 
-pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
-pub type Hash = <PoseidonHash as Hasher>::Hash;
-
 pub use self::state::TreeState;
 pub use self::status::{ProcessedStatus, Status, UnknownStatus, UnprocessedStatus};
+
+pub type PoseidonTree<Version> = LazyMerkleTree<PoseidonHash, Version>;
+pub type Hash = <PoseidonHash as Hasher>::Hash;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, FromRow)]
 pub struct TreeUpdate {
@@ -31,6 +32,7 @@ pub struct TreeUpdate {
     pub leaf_index: usize,
     pub element: Hash,
     pub post_root: Hash,
+    pub received_at: Option<DateTime<Utc>>,
 }
 
 impl TreeUpdate {
@@ -40,12 +42,14 @@ impl TreeUpdate {
         leaf_index: usize,
         element: Hash,
         post_root: Hash,
+        received_at: Option<DateTime<Utc>>,
     ) -> Self {
         Self {
             sequence_id,
             leaf_index,
             element,
             post_root,
+            received_at,
         }
     }
 }
@@ -152,7 +156,13 @@ struct TreeVersionData<V: AllowedTreeVersionMarker> {
 /// Basic operations that should be available for all tree versions.
 pub trait BasicTreeOps {
     /// Updates the tree with the given element at the given leaf index.
-    fn update(&mut self, sequence_id: usize, leaf_index: usize, element: Hash);
+    fn update(
+        &mut self,
+        sequence_id: usize,
+        leaf_index: usize,
+        element: Hash,
+        received_at: Option<DateTime<Utc>>,
+    );
 
     fn next_leaf(&self) -> usize;
     fn proof(&self, leaf_index: usize) -> (Hash, Proof);
@@ -314,7 +324,13 @@ where
 }
 
 impl BasicTreeOps for TreeVersionData<lazy::Canonical> {
-    fn update(&mut self, sequence_id: usize, leaf_index: usize, element: Hash) {
+    fn update(
+        &mut self,
+        sequence_id: usize,
+        leaf_index: usize,
+        element: Hash,
+        _: Option<DateTime<Utc>>,
+    ) {
         take_mut::take(&mut self.state.tree, |tree| {
             tree.update_with_mutation(leaf_index, &element)
         });
@@ -341,7 +357,12 @@ impl BasicTreeOps for TreeVersionData<lazy::Canonical> {
     fn apply_diffs(&mut self, diffs: Vec<AppliedTreeUpdate>) {
         for applied_update in &diffs {
             let update = &applied_update.update;
-            self.update(update.sequence_id, update.leaf_index, update.element);
+            self.update(
+                update.sequence_id,
+                update.leaf_index,
+                update.element,
+                update.received_at,
+            );
         }
     }
 
@@ -385,7 +406,13 @@ impl TreeVersionData<lazy::Derived> {
 }
 
 impl BasicTreeOps for TreeVersionData<lazy::Derived> {
-    fn update(&mut self, sequence_id: usize, leaf_index: usize, element: Hash) {
+    fn update(
+        &mut self,
+        sequence_id: usize,
+        leaf_index: usize,
+        element: Hash,
+        received_at: Option<DateTime<Utc>>,
+    ) {
         let updated_tree = self.state.tree.update(leaf_index, &element);
         let updated_next_leaf = if element != Hash::ZERO {
             leaf_index + 1
@@ -404,6 +431,7 @@ impl BasicTreeOps for TreeVersionData<lazy::Derived> {
                 leaf_index,
                 element,
                 post_root: updated_tree.root(),
+                received_at,
             },
             post_state: self.state.clone(),
         });
@@ -647,6 +675,7 @@ impl TreeVersion<Latest> {
                 tree_update.sequence_id,
                 tree_update.leaf_index,
                 tree_update.element,
+                tree_update.received_at,
             );
             output.push(data.get_root());
         }
@@ -692,6 +721,7 @@ impl<V: Version<TreeVersion = lazy::Derived>> ReversibleVersion for TreeVersion<
 mod tests {
     use super::builder::CanonicalTreeBuilder;
     use super::{Hash, ReversibleVersion, TreeUpdate, TreeVersionReadOps, TreeWithNextVersion};
+    use chrono::Utc;
 
     #[test]
     fn test_peek_next_updates() {
@@ -721,7 +751,13 @@ mod tests {
         let insertion_updates = (0..7)
             .zip(updates)
             .map(|(i, (root, _, leaf_index))| {
-                TreeUpdate::new(i, leaf_index, *insertions.get(i).unwrap(), root)
+                TreeUpdate::new(
+                    i,
+                    leaf_index,
+                    *insertions.get(i).unwrap(),
+                    root,
+                    Some(Utc::now()),
+                )
             })
             .collect::<Vec<_>>();
         _ = processed_tree.apply_updates(&insertion_updates);
@@ -731,7 +767,13 @@ mod tests {
         let deletion_updates = (7..10)
             .zip(updates)
             .map(|(i, (root, _))| {
-                TreeUpdate::new(i, *deletions.get(i - 7).unwrap(), Hash::ZERO, root)
+                TreeUpdate::new(
+                    i,
+                    *deletions.get(i - 7).unwrap(),
+                    Hash::ZERO,
+                    root,
+                    Some(Utc::now()),
+                )
             })
             .collect::<Vec<_>>();
         _ = processed_tree.apply_updates(&deletion_updates);
@@ -752,7 +794,13 @@ mod tests {
         let insertion_updates = (10..14)
             .zip(updates)
             .map(|(i, (root, _, leaf_index))| {
-                TreeUpdate::new(i, leaf_index, *insertions.get(i - 10).unwrap(), root)
+                TreeUpdate::new(
+                    i,
+                    leaf_index,
+                    *insertions.get(i - 10).unwrap(),
+                    root,
+                    Some(Utc::now()),
+                )
             })
             .collect::<Vec<_>>();
         let _ = processed_tree.apply_updates(&insertion_updates);
@@ -783,7 +831,13 @@ mod tests {
         let insertion_updates = (0..30)
             .zip(updates)
             .map(|(i, (root, _, leaf_index))| {
-                TreeUpdate::new(i, leaf_index, *insertions.get(i).unwrap(), root)
+                TreeUpdate::new(
+                    i,
+                    leaf_index,
+                    *insertions.get(i).unwrap(),
+                    root,
+                    Some(Utc::now()),
+                )
             })
             .collect::<Vec<_>>();
         _ = latest_tree.apply_updates(&insertion_updates);

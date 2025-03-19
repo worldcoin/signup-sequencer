@@ -25,29 +25,37 @@ pub fn dedup_tree_updates(updates: Vec<TreeUpdate>) -> Vec<TreeUpdate> {
 
 #[cfg(test)]
 mod tests {
+    use chrono::DateTime;
     use semaphore_rs::Field;
 
     use super::*;
-    use crate::identity_tree::Hash;
+
+    fn new_tree_update(sequence_id: usize, leaf_index: usize) -> TreeUpdate {
+        TreeUpdate::new(
+            sequence_id,
+            leaf_index,
+            Field::from(sequence_id),
+            Field::from(sequence_id),
+            DateTime::from_timestamp_millis(1742309721 + (sequence_id as i64)),
+        )
+    }
 
     #[test]
     fn deduplicates_tree_updates() {
-        let hashes: Vec<Hash> = (0..10).map(Field::from).collect();
-
         let updates = vec![
-            TreeUpdate::new(1, 0, hashes[0], hashes[0]),
-            TreeUpdate::new(2, 1, hashes[1], hashes[1]),
-            TreeUpdate::new(3, 1, hashes[2], hashes[2]),
-            TreeUpdate::new(4, 1, hashes[3], hashes[3]),
-            TreeUpdate::new(5, 2, hashes[4], hashes[4]),
-            TreeUpdate::new(6, 2, hashes[5], hashes[5]),
-            TreeUpdate::new(7, 3, hashes[6], hashes[6]),
+            new_tree_update(1, 0),
+            new_tree_update(2, 1),
+            new_tree_update(3, 1),
+            new_tree_update(4, 1),
+            new_tree_update(5, 2),
+            new_tree_update(6, 2),
+            new_tree_update(7, 3),
         ];
         let expected = vec![
-            TreeUpdate::new(1, 0, hashes[0], hashes[0]),
-            TreeUpdate::new(4, 1, hashes[3], hashes[3]),
-            TreeUpdate::new(6, 2, hashes[5], hashes[5]),
-            TreeUpdate::new(7, 3, hashes[6], hashes[6]),
+            new_tree_update(1, 0),
+            new_tree_update(4, 1),
+            new_tree_update(6, 2),
+            new_tree_update(7, 3),
         ];
 
         let deduped = dedup_tree_updates(updates);
@@ -57,23 +65,21 @@ mod tests {
 
     #[test]
     fn deduplicates_tree_updates_with_same_last() {
-        let hashes: Vec<Hash> = (0..10).map(Field::from).collect();
-
         let updates = vec![
-            TreeUpdate::new(1, 0, hashes[0], hashes[0]),
-            TreeUpdate::new(2, 1, hashes[1], hashes[1]),
-            TreeUpdate::new(3, 1, hashes[2], hashes[2]),
-            TreeUpdate::new(4, 1, hashes[3], hashes[3]),
-            TreeUpdate::new(5, 2, hashes[4], hashes[4]),
-            TreeUpdate::new(6, 2, hashes[5], hashes[5]),
-            TreeUpdate::new(7, 3, hashes[6], hashes[6]),
-            TreeUpdate::new(8, 3, hashes[7], hashes[7]),
+            new_tree_update(1, 0),
+            new_tree_update(2, 1),
+            new_tree_update(3, 1),
+            new_tree_update(4, 1),
+            new_tree_update(5, 2),
+            new_tree_update(6, 2),
+            new_tree_update(7, 3),
+            new_tree_update(8, 3),
         ];
         let expected = vec![
-            TreeUpdate::new(1, 0, hashes[0], hashes[0]),
-            TreeUpdate::new(4, 1, hashes[3], hashes[3]),
-            TreeUpdate::new(6, 2, hashes[5], hashes[5]),
-            TreeUpdate::new(8, 3, hashes[7], hashes[7]),
+            new_tree_update(1, 0),
+            new_tree_update(4, 1),
+            new_tree_update(6, 2),
+            new_tree_update(8, 3),
         ];
 
         let deduped = dedup_tree_updates(updates);

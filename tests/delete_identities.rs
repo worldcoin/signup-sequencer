@@ -6,7 +6,7 @@ use common::prelude::*;
 
 use crate::common::test_delete_identity;
 
-const IDLE_TIME: u64 = 7;
+const IDLE_TIME: u64 = 15;
 
 #[tokio::test]
 async fn delete_identities_onchain() -> anyhow::Result<()> {
@@ -105,7 +105,7 @@ async fn delete_identities(offchain_mode_enabled: bool) -> anyhow::Result<()> {
         test_delete_identity(&uri, &client, &mut ref_tree, &identities_ref, i, false).await;
     }
 
-    tokio::time::sleep(Duration::from_secs(IDLE_TIME * 8)).await;
+    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
     // Ensure that identities have been deleted
     for i in 0..deletion_batch_size {

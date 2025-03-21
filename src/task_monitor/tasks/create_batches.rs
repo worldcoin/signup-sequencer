@@ -49,16 +49,6 @@ pub async fn create_batches(
     let mut timer = time::interval(Duration::from_secs(5));
     timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
-    // When both futures are woken at once, the choice is made
-    // non-deterministically. This could, in the worst case, result in users waiting
-    // for twice `timeout_secs` for their insertion to be processed.
-    //
-    // To ensure that this does not happen we track the last time a batch was
-    // inserted. If we have an incomplete batch but are within a small delta of the
-    // tick happening anyway in the wake branch, we insert the current
-    // (possibly-incomplete) batch anyway.
-    let mut last_batch_time: DateTime<Utc> = app.database.get_latest_insertion().await?.timestamp;
-
     loop {
         // We wait either for a timer tick or a full batch
         select! {
@@ -111,6 +101,9 @@ pub async fn create_batches(
             let batch_insertion_timeout =
                 chrono::Duration::from_std(app.config.app.batch_insertion_timeout)?;
 
+            let last_batch_time: DateTime<Utc> =
+                app.database.get_latest_insertion().await?.timestamp;
+
             let timeout_batch_time = last_batch_time
                 + batch_insertion_timeout
                 + chrono::Duration::seconds(DEBOUNCE_THRESHOLD_SECS);
@@ -133,11 +126,7 @@ pub async fn create_batches(
                 // We've inserted the identities, so we want to ensure that
                 // we don't trigger again until either we get a full batch
                 // or the timer ticks.
-                timer.reset();
-                last_batch_time = Utc::now();
-                app.database
-                    .update_latest_insertion(last_batch_time)
-                    .await?;
+                app.database.update_latest_insertion(Utc::now()).await?;
             } else {
                 // Check if the next batch after the current insertion batch is
                 // deletion. The only time that deletions are

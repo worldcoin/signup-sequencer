@@ -9,7 +9,7 @@ use common::test_inclusion_proof_mined;
 
 use crate::common::test_delete_identity;
 
-const IDLE_TIME: u64 = 7;
+const IDLE_TIME: u64 = 15;
 
 /// This test ensures that we're safe against a scenario where we delete a set
 /// of identities which were just inserted.

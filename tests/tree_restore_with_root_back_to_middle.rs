@@ -4,7 +4,7 @@ use common::prelude::*;
 
 use crate::common::spawn_app_returning_initialized_tree;
 
-const IDLE_TIME: u64 = 7;
+const IDLE_TIME: u64 = 15;
 
 #[tokio::test]
 async fn tree_restore_with_root_back_to_middle_onchain() -> anyhow::Result<()> {

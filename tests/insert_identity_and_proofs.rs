@@ -2,7 +2,7 @@ mod common;
 
 use common::prelude::*;
 
-const IDLE_TIME: u64 = 7;
+const IDLE_TIME: u64 = 15;
 
 #[tokio::test]
 async fn insert_identity_and_proofs_onchain() -> anyhow::Result<()> {

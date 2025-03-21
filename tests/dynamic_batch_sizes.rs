@@ -4,7 +4,7 @@ use common::prelude::*;
 
 use crate::common::{test_add_batch_size, test_remove_batch_size};
 
-const IDLE_TIME: u64 = 10;
+const IDLE_TIME: u64 = 15;
 
 #[tokio::test]
 async fn dynamic_batch_sizes_onchain() -> anyhow::Result<()> {

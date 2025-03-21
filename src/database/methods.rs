@@ -366,7 +366,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             })
         } else {
             Ok(LatestInsertionEntry {
-                timestamp: Utc::now(),
+                timestamp: DateTime::from_timestamp_millis(1).unwrap(),
             })
         }
     }
@@ -527,7 +527,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             })
         } else {
             Ok(LatestDeletionEntry {
-                timestamp: Utc::now(),
+                timestamp: DateTime::from_timestamp_millis(1).unwrap(),
             })
         }
     }

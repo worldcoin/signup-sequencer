@@ -3,7 +3,6 @@ use crate::identity_tree::{ProcessedStatus, TreeUpdate};
 use crate::retry_tx;
 use crate::task_monitor::App;
 use chrono::Utc;
-use semaphore_rs::hash::Hash;
 use semaphore_rs_poseidon::poseidon;
 use std::sync::Arc;
 use tokio::sync::watch::Sender;

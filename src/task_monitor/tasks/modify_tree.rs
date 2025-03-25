@@ -7,6 +7,7 @@ use chrono::Utc;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::watch::Receiver;
 use tokio::sync::Notify;
+use tokio::time::MissedTickBehavior;
 use tokio::{select, time};
 use tracing::{info, warn};
 
@@ -32,6 +33,7 @@ pub async fn modify_tree(
     let min_batch_deletion_size = app.config.app.min_batch_deletion_size;
 
     let mut timer = time::interval(Duration::from_secs(5));
+    timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     loop {
         // We wait either for a timer tick or a event that tree was synchronized

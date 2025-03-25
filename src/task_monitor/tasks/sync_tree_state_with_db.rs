@@ -7,7 +7,7 @@ use semaphore_rs_poseidon::poseidon;
 use std::sync::Arc;
 use tokio::sync::watch::Sender;
 use tokio::sync::Notify;
-use tokio::time::Duration;
+use tokio::time::{Duration, MissedTickBehavior};
 use tokio::{select, time};
 
 pub async fn sync_tree_state_with_db(
@@ -15,13 +15,10 @@ pub async fn sync_tree_state_with_db(
     sync_tree_notify: Arc<Notify>,
     tree_synced_tx: Sender<()>,
 ) -> anyhow::Result<()> {
-    tracing::info!("Awaiting for a clean slate");
-    app.identity_processor.await_clean_slate().await?;
-
-    tracing::info!("Awaiting for initialized tree");
-    app.tree_state()?;
+    tracing::info!("Starting Sync TreeState with DB.");
 
     let mut timer = time::interval(Duration::from_secs(5));
+    timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     loop {
         // We wait either for a timer tick or a full batch
@@ -58,7 +55,6 @@ async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
 fn log_synced_commitment(tree_update: TreeUpdate) {
     let took = tree_update
         .received_at
-        .clone()
         .map(|v| Utc::now().timestamp_millis() - v.timestamp_millis());
     let hashed_commitment_str = format!("{:x}", poseidon::hash1(tree_update.element));
     if let Some(took) = took {

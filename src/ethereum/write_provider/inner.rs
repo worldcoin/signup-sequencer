@@ -13,8 +13,6 @@ pub trait Inner: Send + Sync + 'static {
         tx_id: Option<String>,
     ) -> Result<TransactionId, TxError>;
 
-    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError>;
-
     async fn mine_transaction(&self, tx: TransactionId) -> Result<TransactionResult, TxError>;
 }
 

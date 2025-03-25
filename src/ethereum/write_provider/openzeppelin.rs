@@ -201,20 +201,6 @@ impl OzRelay {
     ) -> Result<RelayerTransactionBase, TxError> {
         self.mine_transaction_id(tx_id.as_str()).await
     }
-
-    pub async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
-        let recent_pending_txs = self
-            .list_recent_transactions()
-            .await
-            .map_err(|err| TxError::Fetch(Box::new(err)))?;
-
-        let pending_txs = recent_pending_txs
-            .into_iter()
-            .map(|tx| tx.transaction_id)
-            .collect();
-
-        Ok(pending_txs)
-    }
 }
 
 #[async_trait::async_trait]
@@ -226,10 +212,6 @@ impl Inner for OzRelay {
         tx_id: Option<String>,
     ) -> Result<TransactionId, TxError> {
         self.send_transaction(tx, only_once, tx_id).await
-    }
-
-    async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
-        self.fetch_pending_transactions().await
     }
 
     async fn mine_transaction(&self, tx: TransactionId) -> Result<TransactionResult, TxError> {

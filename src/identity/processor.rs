@@ -34,8 +34,6 @@ pub trait IdentityProcessor: Send + Sync + 'static {
 
     async fn finalize_identities(&self, sync_tree_notify: &Arc<Notify>) -> anyhow::Result<()>;
 
-    async fn await_clean_slate(&self) -> anyhow::Result<()>;
-
     async fn mine_transaction(&self, transaction_id: TransactionId) -> anyhow::Result<bool>;
 
     async fn tree_init_correction(&self, initial_root_hash: &Hash) -> anyhow::Result<()>;
@@ -102,19 +100,6 @@ impl IdentityProcessor for OnChainIdentityProcessor {
         Ok(())
     }
 
-    async fn await_clean_slate(&self) -> anyhow::Result<()> {
-        // Await for all pending transactions
-        let pending_identities = self.fetch_pending_identities().await?;
-
-        for pending_identity_tx in pending_identities {
-            // Ignores the result of each transaction - we only care about a clean slate in
-            // terms of pending transactions
-            drop(self.mine_transaction(pending_identity_tx).await);
-        }
-
-        Ok(())
-    }
-
     #[instrument(level = "debug", skip(self))]
     async fn mine_transaction(&self, transaction_id: TransactionId) -> anyhow::Result<bool> {
         let result = self.ethereum.mine_transaction(transaction_id).await?;
@@ -143,12 +128,10 @@ impl IdentityProcessor for OnChainIdentityProcessor {
             // finalization. so it's going to stay as "processed"
             // until the next root is mined. self.database.
             tx.mark_root_as_processed(&root_hash).await?;
-            tx.delete_batches_after_root(&root_hash).await?; // TODO: We probably shouldn't do this in HA
         } else {
             // Db is either empty or we're restarting with a new contract/chain
             // so we should mark everything as pending
             tx.mark_all_as_pending().await?;
-            tx.delete_all_batches().await?; // TODO: We probably shouldn't do this in HA
         }
 
         tx.commit().await?;
@@ -326,13 +309,6 @@ impl OnChainIdentityProcessor {
         );
 
         Ok(transaction_id)
-    }
-
-    #[instrument(level = "debug", skip_all)]
-    async fn fetch_pending_identities(&self) -> anyhow::Result<Vec<TransactionId>> {
-        let pending_identities = self.ethereum.fetch_pending_transactions().await?;
-
-        Ok(pending_identities)
     }
 
     /// Validates that merkle proofs are of the correct length against tree
@@ -586,11 +562,6 @@ impl IdentityProcessor for OffChainIdentityProcessor {
         Ok(())
     }
 
-    async fn await_clean_slate(&self) -> anyhow::Result<()> {
-        // For off chain mode we don't need to wait as transactions are instantly done
-        Ok(())
-    }
-
     async fn mine_transaction(&self, _transaction_id: TransactionId) -> anyhow::Result<bool> {
         // For off chain mode we don't mine transactions, so we treat all of them as
         // mined
@@ -598,27 +569,7 @@ impl IdentityProcessor for OffChainIdentityProcessor {
     }
 
     async fn tree_init_correction(&self, _initial_root_hash: &Hash) -> anyhow::Result<()> {
-        // it's enough to run with read committed here
-        // since in the worst case another instance of the sequencer
-        // will try to do the same thing but with a later root
-        // in such a case the state will be corrected later in the program
-        let mut tx = self
-            .database
-            .begin_tx(IsolationLevel::ReadCommitted)
-            .await?;
-
-        let root_hash = tx
-            .get_latest_root_by_status(ProcessedStatus::Processed)
-            .await?;
-
-        if let Some(root_hash) = root_hash {
-            // This deletion is required as when tree is being initialized we do not read batches.
-            // Just restarting from last processed tree.
-            tx.delete_batches_after_root(&root_hash).await?; // TODO: We probably shouldn't do this in HA
-        }
-
-        tx.commit().await?;
-
+        // For off chain mode we assume tree in database is always correct
         Ok(())
     }
 

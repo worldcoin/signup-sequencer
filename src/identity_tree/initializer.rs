@@ -36,9 +36,6 @@ impl TreeInitializer {
     /// Initializes the tree state. This should only ever be called once.
     /// Attempts to call this method more than once will result in a panic.
     pub async fn run(self) -> anyhow::Result<TreeState> {
-        // Await for all pending transactions
-        self.identity_processor.await_clean_slate().await?;
-
         let initial_root_hash =
             LazyPoseidonTree::new(self.config.tree_depth, self.config.initial_leaf_value).root();
 

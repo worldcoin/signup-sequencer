@@ -870,38 +870,6 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[instrument(skip(self), level = "debug")]
-    async fn delete_batches_after_root(self, root: &Hash) -> Result<(), Error> {
-        let mut conn = self.acquire().await?;
-
-        sqlx::query(
-            r#"
-            DELETE FROM batches
-            WHERE prev_root = $1
-            "#,
-        )
-        .bind(root)
-        .execute(&mut *conn)
-        .await?;
-
-        Ok(())
-    }
-
-    #[instrument(skip(self), level = "debug")]
-    async fn delete_all_batches(self) -> Result<(), Error> {
-        let mut conn = self.acquire().await?;
-
-        sqlx::query(
-            r#"
-            DELETE FROM batches
-            "#,
-        )
-        .execute(&mut *conn)
-        .await?;
-
-        Ok(())
-    }
-
-    #[instrument(skip(self), level = "debug")]
     async fn insert_new_transaction(
         self,
         transaction_id: &String,

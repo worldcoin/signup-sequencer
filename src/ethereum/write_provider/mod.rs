@@ -65,10 +65,6 @@ impl WriteProvider {
         self.inner.send_transaction(tx, only_once, tx_id).await
     }
 
-    pub async fn fetch_pending_transactions(&self) -> Result<Vec<TransactionId>, TxError> {
-        self.inner.fetch_pending_transactions().await
-    }
-
     pub async fn mine_transaction(&self, tx: TransactionId) -> Result<bool, TxError> {
         let oz_transaction_result = self.inner.mine_transaction(tx.clone()).await;
 

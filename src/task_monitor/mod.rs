@@ -64,6 +64,7 @@ impl TaskMonitor {
             tasks::finalize_identities::finalize_roots(app.clone(), sync_tree_notify.clone())
         };
         let finalize_identities_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
+            "finalize_identities".to_string(),
             finalize_identities,
             FINALIZE_IDENTITIES_BACKOFF,
             shutdown.clone(),
@@ -74,6 +75,7 @@ impl TaskMonitor {
         let app = main_app.clone();
         let queue_monitor = move || tasks::monitor_queue::monitor_queue(app.clone());
         let queue_monitor_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
+            "queue_monitor".to_string(),
             queue_monitor,
             QUEUE_MONITOR_BACKOFF,
             shutdown.clone(),
@@ -95,6 +97,7 @@ impl TaskMonitor {
             )
         };
         let create_batches_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
+            "create_batches".to_string(),
             create_batches,
             CREATE_BATCHES_BACKOFF,
             shutdown.clone(),
@@ -113,6 +116,7 @@ impl TaskMonitor {
             )
         };
         let process_batches_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
+            "process_batches".to_string(),
             process_batches,
             PROCESS_BATCHES_BACKOFF,
             shutdown.clone(),
@@ -124,6 +128,7 @@ impl TaskMonitor {
         let monitor_txs =
             move || tasks::monitor_txs::monitor_txs(app.clone(), monitored_txs_receiver.clone());
         let monitor_txs_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
+            "monitor_txs".to_string(),
             monitor_txs,
             MONITOR_TXS_BACKOFF,
             shutdown.clone(),
@@ -143,6 +148,7 @@ impl TaskMonitor {
             )
         };
         let modify_tree_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
+            "modify_tree".to_string(),
             modify_tree,
             MODIFY_TREE_BACKOFF,
             shutdown.clone(),
@@ -162,6 +168,7 @@ impl TaskMonitor {
             )
         };
         let sync_tree_state_with_db_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(
+            "sync_tree_state_with_db".to_string(),
             sync_tree_state_with_db,
             SYNC_TREE_STATE_WITH_DB_BACKOFF,
             shutdown.clone(),

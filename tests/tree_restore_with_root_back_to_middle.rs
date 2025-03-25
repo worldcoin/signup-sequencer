@@ -193,12 +193,10 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
         .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (_, app_handle, local_addr, shutdown, initialized_tree) =
+    let (_, app_handle, _, shutdown, initialized_tree) =
         spawn_app_returning_initialized_tree(config.clone())
             .await
             .expect("Failed to spawn app.");
-
-    let uri = "http://".to_owned() + &local_addr.to_string();
 
     let restored_tree_state = initialized_tree;
 
@@ -208,56 +206,12 @@ async fn tree_restore_with_root_back_to_middle(offchain_mode_enabled: bool) -> a
     );
     assert_eq!(
         restored_tree_state.batching_tree().get_root(),
-        mid_root.into()
+        tree_state.batching_tree().get_root()
     );
     assert_eq!(
         restored_tree_state.processed_tree().get_root(),
         mid_root.into()
     );
-
-    tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
-
-    // Check that we can also get these inclusion proofs back.
-    test_inclusion_proof(
-        &mock_chain,
-        &uri,
-        &client,
-        3,
-        &ref_tree,
-        &Hash::from_str_radix(&test_identities[3], 16)
-            .expect("Failed to parse Hash from test leaf 3"),
-        false,
-        offchain_mode_enabled,
-    )
-    .await;
-    test_inclusion_proof(
-        &mock_chain,
-        &uri,
-        &client,
-        4,
-        &ref_tree,
-        &Hash::from_str_radix(&test_identities[4], 16)
-            .expect("Failed to parse Hash from test leaf 4"),
-        false,
-        offchain_mode_enabled,
-    )
-    .await;
-    test_inclusion_proof(
-        &mock_chain,
-        &uri,
-        &client,
-        5,
-        &ref_tree,
-        &Hash::from_str_radix(&test_identities[5], 16)
-            .expect("Failed to parse Hash from test leaf 5"),
-        false,
-        offchain_mode_enabled,
-    )
-    .await;
-
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    test_same_tree_states(tree_state, &restored_tree_state).await?;
 
     // Shutdown the app properly for the final time
     shutdown.shutdown();

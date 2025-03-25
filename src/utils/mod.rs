@@ -74,6 +74,7 @@ macro_rules! retry_tx {
 /// The future will retry until it succeeds or a shutdown signal is received.
 /// During a shutdown, the task will be immediately cancelled
 pub fn spawn_with_backoff_cancel_on_shutdown<S, F>(
+    task_name: String,
     future_spawner: S,
     backoff_duration: Duration,
     shutdown: Shutdown,
@@ -82,10 +83,12 @@ where
     F: Future<Output = anyhow::Result<()>> + Send + 'static,
     S: Fn() -> F + Send + Sync + 'static,
 {
+    let task_name = task_name.clone();
     // Run task in background, returning a handle.
     tokio::spawn(async move {
         select! {
             _ = retry_future(
+                task_name,
                 future_spawner,
                 backoff_duration,
                 &shutdown
@@ -101,6 +104,7 @@ where
 /// During a shutdown, the task will be allowed to finish until the shutdown timout occurs.
 /// This is useful if the task has custom cleanup logic that needs to be run.
 pub fn spawn_with_backoff<S, F>(
+    task_name: String,
     future_spawner: S,
     backoff_duration: Duration,
     shutdown: Shutdown,
@@ -111,7 +115,12 @@ where
 {
     // Run task in background, returning a handle.
     tokio::spawn(async move {
-        let retry = Either::Left(retry_future(future_spawner, backoff_duration, &shutdown));
+        let retry = Either::Left(retry_future(
+            task_name,
+            future_spawner,
+            backoff_duration,
+            &shutdown,
+        ));
         let shutdown = Either::Right(shutdown.await_shutdown_begin());
 
         // If retry completes then we return
@@ -128,8 +137,12 @@ where
 /// The future will be polled on the current task. If the future returns an error,
 /// the error will be logged and future will be retried after the backoff duration.
 /// If the future panics the error will be logged and a shutdown signal will be sent.
-async fn retry_future<S, F>(future_spawner: S, backoff_duration: Duration, shutdown: &Shutdown)
-where
+async fn retry_future<S, F>(
+    task_name: String,
+    future_spawner: S,
+    backoff_duration: Duration,
+    shutdown: &Shutdown,
+) where
     F: Future<Output = anyhow::Result<()>> + Send + 'static,
     S: Fn() -> F + Send + Sync + 'static,
 {
@@ -144,7 +157,7 @@ where
             // Task succeeded or is shutting down gracefully
             Ok(Ok(())) => return,
             Ok(Err(e)) => {
-                error!("Task failed: {e:?}");
+                error!("Task {task_name} failed: {e:?}");
 
                 if shutdown.is_shutting_down() {
                     return;
@@ -153,7 +166,7 @@ where
                 tokio::time::sleep(backoff_duration).await;
             }
             Err(e) => {
-                error!("Task panicked: {e:?}");
+                error!("Task {task_name} panicked: {e:?}");
                 shutdown.shutdown();
                 return;
             }
@@ -177,11 +190,13 @@ mod tests {
     }
 
     fn spawn_task(
+        task_name: String,
         task_result: Arc<Mutex<TaskResult>>,
         got_err: Arc<AtomicBool>,
         shutdown: Shutdown,
     ) -> JoinHandle<()> {
         spawn_with_backoff(
+            task_name,
             move || {
                 let task_result = task_result.clone();
                 let got_err = got_err.clone();
@@ -208,7 +223,12 @@ mod tests {
         let got_err = Arc::new(AtomicBool::new(false));
         let shutdown = Shutdown::spawn(Duration::from_secs(30), Duration::from_millis(100));
 
-        let handle = spawn_task(task_result.clone(), got_err.clone(), shutdown.clone());
+        let handle = spawn_task(
+            "test_task_1".to_string(),
+            task_result.clone(),
+            got_err.clone(),
+            shutdown.clone(),
+        );
 
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert!(got_err.load(Ordering::SeqCst));
@@ -218,7 +238,12 @@ mod tests {
         assert!(handle.is_finished(), "Task should be finished");
 
         *task_result.lock().unwrap() = TaskResult::Panic;
-        let handle = spawn_task(task_result.clone(), got_err.clone(), shutdown.clone());
+        let handle = spawn_task(
+            "test_task_2".to_string(),
+            task_result.clone(),
+            got_err.clone(),
+            shutdown.clone(),
+        );
 
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert!(handle.is_finished(), "Task should be finished");

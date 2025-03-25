@@ -15,12 +15,6 @@ pub async fn process_batches(
     monitored_txs_sender: Arc<mpsc::Sender<TransactionId>>,
     next_batch_notify: Arc<Notify>,
 ) -> anyhow::Result<()> {
-    tracing::info!("Awaiting for a clean slate");
-    app.identity_processor.await_clean_slate().await?;
-
-    // This is a tricky way to know that we are not changing data during tree
-    // initialization process.
-    _ = app.tree_state()?;
     tracing::info!("Starting identity processor.");
 
     let mut timer = time::interval(Duration::from_secs(5));
@@ -44,39 +38,46 @@ pub async fn process_batches(
             },
         }
 
-        {
-            let mut tx = app.database.pool.begin().await?;
-
-            sqlx::query("LOCK TABLE transactions IN ACCESS EXCLUSIVE MODE;")
-                .execute(&mut *tx)
-                .await?;
-
-            let buffered_transactions = tx.count_not_finalized_batches().await?;
-            if buffered_transactions >= MAX_BUFFERED_TRANSACTIONS {
-                tx.commit().await?;
-                continue;
-            }
-
-            let next_batch = tx.get_next_batch_without_transaction().await?;
-            let Some(next_batch) = next_batch else {
-                tx.commit().await?;
-                continue;
-            };
-
-            let tx_id = app
-                .identity_processor
-                .commit_identities(&next_batch)
-                .await?;
-
-            monitored_txs_sender.send(tx_id.clone()).await?;
-
-            tx.insert_new_transaction(&tx_id, &next_batch.next_root)
-                .await?;
-
-            tx.commit().await?;
+        if run(&app, &monitored_txs_sender).await? {
+            // We want to check if there's a full batch available immediately
+            check_next_batch_notify.notify_one();
         }
-
-        // We want to check if there's a full batch available immediately
-        check_next_batch_notify.notify_one();
     }
+}
+
+async fn run(
+    app: &Arc<App>,
+    monitored_txs_sender: &Arc<mpsc::Sender<TransactionId>>,
+) -> anyhow::Result<bool> {
+    let mut tx = app.database.pool.begin().await?;
+
+    sqlx::query("LOCK TABLE transactions IN ACCESS EXCLUSIVE MODE;")
+        .execute(&mut *tx)
+        .await?;
+
+    let buffered_transactions = tx.count_not_finalized_batches().await?;
+    if buffered_transactions >= MAX_BUFFERED_TRANSACTIONS {
+        tx.commit().await?;
+        return Ok(false);
+    }
+
+    let next_batch = tx.get_next_batch_without_transaction().await?;
+    let Some(next_batch) = next_batch else {
+        tx.commit().await?;
+        return Ok(false);
+    };
+
+    let tx_id = app
+        .identity_processor
+        .commit_identities(&next_batch)
+        .await?;
+
+    monitored_txs_sender.send(tx_id.clone()).await?;
+
+    tx.insert_new_transaction(&tx_id, &next_batch.next_root)
+        .await?;
+
+    tx.commit().await?;
+
+    Ok(true)
 }

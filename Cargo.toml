@@ -1,6 +1,6 @@
 [package]
 name = "signup-sequencer"
-version = "2.0.0"
+version = "2.6.3"
 authors = [
     "Remco Bloemen <remco@worldcoin.org>",
     "Lucas Ege <lucas@worldcoin.org>",

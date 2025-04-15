@@ -51,10 +51,12 @@ oz-api = { path = "crates/oz-api" }
 prometheus = "0.13.3"
 reqwest = { version = "0.12.8", features = ["json"] }
 ruint = { version = "1.12.3", features = ["primitive-types", "sqlx"] }
-semaphore-rs = { version = "0.3.2", features = ["depth_30"] }
-semaphore-rs-poseidon = { version = "0.3.2" }
-semaphore-rs-trees = { version = "0.3.2" }
-semaphore-rs-hasher = { version = "0.3.2" }
+semaphore-rs = { git = "https://github.com/worldcoin/semaphore-rs", rev = "85f9e29", features = [
+    "depth_30",
+] }
+semaphore-rs-poseidon = { git = "https://github.com/worldcoin/semaphore-rs", rev = "85f9e29" }
+semaphore-rs-trees = { git = "https://github.com/worldcoin/semaphore-rs", rev = "85f9e29" }
+semaphore-rs-hasher = { git = "https://github.com/worldcoin/semaphore-rs", rev = "85f9e29" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sqlx = { version = "0.8.2", features = [
@@ -91,7 +93,9 @@ maplit = "1.0.2"
 micro-oz = { path = "crates/micro-oz" }
 postgres-docker-utils = { path = "crates/postgres-docker-utils" }
 regex = { version = "1.7.1", features = ["std"] }
-semaphore-rs = { version = "0.3.1", features = ["depth_20"] }
+semaphore-rs = { git = "https://github.com/worldcoin/semaphore-rs", rev = "85f9e29", features = [
+    "depth_20",
+] }
 similar-asserts = "1.5.0"
 test-case = "3.0"
 testcontainers = "0.15.0"

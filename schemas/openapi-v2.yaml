@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
-  version: '2.0.0'
-  title: 'signup-sequencer'
+  version: "2.0.0"
+  title: "signup-sequencer"
   license:
     name: MIT
     identifier: MIT
@@ -12,7 +12,7 @@ paths:
     servers:
       - url: http://localhost:9998
     get:
-      summary: 'Always returns OK response'
+      summary: "Always returns OK response"
       tags: ["management"]
       responses:
         200:
@@ -22,12 +22,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
   /v2/metrics:
     servers:
       - url: http://localhost:9998
     get:
-      summary: 'Returns Prometheus application metrics'
+      summary: "Returns Prometheus application metrics"
       tags: ["management"]
       responses:
         200:
@@ -54,16 +54,16 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
   /v2/identities:
     post:
       summary: Add new identity to the queue
       tags: ["identities"]
       requestBody:
         content:
-          'application/json':
+          "application/json":
             schema:
-              $ref: '#/components/schemas/Identity'
+              $ref: "#/components/schemas/Identity"
       responses:
         202:
           description: Accepted
@@ -72,15 +72,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
         409:
           description: Identity already added to sequencer
+        410:
+          description: Identity has been deleted
         500:
           description: Unexpected error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
   /v2/identities/{commitment}:
     delete:
       tags: ["identities"]
@@ -92,18 +94,20 @@ paths:
           required: true
           schema:
             type: string
-            pattern: &commitment_pattern '^(0x)?[a-fA-F0-9]{64}$'
+            pattern: &commitment_pattern "^(0x)?[a-fA-F0-9]{64}$"
       responses:
         202:
           description: Accepted
         404:
           description: Not found
+        410:
+          description: Identity has been deleted
         500:
           description: Unexpected error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
   /v2/identities/{commitment}/inclusion-proof:
     get:
       summary: Get inclusion proof of identity
@@ -122,26 +126,28 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InclusionProof'
+                $ref: "#/components/schemas/InclusionProof"
         404:
           description: Not found
+        410:
+          description: Identity has been deleted
         500:
           description: Unexpected error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
   /v2/semaphore-proof/verify:
     post:
       summary: Verify semaphore proof
       tags: ["semaphore-proof"]
       requestBody:
         content:
-          'application/json':
+          "application/json":
             schema:
               oneOf:
-                - $ref: '#/components/schemas/VerifySemaphoreProofRequest'
-                - $ref: '#/components/schemas/VerifyCompressedSemaphoreProofRequest'
+                - $ref: "#/components/schemas/VerifySemaphoreProofRequest"
+                - $ref: "#/components/schemas/VerifyCompressedSemaphoreProofRequest"
       responses:
         200:
           description: OK
@@ -150,13 +156,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
         500:
           description: Unexpected error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 components:
   schemas:
     FieldElement:
@@ -165,7 +171,7 @@ components:
     G1:
       type: array
       items:
-        $ref: '#/components/schemas/FieldElement'
+        $ref: "#/components/schemas/FieldElement"
       minItems: 2
       maxItems: 2
       additionalItems: false
@@ -174,7 +180,7 @@ components:
       items:
         type: array
         items:
-          $ref: '#/components/schemas/FieldElement'
+          $ref: "#/components/schemas/FieldElement"
         minItems: 2
         maxItems: 2
         additionalItems: false
@@ -184,25 +190,25 @@ components:
     Identity:
       type: object
       properties:
-        commitment: { $ref: '#/components/schemas/FieldElement' }
+        commitment: { $ref: "#/components/schemas/FieldElement" }
       required:
         - commitment
       example:
-        commitment: '0x000059f0ea2281ab7d12fbd9348ba352014746e813ed46ba59aa59b2e092218d'
+        commitment: "0x000059f0ea2281ab7d12fbd9348ba352014746e813ed46ba59aa59b2e092218d"
     InclusionProof:
       type: object
       properties:
-        root: { $ref: '#/components/schemas/FieldElement' }
+        root: { $ref: "#/components/schemas/FieldElement" }
         proof:
           type: array
           items:
             oneOf:
               - type: object
                 properties:
-                  Left: { $ref: '#/components/schemas/FieldElement' }
+                  Left: { $ref: "#/components/schemas/FieldElement" }
               - type: object
                 properties:
-                  Right: { $ref: '#/components/schemas/FieldElement' }
+                  Right: { $ref: "#/components/schemas/FieldElement" }
       example:
         - Left: "0x0000e2cb684d4920c07142c03ad80c2a98bbb9b58f3baec8ce82c327bab10150"
         - Left: "0x0000bc7b1c5d70381dba382d88acf3c2ebcbe67eac41aaa27c6b8b350cee158e"
@@ -211,41 +217,59 @@ components:
     SemaphoreProof:
       type: array
       prefixItems:
-        - $ref: '#/components/schemas/G1'
-        - $ref: '#/components/schemas/G2'
-        - $ref: '#/components/schemas/G1'
+        - $ref: "#/components/schemas/G1"
+        - $ref: "#/components/schemas/G2"
+        - $ref: "#/components/schemas/G1"
       minItems: 3
       maxItems: 3
       additionalItems: false
       example:
-        - [ "0x000051b5e0275c6e126665006471dee6630e5a76401fc6b65849de8a205639dd", "0x0000bfc6eb8f5f84683ba52e0d270a3de95e467ac553b694285d0037d39a1563" ]
-        - [ [ "0x0000a410a87cc0d9407a07504d7d3df18ac57c6aabb57925346b13f77d21e518", "0x00003b1df48d9af00b97d09b9caffa52fcacddec5f8ba9c47c9d5a7b025982ae" ],  [ "0x00006593891b72f27c921afe6e61ef7fa4e53862903d982df48b50ea37681d62", "0x0000fd4c94999aa36b8c8ceb3c04639a6e5c0870fcb246dbc2e5574a6c99f15b" ]]
-        - [ "0x00006fc8253888b3ca15b2d1af876add2384a371fb266a9219ba2d82351fb7a8", "0x000084659bc928034795a4f8a0558ea74378630f2a9676f0fb0ebebfe6868584" ]
+        - [
+            "0x000051b5e0275c6e126665006471dee6630e5a76401fc6b65849de8a205639dd",
+            "0x0000bfc6eb8f5f84683ba52e0d270a3de95e467ac553b694285d0037d39a1563",
+          ]
+        - [
+            [
+              "0x0000a410a87cc0d9407a07504d7d3df18ac57c6aabb57925346b13f77d21e518",
+              "0x00003b1df48d9af00b97d09b9caffa52fcacddec5f8ba9c47c9d5a7b025982ae",
+            ],
+            [
+              "0x00006593891b72f27c921afe6e61ef7fa4e53862903d982df48b50ea37681d62",
+              "0x0000fd4c94999aa36b8c8ceb3c04639a6e5c0870fcb246dbc2e5574a6c99f15b",
+            ],
+          ]
+        - [
+            "0x00006fc8253888b3ca15b2d1af876add2384a371fb266a9219ba2d82351fb7a8",
+            "0x000084659bc928034795a4f8a0558ea74378630f2a9676f0fb0ebebfe6868584",
+          ]
     CompressedSemaphoreProof:
       type: array
       prefixItems:
-        - $ref: '#/components/schemas/FieldElement'
+        - $ref: "#/components/schemas/FieldElement"
         - type: array
-          items: { $ref: '#/components/schemas/FieldElement' }
+          items: { $ref: "#/components/schemas/FieldElement" }
           minItems: 2
           maxItems: 2
           additionalItems: false
-        - $ref: '#/components/schemas/FieldElement'
+        - $ref: "#/components/schemas/FieldElement"
       minItems: 3
       maxItems: 3
       additionalItems: false
       example:
         - "0x000051b5e0275c6e126665006471dee6630e5a76401fc6b65849de8a205639dd"
-        - [ "0x0000a410a87cc0d9407a07504d7d3df18ac57c6aabb57925346b13f77d21e518", "0x00003b1df48d9af00b97d09b9caffa52fcacddec5f8ba9c47c9d5a7b025982ae" ]
+        - [
+            "0x0000a410a87cc0d9407a07504d7d3df18ac57c6aabb57925346b13f77d21e518",
+            "0x00003b1df48d9af00b97d09b9caffa52fcacddec5f8ba9c47c9d5a7b025982ae",
+          ]
         - "0x00006fc8253888b3ca15b2d1af876add2384a371fb266a9219ba2d82351fb7a8"
     VerifySemaphoreProofRequest:
       type: object
       properties:
-        root: { $ref: '#/components/schemas/FieldElement' }
-        signalHash: { $ref: '#/components/schemas/FieldElement' }
-        nullifierHash: { $ref: '#/components/schemas/FieldElement' }
-        externalNullifierHash: { $ref: '#/components/schemas/FieldElement' }
-        proof: { $ref: '#/components/schemas/SemaphoreProof' }
+        root: { $ref: "#/components/schemas/FieldElement" }
+        signalHash: { $ref: "#/components/schemas/FieldElement" }
+        nullifierHash: { $ref: "#/components/schemas/FieldElement" }
+        externalNullifierHash: { $ref: "#/components/schemas/FieldElement" }
+        proof: { $ref: "#/components/schemas/SemaphoreProof" }
       required:
         - root
         - signalHash
@@ -258,17 +282,33 @@ components:
         nullifier_hash: "0x000012e8498adcc7a2e04ac3c4ef82ee13db7a710a7174b9623fdb8c8ccd38fd"
         external_nullifier_hash: "0x000003282d8e4502363cf69bf7d236bd777b8aab7a232bb96b1a17ec2bbb029a"
         proof:
-          - [ "0x000012bab4c2b8ee80203b053f7edd25408ce4898f9ee48cd1cf5fa05b382258", "0x0000ffed4784db6fd39228c98015be3332bf594460340301dd02e05ccad3a7e5" ]
-          - [ [ "0x0000ba984420b405e2102ec8a3f991d207ae29b65804d4b9ab41f752fcd6f9b0", "0x000072d536482dd3f680a869050426cb0230b0aaf999b89206848406c6b070ac" ],  [ "0x000059f64d1f40212a4be836ec09c1bc675b3315e2f0a6343f7c3c96dac99941", "0x0000ea95958f6182420c86be4e1507f640d77ba9f377bbf3025ff196067411a3" ]]
-          - [ "0x00007c66ab60056f9e021d55f98ea3e6e9ce8db0ef5ca3af6b2c8db1b3018425", "0x0000c0eb8ef9f315815947adce6ed324f49b58a544a37a77185eab9a7202ca1b" ]
+          - [
+              "0x000012bab4c2b8ee80203b053f7edd25408ce4898f9ee48cd1cf5fa05b382258",
+              "0x0000ffed4784db6fd39228c98015be3332bf594460340301dd02e05ccad3a7e5",
+            ]
+          - [
+              [
+                "0x0000ba984420b405e2102ec8a3f991d207ae29b65804d4b9ab41f752fcd6f9b0",
+                "0x000072d536482dd3f680a869050426cb0230b0aaf999b89206848406c6b070ac",
+              ],
+              [
+                "0x000059f64d1f40212a4be836ec09c1bc675b3315e2f0a6343f7c3c96dac99941",
+                "0x0000ea95958f6182420c86be4e1507f640d77ba9f377bbf3025ff196067411a3",
+              ],
+            ]
+          - [
+              "0x00007c66ab60056f9e021d55f98ea3e6e9ce8db0ef5ca3af6b2c8db1b3018425",
+              "0x0000c0eb8ef9f315815947adce6ed324f49b58a544a37a77185eab9a7202ca1b",
+            ]
     VerifyCompressedSemaphoreProofRequest:
       type: object
       properties:
-        root: { $ref: '#/components/schemas/FieldElement' }
-        signal_hash: { $ref: '#/components/schemas/FieldElement' }
-        nullifier_hash: { $ref: '#/components/schemas/FieldElement' }
-        external_nullifier_hash: { $ref: '#/components/schemas/FieldElement' }
-        compressed_proof: { $ref: '#/components/schemas/CompressedSemaphoreProof' }
+        root: { $ref: "#/components/schemas/FieldElement" }
+        signal_hash: { $ref: "#/components/schemas/FieldElement" }
+        nullifier_hash: { $ref: "#/components/schemas/FieldElement" }
+        external_nullifier_hash: { $ref: "#/components/schemas/FieldElement" }
+        compressed_proof:
+          { $ref: "#/components/schemas/CompressedSemaphoreProof" }
       required:
         - root
         - signalHash
@@ -282,7 +322,10 @@ components:
         externalNullifierHash: "0x000003282d8e4502363cf69bf7d236bd777b8aab7a232bb96b1a17ec2bbb029a"
         compressed_proof:
           - "0x0000ba984420b405e2102ec8a3f991d207ae29b65804d4b9ab41f752fcd6f9b0"
-          - [ "0x000012bab4c2b8ee80203b053f7edd25408ce4898f9ee48cd1cf5fa05b382258", "0x0000ffed4784db6fd39228c98015be3332bf594460340301dd02e05ccad3a7e5" ]
+          - [
+              "0x000012bab4c2b8ee80203b053f7edd25408ce4898f9ee48cd1cf5fa05b382258",
+              "0x0000ffed4784db6fd39228c98015be3332bf594460340301dd02e05ccad3a7e5",
+            ]
           - "0x00007c66ab60056f9e021d55f98ea3e6e9ce8db0ef5ca3af6b2c8db1b3018425"
     Error:
       type: object

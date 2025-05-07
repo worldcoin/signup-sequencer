@@ -55,15 +55,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /v2/identities:
+  /v2/identities/{commitment}:
     post:
-      summary: Add new identity to the queue
       tags: ["identities"]
-      requestBody:
-        content:
-          "application/json":
-            schema:
-              $ref: "#/components/schemas/Identity"
+      summary: Add new identity to the queue
+      parameters:
+        - name: commitment
+          in: path
+          description: Identity commitment
+          required: true
+          schema:
+            type: string
+            pattern: &commitment_pattern "^(0x)?[a-fA-F0-9]{64}$"
       responses:
         202:
           description: Accepted
@@ -83,7 +86,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /v2/identities/{commitment}:
     delete:
       tags: ["identities"]
       summary: Add identity removal to the queue
@@ -94,7 +96,7 @@ paths:
           required: true
           schema:
             type: string
-            pattern: &commitment_pattern "^(0x)?[a-fA-F0-9]{64}$"
+            pattern: *commitment_pattern
       responses:
         202:
           description: Accepted
@@ -127,6 +129,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/InclusionProof"
+        202:
+          description: Identity has not been processed yet and proof is not available yet
         404:
           description: Not found
         410:
@@ -150,7 +154,11 @@ paths:
                 - $ref: "#/components/schemas/VerifyCompressedSemaphoreProofRequest"
       responses:
         200:
-          description: OK
+          description: Verification processed, check response for result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemaphoreProofVerificationResult"
         400:
           description: Bad request
           content:
@@ -327,6 +335,13 @@ components:
               "0x0000ffed4784db6fd39228c98015be3332bf594460340301dd02e05ccad3a7e5",
             ]
           - "0x00007c66ab60056f9e021d55f98ea3e6e9ce8db0ef5ca3af6b2c8db1b3018425"
+    SemaphoreProofVerificationResult:
+      type: object
+      properties:
+        valid:
+          type: bool
+      example:
+        valid: true
     Error:
       type: object
       properties:

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::identity_tree::{Hash, InclusionProof, ProcessedStatus, RootItem, Status};
 use crate::prover::{ProverConfig, ProverType};
 
-use super::error::Error;
+use crate::server::api_v1::error::Error;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct InclusionProofResponse {

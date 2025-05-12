@@ -50,6 +50,7 @@ oz-api = { path = "crates/oz-api" }
 # We need upstream PR#465 to fix #272.
 prometheus = "0.13.3"
 reqwest = { version = "0.12.8", features = ["json"] }
+regex = { version = "1.11.1" }
 ruint = { version = "1.12.3", features = ["primitive-types", "sqlx"] }
 semaphore-rs = { git = "https://github.com/worldcoin/semaphore-rs", rev = "85f9e29", features = [
     "depth_30",
@@ -87,6 +88,7 @@ zeroize = "1.6.0"
 dotenvy = "0.15.0"
 
 [dev-dependencies]
+axum-test = "15.7.4"
 hex = "0.4.3"
 lazy_static = "1.4.0"
 maplit = "1.0.2"

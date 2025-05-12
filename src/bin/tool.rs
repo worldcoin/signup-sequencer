@@ -7,7 +7,7 @@ use semaphore_rs::identity::Identity;
 use semaphore_rs::poseidon_tree::Proof;
 use semaphore_rs::Field;
 use serde::{Deserialize, Serialize};
-use signup_sequencer::server::data::{
+use signup_sequencer::server::api_v1::data::{
     InclusionProofRequest, InclusionProofResponse, InsertCommitmentRequest,
     VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
 };

@@ -26,14 +26,14 @@ impl ProverRepository {
         batch_size: usize,
         timeout_seconds: u64,
         prover_type: ProverType,
-    ) -> Result<(), crate::server::error::Error> {
+    ) -> Result<(), crate::server::api_v1::error::Error> {
         let mut map = match prover_type {
             ProverType::Insertion => self.insertion_prover_map.write().await,
             ProverType::Deletion => self.deletion_prover_map.write().await,
         };
 
         if map.batch_size_exists(batch_size) {
-            return Err(crate::server::error::Error::BatchSizeAlreadyExists);
+            return Err(crate::server::api_v1::error::Error::BatchSizeAlreadyExists);
         }
 
         let prover = Prover::new(&ProverConfig {
@@ -56,7 +56,7 @@ impl ProverRepository {
         &self,
         batch_size: usize,
         prover_type: ProverType,
-    ) -> Result<(), crate::server::error::Error> {
+    ) -> Result<(), crate::server::api_v1::error::Error> {
         let mut map = match prover_type {
             ProverType::Insertion => self.insertion_prover_map.write().await,
             ProverType::Deletion => self.deletion_prover_map.write().await,
@@ -64,16 +64,16 @@ impl ProverRepository {
 
         if map.len() == 1 {
             warn!("Attempting to remove the last batch size.");
-            return Err(crate::server::error::Error::CannotRemoveLastBatchSize);
+            return Err(crate::server::api_v1::error::Error::CannotRemoveLastBatchSize);
         }
 
         match map.remove(batch_size) {
             Some(_) => Ok(()),
-            None => Err(crate::server::error::Error::NoSuchBatchSize),
+            None => Err(crate::server::api_v1::error::Error::NoSuchBatchSize),
         }
     }
 
-    pub async fn list_batch_sizes(&self) -> Result<Vec<ProverConfig>, crate::server::error::Error> {
+    pub async fn list_batch_sizes(&self) -> Result<Vec<ProverConfig>, crate::server::api_v1::error::Error> {
         let mut provers = self
             .insertion_prover_map
             .read()

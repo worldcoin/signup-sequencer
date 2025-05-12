@@ -197,7 +197,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     async fn get_tree_item(self, identity: &Hash) -> Result<Option<TreeItem>, Error> {
         let mut conn = self.acquire().await?;
 
-        let row = sqlx::query(
+        Ok(sqlx::query_as(
             r#"
             SELECT leaf_index, status, id as sequence_id, commitment as element
             FROM identities
@@ -208,28 +208,25 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         )
         .bind(identity)
         .fetch_optional(&mut *conn)
-        .await?;
+        .await?)
+    }
 
-        let Some(row) = row else {
-            return Ok(None);
-        };
+    #[instrument(skip(self), level = "debug")]
+    async fn get_tree_item_by_leaf_index(self, leaf_index: usize) -> Result<Option<TreeItem>, Error> {
+        let mut conn = self.acquire().await?;
 
-        let leaf_index = row.get::<i64, _>(0) as usize;
-
-        let status = row
-            .get::<&str, _>(1)
-            .parse()
-            .expect("Status is unreadable, database is corrupt");
-
-        let sequence_id = row.get::<i64, _>(2) as usize;
-        let element = row.get::<Hash, _>(3);
-
-        Ok(Some(TreeItem {
-            status,
-            leaf_index,
-            sequence_id,
-            element,
-        }))
+        Ok(sqlx::query_as(
+            r#"
+            SELECT leaf_index, status, id as sequence_id, commitment as element
+            FROM identities
+            WHERE leaf_index = $1
+            ORDER BY id DESC
+            LIMIT 1;
+            "#,
+        )
+            .bind(leaf_index as i64)
+            .fetch_optional(&mut *conn)
+            .await?)
     }
 
     #[instrument(skip(self), level = "debug")]
@@ -595,6 +592,22 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "debug")]
+    async fn get_deletion(self, commitment: &Hash) -> Result<Option<DeletionEntry>, Error> {
+        let mut conn = self.acquire().await?;
+
+        Ok(sqlx::query_as(
+            r#"
+            SELECT leaf_index, commitment, created_at
+            FROM deletions
+            WHERE commitment = $1
+            "#,
+        )
+            .bind(commitment)
+            .fetch_optional(&mut *conn)
+            .await?)
+    }
+
     // TODO: consider using a larger value than i64 for leaf index, ruint should
     // have postgres compatibility for u256
     #[instrument(skip(self), level = "debug")]
@@ -609,6 +622,22 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         )
         .fetch_all(&mut *conn)
         .await?)
+    }
+
+    #[instrument(skip(self), level = "debug")]
+    async fn count_deletions(self) -> Result<i64, Error> {
+        let mut conn = self.acquire().await?;
+
+        let (count,): (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) as deletions
+            FROM deletions
+            "#,
+        )
+            .fetch_one(&mut *conn)
+            .await?;
+
+        Ok(count)
     }
 
     /// Remove a list of entries from the deletions table

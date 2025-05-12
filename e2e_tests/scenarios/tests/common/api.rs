@@ -5,7 +5,7 @@ use hyper::client::HttpConnector;
 use hyper::{Body, Client, Request};
 use serde_json::{json, Value};
 use signup_sequencer::identity_tree::Hash;
-use signup_sequencer::server::data::{
+use signup_sequencer::server::api_v1::data::{
     DeletionRequest, InclusionProofRequest, InclusionProofResponse, InsertCommitmentRequest,
 };
 use tracing::{debug, info};

@@ -32,7 +32,7 @@ pub struct DockerComposeGuard<'a> {
     signup_sequencer_balancer_port: u32,
 }
 
-impl<'a> DockerComposeGuard<'a> {
+impl DockerComposeGuard<'_> {
     pub fn get_local_addr(&self) -> String {
         format!("{}:{}", LOCAL_ADDR, self.signup_sequencer_balancer_port)
     }
@@ -312,7 +312,7 @@ fn parse_exposed_port(s: String) -> anyhow::Result<u32> {
         .filter(|s| !s.is_empty())
         .collect();
 
-    let port = parts.last().and_then(|v| v.split(':').last());
+    let port = parts.last().and_then(|v| v.split(':').next_back());
 
     match port {
         Some(port) => port.parse::<u32>().map_err(|err| anyhow!(err)),

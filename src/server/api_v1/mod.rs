@@ -1,17 +1,17 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::app::App;
 use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{middleware, Json, Router};
 use data::VerifyCompressedSemaphoreProofRequest;
+use error::Error;
 use hyper::header::CONTENT_TYPE;
 use hyper::StatusCode;
 use prometheus::{Encoder, TextEncoder};
-use crate::app::App;
-use error::Error;
 
 mod custom_middleware;
 pub mod data;
@@ -111,7 +111,7 @@ async fn list_batch_sizes(
     State(app): State<Arc<App>>,
 ) -> Result<(StatusCode, Json<ListBatchSizesResponse>), Error> {
     let batches = app.list_batch_sizes().await?;
-    let result = ListBatchSizesResponse::from(batches);
+    let result = batches;
 
     Ok((result.to_response_code(), Json(result)))
 }
@@ -137,10 +137,7 @@ async fn metrics() -> Result<Response<Body>, Error> {
     Ok(response)
 }
 
-pub fn api_v1_router(
-    app: Arc<App>,
-    serve_timeout: Duration,
-) -> Router {
+pub fn api_v1_router(app: Arc<App>, serve_timeout: Duration) -> Router {
     Router::new()
         // Operate on identity commitments
         .route("/verifySemaphoreProof", post(verify_semaphore_proof))

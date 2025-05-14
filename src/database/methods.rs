@@ -212,7 +212,10 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[instrument(skip(self), level = "debug")]
-    async fn get_tree_item_by_leaf_index(self, leaf_index: usize) -> Result<Option<TreeItem>, Error> {
+    async fn get_tree_item_by_leaf_index(
+        self,
+        leaf_index: usize,
+    ) -> Result<Option<TreeItem>, Error> {
         let mut conn = self.acquire().await?;
 
         Ok(sqlx::query_as(
@@ -224,9 +227,9 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             LIMIT 1;
             "#,
         )
-            .bind(leaf_index as i64)
-            .fetch_optional(&mut *conn)
-            .await?)
+        .bind(leaf_index as i64)
+        .fetch_optional(&mut *conn)
+        .await?)
     }
 
     #[instrument(skip(self), level = "debug")]
@@ -603,9 +606,9 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             WHERE commitment = $1
             "#,
         )
-            .bind(commitment)
-            .fetch_optional(&mut *conn)
-            .await?)
+        .bind(commitment)
+        .fetch_optional(&mut *conn)
+        .await?)
     }
 
     // TODO: consider using a larger value than i64 for leaf index, ruint should
@@ -634,8 +637,8 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             FROM deletions
             "#,
         )
-            .fetch_one(&mut *conn)
-            .await?;
+        .fetch_one(&mut *conn)
+        .await?;
 
         Ok(count)
     }

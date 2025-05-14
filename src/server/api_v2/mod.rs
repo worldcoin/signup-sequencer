@@ -236,16 +236,15 @@ fn parse_commitment(raw_commitment: String) -> Result<Hash, Error> {
         format!("0x{}", raw_commitment)
     };
 
-    Ok(Hash::from_str(&commitment).map_err(|parse_err| {
+    Hash::from_str(&commitment).map_err(|parse_err| {
         Error::BadRequest(ErrorResponse::new(
             "invalid_path_param",
             &format!(
                 "Path parameter 'commitment' has invalid value '{}': {}",
-                raw_commitment,
-                parse_err.to_string()
+                raw_commitment, parse_err
             ),
         ))
-    })?)
+    })
 }
 
 pub fn api_v2_router(app: Arc<App>, serve_timeout: Duration) -> Router {
@@ -377,7 +376,7 @@ mod test {
         let commitment = Hash::from_str(commitment)?;
         let pre_root = tree.get_root();
         let res = tree.simulate_append_many(&[commitment]);
-        let (root, proof, leaf_index) = res.get(0).unwrap();
+        let (root, proof, leaf_index) = res.first().unwrap();
 
         app.database
             .insert_pending_identity(*leaf_index, &commitment, None, root, &pre_root)
@@ -394,7 +393,7 @@ mod test {
             tx.commit().await?;
         }
 
-        Ok((root.clone(), proof.clone()))
+        Ok((*root, proof.clone()))
     }
 
     async fn delete_identity(app: Arc<App>, commitment: &str) -> anyhow::Result<(Hash, Proof)> {
@@ -404,7 +403,7 @@ mod test {
         let tree_item = app.database.get_tree_item(&commitment).await?.unwrap();
         let pre_root = tree.get_root();
         let res = tree.simulate_delete_many(&[tree_item.leaf_index]);
-        let (root, proof) = res.get(0).unwrap();
+        let (root, proof) = res.first().unwrap();
 
         app.database
             .insert_pending_identity(tree_item.leaf_index, &Hash::ZERO, None, root, &pre_root)
@@ -419,7 +418,7 @@ mod test {
             tx.commit().await?;
         }
 
-        Ok((root.clone(), proof.clone()))
+        Ok((*root, proof.clone()))
     }
 
     async fn process_root(app: Arc<App>, root: &Hash) -> anyhow::Result<()> {

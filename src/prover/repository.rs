@@ -73,7 +73,9 @@ impl ProverRepository {
         }
     }
 
-    pub async fn list_batch_sizes(&self) -> Result<Vec<ProverConfig>, crate::server::api_v1::error::Error> {
+    pub async fn list_batch_sizes(
+        &self,
+    ) -> Result<Vec<ProverConfig>, crate::server::api_v1::error::Error> {
         let mut provers = self
             .insertion_prover_map
             .read()
@@ -86,11 +88,11 @@ impl ProverRepository {
     }
 
     pub async fn has_insertion_provers(&self) -> bool {
-        self.insertion_prover_map.read().await.len() > 0
+        !self.insertion_prover_map.read().await.is_empty()
     }
 
     pub async fn has_deletion_provers(&self) -> bool {
-        self.deletion_prover_map.read().await.len() > 0
+        !self.deletion_prover_map.read().await.is_empty()
     }
 
     pub async fn max_insertion_batch_size(&self) -> usize {

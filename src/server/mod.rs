@@ -60,8 +60,7 @@ pub async fn bind_from_listener(
     let router = Router::new()
         .merge(api_v1::api_v1_router(app.clone(), serve_timeout))
         .merge(api_v2::api_v2_router(app.clone(), serve_timeout))
-        .layer(CatchPanicLayer::custom(PanicHandler {}))
-        ;
+        .layer(CatchPanicLayer::custom(PanicHandler {}));
 
     let _shutdown_handle = shutdown.handle();
 

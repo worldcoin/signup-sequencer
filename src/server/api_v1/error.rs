@@ -1,11 +1,11 @@
+use crate::database;
 use anyhow::Error as EyreError;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use thiserror::Error;
-use crate::database;
 
 #[derive(Debug, Error)]
-pub enum Error{
+pub enum Error {
     #[error("invalid http method")]
     InvalidMethod,
     #[error("invalid path")]
@@ -76,12 +76,11 @@ impl Error {
     fn to_status_code(&self) -> StatusCode {
         match self {
             Self::InvalidMethod => StatusCode::METHOD_NOT_ALLOWED,
-            Self::InvalidPath
-            | Self::IdentityCommitmentNotFound => StatusCode::NOT_FOUND,
+            Self::InvalidPath | Self::IdentityCommitmentNotFound => StatusCode::NOT_FOUND,
             Self::InvalidContentType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            Self::IndexOutOfBounds
-            | Self::InvalidCommitment
-            | Self::InvalidSerialization(_) => StatusCode::BAD_REQUEST,
+            Self::IndexOutOfBounds | Self::InvalidCommitment | Self::InvalidSerialization(_) => {
+                StatusCode::BAD_REQUEST
+            }
             Self::IdentityAlreadyDeleted
             | Self::IdentityQueuedForDeletion
             | Self::DuplicateCommitment => StatusCode::CONFLICT,

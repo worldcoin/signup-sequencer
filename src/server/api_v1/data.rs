@@ -1,3 +1,6 @@
+use crate::app::App;
+use crate::identity_tree::{Hash, InclusionProof, ProcessedStatus, RootItem, Status};
+use crate::prover::{ProverConfig, ProverType};
 use chrono::Utc;
 use hyper::StatusCode;
 use semaphore_rs::protocol::compression::CompressedProof;
@@ -5,10 +8,7 @@ use semaphore_rs::protocol::Proof;
 use semaphore_rs::Field;
 use serde::{Deserialize, Serialize};
 
-use crate::identity_tree::{Hash, InclusionProof, ProcessedStatus, RootItem, Status};
-use crate::prover::{ProverConfig, ProverType};
-
-use super::error::Error;
+use crate::server::api_v1::error::Error;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct InclusionProofResponse {
@@ -107,9 +107,7 @@ pub struct DeletionRequest {
 
 impl VerifySemaphoreProofRequest {
     pub fn is_proof_padded(&self) -> bool {
-        let Proof(_g1a, g2, g1b) = &self.proof;
-
-        g2.1[0].is_zero() && g2.1[1].is_zero() && g1b.0.is_zero() && g1b.1.is_zero()
+        App::is_proof_padded(&self.proof)
     }
 }
 

@@ -1,9 +1,8 @@
-use anyhow::Error as EyreError;
-use axum::response::IntoResponse;
-use hyper::StatusCode;
-use thiserror::Error;
-
 use crate::database;
+use anyhow::Error as EyreError;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -29,6 +28,8 @@ pub enum Error {
     UnreducedCommitment,
     #[error("provided identity commitment is already included")]
     DuplicateCommitment,
+    #[error("provided identity commitment was deleted")]
+    DeletedCommitment,
     #[error("Root mismatch between tree and contract.")]
     RootMismatch,
     #[error("Root provided in semaphore proof is too old.")]

@@ -12,7 +12,7 @@ use hyper::Client;
 use serde_json::Value;
 use signup_sequencer::identity_tree::ProcessedStatus::Mined;
 use signup_sequencer::identity_tree::{Hash, Status};
-use signup_sequencer::server::data::InclusionProofResponse;
+use signup_sequencer::server::api_v1::data::InclusionProofResponse;
 use tokio::time::sleep;
 use tracing::{error, info};
 use tracing_subscriber::fmt::format::FmtSpan;

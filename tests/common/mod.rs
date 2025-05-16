@@ -73,21 +73,21 @@ use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;
 use crate::common::abi::{IWorldIDIdentityManager, RootInfo};
 use crate::common::chain_mock::SpecialisedClient;
-use crate::server::error::Error as ServerError;
 use anyhow::anyhow;
 use bon::builder;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use reqwest::{Body, Client, Method, Request, RequestBuilder, StatusCode};
-use server::data::VerifyCompressedSemaphoreProofRequest;
 use signup_sequencer::identity_tree::ProcessedStatus::Mined;
 use signup_sequencer::identity_tree::{
     InclusionProof, ProcessedStatus, Status, TreeState, TreeVersionReadOps,
 };
-use signup_sequencer::server::data::{
+use signup_sequencer::server::api_v1::data::VerifyCompressedSemaphoreProofRequest;
+use signup_sequencer::server::api_v1::data::{
     AddBatchSizeRequest, DeletionRequest, InclusionProofRequest, InclusionProofResponse,
     InsertCommitmentRequest, RemoveBatchSizeRequest, VerifySemaphoreProofRequest,
 };
+use signup_sequencer::server::api_v1::error::Error as ServerError;
 use signup_sequencer::task_monitor::TaskMonitor;
 use std::collections::HashMap;
 use std::net::SocketAddr;

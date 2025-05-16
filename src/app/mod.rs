@@ -1,12 +1,11 @@
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
-use chrono::{Duration, Utc};
-use ruint::Uint;
-use semaphore_rs::protocol::compression::CompressedProof;
-use semaphore_rs::protocol::verify_proof;
-use tracing::{info, instrument, warn};
-
+use crate::app::error::VerifySemaphoreProofV2Error::RootAgeCheckingError;
+use crate::app::error::{
+    DeleteIdentityV2Error, InclusionProofV2Error, InsertIdentityV2Error,
+    VerifySemaphoreProofV2Error,
+};
 use crate::config::Config;
 use crate::contracts::IdentityManager;
 use crate::database::methods::DbMethods as _;
@@ -23,11 +22,19 @@ use crate::identity_tree::{
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::repository::ProverRepository;
 use crate::prover::{ProverConfig, ProverType};
-use crate::server::data::{
+use crate::server::api_v1::data::{
     InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofQuery,
     VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
 };
-use crate::server::error::Error as ServerError;
+use crate::server::api_v1::error::Error as ServerError;
+use chrono::{Duration, Utc};
+use ruint::Uint;
+use semaphore_rs::protocol::compression::CompressedProof;
+use semaphore_rs::protocol::{verify_proof, Proof};
+use semaphore_rs::Field;
+use tracing::{error, info, instrument, warn};
+
+pub mod error;
 
 pub struct App {
     pub database: Arc<Database>,
@@ -174,6 +181,57 @@ impl App {
         Ok(())
     }
 
+    /// Queues an insert into the merkle tree.
+    ///
+    /// # Errors
+    ///
+    /// Will return `Err` if identity is already queued, or in the tree, or the
+    /// queue malfunctions.
+    #[instrument(level = "debug", skip(self))]
+    pub async fn insert_identity_v2(&self, commitment: Hash) -> Result<(), InsertIdentityV2Error> {
+        if self.identity_validator.is_initial_leaf(&commitment) {
+            warn!(?commitment, "Attempt to insert initial leaf.");
+            return Err(InsertIdentityV2Error::InvalidCommitment);
+        }
+
+        if !self.identity_validator.is_reduced(commitment) {
+            warn!(
+                ?commitment,
+                "The provided commitment is not an element of the field."
+            );
+            return Err(InsertIdentityV2Error::UnreducedCommitment);
+        }
+
+        let mut tx = self
+            .database
+            .begin_tx(IsolationLevel::RepeatableRead)
+            .await?;
+
+        let unprocessed = tx.get_unprocessed_commitment(&commitment).await?;
+        if unprocessed.is_some() {
+            return Err(InsertIdentityV2Error::DuplicateCommitment);
+        }
+
+        let processed = tx.get_tree_item(&commitment).await?;
+        if let Some(processed) = processed {
+            let latest_at_index = tx.get_tree_item_by_leaf_index(processed.leaf_index).await?;
+
+            if let Some(latest_at_index) = latest_at_index {
+                if latest_at_index.element == Hash::ZERO {
+                    return Err(InsertIdentityV2Error::DeletedCommitment);
+                }
+            } else {
+                return Err(InsertIdentityV2Error::DuplicateCommitment);
+            }
+        }
+
+        tx.insert_unprocessed_identity(commitment).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
     /// Queues a deletion from the merkle tree.
     ///
     /// # Errors
@@ -220,6 +278,75 @@ impl App {
         }
 
         tx.insert_new_deletion(leaf_index, commitment).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    /// Queues a deletion from the merkle tree.
+    ///
+    /// # Errors
+    ///
+    /// Will return `Err` if identity is already queued, not in the tree, or the
+    /// queue malfunctions.
+    #[instrument(level = "debug", skip(self))]
+    pub async fn delete_identity_v2(&self, commitment: Hash) -> Result<(), DeleteIdentityV2Error> {
+        if self.identity_validator.is_initial_leaf(&commitment) {
+            return Err(DeleteIdentityV2Error::InvalidCommitment);
+        }
+
+        if !self.identity_validator.is_reduced(commitment) {
+            warn!(
+                ?commitment,
+                "The provided commitment is not an element of the field."
+            );
+            return Err(DeleteIdentityV2Error::UnreducedCommitment);
+        }
+
+        let mut tx = self
+            .database
+            .begin_tx(IsolationLevel::RepeatableRead)
+            .await?;
+
+        let processed = match tx.get_tree_item(&commitment).await? {
+            None => {
+                let unprocessed = tx.get_unprocessed_commitment(&commitment).await?;
+                if unprocessed.is_some() {
+                    return Err(DeleteIdentityV2Error::UnprocessedCommitment);
+                } else {
+                    return Err(DeleteIdentityV2Error::CommitmentNotFound);
+                }
+            }
+            Some(tree_item) => tree_item,
+        };
+
+        let latest_at_index = match tx.get_tree_item_by_leaf_index(processed.leaf_index).await? {
+            None => {
+                // This should never happen as last query was returning row with that value
+                return Err(DeleteIdentityV2Error::CommitmentNotFound);
+            }
+            Some(tree_item) => tree_item,
+        };
+
+        if latest_at_index.element == Hash::ZERO {
+            return Err(DeleteIdentityV2Error::DeletedCommitment);
+        }
+
+        let deletion = tx.get_deletion(&commitment).await?;
+        if deletion.is_some() {
+            return Err(DeleteIdentityV2Error::DuplicateCommitmentDeletion);
+        }
+
+        // Check if there are any deletions, if not, set the latest deletion timestamp
+        // to now to ensure that the new deletion is processed by the next deletion
+        // interval
+        if tx.count_deletions().await? == 0 {
+            tx.update_latest_deletion(Utc::now()).await?;
+        }
+
+        tx.insert_new_deletion(processed.leaf_index, &commitment)
+            .await?;
 
         tx.commit().await?;
 
@@ -358,6 +485,79 @@ impl App {
 
     /// # Errors
     ///
+    /// Will return `Err` if the provided index is out of bounds.
+    #[instrument(level = "debug", skip(self))]
+    pub async fn inclusion_proof_v2(
+        &self,
+        commitment: Hash,
+    ) -> Result<(Field, Field, semaphore_rs::poseidon_tree::Proof), InclusionProofV2Error> {
+        if self.identity_validator.is_initial_leaf(&commitment) {
+            return Err(InclusionProofV2Error::InvalidCommitment);
+        }
+
+        if !self.identity_validator.is_reduced(commitment) {
+            warn!(
+                ?commitment,
+                "The provided commitment is not an element of the field."
+            );
+            return Err(InclusionProofV2Error::UnreducedCommitment);
+        }
+
+        let mut tx = self
+            .database
+            .begin_tx(IsolationLevel::RepeatableRead)
+            .await?;
+
+        let item = match tx.get_tree_item(&commitment).await? {
+            None => {
+                let unprocessed = tx.get_unprocessed_commitment(&commitment).await?;
+                if unprocessed.is_some() {
+                    return Err(InclusionProofV2Error::UnprocessedCommitment);
+                } else {
+                    return Err(InclusionProofV2Error::CommitmentNotFound);
+                }
+            }
+            Some(tree_item) => tree_item,
+        };
+
+        let latest_at_index = match tx.get_tree_item_by_leaf_index(item.leaf_index).await? {
+            None => {
+                // This should never happen as last query was returning row with that value
+                return Err(InclusionProofV2Error::CommitmentNotFound);
+            }
+            Some(tree_item) => tree_item,
+        };
+
+        if latest_at_index.element == Hash::ZERO {
+            return Err(InclusionProofV2Error::DeletedCommitment);
+        }
+
+        let tree_state = self.tree_state()?;
+        if tree_state.latest_tree().get_last_sequence_id() < item.sequence_id {
+            // If tree change was not yet applied to latest tree we treat it as it would be
+            // unprocessed.
+            return Err(InclusionProofV2Error::UnprocessedCommitment);
+        }
+
+        // If tree change was applied to latest tree we look for inclusion proof
+        // todo(piotrh): is it ok to use latest tree here?
+        let (leaf, root, proof) = self
+            .tree_state()?
+            .get_latest_tree()
+            .get_leaf_and_proof(item.leaf_index);
+
+        if leaf != commitment {
+            error!("Mismatch between database and in-memory tree. This should never happen.");
+            return Err(InclusionProofV2Error::InvalidInternalState);
+        }
+
+        tx.commit().await?;
+
+        Ok((leaf, root, proof))
+    }
+
+    /// # Errors
+    ///
     /// Will return `Err` if the provided proof is invalid.
     #[instrument(level = "debug", skip(self))]
     pub async fn verify_semaphore_proof(
@@ -401,6 +601,12 @@ impl App {
                 Err(ServerError::ProverError)
             }
         }
+    }
+
+    pub fn is_proof_padded(proof: &Proof) -> bool {
+        let Proof(_g1a, g2, g1b) = proof;
+
+        g2.1[0].is_zero() && g2.1[1].is_zero() && g1b.0.is_zero() && g1b.1.is_zero()
     }
 
     fn validate_root_age(
@@ -456,5 +662,104 @@ impl App {
         } else {
             Ok(())
         }
+    }
+
+    /// # Errors
+    ///
+    /// Will return `Err` if the provided proof is invalid.
+    #[instrument(level = "debug", skip(self))]
+    pub async fn verify_semaphore_proof_v2(
+        &self,
+        root: Field,
+        signal_hash: Field,
+        nullifier_hash: Field,
+        external_nullifier_hash: Field,
+        proof: Proof,
+        max_root_age_seconds: Option<i64>,
+    ) -> Result<bool, VerifySemaphoreProofV2Error> {
+        let Some(root_state) = self.database.get_root_state(&root).await? else {
+            return Err(VerifySemaphoreProofV2Error::InvalidRoot);
+        };
+
+        if let Some(max_root_age_seconds) = max_root_age_seconds {
+            let max_root_age = Duration::seconds(max_root_age_seconds);
+            let is_root_age_valid = self
+                .validate_root_age_v2(max_root_age, &root_state)
+                .map_err(RootAgeCheckingError)?;
+            if !is_root_age_valid {
+                return Err(VerifySemaphoreProofV2Error::RootTooOld);
+            }
+        }
+
+        let proof = if Self::is_proof_padded(&proof) {
+            let proof_flat = proof.flatten();
+            let compressed_flat = [proof_flat[0], proof_flat[1], proof_flat[2], proof_flat[3]];
+            let compressed = CompressedProof::from_flat(compressed_flat);
+            semaphore_rs::protocol::compression::decompress_proof(compressed)
+                .ok_or_else(|| VerifySemaphoreProofV2Error::DecompressingProofError)?
+        } else {
+            proof
+        };
+
+        verify_proof(
+            root,
+            nullifier_hash,
+            signal_hash,
+            external_nullifier_hash,
+            &proof,
+            self.config.tree.tree_depth,
+        )
+        .map_err(|_err| VerifySemaphoreProofV2Error::ProverError)
+    }
+
+    /// We consider root age valid in two cases:
+    /// * root is current root of latest, processed or mined tree
+    /// * root age (depending on state) is not greater than max_root_age
+    fn validate_root_age_v2(
+        &self,
+        max_root_age: Duration,
+        root_state: &RootItem,
+    ) -> anyhow::Result<bool> {
+        let tree_state = self.tree_state()?;
+        let latest_root = tree_state.get_latest_tree().get_root();
+        let processed_root = tree_state.get_processed_tree().get_root();
+        let mined_root = tree_state.get_mined_tree().get_root();
+
+        let root = root_state.root;
+        match root_state.status {
+            // Pending status implies the batching or latest tree, but batching tree is only
+            // for internal processing purposes
+            ProcessedStatus::Pending if latest_root == root => {
+                return Ok(true);
+            }
+            // Processed status implies the processed tree
+            ProcessedStatus::Processed if processed_root == root => {
+                return Ok(true);
+            }
+            // Processed status implies the mined tree
+            ProcessedStatus::Mined if mined_root == root => {
+                return Ok(true);
+            }
+            _ => (),
+        }
+
+        let now = Utc::now();
+        let root_age = match root_state.status {
+            ProcessedStatus::Pending | ProcessedStatus::Processed => {
+                now - root_state.pending_valid_as_of
+            }
+            ProcessedStatus::Mined => {
+                if let Some(mined_at) = root_state.mined_valid_as_of {
+                    now - mined_at
+                } else {
+                    error!("Root state does not have mined_at set while have mined status. This should never happen. Considering root age too old.");
+                    return Err(anyhow::Error::msg(
+                        "Unexpected error occurred while checking root age.",
+                    ));
+                }
+            }
+        };
+
+        Ok(root_age <= max_root_age)
     }
 }

@@ -54,10 +54,13 @@ impl TreeUpdate {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, FromRow)]
 pub struct TreeItem {
+    #[sqlx(try_from = "i64")]
     pub sequence_id: usize,
+    #[sqlx(try_from = "&'a str")]
     pub status: ProcessedStatus,
+    #[sqlx(try_from = "i64")]
     pub leaf_index: usize,
     pub element: Hash,
 }

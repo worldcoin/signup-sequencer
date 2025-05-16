@@ -169,16 +169,15 @@ async fn verify_semaphore_proof(
             VerifySemaphoreProofV2Error::ProverError => {
                 Error::InternalServerError(ErrorResponse::new("prover_error", &err.to_string()))
             }
+            VerifySemaphoreProofV2Error::RootAgeCheckingError(_) => Error::InternalServerError(
+                ErrorResponse::new("root_age_checking_error", &err.to_string()),
+            ),
             VerifySemaphoreProofV2Error::Database(_) => {
                 error!("Database error: {}", err);
                 Error::InternalServerError(ErrorResponse::new(
                     "internal_database_error",
                     &err.to_string(),
                 ))
-            }
-            VerifySemaphoreProofV2Error::AnyhowError(_) => {
-                error!("Error: {}", err);
-                Error::InternalServerError(ErrorResponse::new("internal_error", &err.to_string()))
             }
         })?;
 
@@ -258,8 +257,6 @@ pub fn api_v2_router(app: Arc<App>, serve_timeout: Duration) -> Router {
             get(inclusion_proof),
         )
         .route("/v2/semaphore-proof/verify", post(verify_semaphore_proof))
-        // Operate on identity commitments
-        // Health check, return 200 OK
         .route("/v2/health", get(health))
         .route("/v2/metrics", get(metrics))
         .layer(middleware::from_fn_with_state(
@@ -278,7 +275,10 @@ pub fn api_v2_router(app: Arc<App>, serve_timeout: Duration) -> Router {
 #[cfg(test)]
 mod test {
     use crate::app::App;
-    use crate::config::{Config, DatabaseConfig};
+    use crate::config::{
+        default, AppConfig, Config, DatabaseConfig, OffchainModeConfig, ServerConfig,
+        ServiceConfig, TreeConfig,
+    };
     use crate::database::methods::DbMethods;
     use crate::database::IsolationLevel;
     use crate::identity_tree::db_sync::sync_tree;
@@ -294,6 +294,7 @@ mod test {
     use semaphore_rs::protocol::generate_proof;
     use semaphore_rs_poseidon::poseidon;
     use serde_json::json;
+    use std::net::SocketAddr;
     use std::str::FromStr;
     use std::sync::Arc;
     use std::time::Duration;
@@ -306,33 +307,45 @@ mod test {
     ) -> anyhow::Result<(TestServer, Arc<App>, DockerContainer, TempDir)> {
         let (db_config, db_container) = setup_db(docker).await?;
 
-        let config_toml = r#"
-        [app]
-        provers_urls = "[]"
-
-        [tree]
-        dense_tree_prefix_depth = 8
-
-        [database]
-        database = "postgres://user:password@localhost:5432/database"
-
-        [server]
-        address = "0.0.0.0:3001"
-
-        [offchain_mode]
-        enabled = true
-        "#;
-
         let temp_dir = tempfile::tempdir()?;
 
-        let mut config: Config = toml::from_str(config_toml)?;
-        config.database = db_config;
-        config.tree.cache_file = temp_dir
-            .path()
-            .join("testfile")
-            .to_str()
-            .unwrap()
-            .to_string();
+        let config = Config {
+            app: AppConfig {
+                provers_urls: vec![].into(),
+                batch_insertion_timeout: default::batch_insertion_timeout(),
+                batch_deletion_timeout: default::batch_deletion_timeout(),
+                min_batch_deletion_size: default::min_batch_deletion_size(),
+                scanning_window_size: default::scanning_window_size(),
+                scanning_chain_head_offset: default::scanning_chain_head_offset(),
+                time_between_scans: default::time_between_scans(),
+                monitored_txs_capacity: default::monitored_txs_capacity(),
+                shutdown_timeout: default::shutdown_timeout(),
+                shutdown_delay: default::shutdown_delay(),
+            },
+            tree: TreeConfig {
+                tree_depth: default::tree_depth(),
+                dense_tree_prefix_depth: 8,
+                tree_gc_threshold: default::tree_gc_threshold(),
+                cache_file: temp_dir
+                    .path()
+                    .join("testfile")
+                    .to_str()
+                    .unwrap()
+                    .to_string(),
+                force_cache_purge: default::force_cache_purge(),
+                initial_leaf_value: default::initial_leaf_value(),
+            },
+            network: None,
+            providers: None,
+            relayer: None,
+            database: db_config,
+            server: ServerConfig {
+                address: SocketAddr::from(([127, 0, 0, 1], 0)),
+                serve_timeout: default::serve_timeout(),
+            },
+            service: ServiceConfig::default(),
+            offchain_mode: OffchainModeConfig { enabled: true },
+        };
 
         let app = App::new(config).await?;
 

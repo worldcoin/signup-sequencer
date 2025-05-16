@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
+use crate::app::error::VerifySemaphoreProofV2Error::RootAgeCheckingError;
 use crate::app::error::{
     DeleteIdentityV2Error, InclusionProofV2Error, InsertIdentityV2Error,
     VerifySemaphoreProofV2Error,
@@ -681,7 +682,10 @@ impl App {
 
         if let Some(max_root_age_seconds) = max_root_age_seconds {
             let max_root_age = Duration::seconds(max_root_age_seconds);
-            if !self.validate_root_age_v2(max_root_age, &root_state)? {
+            let is_root_age_valid = self
+                .validate_root_age_v2(max_root_age, &root_state)
+                .map_err(RootAgeCheckingError)?;
+            if !is_root_age_valid {
                 return Err(VerifySemaphoreProofV2Error::RootTooOld);
             }
         }
@@ -720,24 +724,19 @@ impl App {
         let processed_root = tree_state.get_processed_tree().get_root();
         let mined_root = tree_state.get_mined_tree().get_root();
 
-        info!("Validating age max_root_age: {max_root_age:?}");
-
         let root = root_state.root;
         match root_state.status {
             // Pending status implies the batching or latest tree, but batching tree is only
             // for internal processing purposes
             ProcessedStatus::Pending if latest_root == root => {
-                warn!("Root matches current pending tree root - considering valid");
                 return Ok(true);
             }
             // Processed status implies the processed tree
             ProcessedStatus::Processed if processed_root == root => {
-                warn!("Root matches current processed tree root - considering valid");
                 return Ok(true);
             }
             // Processed status implies the mined tree
             ProcessedStatus::Mined if mined_root == root => {
-                warn!("Root matches current mined tree root - considering valid");
                 return Ok(true);
             }
             _ => (),
@@ -754,13 +753,11 @@ impl App {
                 } else {
                     error!("Root state does not have mined_at set while have mined status. This should never happen. Considering root age too old.");
                     return Err(anyhow::Error::msg(
-                        "Unexpected error ocurred while checking root age.",
+                        "Unexpected error occurred while checking root age.",
                     ));
                 }
             }
         };
-
-        warn!("Root age: {root_age:?}");
 
         Ok(root_age <= max_root_age)
     }

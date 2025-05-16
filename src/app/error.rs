@@ -68,8 +68,8 @@ pub enum VerifySemaphoreProofV2Error {
     DecompressingProofError,
     #[error("prover error")]
     ProverError,
+    #[error("root age checking error")]
+    RootAgeCheckingError(anyhow::Error),
     #[error(transparent)]
     Database(#[from] database::Error),
-    #[error(transparent)]
-    AnyhowError(#[from] anyhow::Error),
 }

@@ -603,7 +603,7 @@ impl App {
         }
     }
 
-    fn is_proof_padded(proof: &Proof) -> bool {
+    pub fn is_proof_padded(proof: &Proof) -> bool {
         let Proof(_g1a, g2, g1b) = proof;
 
         g2.1[0].is_zero() && g2.1[1].is_zero() && g1b.0.is_zero() && g1b.1.is_zero()

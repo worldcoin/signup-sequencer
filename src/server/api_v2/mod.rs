@@ -133,7 +133,7 @@ async fn inclusion_proof(
                     &err.to_string(),
                 ))
             }
-            InclusionProofV2Error::AnyhowError(_) => {
+            InclusionProofV2Error::InvalidInternalState | InclusionProofV2Error::AnyhowError(_) => {
                 error!("Error: {}", err);
                 Error::InternalServerError(ErrorResponse::new("internal_error", &err.to_string()))
             }

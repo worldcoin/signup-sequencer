@@ -547,7 +547,8 @@ impl App {
             .get_leaf_and_proof(item.leaf_index);
 
         if leaf != commitment {
-            return Err(InclusionProofV2Error::InvalidCommitment);
+            error!("Mismatch between database and in-memory tree. This should never happen.");
+            return Err(InclusionProofV2Error::InvalidInternalState);
         }
 
         tx.commit().await?;

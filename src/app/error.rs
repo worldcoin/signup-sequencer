@@ -50,6 +50,8 @@ pub enum InclusionProofV2Error {
     CommitmentNotFound,
     #[error("provided identity commitment was deleted")]
     DeletedCommitment,
+    #[error("invalid internal state")]
+    InvalidInternalState,
     #[error(transparent)]
     Database(#[from] database::Error),
     #[error(transparent)]

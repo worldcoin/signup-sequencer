@@ -66,7 +66,7 @@ paths:
           required: true
           schema:
             type: string
-            pattern: &commitment_pattern "^(0x)?[a-fA-F0-9]{64}$"
+            pattern: &commitment_pattern "^(0x)?[a-fA-F0-9]{1,64}$"
       responses:
         202:
           description: Accepted
@@ -219,8 +219,8 @@ components:
                   Right: { $ref: "#/components/schemas/FieldElement" }
       example:
         - Left: "0x0000e2cb684d4920c07142c03ad80c2a98bbb9b58f3baec8ce82c327bab10150"
-        - Left: "0x0000bc7b1c5d70381dba382d88acf3c2ebcbe67eac41aaa27c6b8b350cee158e"
-        - Right: "0x00003acaf3335688e800b6a79ca6b2ebb81c006f805995fd78b332c8a7f78139"
+        - Left: "0xbc7b1c5d70381dba382d88acf3c2ebcbe67eac41aaa27c6b8b350cee158e"
+        - Right: "0x3acaf3335688e800b6a79ca6b2ebb81c006f805995fd78b332c8a7f78139"
         - Left: "0x0000bb1b1689d30a5cebce9c9b29b625cdd39cc316cf652b38417cee8275fbf0"
     SemaphoreProof:
       type: array

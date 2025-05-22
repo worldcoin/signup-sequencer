@@ -215,7 +215,7 @@ async fn metrics() -> Result<Response<Body>, Error> {
 }
 
 fn parse_commitment(raw_commitment: String) -> Result<Hash, Error> {
-    let re = Regex::new(r"^(0x)?[a-fA-F0-9]{64}$").unwrap();
+    let re = Regex::new(r"^(0x)?[a-fA-F0-9]{1,64}$").unwrap();
     if !re.is_match(&raw_commitment) {
         return Err(
             Error::BadRequest(ErrorResponse::new(
@@ -469,18 +469,16 @@ mod test {
         query: fn(&TestServer, &str) -> TestRequest,
     ) {
         for commitment in [
-            "abc",
+            "abcz",
             "abcdefgh",
-            "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
             "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
             "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
         ] {
             let res = query(server, commitment).await;
             res.assert_status(StatusCode::BAD_REQUEST);
             res.assert_json(&json!({
                 "errorId": "invalid_path_param",
-                "errorMessage": format!("Path parameter 'commitment' has invalid value '{}' which doesn't match required format '^(0x)?[a-fA-F0-9]{{64}}$'", commitment),
+                "errorMessage": format!("Path parameter 'commitment' has invalid value '{}' which doesn't match required format '^(0x)?[a-fA-F0-9]{{1,64}}$'", commitment),
             }));
         }
     }
@@ -558,7 +556,8 @@ mod test {
         test_success("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").await;
         test_success("1123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").await;
 
-        test_duplicate("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").await;
+        test_duplicate("0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").await;
+        test_duplicate("123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").await;
 
         add_identity(
             app.clone(),

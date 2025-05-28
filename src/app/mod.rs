@@ -220,9 +220,9 @@ impl App {
                 if latest_at_index.element == Hash::ZERO {
                     return Err(InsertIdentityV2Error::DeletedCommitment);
                 }
-            } else {
-                return Err(InsertIdentityV2Error::DuplicateCommitment);
             }
+
+            return Err(InsertIdentityV2Error::DuplicateCommitment);
         }
 
         tx.insert_unprocessed_identity(commitment).await?;

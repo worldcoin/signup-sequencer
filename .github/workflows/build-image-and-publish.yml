@@ -55,8 +55,8 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ env.RUST_VERSION }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ env.RUST_VERSION }}-cargo-lint-
+          key: ${{ env.RUST_VERSION }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ env.RUST_VERSION }}-cargo-build-
 
       - name: Build and push
         uses: docker/build-push-action@v5

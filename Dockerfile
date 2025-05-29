@@ -51,9 +51,7 @@ RUN echo "fn main() {}" > ./e2e_tests/scenarios/src/main.rs
 
 # Prebuild dependencies
 RUN cargo fetch
-RUN --mount=type=cache,target=/root/.cargo/registry \
-    --mount=type=cache,target=/src/target \
-    cargo build --release
+RUN cargo build --release
 
 # Copy all the source files
 # .dockerignore ignores the target dir
@@ -61,9 +59,7 @@ COPY . .
 
 # Build the sequencer
 RUN cargo fetch
-RUN --mount=type=cache,target=/root/.cargo/registry \
-    --mount=type=cache,target=/src/target \
-    cargo build --release
+RUN cargo build --release
 
 # cc variant because we need libgcc and others
 FROM gcr.io/distroless/cc-debian12:nonroot

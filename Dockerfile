@@ -1,4 +1,4 @@
-FROM debian:12 AS build-env
+FROM rust:1.86-slim-bookworm AS build-env
 
 WORKDIR /src
 
@@ -6,29 +6,25 @@ WORKDIR /src
 RUN apt-get update && \
     apt-get install -y git curl build-essential libssl-dev texinfo libcap2-bin pkg-config
 
-# TODO: Use a specific version of rustup
-# Install rustup
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
-
 # Copy only rust-toolchain.toml for better caching
 COPY ./rust-toolchain.toml ./rust-toolchain.toml
 
 # Set environment variables
-ENV PATH="/root/.cargo/bin:${PATH}"
-ENV RUSTUP_HOME="/root/.rustup"
-ENV CARGO_HOME="/root/.cargo"
+ENV PATH="/root/.cargo/bin:${PATH}" \
+    RUSTUP_HOME="/root/.rustup" \
+    CARGO_HOME="/root/.cargo"
 
 # Install the toolchain
 RUN rustup component add cargo
 
 # TODO: Hacky but it works
-RUN mkdir -p ./src
-RUN mkdir -p ./crates/cognitoauth/src
-RUN mkdir -p ./crates/micro-oz/src
-RUN mkdir -p ./crates/oz-api/src
-RUN mkdir -p ./crates/postgres-docker-utils/src
-RUN mkdir -p ./crates/tx-sitter-client/src
-RUN mkdir -p ./e2e_tests/scenarios/src
+RUN mkdir -p ./src \
+    && mkdir -p ./crates/cognitoauth/src \
+    && mkdir -p ./crates/micro-oz/src \
+    && mkdir -p ./crates/oz-api/src \
+    && mkdir -p ./crates/postgres-docker-utils/src \
+    && mkdir -p ./crates/tx-sitter-client/src \
+    && mkdir -p ./e2e_tests/scenarios/src
 
 # Copy only Cargo.toml for better caching
 COPY ./build.rs ./build.rs
@@ -41,25 +37,25 @@ COPY ./crates/postgres-docker-utils/Cargo.toml ./crates/postgres-docker-utils/Ca
 COPY ./crates/tx-sitter-client/Cargo.toml ./crates/tx-sitter-client/Cargo.toml
 COPY ./e2e_tests/scenarios/Cargo.toml ./e2e_tests/scenarios/Cargo.toml
 
-RUN echo "fn main() {}" > ./src/main.rs
-RUN echo "fn main() {}" > ./crates/cognitoauth/src/main.rs
-RUN echo "fn main() {}" > ./crates/micro-oz/src/main.rs
-RUN echo "fn main() {}" > ./crates/oz-api/src/main.rs
-RUN echo "fn main() {}" > ./crates/postgres-docker-utils/src/main.rs
-RUN echo "fn main() {}" > ./crates/tx-sitter-client/src/main.rs
-RUN echo "fn main() {}" > ./e2e_tests/scenarios/src/main.rs
+RUN echo "fn main() {}" > ./src/main.rs \
+    && echo "fn main() {}" > ./crates/cognitoauth/src/main.rs \
+    && echo "fn main() {}" > ./crates/micro-oz/src/main.rs \
+    && echo "fn main() {}" > ./crates/oz-api/src/main.rs \
+    && echo "fn main() {}" > ./crates/postgres-docker-utils/src/main.rs \
+    && echo "fn main() {}" > ./crates/tx-sitter-client/src/main.rs \
+    && echo "fn main() {}" > ./e2e_tests/scenarios/src/main.rs
 
 # Prebuild dependencies
-RUN cargo fetch
-RUN cargo build --release
+RUN cargo fetch \ 
+    && cargo build --release --workspace
 
 # Copy all the source files
 # .dockerignore ignores the target dir
 COPY . .
 
 # Build the sequencer
-RUN cargo fetch
-RUN cargo build --release
+RUN cargo fetch \
+    && cargo build --release
 
 # cc variant because we need libgcc and others
 FROM gcr.io/distroless/cc-debian12:nonroot

@@ -61,4 +61,3 @@ jobs:
           annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha,scope=${{ github.repository }}-${{ github.ref_name }}-${{ matrix.platform }}
           cache-to: type=gha,scope=${{ github.repository }}-${{ github.ref_name }}-${{ matrix.platform }},mode=max
-          outputs: type=registry,push-by-digest=true,name-canonical=true,push=true

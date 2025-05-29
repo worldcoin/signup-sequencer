@@ -11,6 +11,7 @@ permissions:
   packages: write
 
 env:
+  RUST_VERSION: "1.86.0"
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 

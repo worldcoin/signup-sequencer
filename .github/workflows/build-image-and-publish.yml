@@ -45,6 +45,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Cache Rust build
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        id: cache-rust
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            rust-build-${{ runner.os }}-
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:

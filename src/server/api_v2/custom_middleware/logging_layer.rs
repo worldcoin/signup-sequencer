@@ -1,7 +1,7 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use axum::body::Body;
-use axum::extract::{Request, MatchedPath};
+use axum::extract::{MatchedPath, Request};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::Response;

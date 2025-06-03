@@ -1,7 +1,7 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use axum::body::Body;
-use axum::extract::Request;
+use axum::extract::{Request, MatchedPath};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::Response;
@@ -20,6 +20,12 @@ pub async fn middleware(request: Request, next: Next) -> Result<Response, Status
     let uri_path = parts.uri.path().to_string();
     let request_method = parts.method.clone();
     let request_query = parts.uri.query().map(ToString::to_string);
+
+    let matched_path = parts
+        .extensions
+        .get::<MatchedPath>()
+        .map(|mp| mp.as_str().to_string())
+        .unwrap_or_else(|| uri_path.clone());
 
     if let Method::GET = request_method {
         let span = info_span!("request", ?uri_path, ?request_method, ?request_query);
@@ -40,6 +46,7 @@ pub async fn middleware(request: Request, next: Next) -> Result<Response, Status
             let response = next.run(request).await;
 
             let mut response = handle_response(
+                &matched_path,
                 &uri_path,
                 &request_method,
                 request_query.as_deref(),
@@ -75,6 +82,7 @@ pub async fn middleware(request: Request, next: Next) -> Result<Response, Status
             let response = next.run(request).await;
 
             let mut response = handle_response(
+                &matched_path,
                 &uri_path,
                 &request_method,
                 request_query.as_deref(),
@@ -92,6 +100,7 @@ pub async fn middleware(request: Request, next: Next) -> Result<Response, Status
 }
 
 async fn handle_response(
+    matched_path: &str,
     uri_path: &str,
     request_method: &Method,
     request_query: Option<&str>,
@@ -132,6 +141,7 @@ async fn handle_response(
     };
 
     info!(
+        matched_path,
         uri_path,
         ?request_method,
         ?request_query,

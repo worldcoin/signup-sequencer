@@ -127,11 +127,10 @@ pub async fn create_batches(
                 // inserted is when there is a full deletion batch or the
                 // deletion time interval has elapsed.
                 // In this case, we should immediately process the batch.
-                let next_batch_is_deletion = if let Some(update) = app
+                let next_update_is_deletion = if let Some(update) = app
                     .tree_state()?
                     .batching_tree()
-                    .peek_next_updates(batch_size + 1)
-                    .last()
+                    .peek_next_update_at(updates.len())
                 {
                     update.update.element == Hash::ZERO
                 } else {
@@ -139,7 +138,7 @@ pub async fn create_batches(
                 };
 
                 // If the next batch is deletion, process the current insertion batch
-                if next_batch_is_deletion {
+                if next_update_is_deletion {
                     commit_identities(
                         &app.database,
                         &app.prover_repository,

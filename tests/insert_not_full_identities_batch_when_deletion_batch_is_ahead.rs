@@ -6,7 +6,7 @@ use common::prelude::*;
 
 use crate::common::test_delete_identity;
 
-const IDLE_TIME: u64 = 5;
+const IDLE_TIME: u64 = 10;
 
 #[tokio::test]
 async fn insert_not_full_identities_batch_when_deletion_batch_is_ahead_onchain(

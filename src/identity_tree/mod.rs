@@ -234,6 +234,15 @@ where
             .collect()
     }
 
+    /// Returns _if available_ next update at `pos` in a queue to be applied to the tree.
+    fn peek_next_update_at(&self, pos: usize) -> Option<AppliedTreeUpdate> {
+        let next = self.next.as_ref()?;
+
+        let next = next.get_data();
+
+        next.metadata.diff.get(pos).cloned()
+    }
+
     /// Applies updates _up to_ `root`. Returns zero when root was not found.
     fn apply_updates_up_to(&mut self, root: Hash) -> usize {
         let Some(next) = self.next.clone() else {
@@ -691,6 +700,7 @@ impl TreeVersion<Latest> {
 /// only allow peeking and applying updates from the successor.
 pub trait TreeWithNextVersion {
     fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate>;
+    fn peek_next_update_at(&self, pos: usize) -> Option<AppliedTreeUpdate>;
     fn apply_updates_up_to(&self, root: Hash) -> usize;
 }
 
@@ -701,6 +711,10 @@ where
 {
     fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
         self.get_data().peek_next_updates(maximum_update_count)
+    }
+
+    fn peek_next_update_at(&self, pos: usize) -> Option<AppliedTreeUpdate> {
+        self.get_data().peek_next_update_at(pos)
     }
 
     fn apply_updates_up_to(&self, root: Hash) -> usize {

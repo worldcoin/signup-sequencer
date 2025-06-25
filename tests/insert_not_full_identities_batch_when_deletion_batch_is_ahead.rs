@@ -9,16 +9,20 @@ use crate::common::test_delete_identity;
 const IDLE_TIME: u64 = 5;
 
 #[tokio::test]
-async fn insert_not_full_identities_batch_when_deletion_batch_is_ahead_onchain() -> anyhow::Result<()> {
+async fn insert_not_full_identities_batch_when_deletion_batch_is_ahead_onchain(
+) -> anyhow::Result<()> {
     insert_not_full_identities_batch_when_deletion_batch_is_ahead(false).await
 }
 
 #[tokio::test]
-async fn insert_not_full_identities_batch_when_deletion_batch_is_ahead_offchain() -> anyhow::Result<()> {
+async fn insert_not_full_identities_batch_when_deletion_batch_is_ahead_offchain(
+) -> anyhow::Result<()> {
     insert_not_full_identities_batch_when_deletion_batch_is_ahead(true).await
 }
 
-async fn insert_not_full_identities_batch_when_deletion_batch_is_ahead(offchain_mode_enabled: bool) -> anyhow::Result<()> {
+async fn insert_not_full_identities_batch_when_deletion_batch_is_ahead(
+    offchain_mode_enabled: bool,
+) -> anyhow::Result<()> {
     // Initialize logging for the test.
     init_tracing_subscriber();
     info!("Starting integration test");
@@ -96,20 +100,20 @@ async fn insert_not_full_identities_batch_when_deletion_batch_is_ahead(offchain_
         false,
         offchain_mode_enabled,
     )
-        .await;
+    .await;
 
     tokio::time::sleep(Duration::from_secs(2 * IDLE_TIME)).await;
 
     // Insert enough identities to trigger an batch to be sent to the blockchain to have identities
     // to delete
-    for i in 1..(insertion_batch_size+1) {
+    for i in 1..(insertion_batch_size + 1) {
         test_insert_identity(&uri, &client, &mut ref_tree, &test_identities_ref, i).await;
     }
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
 
     // Check that we can also get these inclusion proofs back.
-    for i in 1..(insertion_batch_size+1) {
+    for i in 1..(insertion_batch_size + 1) {
         test_inclusion_proof(
             &mock_chain,
             &uri,
@@ -121,7 +125,7 @@ async fn insert_not_full_identities_batch_when_deletion_batch_is_ahead(offchain_
             false,
             offchain_mode_enabled,
         )
-            .await;
+        .await;
     }
 
     tokio::time::sleep(Duration::from_secs(IDLE_TIME)).await;
@@ -161,7 +165,7 @@ async fn insert_not_full_identities_batch_when_deletion_batch_is_ahead(offchain_
             true,
             offchain_mode_enabled,
         )
-            .await;
+        .await;
     }
 
     // Ensure that identities have been added
@@ -177,7 +181,7 @@ async fn insert_not_full_identities_batch_when_deletion_batch_is_ahead(offchain_
             false,
             offchain_mode_enabled,
         )
-            .await;
+        .await;
     }
 
     // Shutdown the app properly for the final time

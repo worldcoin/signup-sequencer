@@ -236,16 +236,11 @@ where
 
     /// Returns _if available_ next update at `pos` in a queue to be applied to the tree.
     fn peek_next_update_at(&self, pos: usize) -> Option<AppliedTreeUpdate> {
-        let Some(next) = self.next.as_ref() else {
-            return None;
-        };
+        let next = self.next.as_ref()?;
 
         let next = next.get_data();
 
-        next.metadata
-            .diff
-            .get(pos)
-            .map(|v| v.clone())
+        next.metadata.diff.get(pos).cloned()
     }
 
     /// Applies updates _up to_ `root`. Returns zero when root was not found.

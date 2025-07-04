@@ -214,7 +214,7 @@ impl<P: Version> DerivedTreeBuilder<P> {
         let state = self.current.state.clone();
         let sealed = TreeVersion(Arc::new(Mutex::new(self.current)));
         let next = Self::new(state, sealed.clone());
-        self.prev.get_data().next = Some(sealed.as_derived());
+        self.prev.lock().next = Some(sealed.as_derived());
         (sealed, next)
     }
 
@@ -222,7 +222,7 @@ impl<P: Version> DerivedTreeBuilder<P> {
     #[must_use]
     pub fn seal(self) -> TreeVersion<Latest> {
         let sealed = TreeVersion(Arc::new(Mutex::new(self.current)));
-        self.prev.get_data().next = Some(sealed.as_derived());
+        self.prev.lock().next = Some(sealed.as_derived());
         sealed
     }
 }

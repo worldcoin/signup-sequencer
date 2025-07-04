@@ -14,9 +14,9 @@ use tokio::{select, time};
 use tracing::instrument;
 
 use crate::app::App;
-use crate::database;
 use crate::database::methods::DbMethods as _;
 use crate::database::Database;
+use crate::database::{self, IsolationLevel};
 use crate::identity_tree::{
     AppliedTreeUpdate, Hash, Intermediate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
@@ -236,7 +236,7 @@ pub async fn insert_identities(
 
     let pre_root = batching_tree.get_root();
 
-    let mut tx = database.pool.begin().await?;
+    let mut tx = database.begin_tx(IsolationLevel::Serializable).await?;
     let latest_batch = tx.get_latest_batch().await?;
     if let Some(latest_batch) = latest_batch {
         if pre_root != latest_batch.next_root {

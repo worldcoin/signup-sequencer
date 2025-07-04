@@ -150,7 +150,7 @@ impl Clone for TreeVersionState<lazy::Derived> {
 /// next leaf (only used in the latest tree), a last sequence id from database
 /// indicating order of operations, a pointer to the next version (if exists)
 /// and the metadata specified by the version marker.
-struct TreeVersionData<V: AllowedTreeVersionMarker> {
+pub struct TreeVersionData<V: AllowedTreeVersionMarker> {
     state: TreeVersionState<V>,
     next: Option<TreeVersion<AnyDerived>>,
     metadata: V::Metadata,
@@ -184,30 +184,30 @@ where
     V: lazy::VersionMarker + AllowedTreeVersionMarker,
     Self: BasicTreeOps,
 {
-    /// Gets the current tree root.
-    fn get_root(&self) -> Hash {
-        self.state.tree.root()
-    }
+    // /// Gets the current tree root.
+    // pub fn get_root(&self) -> Hash {
+    //     self.state.tree.root()
+    // }
+    //
+    // /// Gets the leaf value at a given index.
+    // fn get_leaf(&self, leaf: usize) -> Hash {
+    //     self.state.tree.get_leaf(leaf)
+    // }
 
-    /// Gets the leaf value at a given index.
-    fn get_leaf(&self, leaf: usize) -> Hash {
-        self.state.tree.get_leaf(leaf)
-    }
-
-    /// Gets the proof of the given leaf index element
-    fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
-        let proof = self.state.tree.proof(leaf);
-        (self.state.tree.root(), proof)
-    }
+    // /// Gets the proof of the given leaf index element
+    // fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
+    //     let proof = self.state.tree.proof(leaf);
+    //     (self.state.tree.root(), proof)
+    // }
 
     /// Returns _up to_ `maximum_update_count` contiguous deletion or insertion
     /// updates that are to be applied to the tree.
-    fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
+    pub fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
         let Some(next) = self.next.as_ref() else {
             return Vec::new();
         };
 
-        let next = next.get_data();
+        let next = next.lock();
 
         let first_is_zero = match next.metadata.diff.first() {
             Some(first) => first.update.element == Hash::ZERO,
@@ -238,7 +238,7 @@ where
     fn peek_next_update_at(&self, pos: usize) -> Option<AppliedTreeUpdate> {
         let next = self.next.as_ref()?;
 
-        let next = next.get_data();
+        let next = next.lock();
 
         next.metadata.diff.get(pos).cloned()
     }
@@ -253,7 +253,7 @@ where
         {
             let applied_updates = {
                 // Acquire the exclusive write lock on the next version.
-                let mut next = next.get_data();
+                let mut next = next.lock();
 
                 let index_of_root = next
                     .metadata
@@ -321,7 +321,7 @@ where
         let num_updates = rest.len();
 
         if let Some(next) = self.next.clone() {
-            let mut next = next.get_data();
+            let mut next = next.lock();
             rest.append(&mut next.metadata.diff);
             next.metadata.diff = rest;
             next.metadata.ref_state = self.state.clone();
@@ -392,7 +392,7 @@ impl BasicTreeOps for TreeVersionData<lazy::Canonical> {
             self.metadata.count_since_last_flatten = 0;
             let next = &self.next;
             if let Some(next) = next {
-                next.get_data().rebuild_on(self.state.tree.derived());
+                next.lock().rebuild_on(self.state.tree.derived());
             }
             info!("Tree versions rebuilt");
         }
@@ -412,7 +412,7 @@ impl TreeVersionData<lazy::Derived> {
         self.state.tree = tree.clone();
         let next = &self.next;
         if let Some(next) = next {
-            next.get_data().rebuild_on(self.state.tree.clone());
+            next.lock().rebuild_on(self.state.tree.clone());
         }
     }
 }
@@ -449,7 +449,7 @@ impl BasicTreeOps for TreeVersionData<lazy::Derived> {
         });
 
         if let Some(next) = &self.next {
-            let mut next = next.get_data();
+            let mut next = next.lock();
             next.metadata.ref_state = self.state.clone();
         }
     }
@@ -477,7 +477,7 @@ impl BasicTreeOps for TreeVersionData<lazy::Derived> {
         }
 
         if let Some(next) = &self.next {
-            let mut next = next.get_data();
+            let mut next = next.lock();
             next.metadata.ref_state = self.state.clone();
         }
     }
@@ -581,15 +581,15 @@ where
     TreeVersionData<V::TreeVersion>: BasicTreeOps,
 {
     fn get_root(&self) -> Hash {
-        self.get_data().get_root()
+        self.lock().get_root()
     }
 
     fn next_leaf(&self) -> usize {
-        self.get_data().state.next_leaf
+        self.lock().state.next_leaf
     }
 
     fn get_leaf_and_proof(&self, leaf: usize) -> (Hash, Hash, Proof) {
-        let tree = self.get_data();
+        let tree = self.lock();
 
         let (root, proof) = tree.get_proof(leaf);
         let leaf = tree.get_leaf(leaf);
@@ -598,17 +598,17 @@ where
     }
 
     fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
-        let tree = self.get_data();
+        let tree = self.lock();
         tree.get_proof(leaf)
     }
 
     fn get_leaf(&self, leaf: usize) -> Hash {
-        let tree = self.get_data();
+        let tree = self.lock();
         tree.get_leaf(leaf)
     }
 
     fn commitments_by_leaves(&self, leaves: impl IntoIterator<Item = usize>) -> Vec<Hash> {
-        let tree = self.get_data();
+        let tree = self.lock();
 
         let mut commitments = vec![];
 
@@ -620,12 +620,52 @@ where
     }
 
     fn get_last_sequence_id(&self) -> usize {
-        self.get_data().state.last_sequence_id
+        self.lock().state.last_sequence_id
+    }
+}
+
+impl<V: AllowedTreeVersionMarker> TreeVersionReadOps for TreeVersionData<V> {
+    fn get_root(&self) -> Hash {
+        self.state.tree.root()
+    }
+
+    fn next_leaf(&self) -> usize {
+        self.state.next_leaf
+    }
+
+    fn get_leaf_and_proof(&self, leaf: usize) -> (Hash, Hash, Proof) {
+        let (root, proof) = self.get_proof(leaf);
+        let leaf = self.get_leaf(leaf);
+
+        (leaf, root, proof)
+    }
+
+    fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
+        let proof = self.state.tree.proof(leaf);
+        (self.state.tree.root(), proof)
+    }
+
+    fn get_leaf(&self, leaf: usize) -> Hash {
+        self.state.tree.get_leaf(leaf)
+    }
+
+    fn commitments_by_leaves(&self, leaves: impl IntoIterator<Item = usize>) -> Vec<Hash> {
+        let mut commitments = vec![];
+
+        for leaf in leaves {
+            commitments.push(self.state.tree.get_leaf(leaf));
+        }
+
+        commitments
+    }
+
+    fn get_last_sequence_id(&self) -> usize {
+        self.state.last_sequence_id
     }
 }
 
 impl<V: Version> TreeVersion<V> {
-    fn get_data(&self) -> MutexGuard<TreeVersionData<V::TreeVersion>> {
+    pub fn lock(&self) -> MutexGuard<TreeVersionData<V::TreeVersion>> {
         self.0.lock().expect("no lock poisoning")
     }
 }
@@ -636,7 +676,7 @@ impl TreeVersion<Latest> {
     /// changes are made to the tree.
     #[must_use]
     pub fn simulate_append_many(&self, identities: &[Hash]) -> Vec<(Hash, Proof, usize)> {
-        let data = self.get_data();
+        let data = self.lock();
         let mut tree = data.state.tree.clone();
         let next_leaf = data.state.next_leaf;
 
@@ -660,7 +700,7 @@ impl TreeVersion<Latest> {
     /// changes are made to the tree.
     #[must_use]
     pub fn simulate_delete_many(&self, leaf_indices: &[usize]) -> Vec<(Hash, Proof)> {
-        let mut tree = self.get_data().state.tree.clone();
+        let mut tree = self.lock().state.tree.clone();
 
         let mut output = Vec::with_capacity(leaf_indices.len());
 
@@ -678,7 +718,7 @@ impl TreeVersion<Latest> {
     /// Latest tree is the only way to apply new updates. Other versions may
     /// only move on the chain of changes by passing desired root.
     pub fn apply_updates(&self, tree_updates: &[TreeUpdate]) -> Vec<Hash> {
-        let mut data = self.get_data();
+        let mut data = self.lock();
 
         let mut output = Vec::with_capacity(tree_updates.len());
 
@@ -710,15 +750,15 @@ where
     TreeVersionData<<V as Version>::TreeVersion>: BasicTreeOps,
 {
     fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
-        self.get_data().peek_next_updates(maximum_update_count)
+        self.lock().peek_next_updates(maximum_update_count)
     }
 
     fn peek_next_update_at(&self, pos: usize) -> Option<AppliedTreeUpdate> {
-        self.get_data().peek_next_update_at(pos)
+        self.lock().peek_next_update_at(pos)
     }
 
     fn apply_updates_up_to(&self, root: Hash) -> usize {
-        self.get_data().apply_updates_up_to(root)
+        self.lock().apply_updates_up_to(root)
     }
 }
 
@@ -730,7 +770,7 @@ pub trait ReversibleVersion {
 
 impl<V: Version<TreeVersion = lazy::Derived>> ReversibleVersion for TreeVersion<V> {
     fn rewind_updates_up_to(&self, root: Hash) -> usize {
-        self.get_data().rewind_updates_up_to(root)
+        self.lock().rewind_updates_up_to(root)
     }
 }
 
@@ -739,6 +779,93 @@ mod tests {
     use super::builder::CanonicalTreeBuilder;
     use super::{Hash, ReversibleVersion, TreeUpdate, TreeVersionReadOps, TreeWithNextVersion};
     use chrono::Utc;
+
+    #[test]
+    fn test_peek_next_updatess() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let (canonical_tree, processed_builder) = CanonicalTreeBuilder::new(
+            10,
+            10,
+            0,
+            Hash::ZERO,
+            &[],
+            temp_dir.path().join("testfile").to_str().unwrap(),
+        )
+        .seal();
+        let processed_tree = processed_builder.seal();
+
+        let insertions = [
+            Hash::from(1),
+            Hash::from(2),
+            Hash::from(3),
+            Hash::from(4),
+            Hash::from(5),
+            Hash::from(6),
+            Hash::from(7),
+        ];
+        let updates = processed_tree.simulate_append_many(&insertions);
+        let insertion_updates = (0..7)
+            .zip(updates)
+            .map(|(i, (root, _, leaf_index))| {
+                TreeUpdate::new(
+                    i,
+                    leaf_index,
+                    *insertions.get(i).unwrap(),
+                    root,
+                    Some(Utc::now()),
+                )
+            })
+            .collect::<Vec<_>>();
+        _ = processed_tree.apply_updates(&insertion_updates);
+
+        let deletions = [0, 1, 2];
+        let updates = processed_tree.simulate_delete_many(&deletions);
+        let deletion_updates = (7..10)
+            .zip(updates)
+            .map(|(i, (root, _))| {
+                TreeUpdate::new(
+                    i,
+                    *deletions.get(i - 7).unwrap(),
+                    Hash::ZERO,
+                    root,
+                    Some(Utc::now()),
+                )
+            })
+            .collect::<Vec<_>>();
+        _ = processed_tree.apply_updates(&deletion_updates);
+
+        let next_updates = canonical_tree.peek_next_updates(10);
+        assert_eq!(next_updates.len(), 7);
+
+        canonical_tree.apply_updates_up_to(
+            next_updates
+                .last()
+                .expect("Could not get insertion updates")
+                .update
+                .post_root,
+        );
+
+        let insertions = [Hash::from(8), Hash::from(9), Hash::from(10), Hash::from(11)];
+        let updates = processed_tree.simulate_append_many(&insertions);
+        let insertion_updates = (10..14)
+            .zip(updates)
+            .map(|(i, (root, _, leaf_index))| {
+                TreeUpdate::new(
+                    i,
+                    leaf_index,
+                    *insertions.get(i - 10).unwrap(),
+                    root,
+                    Some(Utc::now()),
+                )
+            })
+            .collect::<Vec<_>>();
+        let _ = processed_tree.apply_updates(&insertion_updates);
+
+        let next_updates = canonical_tree.peek_next_updates(10);
+
+        assert_eq!(next_updates.len(), 3);
+    }
 
     #[test]
     fn test_peek_next_updates() {

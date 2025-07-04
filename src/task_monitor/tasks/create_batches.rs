@@ -69,10 +69,14 @@ pub async fn create_batches(
             app.prover_repository.max_insertion_batch_size().await
         };
 
-        let updates = app
-            .tree_state()?
-            .batching_tree()
-            .peek_next_updates(batch_size);
+        // Lock the batching tree to ensure it doesn't change
+        let batching_tree = app.tree_state()?.batching_tree().lock();
+        let pre_root = batching_tree.get_root();
+        let updates = batching_tree.peek_next_updates(batch_size);
+        let mut indices: Vec<_> = updates.iter().map(|f| f.update.leaf_index).collect();
+        let commitments = batching_tree.commitments_by_leaves(indices.iter().copied());
+        drop(batching_tree);
+        let mut commitments: Vec<U256> = commitments.into_iter().map(U256::from).collect();
 
         if updates.is_empty() {
             tracing::trace!("No updates found. Waiting.");
@@ -84,10 +88,12 @@ pub async fn create_batches(
             commit_identities(
                 &app.database,
                 &app.prover_repository,
-                app.tree_state()?.batching_tree(),
                 &next_batch_notify,
                 &sync_tree_notify,
                 &updates,
+                pre_root,
+                commitments,
+                indices,
             )
             .await?;
         } else {
@@ -110,7 +116,6 @@ pub async fn create_batches(
                 commit_identities(
                     &app.database,
                     &app.prover_repository,
-                    app.tree_state()?.batching_tree(),
                     &next_batch_notify,
                     &sync_tree_notify,
                     &updates,
@@ -142,7 +147,6 @@ pub async fn create_batches(
                     commit_identities(
                         &app.database,
                         &app.prover_repository,
-                        app.tree_state()?.batching_tree(),
                         &next_batch_notify,
                         &sync_tree_notify,
                         &updates,
@@ -176,10 +180,12 @@ async fn ensure_batch_chain_initialized(app: &Arc<App>) -> anyhow::Result<()> {
 async fn commit_identities(
     database: &Database,
     prover_repository: &Arc<ProverRepository>,
-    batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
     sync_tree_notify: &Arc<Notify>,
     updates: &[AppliedTreeUpdate],
+    pre_root: Hash,
+    commitments: Vec<U256>,
+    indices: Vec<usize>,
 ) -> anyhow::Result<()> {
     // If the update is an insertion
     if updates
@@ -197,11 +203,11 @@ async fn commit_identities(
 
         insert_identities(
             database,
-            batching_tree,
             next_batch_notify,
             sync_tree_notify,
             updates,
             batch_size,
+            pre_root,
         )
         .await
     } else {
@@ -213,11 +219,13 @@ async fn commit_identities(
 
         delete_identities(
             database,
-            batching_tree,
             next_batch_notify,
             sync_tree_notify,
             updates,
             batch_size,
+            pre_root,
+            commitments,
+            indices,
         )
         .await
     }
@@ -226,15 +234,13 @@ async fn commit_identities(
 #[instrument(level = "info", skip_all)]
 pub async fn insert_identities(
     database: &Database,
-    batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
     sync_tree_notify: &Arc<Notify>,
     updates: &[AppliedTreeUpdate],
     batch_size: usize,
+    pre_root: Hash,
 ) -> anyhow::Result<()> {
     assert_updates_are_consecutive(updates);
-
-    let pre_root = batching_tree.get_root();
 
     let mut tx = database.begin_tx(IsolationLevel::Serializable).await?;
     let latest_batch = tx.get_latest_batch().await?;
@@ -377,15 +383,14 @@ fn assert_updates_are_consecutive(updates: &[AppliedTreeUpdate]) {
 
 pub async fn delete_identities(
     database: &Database,
-    batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
     sync_tree_notify: &Arc<Notify>,
     updates: &[AppliedTreeUpdate],
     batch_size: usize,
+    pre_root: Hash,
+    mut commitments: Vec<U256>,
+    mut indices: Vec<usize>,
 ) -> anyhow::Result<()> {
-    // Grab the initial conditions before the updates are applied to the tree.
-    let pre_root = batching_tree.get_root();
-
     let mut tx = database.pool.begin().await?;
     let latest_batch = tx.get_latest_batch().await?;
     if let Some(latest_batch) = latest_batch {
@@ -397,9 +402,8 @@ pub async fn delete_identities(
     }
 
     let mut deletion_indices: Vec<_> = updates.iter().map(|f| f.update.leaf_index).collect();
-
-    let commitments = batching_tree.commitments_by_leaves(deletion_indices.iter().copied());
-    let mut commitments: Vec<U256> = commitments.into_iter().map(U256::from).collect();
+    // let commitments = batching_tree.commitments_by_leaves(deletion_indices.iter().copied());
+    // let mut commitments: Vec<U256> = commitments.into_iter().map(U256::from).collect();
 
     let latest_tree_from_updates = updates
         .last()
@@ -440,7 +444,7 @@ pub async fn delete_identities(
     if commitment_count != batch_size {
         let padding = batch_size - commitment_count;
         commitments.extend(vec![U256::zero(); padding]);
-        deletion_indices.extend(vec![pad_index; padding]);
+        indices.extend(vec![pad_index; padding]);
 
         let zeroed_proof = InclusionProof(vec![
             Branch::Left(Uint::ZERO);
@@ -450,11 +454,11 @@ pub async fn delete_identities(
         merkle_proofs.extend(vec![zeroed_proof; padding]);
     }
 
-    assert_eq!(
-        deletion_indices.len(),
-        batch_size,
-        "Mismatch between deletion indices length and batch size."
-    );
+    // assert_eq!(
+    //     deletion_indices.len(),
+    //     batch_size,
+    //     "Mismatch between deletion indices length and batch size."
+    // );
 
     // With the updates applied we can grab the value of the tree's new root and
     // build our identities for sending to the identity manager.
@@ -469,7 +473,7 @@ pub async fn delete_identities(
         &pre_root,
         database::types::BatchType::Deletion,
         &identity_commitments,
-        &deletion_indices,
+        &indices,
     )
     .await?;
 

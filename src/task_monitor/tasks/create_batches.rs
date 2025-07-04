@@ -69,14 +69,19 @@ pub async fn create_batches(
             app.prover_repository.max_insertion_batch_size().await
         };
 
-        // Lock the batching tree to ensure it doesn't change
-        let batching_tree = app.tree_state()?.batching_tree().lock();
-        let pre_root = batching_tree.get_root();
-        let updates = batching_tree.peek_next_updates(batch_size);
-        let mut indices: Vec<_> = updates.iter().map(|f| f.update.leaf_index).collect();
-        let commitments = batching_tree.commitments_by_leaves(indices.iter().copied());
-        drop(batching_tree);
-        let mut commitments: Vec<U256> = commitments.into_iter().map(U256::from).collect();
+        let (pre_root, updates, indices, commitments) = {
+            // Lock the batching tree to ensure consistent reads
+            let batching_tree = app.tree_state()?.batching_tree().lock();
+            let pre_root = batching_tree.get_root();
+            let updates = batching_tree.peek_next_updates(batch_size);
+            let indices: Vec<_> = updates.iter().map(|f| f.update.leaf_index).collect();
+            let commitments = batching_tree
+                .commitments_by_leaves(indices.iter().copied())
+                .into_iter()
+                .map(U256::from)
+                .collect();
+            (pre_root, updates, indices, commitments)
+        };
 
         if updates.is_empty() {
             tracing::trace!("No updates found. Waiting.");
@@ -119,6 +124,9 @@ pub async fn create_batches(
                     &next_batch_notify,
                     &sync_tree_notify,
                     &updates,
+                    pre_root,
+                    commitments,
+                    indices,
                 )
                 .await?;
 
@@ -150,6 +158,9 @@ pub async fn create_batches(
                         &next_batch_notify,
                         &sync_tree_notify,
                         &updates,
+                        pre_root,
+                        commitments,
+                        indices,
                     )
                     .await?;
                 } else {
@@ -401,10 +412,6 @@ pub async fn delete_identities(
         }
     }
 
-    let mut deletion_indices: Vec<_> = updates.iter().map(|f| f.update.leaf_index).collect();
-    // let commitments = batching_tree.commitments_by_leaves(deletion_indices.iter().copied());
-    // let mut commitments: Vec<U256> = commitments.into_iter().map(U256::from).collect();
-
     let latest_tree_from_updates = updates
         .last()
         .expect("Updates is non empty.")
@@ -454,11 +461,11 @@ pub async fn delete_identities(
         merkle_proofs.extend(vec![zeroed_proof; padding]);
     }
 
-    // assert_eq!(
-    //     deletion_indices.len(),
-    //     batch_size,
-    //     "Mismatch between deletion indices length and batch size."
-    // );
+    assert_eq!(
+        indices.len(),
+        batch_size,
+        "Mismatch between deletion indices length and batch size."
+    );
 
     // With the updates applied we can grab the value of the tree's new root and
     // build our identities for sending to the identity manager.

@@ -571,7 +571,10 @@ pub trait TreeVersionReadOps {
     /// Gets the leaf value at a given index.
     fn get_leaf(&self, leaf: usize) -> Hash;
     /// Gets commitments at given leaf values
-    fn commitments_by_leaves(&self, leaves: impl IntoIterator<Item = usize>) -> Vec<Hash>;
+    fn commitments_by_leaves(
+        &self,
+        leaves: impl IntoIterator<Item = usize>,
+    ) -> impl IntoIterator<Item = Hash>;
     /// Gets last sequence id
     fn get_last_sequence_id(&self) -> usize;
 }
@@ -607,16 +610,15 @@ where
         tree.get_leaf(leaf)
     }
 
-    fn commitments_by_leaves(&self, leaves: impl IntoIterator<Item = usize>) -> Vec<Hash> {
+    fn commitments_by_leaves(
+        &self,
+        leaves: impl IntoIterator<Item = usize>,
+    ) -> impl IntoIterator<Item = Hash> {
         let tree = self.lock();
-
-        let mut commitments = vec![];
-
-        for leaf in leaves {
-            commitments.push(tree.state.tree.get_leaf(leaf));
-        }
-
-        commitments
+        leaves
+            .into_iter()
+            .map(|leaf| tree.state.tree.get_leaf(leaf))
+            .collect::<Vec<_>>()
     }
 
     fn get_last_sequence_id(&self) -> usize {
@@ -649,14 +651,13 @@ impl<V: AllowedTreeVersionMarker> TreeVersionReadOps for TreeVersionData<V> {
         self.state.tree.get_leaf(leaf)
     }
 
-    fn commitments_by_leaves(&self, leaves: impl IntoIterator<Item = usize>) -> Vec<Hash> {
-        let mut commitments = vec![];
-
-        for leaf in leaves {
-            commitments.push(self.state.tree.get_leaf(leaf));
-        }
-
-        commitments
+    fn commitments_by_leaves(
+        &self,
+        leaves: impl IntoIterator<Item = usize>,
+    ) -> impl IntoIterator<Item = Hash> {
+        leaves
+            .into_iter()
+            .map(|leaf| self.state.tree.get_leaf(leaf))
     }
 
     fn get_last_sequence_id(&self) -> usize {

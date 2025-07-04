@@ -184,22 +184,6 @@ where
     V: lazy::VersionMarker + AllowedTreeVersionMarker,
     Self: BasicTreeOps,
 {
-    // /// Gets the current tree root.
-    // pub fn get_root(&self) -> Hash {
-    //     self.state.tree.root()
-    // }
-    //
-    // /// Gets the leaf value at a given index.
-    // fn get_leaf(&self, leaf: usize) -> Hash {
-    //     self.state.tree.get_leaf(leaf)
-    // }
-
-    // /// Gets the proof of the given leaf index element
-    // fn get_proof(&self, leaf: usize) -> (Hash, Proof) {
-    //     let proof = self.state.tree.proof(leaf);
-    //     (self.state.tree.root(), proof)
-    // }
-
     /// Returns _up to_ `maximum_update_count` contiguous deletion or insertion
     /// updates that are to be applied to the tree.
     pub fn peek_next_updates(&self, maximum_update_count: usize) -> Vec<AppliedTreeUpdate> {
@@ -780,93 +764,6 @@ mod tests {
     use super::builder::CanonicalTreeBuilder;
     use super::{Hash, ReversibleVersion, TreeUpdate, TreeVersionReadOps, TreeWithNextVersion};
     use chrono::Utc;
-
-    #[test]
-    fn test_peek_next_updatess() {
-        let temp_dir = tempfile::tempdir().unwrap();
-
-        let (canonical_tree, processed_builder) = CanonicalTreeBuilder::new(
-            10,
-            10,
-            0,
-            Hash::ZERO,
-            &[],
-            temp_dir.path().join("testfile").to_str().unwrap(),
-        )
-        .seal();
-        let processed_tree = processed_builder.seal();
-
-        let insertions = [
-            Hash::from(1),
-            Hash::from(2),
-            Hash::from(3),
-            Hash::from(4),
-            Hash::from(5),
-            Hash::from(6),
-            Hash::from(7),
-        ];
-        let updates = processed_tree.simulate_append_many(&insertions);
-        let insertion_updates = (0..7)
-            .zip(updates)
-            .map(|(i, (root, _, leaf_index))| {
-                TreeUpdate::new(
-                    i,
-                    leaf_index,
-                    *insertions.get(i).unwrap(),
-                    root,
-                    Some(Utc::now()),
-                )
-            })
-            .collect::<Vec<_>>();
-        _ = processed_tree.apply_updates(&insertion_updates);
-
-        let deletions = [0, 1, 2];
-        let updates = processed_tree.simulate_delete_many(&deletions);
-        let deletion_updates = (7..10)
-            .zip(updates)
-            .map(|(i, (root, _))| {
-                TreeUpdate::new(
-                    i,
-                    *deletions.get(i - 7).unwrap(),
-                    Hash::ZERO,
-                    root,
-                    Some(Utc::now()),
-                )
-            })
-            .collect::<Vec<_>>();
-        _ = processed_tree.apply_updates(&deletion_updates);
-
-        let next_updates = canonical_tree.peek_next_updates(10);
-        assert_eq!(next_updates.len(), 7);
-
-        canonical_tree.apply_updates_up_to(
-            next_updates
-                .last()
-                .expect("Could not get insertion updates")
-                .update
-                .post_root,
-        );
-
-        let insertions = [Hash::from(8), Hash::from(9), Hash::from(10), Hash::from(11)];
-        let updates = processed_tree.simulate_append_many(&insertions);
-        let insertion_updates = (10..14)
-            .zip(updates)
-            .map(|(i, (root, _, leaf_index))| {
-                TreeUpdate::new(
-                    i,
-                    leaf_index,
-                    *insertions.get(i - 10).unwrap(),
-                    root,
-                    Some(Utc::now()),
-                )
-            })
-            .collect::<Vec<_>>();
-        let _ = processed_tree.apply_updates(&insertion_updates);
-
-        let next_updates = canonical_tree.peek_next_updates(10);
-
-        assert_eq!(next_updates.len(), 3);
-    }
 
     #[test]
     fn test_peek_next_updates() {

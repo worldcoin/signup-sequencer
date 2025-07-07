@@ -6,6 +6,7 @@ use crate::identity_tree::{
 use anyhow::bail;
 use sqlx::{Postgres, Transaction};
 use std::cmp::Ordering;
+use tokio::sync::MutexGuard;
 use tracing::debug;
 
 pub struct SyncTreeResult {
@@ -16,7 +17,7 @@ pub struct SyncTreeResult {
 /// apply new updates or rewind them properly.
 pub async fn sync_tree(
     tx: &mut Transaction<'_, Postgres>,
-    tree_state: &TreeState,
+    tree_state: &MutexGuard<'_, TreeState>,
 ) -> anyhow::Result<SyncTreeResult> {
     let mined_tree = tree_state.mined_tree();
     let processed_tree = tree_state.processed_tree();

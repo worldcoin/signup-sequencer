@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use semaphore_rs::poseidon_tree::LazyPoseidonTree;
+use tokio::sync::Mutex;
 use tracing::{info, instrument, warn};
 
 use crate::config::TreeConfig;
@@ -35,7 +36,7 @@ impl TreeInitializer {
 
     /// Initializes the tree state. This should only ever be called once.
     /// Attempts to call this method more than once will result in a panic.
-    pub async fn run(self) -> anyhow::Result<TreeState> {
+    pub async fn run(self) -> anyhow::Result<Mutex<TreeState>> {
         let initial_root_hash =
             LazyPoseidonTree::new(self.config.tree_depth, self.config.initial_leaf_value).root();
 
@@ -50,7 +51,7 @@ impl TreeInitializer {
             .await?;
         info!("Tree state initialization took: {:?}", timer.elapsed());
 
-        let tree_root = tree_state.get_processed_tree().get_root();
+        let tree_root = tree_state.lock().await.get_processed_tree().get_root();
         match self.identity_processor.latest_root().await? {
             Some(root) if root == tree_root => Ok(tree_state),
             None if initial_root_hash == tree_root => Ok(tree_state),
@@ -77,7 +78,7 @@ impl TreeInitializer {
         &self,
         initial_root_hash: Hash,
         force_cache_purge: bool,
-    ) -> anyhow::Result<TreeState> {
+    ) -> anyhow::Result<Mutex<TreeState>> {
         info!("Getting mined commitments from DB");
         let mut mined_items = self
             .database
@@ -152,7 +153,7 @@ impl TreeInitializer {
         &self,
         mined_items: &[TreeUpdate],
         initial_root_hash: Hash,
-    ) -> anyhow::Result<Option<TreeState>> {
+    ) -> anyhow::Result<Option<Mutex<TreeState>>> {
         info!("Restoring tree from cache");
 
         let mut last_mined_leaf_in_dense: Option<TreeUpdate> = None;
@@ -203,11 +204,11 @@ impl TreeInitializer {
         let (batching, latest_builder) = batching_builder.seal_and_continue();
         let latest = latest_builder.seal();
 
-        let tree_state = TreeState::new(mined, processed, batching, latest);
+        let tree_state = Mutex::new(TreeState::new(mined, processed, batching, latest));
 
         info!("Initial tree state created. Syncing tree.");
 
-        retry_tx!(&self.database, tx, sync_tree(&mut tx, &tree_state).await).await?;
+        retry_tx!(&self.database, tx, sync_tree(&mut tx, &tree_state.lock().await).await).await?;
 
         info!("Tree restored.");
 
@@ -215,7 +216,7 @@ impl TreeInitializer {
     }
 
     #[instrument(skip_all)]
-    async fn initialize_tree(&self, mined_items: Vec<TreeUpdate>) -> anyhow::Result<TreeState> {
+    async fn initialize_tree(&self, mined_items: Vec<TreeUpdate>) -> anyhow::Result<Mutex<TreeState>> {
         info!("Creating tree from the database");
 
         let initial_leaf_value = self.config.initial_leaf_value;
@@ -261,11 +262,11 @@ impl TreeInitializer {
         let (batching, latest_builder) = batching_builder.seal_and_continue();
         let latest = latest_builder.seal();
 
-        let tree_state = TreeState::new(mined, processed, batching, latest);
+        let tree_state = Mutex::new(TreeState::new(mined, processed, batching, latest));
 
         info!("Initial tree state created. Syncing tree.");
 
-        retry_tx!(&self.database, tx, sync_tree(&mut tx, &tree_state).await).await?;
+        retry_tx!(&self.database, tx, sync_tree(&mut tx, &tree_state.lock().await).await).await?;
 
         info!("Tree created.");
 

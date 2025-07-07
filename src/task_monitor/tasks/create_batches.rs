@@ -59,7 +59,9 @@ pub async fn create_batches(
             },
         }
 
-        let Some(batch_type) = determine_batch_type(app.tree_state()?.batching_tree()) else {
+        let tree_state = app.tree_state().await?;
+
+        let Some(batch_type) = determine_batch_type(tree_state.batching_tree()) else {
             continue;
         };
 
@@ -69,8 +71,7 @@ pub async fn create_batches(
             app.prover_repository.max_insertion_batch_size().await
         };
 
-        let updates = app
-            .tree_state()?
+        let updates = tree_state
             .batching_tree()
             .peek_next_updates(batch_size);
 
@@ -84,7 +85,7 @@ pub async fn create_batches(
             commit_identities(
                 &app.database,
                 &app.prover_repository,
-                app.tree_state()?.batching_tree(),
+                tree_state.batching_tree(),
                 &next_batch_notify,
                 &sync_tree_notify,
                 &updates,
@@ -110,7 +111,7 @@ pub async fn create_batches(
                 commit_identities(
                     &app.database,
                     &app.prover_repository,
-                    app.tree_state()?.batching_tree(),
+                    tree_state.batching_tree(),
                     &next_batch_notify,
                     &sync_tree_notify,
                     &updates,
@@ -127,8 +128,7 @@ pub async fn create_batches(
                 // inserted is when there is a full deletion batch or the
                 // deletion time interval has elapsed.
                 // In this case, we should immediately process the batch.
-                let next_update_is_deletion = if let Some(update) = app
-                    .tree_state()?
+                let next_update_is_deletion = if let Some(update) = tree_state
                     .batching_tree()
                     .peek_next_update_at(updates.len())
                 {
@@ -142,7 +142,7 @@ pub async fn create_batches(
                     commit_identities(
                         &app.database,
                         &app.prover_repository,
-                        app.tree_state()?.batching_tree(),
+                        tree_state.batching_tree(),
                         &next_batch_notify,
                         &sync_tree_notify,
                         &updates,
@@ -167,7 +167,7 @@ async fn ensure_batch_chain_initialized(app: &Arc<App>) -> anyhow::Result<()> {
     let batch_head = app.database.get_batch_head().await?;
     if batch_head.is_none() {
         app.database
-            .insert_new_batch_head(&app.tree_state()?.batching_tree().get_root())
+            .insert_new_batch_head(&app.tree_state().await?.batching_tree().get_root())
             .await?;
     }
     Ok(())

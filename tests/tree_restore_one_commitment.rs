@@ -89,9 +89,9 @@ async fn tree_restore_one_commitment(offchain_mode_enabled: bool) -> anyhow::Res
         .await
         .expect("Failed to spawn app.");
 
-    let restored_tree_state = app.tree_state()?.clone();
+    let restored_tree_state = app.tree_state().await?.clone();
 
-    test_same_tree_states(tree_state, &restored_tree_state).await?;
+    test_same_tree_states(&tree_state, &restored_tree_state).await?;
 
     // Shutdown the app properly for the final time
     shutdown.shutdown();

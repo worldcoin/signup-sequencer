@@ -146,7 +146,7 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        if !self.prover_repository.has_insertion_provers().await {
+        if !self.prover_repository.has_insertion_provers() {
             warn!(
                 ?commitment,
                 "Identity Manager has no insertion provers. Add provers with /addBatchSize \
@@ -246,7 +246,7 @@ impl App {
             .await?;
 
         // Ensure that deletion provers exist
-        if !self.prover_repository.has_deletion_provers().await {
+        if !self.prover_repository.has_deletion_provers() {
             warn!(
                 ?commitment,
                 "Identity Manager has no deletion provers. Add provers with /addBatchSize request."
@@ -390,8 +390,7 @@ impl App {
         prover_type: ProverType,
     ) -> Result<(), ServerError> {
         self.prover_repository
-            .add_batch_size(&url, batch_size, timeout_seconds, prover_type)
-            .await?;
+            .add_batch_size(&url, batch_size, timeout_seconds, prover_type)?;
 
         self.database
             .insert_prover_configuration(batch_size, url, timeout_seconds, prover_type)
@@ -411,8 +410,7 @@ impl App {
         prover_type: ProverType,
     ) -> Result<(), ServerError> {
         self.prover_repository
-            .remove_batch_size(batch_size, prover_type)
-            .await?;
+            .remove_batch_size(batch_size, prover_type)?;
 
         self.database.remove_prover(batch_size, prover_type).await?;
 
@@ -424,7 +422,7 @@ impl App {
     /// Will return `Err` if something unknown went wrong.
     #[instrument(level = "debug", skip(self))]
     pub async fn list_batch_sizes(&self) -> Result<ListBatchSizesResponse, ServerError> {
-        let batches = self.prover_repository.list_batch_sizes().await?;
+        let batches = self.prover_repository.list_batch_sizes()?;
 
         Ok(ListBatchSizesResponse::from(batches))
     }

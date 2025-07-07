@@ -219,7 +219,7 @@ where
     }
 
     /// Returns _if available_ next update at `pos` in a queue to be applied to the tree.
-    fn peek_next_update_at(&self, pos: usize) -> Option<AppliedTreeUpdate> {
+    pub fn peek_next_update_at(&self, pos: usize) -> Option<AppliedTreeUpdate> {
         let next = self.next.as_ref()?;
 
         let next = next.lock();

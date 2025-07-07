@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use tokio::sync::{RwLock, RwLockReadGuard};
+use parking_lot::RwLock;
 use tracing::warn;
 
 use crate::prover::{Prover, ProverConfig, ProverMap, ProverType};
@@ -20,7 +20,7 @@ impl ProverRepository {
         }
     }
 
-    pub async fn add_batch_size(
+    pub fn add_batch_size(
         &self,
         url: &impl ToString,
         batch_size: usize,
@@ -28,8 +28,8 @@ impl ProverRepository {
         prover_type: ProverType,
     ) -> Result<(), crate::server::api_v1::error::Error> {
         let mut map = match prover_type {
-            ProverType::Insertion => self.insertion_prover_map.write().await,
-            ProverType::Deletion => self.deletion_prover_map.write().await,
+            ProverType::Insertion => self.insertion_prover_map.write(),
+            ProverType::Deletion => self.deletion_prover_map.write(),
         };
 
         if map.batch_size_exists(batch_size) {
@@ -52,14 +52,14 @@ impl ProverRepository {
     ///
     /// Will return `Err` if the batch size requested for removal doesn't exist
     /// in the prover map.
-    pub async fn remove_batch_size(
+    pub fn remove_batch_size(
         &self,
         batch_size: usize,
         prover_type: ProverType,
     ) -> Result<(), crate::server::api_v1::error::Error> {
         let mut map = match prover_type {
-            ProverType::Insertion => self.insertion_prover_map.write().await,
-            ProverType::Deletion => self.deletion_prover_map.write().await,
+            ProverType::Insertion => self.insertion_prover_map.write(),
+            ProverType::Deletion => self.deletion_prover_map.write(),
         };
 
         if map.len() == 1 {
@@ -73,81 +73,60 @@ impl ProverRepository {
         }
     }
 
-    pub async fn list_batch_sizes(
+    pub fn list_batch_sizes(
         &self,
     ) -> Result<Vec<ProverConfig>, crate::server::api_v1::error::Error> {
-        let mut provers = self
-            .insertion_prover_map
-            .read()
-            .await
-            .as_configuration_vec();
+        let mut provers = self.insertion_prover_map.read().as_configuration_vec();
 
-        provers.extend(self.deletion_prover_map.read().await.as_configuration_vec());
+        provers.extend(self.deletion_prover_map.read().as_configuration_vec());
 
         Ok(provers)
     }
 
-    pub async fn has_insertion_provers(&self) -> bool {
-        !self.insertion_prover_map.read().await.is_empty()
+    pub fn has_insertion_provers(&self) -> bool {
+        !self.insertion_prover_map.read().is_empty()
     }
 
-    pub async fn has_deletion_provers(&self) -> bool {
-        !self.deletion_prover_map.read().await.is_empty()
+    pub fn has_deletion_provers(&self) -> bool {
+        !self.deletion_prover_map.read().is_empty()
     }
 
-    pub async fn max_insertion_batch_size(&self) -> usize {
-        self.insertion_prover_map.read().await.max_batch_size()
+    pub fn max_insertion_batch_size(&self) -> usize {
+        self.insertion_prover_map.read().max_batch_size()
     }
 
-    pub async fn max_deletion_batch_size(&self) -> usize {
-        self.deletion_prover_map.read().await.max_batch_size()
+    pub fn max_deletion_batch_size(&self) -> usize {
+        self.deletion_prover_map.read().max_batch_size()
     }
 
-    pub async fn get_suitable_deletion_batch_size(
+    pub fn get_suitable_deletion_batch_size(&self, num_identities: usize) -> anyhow::Result<usize> {
+        Ok(self
+            .get_suitable_deletion_prover(num_identities)?
+            .batch_size())
+    }
+
+    pub fn get_suitable_insertion_batch_size(
         &self,
         num_identities: usize,
     ) -> anyhow::Result<usize> {
         Ok(self
-            .get_suitable_deletion_prover(num_identities)
-            .await?
+            .get_suitable_insertion_prover(num_identities)?
             .batch_size())
     }
 
-    pub async fn get_suitable_insertion_batch_size(
-        &self,
-        num_identities: usize,
-    ) -> anyhow::Result<usize> {
-        Ok(self
-            .get_suitable_insertion_prover(num_identities)
-            .await?
-            .batch_size())
+    pub fn get_suitable_insertion_prover(&self, num_identities: usize) -> anyhow::Result<Prover> {
+        self.insertion_prover_map
+            .read()
+            .get(num_identities)
+            .cloned()
+            .ok_or_else(|| anyhow!("No suitable prover found for batch size: {num_identities}"))
     }
 
-    pub async fn get_suitable_insertion_prover(
-        &self,
-        num_identities: usize,
-    ) -> anyhow::Result<RwLockReadGuard<Prover>> {
-        let prover_map = self.insertion_prover_map.read().await;
-
-        match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
-            Ok(p) => anyhow::Ok(p),
-            Err(_) => Err(anyhow!(
-                "No available prover for batch size: {num_identities}"
-            )),
-        }
-    }
-
-    pub async fn get_suitable_deletion_prover(
-        &self,
-        num_identities: usize,
-    ) -> anyhow::Result<RwLockReadGuard<Prover>> {
-        let prover_map = self.deletion_prover_map.read().await;
-
-        match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
-            Ok(p) => anyhow::Ok(p),
-            Err(_) => Err(anyhow!(
-                "No available prover for batch size: {num_identities}"
-            )),
-        }
+    pub fn get_suitable_deletion_prover(&self, num_identities: usize) -> anyhow::Result<Prover> {
+        self.deletion_prover_map
+            .read()
+            .get(num_identities)
+            .cloned()
+            .ok_or_else(|| anyhow!("No suitable prover found for batch size: {num_identities}"))
     }
 }

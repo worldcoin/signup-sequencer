@@ -37,6 +37,7 @@ services:
     volumes:
       - ./signup_sequencer/config.toml:/config.toml
     command: [ "/config.toml" ]
+    user: 0:10001
     environment:
       - RUST_LOG=debug
   signup-sequencer-1:

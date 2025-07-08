@@ -71,31 +71,29 @@ pub async fn create_batches(
                 app.prover_repository.max_insertion_batch_size().await
             };
 
-            let pre_root = tree_state
+            let pre_root = tree_state.batching_tree().get_root();
+
+            let updates = tree_state.batching_tree().peek_next_updates(max_batch_size);
+
+            let updates_indices: Vec<_> = updates.iter().map(|f| f.update.leaf_index).collect();
+
+            let pre_commitments = tree_state
                 .batching_tree()
-                .get_root();
-
-            let updates = tree_state
-                .batching_tree()
-                .peek_next_updates(max_batch_size);
-
-            let updates_indices: Vec<_> = updates
-                .iter()
-                .map(|f| f.update.leaf_index)
-                .collect();
-
-            let pre_commitments = tree_state.
-                batching_tree().
-                commitments_by_leaves(updates_indices.iter().copied());
+                .commitments_by_leaves(updates_indices.iter().copied());
 
             let next_batch_type = tree_state
                 .batching_tree()
                 .peek_next_update_at(updates.len())
-                .map(|update| {
-                    determine_batch_type(&update)
-                });
+                .map(|update| determine_batch_type(&update));
 
-            (batch_type, next_batch_type, max_batch_size, updates, pre_root, pre_commitments)
+            (
+                batch_type,
+                next_batch_type,
+                max_batch_size,
+                updates,
+                pre_root,
+                pre_commitments,
+            )
         };
 
         if updates.is_empty() {
@@ -123,8 +121,7 @@ pub async fn create_batches(
         let batch_insertion_timeout =
             chrono::Duration::from_std(app.config.app.batch_insertion_timeout)?;
 
-        let last_batch_time: DateTime<Utc> =
-            app.database.get_latest_insertion().await?.timestamp;
+        let last_batch_time: DateTime<Utc> = app.database.get_latest_insertion().await?.timestamp;
 
         let timeout_batch_time = last_batch_time
             + batch_insertion_timeout
@@ -221,7 +218,7 @@ async fn commit_insertion_batch(
         updates,
         batch_size,
     )
-        .await
+    .await
 }
 
 async fn commit_deletion_batch(
@@ -261,7 +258,6 @@ pub async fn insert_identities(
     batch_size: usize,
 ) -> anyhow::Result<()> {
     assert_updates_are_consecutive(updates);
-
 
     let mut tx = database.pool.begin().await?;
     let latest_batch = tx.get_latest_batch().await?;

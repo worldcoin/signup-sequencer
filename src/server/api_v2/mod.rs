@@ -388,7 +388,10 @@ mod test {
         let (pre_root, res) = {
             let tree_state = app.tree_state().await?;
             let tree = tree_state.latest_tree();
-            (tree.get_root().clone(), tree.simulate_append_many(&[commitment]))
+            (
+                tree.get_root().clone(),
+                tree.simulate_append_many(&[commitment]),
+            )
         };
         let (root, proof, leaf_index) = res.first().unwrap();
 
@@ -416,7 +419,10 @@ mod test {
         let (pre_root, res) = {
             let tree_state = app.tree_state().await?;
             let tree = tree_state.latest_tree();
-            (tree.get_root().clone(), tree.simulate_delete_many(&[tree_item.leaf_index]))
+            (
+                tree.get_root().clone(),
+                tree.simulate_delete_many(&[tree_item.leaf_index]),
+            )
         };
         let (root, proof) = res.first().unwrap();
 

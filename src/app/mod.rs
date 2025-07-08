@@ -133,8 +133,7 @@ impl App {
             .get()
             .ok_or(ServerError::TreeStateUninitialized)?
             .lock()
-            .await
-        )
+            .await)
     }
 
     /// Queues an insert into the merkle tree.
@@ -270,7 +269,13 @@ impl App {
             .leaf_index;
 
         // Check if the id has already been deleted
-        if self.tree_state().await?.get_latest_tree().get_leaf(leaf_index) == Uint::ZERO {
+        if self
+            .tree_state()
+            .await?
+            .get_latest_tree()
+            .get_leaf(leaf_index)
+            == Uint::ZERO
+        {
             return Err(ServerError::IdentityAlreadyDeleted);
         }
 
@@ -693,7 +698,8 @@ impl App {
         if let Some(max_root_age_seconds) = max_root_age_seconds {
             let max_root_age = Duration::seconds(max_root_age_seconds);
             let is_root_age_valid = self
-                .validate_root_age_v2(max_root_age, &root_state).await
+                .validate_root_age_v2(max_root_age, &root_state)
+                .await
                 .map_err(RootAgeCheckingError)?;
             if !is_root_age_valid {
                 return Err(VerifySemaphoreProofV2Error::RootTooOld);
@@ -729,7 +735,7 @@ impl App {
         max_root_age: Duration,
         root_state: &RootItem,
     ) -> anyhow::Result<bool> {
-        let (latest_root,  processed_root, mined_root) = {
+        let (latest_root, processed_root, mined_root) = {
             let tree_state = self.tree_state().await?;
             let latest_root = tree_state.get_latest_tree().get_root();
             let processed_root = tree_state.get_processed_tree().get_root();

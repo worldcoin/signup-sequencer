@@ -208,7 +208,12 @@ impl TreeInitializer {
 
         info!("Initial tree state created. Syncing tree.");
 
-        retry_tx!(&self.database, tx, sync_tree(&mut tx, &tree_state.lock().await).await).await?;
+        retry_tx!(
+            &self.database,
+            tx,
+            sync_tree(&mut tx, &tree_state.lock().await).await
+        )
+        .await?;
 
         info!("Tree restored.");
 
@@ -216,7 +221,10 @@ impl TreeInitializer {
     }
 
     #[instrument(skip_all)]
-    async fn initialize_tree(&self, mined_items: Vec<TreeUpdate>) -> anyhow::Result<Mutex<TreeState>> {
+    async fn initialize_tree(
+        &self,
+        mined_items: Vec<TreeUpdate>,
+    ) -> anyhow::Result<Mutex<TreeState>> {
         info!("Creating tree from the database");
 
         let initial_leaf_value = self.config.initial_leaf_value;
@@ -266,7 +274,12 @@ impl TreeInitializer {
 
         info!("Initial tree state created. Syncing tree.");
 
-        retry_tx!(&self.database, tx, sync_tree(&mut tx, &tree_state.lock().await).await).await?;
+        retry_tx!(
+            &self.database,
+            tx,
+            sync_tree(&mut tx, &tree_state.lock().await).await
+        )
+        .await?;
 
         info!("Tree created.");
 

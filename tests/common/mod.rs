@@ -95,6 +95,7 @@ use std::str::FromStr;
 use std::sync::{Arc, Once};
 use testcontainers::clients::Cli;
 use tokio::net::TcpListener;
+use tokio::sync::MutexGuard;
 use tracing::trace;
 
 const NUM_ATTEMPTS_FOR_INCLUSION_PROOF: usize = 20;
@@ -654,11 +655,11 @@ pub async fn spawn_app_returning_initialized_tree(
 
     info!("Waiting for tree initialization");
     // For our tests to work we need the tree to be initialized.
-    while app.tree_state().is_err() {
+    while app.tree_state().await.is_err() {
         trace!("Waiting for the tree to be initialized");
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    let initialized_tree_state = app.tree_state()?.clone();
+    let initialized_tree_state = app.tree_state().await?.clone();
 
     let app_clone = app.clone();
     let shutdown_clone = shutdown.clone();
@@ -943,12 +944,12 @@ pub async fn test_same_tree_states(
 pub async fn await_tree_state_with_mined_leafs_size(
     app: &App,
     mined_leafs_size: usize,
-) -> anyhow::Result<&TreeState> {
+) -> anyhow::Result<MutexGuard<TreeState>> {
     let number_of_tries = 30;
     let mut tree_state = None;
     for _ in 0..number_of_tries {
-        if app.tree_state()?.mined_tree().next_leaf() == mined_leafs_size {
-            tree_state = Some(app.tree_state()?);
+        if app.tree_state().await?.mined_tree().next_leaf() == mined_leafs_size {
+            tree_state = Some(app.tree_state().await?);
             break;
         }
 

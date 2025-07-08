@@ -43,9 +43,9 @@ pub async fn sync_tree_state_with_db(
 }
 
 async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
-    let tree_state = app.tree_state()?;
+    let tree_state = app.tree_state().await?;
 
-    let res = retry_tx!(&app.database, tx, sync_tree(&mut tx, tree_state).await).await?;
+    let res = retry_tx!(&app.database, tx, sync_tree(&mut tx, &tree_state).await).await?;
 
     tracing::info!("TreeState synced with DB");
 

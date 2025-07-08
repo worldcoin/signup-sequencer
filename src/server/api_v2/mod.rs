@@ -384,11 +384,15 @@ mod test {
     }
 
     async fn pending_identity(app: Arc<App>, commitment: &str) -> anyhow::Result<(Hash, Proof)> {
-        let tree = app.tree_state()?.latest_tree();
-
         let commitment = Hash::from_str(commitment)?;
-        let pre_root = tree.get_root();
-        let res = tree.simulate_append_many(&[commitment]);
+        let (pre_root, res) = {
+            let tree_state = app.tree_state().await?;
+            let tree = tree_state.latest_tree();
+            (
+                tree.get_root().clone(),
+                tree.simulate_append_many(&[commitment]),
+            )
+        };
         let (root, proof, leaf_index) = res.first().unwrap();
 
         app.database
@@ -402,7 +406,7 @@ mod test {
                 .database
                 .begin_tx(IsolationLevel::RepeatableRead)
                 .await?;
-            sync_tree(&mut tx, app.tree_state()?).await?;
+            sync_tree(&mut tx, &app.tree_state().await?).await?;
             tx.commit().await?;
         }
 
@@ -410,12 +414,16 @@ mod test {
     }
 
     async fn delete_identity(app: Arc<App>, commitment: &str) -> anyhow::Result<(Hash, Proof)> {
-        let tree = app.tree_state()?.latest_tree();
-
         let commitment = Hash::from_str(commitment)?;
         let tree_item = app.database.get_tree_item(&commitment).await?.unwrap();
-        let pre_root = tree.get_root();
-        let res = tree.simulate_delete_many(&[tree_item.leaf_index]);
+        let (pre_root, res) = {
+            let tree_state = app.tree_state().await?;
+            let tree = tree_state.latest_tree();
+            (
+                tree.get_root(),
+                tree.simulate_delete_many(&[tree_item.leaf_index]),
+            )
+        };
         let (root, proof) = res.first().unwrap();
 
         app.database
@@ -427,7 +435,7 @@ mod test {
                 .database
                 .begin_tx(IsolationLevel::RepeatableRead)
                 .await?;
-            sync_tree(&mut tx, app.tree_state()?).await?;
+            sync_tree(&mut tx, &app.tree_state().await?).await?;
             tx.commit().await?;
         }
 
@@ -442,7 +450,7 @@ mod test {
                 .database
                 .begin_tx(IsolationLevel::RepeatableRead)
                 .await?;
-            sync_tree(&mut tx, app.tree_state()?).await?;
+            sync_tree(&mut tx, &app.tree_state().await?).await?;
             tx.commit().await?;
         }
 
@@ -457,7 +465,7 @@ mod test {
                 .database
                 .begin_tx(IsolationLevel::RepeatableRead)
                 .await?;
-            sync_tree(&mut tx, app.tree_state()?).await?;
+            sync_tree(&mut tx, &app.tree_state().await?).await?;
             tx.commit().await?;
         }
 

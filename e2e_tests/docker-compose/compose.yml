@@ -42,6 +42,7 @@ services:
       - tx-sitter-db
       - chain
     restart: always
+    user: 0:10001
     ports:
       - ${TX_SITTER_PORT:-3000}:3000
     environment:
@@ -149,6 +150,7 @@ services:
     volumes:
       - ./signup_sequencer/config.toml:/config.toml
     command: [ "/config.toml" ]
+    user: 0:10001
     environment:
       - RUST_LOG=debug
   signup-sequencer-1:

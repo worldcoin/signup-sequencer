@@ -1,4 +1,3 @@
-use anyhow::Context;
 use chrono::{DateTime, Utc};
 use ethers::prelude::U256;
 use ruint::Uint;
@@ -59,20 +58,43 @@ pub async fn create_batches(
             },
         }
 
-        let Some(batch_type) = determine_batch_type(app.tree_state()?.batching_tree()) else {
-            continue;
-        };
+        let (batch_type, next_batch_type, max_batch_size, updates, pre_root, pre_commitments) = {
+            let tree_state = app.tree_state().await?;
 
-        let batch_size = if batch_type.is_deletion() {
-            app.prover_repository.max_deletion_batch_size().await
-        } else {
-            app.prover_repository.max_insertion_batch_size().await
-        };
+            let Some(batch_type) = determine_next_batch_type(tree_state.batching_tree()) else {
+                continue;
+            };
 
-        let updates = app
-            .tree_state()?
-            .batching_tree()
-            .peek_next_updates(batch_size);
+            let max_batch_size = if batch_type.is_deletion() {
+                app.prover_repository.max_deletion_batch_size().await
+            } else {
+                app.prover_repository.max_insertion_batch_size().await
+            };
+
+            let pre_root = tree_state.batching_tree().get_root();
+
+            let updates = tree_state.batching_tree().peek_next_updates(max_batch_size);
+
+            let updates_indices: Vec<_> = updates.iter().map(|f| f.update.leaf_index).collect();
+
+            let pre_commitments = tree_state
+                .batching_tree()
+                .commitments_by_leaves(updates_indices.iter().copied());
+
+            let next_batch_type = tree_state
+                .batching_tree()
+                .peek_next_update_at(updates.len())
+                .map(|update| determine_batch_type(&update));
+
+            (
+                batch_type,
+                next_batch_type,
+                max_batch_size,
+                updates,
+                pre_root,
+                pre_commitments,
+            )
+        };
 
         if updates.is_empty() {
             tracing::trace!("No updates found. Waiting.");
@@ -81,85 +103,86 @@ pub async fn create_batches(
 
         // If the batch is a deletion, process immediately without resetting the timer
         if batch_type.is_deletion() {
-            commit_identities(
+            commit_deletion_batch(
                 &app.database,
                 &app.prover_repository,
-                app.tree_state()?.batching_tree(),
                 &next_batch_notify,
                 &sync_tree_notify,
+                pre_root,
+                &updates,
+                &pre_commitments,
+            )
+            .await?;
+
+            continue;
+        }
+
+        let current_time = Utc::now();
+        let batch_insertion_timeout =
+            chrono::Duration::from_std(app.config.app.batch_insertion_timeout)?;
+
+        let last_batch_time: DateTime<Utc> = app.database.get_latest_insertion().await?.timestamp;
+
+        let timeout_batch_time = last_batch_time
+            + batch_insertion_timeout
+            + chrono::Duration::seconds(DEBOUNCE_THRESHOLD_SECS);
+
+        let batch_time_elapsed = current_time >= timeout_batch_time;
+
+        // If the batch size is full or if the insertion time has elapsed
+        // process the batch
+        if updates.len() >= max_batch_size || batch_time_elapsed {
+            commit_insertion_batch(
+                &app.database,
+                &app.prover_repository,
+                &next_batch_notify,
+                &sync_tree_notify,
+                pre_root,
                 &updates,
             )
             .await?;
-        } else {
-            let current_time = Utc::now();
-            let batch_insertion_timeout =
-                chrono::Duration::from_std(app.config.app.batch_insertion_timeout)?;
 
-            let last_batch_time: DateTime<Utc> =
-                app.database.get_latest_insertion().await?.timestamp;
+            // We've inserted the identities, so we want to ensure that
+            // we don't trigger again until either we get a full batch
+            // or the timer ticks.
+            app.database.update_latest_insertion(Utc::now()).await?;
 
-            let timeout_batch_time = last_batch_time
-                + batch_insertion_timeout
-                + chrono::Duration::seconds(DEBOUNCE_THRESHOLD_SECS);
-
-            let batch_time_elapsed = current_time >= timeout_batch_time;
-
-            // If the batch size is full or if the insertion time has elapsed
-            // process the batch
-            if updates.len() >= batch_size || batch_time_elapsed {
-                commit_identities(
-                    &app.database,
-                    &app.prover_repository,
-                    app.tree_state()?.batching_tree(),
-                    &next_batch_notify,
-                    &sync_tree_notify,
-                    &updates,
-                )
-                .await?;
-
-                // We've inserted the identities, so we want to ensure that
-                // we don't trigger again until either we get a full batch
-                // or the timer ticks.
-                app.database.update_latest_insertion(Utc::now()).await?;
-            } else {
-                // Check if the next batch after the current insertion batch is
-                // deletion. The only time that deletions are
-                // inserted is when there is a full deletion batch or the
-                // deletion time interval has elapsed.
-                // In this case, we should immediately process the batch.
-                let next_update_is_deletion = if let Some(update) = app
-                    .tree_state()?
-                    .batching_tree()
-                    .peek_next_update_at(updates.len())
-                {
-                    update.update.element == Hash::ZERO
-                } else {
-                    false
-                };
-
-                // If the next batch is deletion, process the current insertion batch
-                if next_update_is_deletion {
-                    commit_identities(
-                        &app.database,
-                        &app.prover_repository,
-                        app.tree_state()?.batching_tree(),
-                        &next_batch_notify,
-                        &sync_tree_notify,
-                        &updates,
-                    )
-                    .await?;
-                } else {
-                    // If there are not enough identities to fill the batch, the time interval has
-                    // not elapsed and the next batch is not deletion, wait for more identities
-                    tracing::trace!(
-                        "Pending identities ({}) is less than batch size ({}). Waiting.",
-                        updates.len(),
-                        batch_size
-                    );
-                    continue;
-                }
-            }
+            continue;
         }
+
+        // Check if the next batch after the current insertion batch is
+        // deletion. The only time that deletions are
+        // inserted is when there is a full deletion batch or the
+        // deletion time interval has elapsed.
+        // In this case, we should immediately process the batch.
+        let next_update_is_deletion = if let Some(next_batch_type) = next_batch_type {
+            next_batch_type == BatchType::Deletion
+        } else {
+            false
+        };
+
+        // If the next batch is deletion, process the current insertion batch
+        if next_update_is_deletion {
+            commit_insertion_batch(
+                &app.database,
+                &app.prover_repository,
+                &next_batch_notify,
+                &sync_tree_notify,
+                pre_root,
+                &updates,
+            )
+            .await?;
+
+            continue;
+        }
+
+        // If there are not enough identities to fill the batch, the time interval has
+        // not elapsed and the next batch is not deletion, wait for more identities
+        tracing::trace!(
+            "Pending identities ({}) is less than max batch size ({}). Waiting.",
+            updates.len(),
+            max_batch_size
+        );
     }
 }
 
@@ -167,74 +190,74 @@ async fn ensure_batch_chain_initialized(app: &Arc<App>) -> anyhow::Result<()> {
     let batch_head = app.database.get_batch_head().await?;
     if batch_head.is_none() {
         app.database
-            .insert_new_batch_head(&app.tree_state()?.batching_tree().get_root())
+            .insert_new_batch_head(&app.tree_state().await?.batching_tree().get_root())
             .await?;
     }
     Ok(())
 }
 
-async fn commit_identities(
+async fn commit_insertion_batch(
     database: &Database,
     prover_repository: &Arc<ProverRepository>,
-    batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
     sync_tree_notify: &Arc<Notify>,
+    pre_root: Hash,
     updates: &[AppliedTreeUpdate],
 ) -> anyhow::Result<()> {
-    // If the update is an insertion
-    if updates
-        .first()
-        .context("Updates should be > 1")?
-        .update
-        .element
-        != Hash::ZERO
-    {
-        let batch_size = prover_repository
-            .get_suitable_insertion_batch_size(updates.len())
-            .await?;
+    let batch_size = prover_repository
+        .get_suitable_insertion_batch_size(updates.len())
+        .await?;
 
-        tracing::info!(num_updates = updates.len(), batch_size, "Insertion batch",);
+    tracing::info!(num_updates = updates.len(), batch_size, "Insertion batch",);
 
-        insert_identities(
-            database,
-            batching_tree,
-            next_batch_notify,
-            sync_tree_notify,
-            updates,
-            batch_size,
-        )
-        .await
-    } else {
-        let batch_size = prover_repository
-            .get_suitable_deletion_batch_size(updates.len())
-            .await?;
+    insert_identities(
+        database,
+        next_batch_notify,
+        sync_tree_notify,
+        pre_root,
+        updates,
+        batch_size,
+    )
+    .await
+}
 
-        tracing::info!(num_updates = updates.len(), batch_size, "Deletion batch");
+async fn commit_deletion_batch(
+    database: &Database,
+    prover_repository: &Arc<ProverRepository>,
+    next_batch_notify: &Arc<Notify>,
+    sync_tree_notify: &Arc<Notify>,
+    pre_root: Hash,
+    updates: &[AppliedTreeUpdate],
+    pre_commitments: &[Hash],
+) -> anyhow::Result<()> {
+    let batch_size = prover_repository
+        .get_suitable_deletion_batch_size(updates.len())
+        .await?;
 
-        delete_identities(
-            database,
-            batching_tree,
-            next_batch_notify,
-            sync_tree_notify,
-            updates,
-            batch_size,
-        )
-        .await
-    }
+    tracing::info!(num_updates = updates.len(), batch_size, "Deletion batch");
+
+    delete_identities(
+        database,
+        next_batch_notify,
+        sync_tree_notify,
+        pre_root,
+        updates,
+        pre_commitments,
+        batch_size,
+    )
+    .await
 }
 
 #[instrument(level = "info", skip_all)]
 pub async fn insert_identities(
     database: &Database,
-    batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
     sync_tree_notify: &Arc<Notify>,
+    pre_root: Hash,
     updates: &[AppliedTreeUpdate],
     batch_size: usize,
 ) -> anyhow::Result<()> {
     assert_updates_are_consecutive(updates);
-
-    let pre_root = batching_tree.get_root();
 
     let mut tx = database.pool.begin().await?;
     let latest_batch = tx.get_latest_batch().await?;
@@ -377,15 +400,13 @@ fn assert_updates_are_consecutive(updates: &[AppliedTreeUpdate]) {
 
 pub async fn delete_identities(
     database: &Database,
-    batching_tree: &TreeVersion<Intermediate>,
     next_batch_notify: &Arc<Notify>,
     sync_tree_notify: &Arc<Notify>,
+    pre_root: Hash,
     updates: &[AppliedTreeUpdate],
+    pre_commitments: &[Hash],
     batch_size: usize,
 ) -> anyhow::Result<()> {
-    // Grab the initial conditions before the updates are applied to the tree.
-    let pre_root = batching_tree.get_root();
-
     let mut tx = database.pool.begin().await?;
     let latest_batch = tx.get_latest_batch().await?;
     if let Some(latest_batch) = latest_batch {
@@ -397,9 +418,7 @@ pub async fn delete_identities(
     }
 
     let mut deletion_indices: Vec<_> = updates.iter().map(|f| f.update.leaf_index).collect();
-
-    let commitments = batching_tree.commitments_by_leaves(deletion_indices.iter().copied());
-    let mut commitments: Vec<U256> = commitments.into_iter().map(U256::from).collect();
+    let mut commitments: Vec<U256> = pre_commitments.iter().map(|c| U256::from(*c)).collect();
 
     let latest_tree_from_updates = updates
         .last()
@@ -487,19 +506,23 @@ pub async fn delete_identities(
     Ok(())
 }
 
-fn determine_batch_type(tree: &TreeVersion<Intermediate>) -> Option<BatchType> {
+fn determine_next_batch_type(tree: &TreeVersion<Intermediate>) -> Option<BatchType> {
     let next_update = tree.peek_next_updates(1);
     if next_update.is_empty() {
         return None;
     }
 
-    let batch_type = if next_update[0].update.element == Hash::ZERO {
+    let batch_type = determine_batch_type(&next_update[0]);
+
+    Some(batch_type)
+}
+
+fn determine_batch_type(update: &AppliedTreeUpdate) -> BatchType {
+    if update.update.element == Hash::ZERO {
         BatchType::Deletion
     } else {
         BatchType::Insertion
-    };
-
-    Some(batch_type)
+    }
 }
 
 fn zip_commitments_and_proofs(

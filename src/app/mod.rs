@@ -128,16 +128,13 @@ impl App {
     }
 
     pub async fn tree_state(&self) -> anyhow::Result<MutexGuard<TreeState>> {
-        info!("[zzz] getting tree state 1");
-        let res = Ok(self
+        Ok(self
             .tree_state
             .get()
             .ok_or(ServerError::TreeStateUninitialized)?
             .lock()
             .await
-        );
-        info!("[zzz] getting tree state 2");
-        res
+        )
     }
 
     /// Queues an insert into the merkle tree.

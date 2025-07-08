@@ -420,7 +420,7 @@ mod test {
             let tree_state = app.tree_state().await?;
             let tree = tree_state.latest_tree();
             (
-                tree.get_root().clone(),
+                tree.get_root(),
                 tree.simulate_delete_many(&[tree_item.leaf_index]),
             )
         };

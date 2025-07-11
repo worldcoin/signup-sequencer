@@ -48,6 +48,7 @@ indoc = "2.0.4"
 once_cell = "1.8"
 oz-api = { path = "crates/oz-api" }
 # We need upstream PR#465 to fix #272.
+parking_lot = "0.12.4"
 prometheus = "0.13.3"
 reqwest = { version = "0.12.8", features = ["json"] }
 regex = { version = "1.11.1" }

@@ -59,8 +59,7 @@ impl IdentityProcessor for OnChainIdentityProcessor {
         if batch.batch_type == BatchType::Insertion {
             let prover = self
                 .prover_repository
-                .get_suitable_insertion_prover(batch.data.0.identities.len())
-                .await?;
+                .get_suitable_insertion_prover(batch.data.0.identities.len())?;
 
             info!(
                 num_updates = batch.data.0.identities.len(),
@@ -72,8 +71,7 @@ impl IdentityProcessor for OnChainIdentityProcessor {
         } else {
             let prover = self
                 .prover_repository
-                .get_suitable_deletion_prover(batch.data.0.identities.len())
-                .await?;
+                .get_suitable_deletion_prover(batch.data.0.identities.len())?;
 
             info!(
                 num_updates = batch.data.0.identities.len(),

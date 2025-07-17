@@ -6,7 +6,7 @@ use anyhow::Context;
 use chrono::Utc;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::watch::Receiver;
-use tokio::sync::Notify;
+use tokio::sync::{MutexGuard, Notify};
 use tokio::time::MissedTickBehavior;
 use tokio::{select, time};
 use tracing::{info, warn};
@@ -47,9 +47,9 @@ pub async fn modify_tree(
             },
         }
 
-        let tree_state = app.tree_state()?;
-
         let request_sync = retry_tx!(&app.database, tx, {
+            let tree_state = app.tree_state().await?;
+
             let latest_tree = tree_state.get_latest_tree();
             let next_leaf_tree = latest_tree.next_leaf();
             let next_leaf_db = tx.get_next_leaf_index().await?;
@@ -67,7 +67,7 @@ pub async fn modify_tree(
                 &mut tx,
                 batch_deletion_timeout,
                 min_batch_deletion_size,
-                tree_state,
+                &tree_state,
             )
             .await
         })
@@ -90,7 +90,7 @@ async fn do_modify_tree(
     tx: &mut Transaction<'_, Postgres>,
     batch_deletion_timeout: chrono::Duration,
     min_batch_deletion_size: usize,
-    tree_state: &TreeState,
+    tree_state: &MutexGuard<'_, TreeState>,
 ) -> anyhow::Result<bool> {
     let deletions = get_deletions(
         tx,
@@ -112,7 +112,7 @@ pub async fn get_deletions(
     tx: &mut Transaction<'_, Postgres>,
     batch_deletion_timeout: chrono::Duration,
     min_batch_deletion_size: usize,
-    tree_state: &TreeState,
+    tree_state: &MutexGuard<'_, TreeState>,
 ) -> anyhow::Result<Vec<DeletionEntry>> {
     let deletions = tx.get_deletions().await?;
 
@@ -163,7 +163,7 @@ pub async fn get_deletions(
 /// Run insertions and returns true if there were any changes to the tree.
 pub async fn run_insertions(
     tx: &mut Transaction<'_, Postgres>,
-    tree_state: &TreeState,
+    tree_state: &MutexGuard<'_, TreeState>,
 ) -> anyhow::Result<bool> {
     let unprocessed = tx.get_unprocessed_identities().await?;
     if unprocessed.is_empty() {
@@ -207,7 +207,7 @@ pub async fn run_insertions(
 /// Run deletions and returns true if there were any changes to the tree.
 pub async fn run_deletions(
     tx: &mut Transaction<'_, Postgres>,
-    tree_state: &TreeState,
+    tree_state: &MutexGuard<'_, TreeState>,
     deletions: Vec<DeletionEntry>,
 ) -> anyhow::Result<bool> {
     let (leaf_indices, previous_commitments): (Vec<usize>, Vec<Hash>) = deletions

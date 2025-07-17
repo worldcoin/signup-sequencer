@@ -59,7 +59,7 @@ async fn tree_restore_empty(offchain_mode_enabled: bool) -> anyhow::Result<()> {
         .await
         .expect("Failed to spawn app.");
 
-    let tree_state = app.tree_state()?.clone();
+    let tree_state = app.tree_state().await?.clone();
 
     assert_eq!(tree_state.latest_tree().next_leaf(), 0);
 
@@ -73,7 +73,7 @@ async fn tree_restore_empty(offchain_mode_enabled: bool) -> anyhow::Result<()> {
         .await
         .expect("Failed to spawn app.");
 
-    let restored_tree_state = app.tree_state()?.clone();
+    let restored_tree_state = app.tree_state().await?.clone();
 
     test_same_tree_states(&tree_state, &restored_tree_state).await?;
 

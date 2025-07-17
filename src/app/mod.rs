@@ -32,6 +32,7 @@ use ruint::Uint;
 use semaphore_rs::protocol::compression::CompressedProof;
 use semaphore_rs::protocol::{verify_proof, Proof};
 use semaphore_rs::Field;
+use tokio::sync::{Mutex, MutexGuard};
 use tracing::{error, info, instrument, warn};
 
 pub mod error;
@@ -40,7 +41,7 @@ pub struct App {
     pub database: Arc<Database>,
     pub identity_processor: Arc<dyn IdentityProcessor>,
     pub prover_repository: Arc<ProverRepository>,
-    tree_state: OnceLock<TreeState>,
+    tree_state: OnceLock<Mutex<TreeState>>,
     pub config: Config,
 
     pub identity_validator: IdentityValidator,
@@ -126,11 +127,13 @@ impl App {
         Ok::<(), anyhow::Error>(())
     }
 
-    pub fn tree_state(&self) -> anyhow::Result<&TreeState> {
+    pub async fn tree_state(&self) -> anyhow::Result<MutexGuard<TreeState>> {
         Ok(self
             .tree_state
             .get()
-            .ok_or(ServerError::TreeStateUninitialized)?)
+            .ok_or(ServerError::TreeStateUninitialized)?
+            .lock()
+            .await)
     }
 
     /// Queues an insert into the merkle tree.
@@ -266,7 +269,13 @@ impl App {
             .leaf_index;
 
         // Check if the id has already been deleted
-        if self.tree_state()?.get_latest_tree().get_leaf(leaf_index) == Uint::ZERO {
+        if self
+            .tree_state()
+            .await?
+            .get_latest_tree()
+            .get_leaf(leaf_index)
+            == Uint::ZERO
+        {
             return Err(ServerError::IdentityAlreadyDeleted);
         }
 
@@ -461,7 +470,7 @@ impl App {
             .await?
             .ok_or(ServerError::IdentityCommitmentNotFound)?;
 
-        let tree_state = self.tree_state()?;
+        let tree_state = self.tree_state().await?;
         if tree_state.latest_tree().get_last_sequence_id() < item.sequence_id {
             // If tree change was not yet applied to latest tree we treat it as it would be
             // unprocessed.
@@ -474,7 +483,7 @@ impl App {
         }
 
         // If tree change was applied to latest tree we then look in the trees we have for proof
-        let (leaf, proof) = self.tree_state()?.get_proof_for(&item);
+        let (leaf, proof) = tree_state.get_proof_for(&item);
 
         if leaf != *commitment {
             return Err(ServerError::InvalidCommitment);
@@ -532,19 +541,20 @@ impl App {
             return Err(InclusionProofV2Error::DeletedCommitment);
         }
 
-        let tree_state = self.tree_state()?;
-        if tree_state.latest_tree().get_last_sequence_id() < item.sequence_id {
-            // If tree change was not yet applied to latest tree we treat it as it would be
-            // unprocessed.
-            return Err(InclusionProofV2Error::UnprocessedCommitment);
-        }
-
         // If tree change was applied to latest tree we look for inclusion proof
         // todo(piotrh): is it ok to use latest tree here?
-        let (leaf, root, proof) = self
-            .tree_state()?
-            .get_latest_tree()
-            .get_leaf_and_proof(item.leaf_index);
+        let (leaf, root, proof) = {
+            let tree_state = self.tree_state().await?;
+            if tree_state.latest_tree().get_last_sequence_id() < item.sequence_id {
+                // If tree change was not yet applied to latest tree we treat it as it would be
+                // unprocessed.
+                return Err(InclusionProofV2Error::UnprocessedCommitment);
+            }
+
+            tree_state
+                .get_latest_tree()
+                .get_leaf_and_proof(item.leaf_index)
+        };
 
         if leaf != commitment {
             error!("Mismatch between database and in-memory tree. This should never happen.");
@@ -571,7 +581,7 @@ impl App {
 
         if let Some(max_root_age_seconds) = query.max_root_age_seconds {
             let max_root_age = Duration::seconds(max_root_age_seconds);
-            self.validate_root_age(max_root_age, &root_state)?;
+            self.validate_root_age(max_root_age, &root_state).await?;
         }
 
         let proof = if request.is_proof_padded() {
@@ -609,16 +619,20 @@ impl App {
         g2.1[0].is_zero() && g2.1[1].is_zero() && g1b.0.is_zero() && g1b.1.is_zero()
     }
 
-    fn validate_root_age(
+    async fn validate_root_age(
         &self,
         max_root_age: Duration,
         root_state: &RootItem,
     ) -> Result<(), ServerError> {
-        let tree_state = self.tree_state()?;
-        let latest_root = tree_state.get_latest_tree().get_root();
-        let batching_root = tree_state.get_batching_tree().get_root();
-        let processed_root = tree_state.get_processed_tree().get_root();
-        let mined_root = tree_state.get_mined_tree().get_root();
+        let (latest_root, batching_root, processed_root, mined_root) = {
+            let tree_state = self.tree_state().await?;
+            let latest_root = tree_state.get_latest_tree().get_root();
+            let batching_root = tree_state.get_batching_tree().get_root();
+            let processed_root = tree_state.get_processed_tree().get_root();
+            let mined_root = tree_state.get_mined_tree().get_root();
+
+            (latest_root, batching_root, processed_root, mined_root)
+        };
 
         info!("Validating age max_root_age: {max_root_age:?}");
 
@@ -685,6 +699,7 @@ impl App {
             let max_root_age = Duration::seconds(max_root_age_seconds);
             let is_root_age_valid = self
                 .validate_root_age_v2(max_root_age, &root_state)
+                .await
                 .map_err(RootAgeCheckingError)?;
             if !is_root_age_valid {
                 return Err(VerifySemaphoreProofV2Error::RootTooOld);
@@ -715,15 +730,19 @@ impl App {
     /// We consider root age valid in two cases:
     /// * root is current root of latest, processed or mined tree
     /// * root age (depending on state) is not greater than max_root_age
-    fn validate_root_age_v2(
+    async fn validate_root_age_v2(
         &self,
         max_root_age: Duration,
         root_state: &RootItem,
     ) -> anyhow::Result<bool> {
-        let tree_state = self.tree_state()?;
-        let latest_root = tree_state.get_latest_tree().get_root();
-        let processed_root = tree_state.get_processed_tree().get_root();
-        let mined_root = tree_state.get_mined_tree().get_root();
+        let (latest_root, processed_root, mined_root) = {
+            let tree_state = self.tree_state().await?;
+            let latest_root = tree_state.get_latest_tree().get_root();
+            let processed_root = tree_state.get_processed_tree().get_root();
+            let mined_root = tree_state.get_mined_tree().get_root();
+
+            (latest_root, processed_root, mined_root)
+        };
 
         let root = root_state.root;
         match root_state.status {

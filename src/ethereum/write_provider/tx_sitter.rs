@@ -6,7 +6,7 @@ use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::U256;
 use reqwest::StatusCode;
 use tx_sitter_client::data::{SendTxRequest, TransactionPriority, TxStatus};
-use tx_sitter_client::{HttpError, TxSitterClient};
+use tx_sitter_client::{ErrorResponse, TxSitterClient};
 
 use super::inner::{Inner, TransactionResult};
 use crate::config::TxSitterConfig;
@@ -88,8 +88,11 @@ impl Inner for TxSitter {
             .await;
 
         let res = match res {
-            Err(err) => match err.downcast_ref::<HttpError>() {
-                Some(http_err) if http_err.status == StatusCode::CONFLICT => {
+            Err(err) => match err.downcast_ref::<ErrorResponse>() {
+                Some(resp_err)
+                    if resp_err.status == StatusCode::CONFLICT
+                        && resp_err.body.error_id == "transaction_already_exists" =>
+                {
                     if let Some(tx_id) = tx_id {
                         return Ok(tx_id);
                     }

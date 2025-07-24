@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::data::ErrorResponseBody;
 use anyhow::bail;
 use data::{GetTxResponse, SendTxRequest, SendTxResponse, TxStatus};
 use reqwest::header::HeaderMap;
@@ -26,6 +27,22 @@ impl fmt::Display for HttpError {
             f,
             "Response failed with status {} - {}",
             self.status, self.body
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ErrorResponse {
+    pub status: StatusCode,
+    pub body: ErrorResponseBody,
+}
+
+impl fmt::Display for ErrorResponse {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Response failed with status {} - got ErrorResponse object (error_key={}, error_message={})",
+            self.status, self.body.error_id, self.body.error_message
         )
     }
 }
@@ -79,8 +96,18 @@ impl TxSitterClient {
             let status = response.status();
             let body = response.text().await?;
 
-            tracing::error!("Response failed with status {} - {}", status, body);
-            bail!(HttpError { body, status });
+            if let Ok(error_response) = serde_json::from_str::<ErrorResponseBody>(&body) {
+                let error = ErrorResponse {
+                    status,
+                    body: error_response,
+                };
+                tracing::error!("Error: {}", error);
+                bail!(error);
+            }
+
+            let error = HttpError { body, status };
+            tracing::error!("Error: {}", error);
+            bail!(error);
         }
 
         Ok(response)

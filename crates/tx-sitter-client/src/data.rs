@@ -71,6 +71,13 @@ pub enum TxStatus {
     Finalized,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorResponseBody {
+    pub error_id: String,
+    pub error_message: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

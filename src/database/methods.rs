@@ -676,6 +676,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .await?)
     }
 
+    #[instrument(skip(self), level = "debug")]
     async fn get_unprocessed_commitment(self, commitment: &Hash) -> Result<Option<Hash>, Error> {
         let mut conn = self.acquire().await?;
 
@@ -688,10 +689,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .fetch_optional(&mut *conn)
         .await?;
 
-        if let Some(row) = result {
-            return Ok(Some(row.get::<Hash, _>(0)));
-        };
-        Ok(None)
+        Ok(result.map(|row| row.get::<Hash, _>(0)))
     }
 
     #[instrument(skip(self), level = "debug")]

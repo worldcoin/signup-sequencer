@@ -450,12 +450,12 @@ impl App {
             return Err(ServerError::InvalidCommitment);
         }
 
-        if self
-            .database
-            .get_unprocessed_commitment(commitment)
-            .await?
-            .is_some()
-        {
+        let (unprocessed_commitment, item) = tokio::join!(
+            self.database.get_unprocessed_commitment(commitment),
+            self.database.get_tree_item(commitment),
+        );
+
+        if unprocessed_commitment?.is_some() {
             return Ok(InclusionProofResponse {
                 status: UnprocessedStatus::New.into(),
                 root: None,
@@ -464,11 +464,7 @@ impl App {
             });
         }
 
-        let item = self
-            .database
-            .get_tree_item(commitment)
-            .await?
-            .ok_or(ServerError::IdentityCommitmentNotFound)?;
+        let item = item?.ok_or(ServerError::IdentityCommitmentNotFound)?;
 
         let tree_state = self.tree_state().await?;
         if tree_state.latest_tree().get_last_sequence_id() < item.sequence_id {

@@ -31,12 +31,14 @@ pub async fn sync_tree(
     // First check if mined tree needs to be rolled back. If so then we must
     // panic to quit to rebuild the tree on startup. This is a time-consuming
     // operation.
-    if let Some(ref mined_tree_update) = latest_mined_tree_update {
-        assert!(
-            mined_tree_update.sequence_id >= mined_tree.get_last_sequence_id(),
-            "Mined tree needs to be rolled back."
-        );
-    };
+    assert!(
+        latest_mined_tree_update
+            .clone()
+            .map(|u| u.sequence_id)
+            .unwrap_or(0)
+            >= mined_tree.get_last_sequence_id(),
+        "Mined tree needs to be rolled back."
+    );
 
     // Get all other roots from database
     let latest_processed_tree_update = tx

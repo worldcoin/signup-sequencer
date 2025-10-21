@@ -7,8 +7,8 @@ use semaphore_rs_trees::lazy::{self, LazyMerkleTree};
 use tracing::{info, warn};
 
 use crate::identity_tree::{
-    BasicTreeOps, Canonical, CanonicalTreeMetadata, DerivedTreeMetadata, Intermediate, Latest,
-    PoseidonTree, TreeUpdate, TreeVersion, TreeVersionData, TreeVersionState, Version,
+    BasicTreeOps, Canonical, CanonicalTreeMetadata, DerivedTreeMetadata, Hash, Intermediate,
+    Latest, PoseidonTree, TreeUpdate, TreeVersion, TreeVersionData, TreeVersionState, Version,
 };
 
 /// A helper for building the first tree version. Exposes a type-safe API over
@@ -95,16 +95,14 @@ impl CanonicalTreeBuilder {
         builder
     }
 
-    pub fn restore(
+    pub fn restore_dense(
         tree_depth: usize,
         dense_prefix_depth: usize,
         default_leaf: &Field,
-        last_dense_leaf: Option<TreeUpdate>,
-        leftover_items: &[TreeUpdate],
         flattening_threshold: usize,
         mmap_file_path: &str,
-    ) -> Option<Self> {
-        info!("Restoring tree from file");
+    ) -> Option<RestoredCanonicalTreeBuilder> {
+        info!("Restoring dense tree from file");
         let tree: LazyMerkleTree<PoseidonHash, lazy::Canonical> =
             match PoseidonTree::<lazy::Canonical>::attempt_dense_mmap_restore(
                 tree_depth,
@@ -114,38 +112,19 @@ impl CanonicalTreeBuilder {
             ) {
                 Ok(tree) => tree,
                 Err(error) => {
-                    warn!("Tree wasn't restored. Reason: {}", error.to_string());
+                    warn!("Dense tree wasn't restored. Reason: {}", error.to_string());
                     return None;
                 }
             };
 
-        info!("Applying leaves not in dense tree");
         let metadata = CanonicalTreeMetadata {
             flatten_threshold: flattening_threshold,
             count_since_last_flatten: 0,
         };
-        let mut builder = Self(TreeVersionData {
-            state: TreeVersionState {
-                tree,
-                next_leaf: last_dense_leaf
-                    .as_ref()
-                    .map(|v| v.leaf_index + 1)
-                    .unwrap_or(0),
-                last_sequence_id: last_dense_leaf.as_ref().map(|v| v.sequence_id).unwrap_or(0),
-            },
-            next: None,
-            metadata,
-        });
 
-        let last_index = leftover_items.len();
-        for (i, tree_update) in leftover_items.iter().enumerate() {
-            if i % 10000 == 0 {
-                info!("Current leaf index {i}/{last_index}");
-            }
-            builder.update(tree_update);
-        }
+        let builder = RestoredCanonicalTreeBuilder { tree, metadata };
 
-        info!("Tree restored");
+        info!("Dense tree restored");
         Some(builder)
     }
 
@@ -166,6 +145,29 @@ impl CanonicalTreeBuilder {
         let sealed = TreeVersion(Arc::new(Mutex::new(self.0)));
         let next = DerivedTreeBuilder::<Canonical>::new(state, sealed.clone());
         (sealed, next)
+    }
+}
+
+pub struct RestoredCanonicalTreeBuilder {
+    pub tree: PoseidonTree<lazy::Canonical>,
+    pub metadata: CanonicalTreeMetadata,
+}
+
+impl RestoredCanonicalTreeBuilder {
+    pub fn with_leaf(self, last_dense_leaf: TreeUpdate) -> CanonicalTreeBuilder {
+        CanonicalTreeBuilder(TreeVersionData {
+            state: TreeVersionState {
+                tree: self.tree,
+                next_leaf: last_dense_leaf.leaf_index + 1,
+                last_sequence_id: last_dense_leaf.sequence_id,
+            },
+            next: None,
+            metadata: self.metadata,
+        })
+    }
+
+    pub fn root(&self) -> Hash {
+        self.tree.root()
     }
 }
 

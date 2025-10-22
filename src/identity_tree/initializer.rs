@@ -74,12 +74,28 @@ impl TreeInitializer {
             info!("Restoring cached tree took: {:?}", timer_cache.elapsed());
 
             if let Some(tree_state) = tree_state {
-                let tree_root = tree_state.lock().await.get_processed_tree().get_root();
+                let (tree_root, tree_last_sequence_id) = {
+                    let processed_tree = tree_state.lock().await.get_processed_tree();
+                    (
+                        processed_tree.get_root(),
+                        processed_tree.get_last_sequence_id(),
+                    )
+                };
 
-                match self.identity_processor.latest_root().await? {
-                    Some(root) if root == tree_root => return Ok(tree_state),
-                    None if initial_root_hash == tree_root => return Ok(tree_state),
-                    _ => warn!("Cached tree root is different from the contract root."),
+                if tree_root == initial_root_hash {
+                    warn!("Restored cached tree is empty.");
+                } else if let Some(root) = self.identity_processor.latest_root().await? {
+                    if let Some(tree_update) = self.database.get_tree_update_by_root(&root).await? {
+                        if tree_last_sequence_id <= tree_update.sequence_id {
+                            return Ok(tree_state);
+                        } else {
+                            warn!("Cached tree last sequence id is ahead of one set in identity processor.")
+                        }
+                    } else {
+                        warn!("Couldn't find tree update with root returned by identity processor.")
+                    }
+                } else {
+                    warn!("Identity processor returned no latest root.")
                 }
             }
         }

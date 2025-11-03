@@ -1,3 +1,5 @@
+#![allow(clippy::doc_overindented_list_items)]
+
 use std::time::Duration;
 
 use eyre::Result;

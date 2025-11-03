@@ -233,32 +233,3 @@ impl TreeInitializer {
         Ok(tree_state)
     }
 }
-
-#[cfg(test)]
-mod test {
-    use chrono::Utc;
-    use ethers::prelude::rand;
-    use ethers::types::U256;
-    use ruint::Uint;
-
-    use crate::identity_tree::TreeUpdate;
-
-    pub fn generate_test_identities_with_index(identity_count: usize) -> Vec<TreeUpdate> {
-        let mut identities = vec![];
-
-        for i in 0..identity_count {
-            let bytes: [u8; 32] = U256::from(rand::random::<u64>()).into();
-            let identity = Uint::<256, 4>::from_le_bytes(bytes);
-
-            identities.push(TreeUpdate {
-                sequence_id: i + 1,
-                leaf_index: i,
-                element: identity,
-                post_root: identity,
-                received_at: Some(Utc::now()),
-            });
-        }
-
-        identities
-    }
-}

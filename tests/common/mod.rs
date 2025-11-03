@@ -734,10 +734,10 @@ struct CompiledContract {
     bytecode: Bytecode,
 }
 
-pub async fn spawn_deps<'a, 'b, 'c>(
+pub async fn spawn_deps<'a>(
     initial_root: U256,
-    insertion_batch_sizes: &'b [usize],
-    deletion_batch_sizes: &'c [usize],
+    insertion_batch_sizes: &[usize],
+    deletion_batch_sizes: &[usize],
     tree_depth: u8,
     docker: &'a Cli,
 ) -> anyhow::Result<(

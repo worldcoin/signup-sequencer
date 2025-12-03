@@ -137,17 +137,17 @@ pub async fn get_deletions(
     // due our requirement to have unique roots after each operation. It is not a big deal as each
     // insertion is for sure creating unique root tree.
 
-    let res = tree_state
+    let data = tree_state
         .latest_tree()
         .clone()
         .simulate_delete_many(&deletions.iter().map(|d| d.commitment).collect());
 
-    if let Some((last_root, _)) = res.last() {
-        let id_for_root = tx.get_id_by_root(last_root).await?;
-        if id_for_root.is_some() {
+    // Check for duplicate roots in the database
+    for (root, _proof) in &data {
+        if let Some(_existing) = tx.get_root_state(root).await? {
             warn!(
-                "Deletion batch will create a duplicate root batch. Deletion \
-                 batch will be postponed"
+                "Deletion batch will create a duplicate root batch. Deletion batch will be \
+                postponed"
             );
             return Ok(Vec::new());
         }

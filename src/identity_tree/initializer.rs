@@ -135,9 +135,12 @@ impl TreeInitializer {
             .await?
         {
             Some(last_dense_leaf) => {
-                let next_leaf_index = self.database.get_next_leaf_index_up_to_sequence_id(last_dense_leaf.sequence_id).await?;
+                let next_leaf_index = self
+                    .database
+                    .get_next_leaf_index_up_to_sequence_id(last_dense_leaf.sequence_id)
+                    .await?;
                 restored_mined_builder.with_leaf(next_leaf_index, last_dense_leaf.sequence_id)
-            },
+            }
             None => {
                 info!("Cannot find tree update matching restored tree root.");
                 return Ok(None);

@@ -193,7 +193,10 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         Ok((leaf_index + 1) as usize)
     }
     #[instrument(skip(self), level = "debug")]
-    async fn get_next_leaf_index_up_to_sequence_id(self, sequence_id: usize) -> Result<usize, Error> {
+    async fn get_next_leaf_index_up_to_sequence_id(
+        self,
+        sequence_id: usize,
+    ) -> Result<usize, Error> {
         let mut conn = self.acquire().await?;
 
         let row = sqlx::query(
@@ -204,9 +207,9 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             LIMIT 1
             "#,
         )
-            .bind(sequence_id as i64)
-            .fetch_optional(&mut *conn)
-            .await?;
+        .bind(sequence_id as i64)
+        .fetch_optional(&mut *conn)
+        .await?;
 
         let Some(row) = row else { return Ok(0) };
         let leaf_index = row.get::<i64, _>(0);

@@ -154,12 +154,12 @@ pub struct RestoredCanonicalTreeBuilder {
 }
 
 impl RestoredCanonicalTreeBuilder {
-    pub fn with_leaf(self, last_dense_leaf: TreeUpdate) -> CanonicalTreeBuilder {
+    pub fn with_leaf(self, next_leaf: usize, last_sequence_id: usize) -> CanonicalTreeBuilder {
         CanonicalTreeBuilder(TreeVersionData {
             state: TreeVersionState {
                 tree: self.tree,
-                next_leaf: last_dense_leaf.leaf_index + 1,
-                last_sequence_id: last_dense_leaf.sequence_id,
+                next_leaf,
+                last_sequence_id,
             },
             next: None,
             metadata: self.metadata,

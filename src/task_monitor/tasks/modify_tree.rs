@@ -101,8 +101,9 @@ async fn do_modify_tree(
     .await?;
 
     // Deleting identities has precedence over inserting them.
-    if !deletions.is_empty() {
-        run_deletions(tx, tree_state, deletions).await
+    // If deletions fail (e.g., would create duplicate roots), fall through to insertions.
+    if !deletions.is_empty() && run_deletions(tx, tree_state, deletions).await? {
+        Ok(true)
     } else {
         run_insertions(tx, tree_state).await
     }
@@ -228,6 +229,17 @@ pub async fn run_deletions(
         leaf_indices.len(),
         "Length mismatch when appending identities to tree"
     );
+
+    // Check for duplicate roots in the database
+    for (root, _proof) in &data {
+        if let Some(_existing) = tx.get_root_state(root).await? {
+            warn!(
+                "Deletion batch would create duplicate root. Skipping deletions to allow \
+                 insertions instead"
+            );
+            return Ok(false);
+        }
+    }
 
     // Insert the new items into pending identities
     let items = data.into_iter().zip(deletions);

@@ -1,4 +1,4 @@
-FROM rust:1.86-slim-bookworm AS build-env
+FROM rust:1.92-slim-bookworm AS build-env
 
 WORKDIR /src
 

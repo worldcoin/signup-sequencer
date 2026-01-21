@@ -5,6 +5,7 @@ mod common;
 use common::prelude::*;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use reqwest::header::AUTHORIZATION;
+use signup_sequencer::config::AuthMode;
 use std::collections::HashMap;
 
 /// Generates an ES256 key pair for testing.
@@ -81,9 +82,9 @@ fn sign_jwt(private_key_pem: &str, claims: serde_json::Value) -> String {
 }
 
 async fn setup_test_app_with_auth(
-    require_auth: bool,
-    auth_enabled: bool,
+    auth_mode: AuthMode,
     authorized_keys: HashMap<String, String>,
+    basic_auth_credentials: HashMap<String, String>,
 ) -> anyhow::Result<(std::sync::Arc<signup_sequencer::app::App>, JoinHandle<()>, std::net::SocketAddr, Shutdown, DockerContainer<'static>, tempfile::TempDir)> {
     let ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
@@ -115,9 +116,9 @@ async fn setup_test_app_with_auth(
         .offchain_mode(true)
         .build()?;
 
+    config.server.auth_mode = auth_mode;
     config.server.authorized_keys = authorized_keys;
-    config.server.auth_enabled = auth_enabled;
-    config.server.require_auth = require_auth;
+    config.server.basic_auth_credentials = basic_auth_credentials;
 
     let (app, app_handle, local_addr, shutdown) = spawn_app(config).await?;
 
@@ -133,7 +134,7 @@ async fn health_no_auth_required() -> anyhow::Result<()> {
     keys.insert("test_key".to_string(), public_pem);
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
-        setup_test_app_with_auth(true, true, keys).await?;
+        setup_test_app_with_auth(AuthMode::JwtOnly, keys, HashMap::new()).await?;
 
     let client = Client::new();
     let response = client
@@ -158,7 +159,7 @@ async fn metrics_no_auth_required() -> anyhow::Result<()> {
     keys.insert("test_key".to_string(), public_pem);
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
-        setup_test_app_with_auth(true, true, keys).await?;
+        setup_test_app_with_auth(AuthMode::JwtOnly, keys, HashMap::new()).await?;
 
     let client = Client::new();
     let response = client
@@ -183,7 +184,7 @@ async fn insert_identity_requires_auth_when_enforced() -> anyhow::Result<()> {
     keys.insert("test_key".to_string(), public_pem);
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
-        setup_test_app_with_auth(true, true, keys).await?;
+        setup_test_app_with_auth(AuthMode::JwtOnly, keys, HashMap::new()).await?;
 
     let client = Client::new();
     let response = client
@@ -212,7 +213,7 @@ async fn insert_identity_succeeds_with_valid_token() -> anyhow::Result<()> {
     keys.insert("test_key".to_string(), public_pem);
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
-        setup_test_app_with_auth(true, true, keys).await?;
+        setup_test_app_with_auth(AuthMode::JwtOnly, keys, HashMap::new()).await?;
 
     let token = sign_jwt(&private_pem, json!({"sub": "test"}));
 
@@ -246,7 +247,7 @@ async fn auth_disabled_bypasses_all_checks() -> anyhow::Result<()> {
 
     // Auth is disabled entirely
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
-        setup_test_app_with_auth(true, false, keys).await?;
+        setup_test_app_with_auth(AuthMode::Disabled, keys, HashMap::new()).await?;
 
     let client = Client::new();
     let response = client
@@ -268,28 +269,32 @@ async fn auth_disabled_bypasses_all_checks() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn require_auth_false_allows_unauthenticated_requests() -> anyhow::Result<()> {
+async fn basic_with_soft_jwt_allows_without_jwt() -> anyhow::Result<()> {
     init_tracing_subscriber();
 
     let (_, public_pem) = generate_es256_keypair();
     let mut keys = HashMap::new();
     keys.insert("test_key".to_string(), public_pem);
 
-    // Auth enabled but not required (soft rollout mode)
+    let mut basic_creds = HashMap::new();
+    basic_creds.insert("testuser".to_string(), "testpass".to_string());
+
+    // BasicWithSoftJwt mode: basic auth required, JWT soft-validated
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
-        setup_test_app_with_auth(false, true, keys).await?;
+        setup_test_app_with_auth(AuthMode::BasicWithSoftJwt, keys, basic_creds).await?;
 
     let client = Client::new();
     let response = client
         .post(format!("http://{}/insertIdentity", local_addr))
         .header("Content-Type", "application/json")
+        .basic_auth("testuser", Some("testpass"))
         .body(
             r#"{"identityCommitment":"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"}"#,
         )
         .send()
         .await?;
 
-    // Should not be 401 since require_auth=false
+    // Should not be 401 since basic auth is valid and JWT is soft-validated (missing is allowed with warning)
     assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
 
     shutdown.shutdown();
@@ -307,7 +312,7 @@ async fn v2_insert_identity_requires_auth_when_enforced() -> anyhow::Result<()> 
     keys.insert("test_key".to_string(), public_pem);
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
-        setup_test_app_with_auth(true, true, keys).await?;
+        setup_test_app_with_auth(AuthMode::JwtOnly, keys, HashMap::new()).await?;
 
     let commitment = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
     let client = Client::new();
@@ -333,7 +338,7 @@ async fn v2_delete_identity_requires_auth_when_enforced() -> anyhow::Result<()> 
     keys.insert("test_key".to_string(), public_pem);
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
-        setup_test_app_with_auth(true, true, keys).await?;
+        setup_test_app_with_auth(AuthMode::JwtOnly, keys, HashMap::new()).await?;
 
     let commitment = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
     let client = Client::new();
@@ -359,7 +364,7 @@ async fn inclusion_proof_no_auth_required() -> anyhow::Result<()> {
     keys.insert("test_key".to_string(), public_pem);
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
-        setup_test_app_with_auth(true, true, keys).await?;
+        setup_test_app_with_auth(AuthMode::JwtOnly, keys, HashMap::new()).await?;
 
     let commitment = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
     let client = Client::new();
@@ -391,7 +396,7 @@ async fn wrong_key_rejected() -> anyhow::Result<()> {
     keys.insert("test_key".to_string(), correct_public_pem);
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
-        setup_test_app_with_auth(true, true, keys).await?;
+        setup_test_app_with_auth(AuthMode::JwtOnly, keys, HashMap::new()).await?;
 
     // Sign with wrong key
     let token = sign_jwt(&wrong_private_pem, json!({"sub": "test"}));

@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::Context;
 use ethers::types::Address;
 use signup_sequencer::config::{
-    default, AppConfig, Config, DatabaseConfig, NetworkConfig, OffchainModeConfig,
+    default, AppConfig, AuthMode, Config, DatabaseConfig, NetworkConfig, OffchainModeConfig,
     OzDefenderConfig, ProvidersConfig, RelayerConfig, ServerConfig, ServiceConfig, TreeConfig,
 };
 use signup_sequencer::prover::ProverConfig;
@@ -207,9 +207,9 @@ impl TestConfigBuilder {
             server: ServerConfig {
                 address: SocketAddr::from(([127, 0, 0, 1], 0)),
                 serve_timeout: default::serve_timeout(),
+                auth_mode: AuthMode::Disabled,
+                basic_auth_credentials: Default::default(),
                 authorized_keys: Default::default(),
-                auth_enabled: false,
-                require_auth: false,
             },
             service: ServiceConfig::default(),
             offchain_mode: OffchainModeConfig {

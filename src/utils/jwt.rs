@@ -13,7 +13,6 @@ pub enum JwtError {
 #[derive(Clone)]
 pub struct JwtValidator {
     keys: HashMap<String, DecodingKey>,
-    require_auth: bool,
 }
 
 impl JwtValidator {
@@ -21,21 +20,13 @@ impl JwtValidator {
     ///
     /// # Errors
     /// Returns an error if any of the provided PEM keys are invalid.
-    pub fn new(
-        pem_keys: &HashMap<String, String>,
-        require_auth: bool,
-    ) -> Result<Self, JwtError> {
+    pub fn new(pem_keys: &HashMap<String, String>) -> Result<Self, JwtError> {
         let mut keys = HashMap::new();
         for (name, pem) in pem_keys {
             let key = DecodingKey::from_ec_pem(pem.as_bytes())?;
             keys.insert(name.clone(), key);
         }
-        Ok(Self { keys, require_auth })
-    }
-
-    /// Returns whether authentication is required.
-    pub fn require_auth(&self) -> bool {
-        self.require_auth
+        Ok(Self { keys })
     }
 
     /// Returns whether any keys are configured.
@@ -150,7 +141,7 @@ mod tests {
         let mut keys = HashMap::new();
         keys.insert("test_key".to_string(), public_pem);
 
-        let validator = JwtValidator::new(&keys, true).expect("Failed to create validator");
+        let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
         let claims = json!({"sub": "user123"});
         let token = sign_jwt(&private_pem, claims);
@@ -168,7 +159,7 @@ mod tests {
         let mut keys = HashMap::new();
         keys.insert("key2".to_string(), public_pem2);
 
-        let validator = JwtValidator::new(&keys, true).expect("Failed to create validator");
+        let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
         // Sign with key1, but validator only has key2
         let claims = json!({"sub": "user123"});
@@ -185,7 +176,7 @@ mod tests {
         let mut keys = HashMap::new();
         keys.insert("test_key".to_string(), public_pem);
 
-        let validator = JwtValidator::new(&keys, true).expect("Failed to create validator");
+        let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
         let result = validator.validate("not.a.valid.token");
         assert!(matches!(result, Err(JwtError::InvalidToken)));
@@ -200,7 +191,7 @@ mod tests {
         keys.insert("key1".to_string(), public_pem1);
         keys.insert("key2".to_string(), public_pem2);
 
-        let validator = JwtValidator::new(&keys, true).expect("Failed to create validator");
+        let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
         // Token signed with key1 should match key1
         let claims1 = json!({"sub": "user1"});
@@ -220,8 +211,7 @@ mod tests {
     #[test]
     fn empty_keys_rejects_all() {
         let keys = HashMap::new();
-        let validator =
-            JwtValidator::new(&keys, false).expect("Failed to create validator");
+        let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
         let (private_pem, _public_pem) = generate_es256_keypair();
         let claims = json!({"sub": "user123"});
@@ -232,30 +222,15 @@ mod tests {
     }
 
     #[test]
-    fn require_auth_flag_preserved() {
-        let keys = HashMap::new();
-
-        let validator_require =
-            JwtValidator::new(&keys, true).expect("Failed to create validator");
-        assert!(validator_require.require_auth());
-
-        let validator_no_require =
-            JwtValidator::new(&keys, false).expect("Failed to create validator");
-        assert!(!validator_no_require.require_auth());
-    }
-
-    #[test]
     fn has_keys_returns_correct_value() {
         let empty_keys = HashMap::new();
-        let validator_empty =
-            JwtValidator::new(&empty_keys, false).expect("Failed to create validator");
+        let validator_empty = JwtValidator::new(&empty_keys).expect("Failed to create validator");
         assert!(!validator_empty.has_keys());
 
         let (_, public_pem) = generate_es256_keypair();
         let mut keys = HashMap::new();
         keys.insert("test".to_string(), public_pem);
-        let validator_with_keys =
-            JwtValidator::new(&keys, false).expect("Failed to create validator");
+        let validator_with_keys = JwtValidator::new(&keys).expect("Failed to create validator");
         assert!(validator_with_keys.has_keys());
     }
 }

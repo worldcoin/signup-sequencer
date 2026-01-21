@@ -24,6 +24,7 @@ default = []
 [dependencies]
 anyhow = { version = "1.0.68" }
 async-stream = "0.3.3"
+base64 = "0.22"
 async-trait = "0.1.86"
 axum = "0.7.7"
 axum-server = "0.7.1"

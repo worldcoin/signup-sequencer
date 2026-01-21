@@ -6,6 +6,7 @@ use std::time::Duration;
 use tokio::select;
 use tokio::task::JoinHandle;
 use tracing::error;
+pub mod auth;
 pub mod batch_type;
 pub mod index_packing;
 pub mod jwt;

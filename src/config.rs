@@ -11,6 +11,21 @@ use crate::prover::ProverConfig;
 use crate::utils::secret::SecretUrl;
 use crate::utils::serde_utils::JsonStrWrapper;
 
+/// Authentication mode for the server API endpoints.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthMode {
+    /// No auth required (for testing/emergencies)
+    #[default]
+    Disabled,
+    /// Basic Auth required only
+    BasicOnly,
+    /// Basic Auth required + soft-validate JWT (warn if missing, error if invalid)
+    BasicWithSoftJwt,
+    /// JWT required
+    JwtOnly,
+}
+
 pub fn load_config(config_file_path: Option<&Path>) -> anyhow::Result<Config> {
     let mut settings = config::Config::builder();
 
@@ -230,17 +245,17 @@ pub struct ServerConfig {
     #[serde(default = "default::serve_timeout")]
     pub serve_timeout: Duration,
 
+    /// Authentication mode
+    #[serde(default)]
+    pub auth_mode: AuthMode,
+
+    /// Basic auth credentials (username -> password)
+    #[serde(default)]
+    pub basic_auth_credentials: HashMap<String, String>,
+
     /// Named authorized keys for JWT authentication: key_name -> PEM public key
     #[serde(default)]
     pub authorized_keys: HashMap<String, String>,
-
-    /// Master switch - if false, auth middleware is bypassed entirely
-    #[serde(default = "default::auth_enabled")]
-    pub auth_enabled: bool,
-
-    /// If false, missing/invalid auth logs warning but allows request
-    #[serde(default)]
-    pub require_auth: bool,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -362,10 +377,6 @@ pub mod default {
     pub fn offchain_mode_enabled() -> bool {
         false
     }
-
-    pub fn auth_enabled() -> bool {
-        true
-    }
 }
 
 #[cfg(test)]
@@ -433,8 +444,9 @@ mod tests {
         [server]
         address = "0.0.0.0:3001"
         serve_timeout = "30s"
-        auth_enabled = true
-        require_auth = false
+        auth_mode = "disabled"
+
+        [server.basic_auth_credentials]
 
         [server.authorized_keys]
 
@@ -477,8 +489,9 @@ mod tests {
         [server]
         address = "0.0.0.0:3001"
         serve_timeout = "30s"
-        auth_enabled = true
-        require_auth = false
+        auth_mode = "disabled"
+
+        [server.basic_auth_credentials]
 
         [server.authorized_keys]
 
@@ -528,8 +541,7 @@ mod tests {
 
         SEQ__SERVER__ADDRESS=0.0.0.0:3001
         SEQ__SERVER__SERVE_TIMEOUT=30s
-        SEQ__SERVER__AUTH_ENABLED=true
-        SEQ__SERVER__REQUIRE_AUTH=false
+        SEQ__SERVER__AUTH_MODE=disabled
 
         SEQ__SERVICE__SERVICE_NAME=signup-sequencer
 
@@ -563,8 +575,7 @@ mod tests {
 
         SEQ__SERVER__ADDRESS=0.0.0.0:3001
         SEQ__SERVER__SERVE_TIMEOUT=30s
-        SEQ__SERVER__AUTH_ENABLED=true
-        SEQ__SERVER__REQUIRE_AUTH=false
+        SEQ__SERVER__AUTH_MODE=disabled
 
         SEQ__SERVICE__SERVICE_NAME=signup-sequencer
 

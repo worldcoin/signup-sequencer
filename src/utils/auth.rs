@@ -64,13 +64,13 @@ impl AuthValidator {
     }
 
     /// Returns the authentication mode.
-    pub fn mode(&self) -> &AuthMode {
-        &self.mode
+    pub fn mode(&self) -> AuthMode {
+        self.mode
     }
 
     /// Validates a request based on the configured auth mode.
     pub fn validate(&self, request: &Request) -> AuthResult {
-        match &self.mode {
+        match self.mode {
             AuthMode::Disabled => AuthResult::Allowed,
             AuthMode::BasicOnly => self.validate_basic_only(request),
             AuthMode::BasicWithSoftJwt => self.validate_basic_with_soft_jwt(request),

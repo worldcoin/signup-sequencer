@@ -12,7 +12,7 @@ use crate::utils::secret::SecretUrl;
 use crate::utils::serde_utils::JsonStrWrapper;
 
 /// Authentication mode for the server API endpoints.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthMode {
     /// No auth required (for testing/emergencies)

@@ -3,12 +3,21 @@
 mod common;
 
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use common::prelude::*;
 use common::{generate_es256_keypair, sign_jwt};
 use maplit::hashmap;
 use reqwest::header::AUTHORIZATION;
 use signup_sequencer::config::AuthMode;
+
+fn future_exp() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + 3600
+}
 
 async fn setup_test_app_with_auth(
     auth_mode: AuthMode,
@@ -148,7 +157,7 @@ async fn insert_identity_succeeds_with_valid_token() -> anyhow::Result<()> {
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
         setup_test_app_with_auth(AuthMode::JwtOnly, keys, hashmap! {}).await?;
 
-    let token = sign_jwt(&private_pem, json!({"sub": "test"}));
+    let token = sign_jwt(&private_pem, json!({"sub": "test", "exp": future_exp()}));
 
     let client = Client::new();
     let response = client
@@ -331,7 +340,10 @@ async fn wrong_key_rejected() -> anyhow::Result<()> {
         setup_test_app_with_auth(AuthMode::JwtOnly, keys, hashmap! {}).await?;
 
     // Sign with wrong key
-    let token = sign_jwt(&wrong_private_pem, json!({"sub": "test"}));
+    let token = sign_jwt(
+        &wrong_private_pem,
+        json!({"sub": "test", "exp": future_exp()}),
+    );
 
     let client = Client::new();
     let response = client

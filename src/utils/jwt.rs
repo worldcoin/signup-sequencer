@@ -41,10 +41,7 @@ impl JwtValidator {
     /// # Errors
     /// Returns `JwtError::InvalidToken` if no key validates the token.
     pub fn validate(&self, token: &str) -> Result<String, JwtError> {
-        let mut validation = Validation::new(Algorithm::ES256);
-        // We don't validate standard claims - the token just needs a valid signature
-        validation.validate_exp = false;
-        validation.required_spec_claims.clear();
+        let validation = Validation::new(Algorithm::ES256);
 
         for (name, key) in &self.keys {
             if decode::<serde_json::Value>(token, key, &validation).is_ok() {
@@ -59,10 +56,60 @@ impl JwtValidator {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::time::{SystemTime, UNIX_EPOCH};
     use test_utils::{generate_es256_keypair, sign_jwt};
+
+    fn future_exp() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            + 3600
+    }
+
+    fn past_exp() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            - 3600
+    }
 
     #[test]
     fn valid_token_returns_key_name() {
+        let (private_pem, public_pem) = generate_es256_keypair();
+
+        let mut keys = HashMap::new();
+        keys.insert("test_key".to_string(), public_pem);
+
+        let validator = JwtValidator::new(&keys).expect("Failed to create validator");
+
+        let claims = json!({"sub": "user123", "exp": future_exp()});
+        let token = sign_jwt(&private_pem, claims);
+
+        let result = validator.validate(&token);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "test_key");
+    }
+
+    #[test]
+    fn expired_token_rejected() {
+        let (private_pem, public_pem) = generate_es256_keypair();
+
+        let mut keys = HashMap::new();
+        keys.insert("test_key".to_string(), public_pem);
+
+        let validator = JwtValidator::new(&keys).expect("Failed to create validator");
+
+        let claims = json!({"sub": "user123", "exp": past_exp()});
+        let token = sign_jwt(&private_pem, claims);
+
+        let result = validator.validate(&token);
+        assert!(matches!(result, Err(JwtError::InvalidToken)));
+    }
+
+    #[test]
+    fn missing_exp_rejected() {
         let (private_pem, public_pem) = generate_es256_keypair();
 
         let mut keys = HashMap::new();
@@ -74,8 +121,7 @@ mod tests {
         let token = sign_jwt(&private_pem, claims);
 
         let result = validator.validate(&token);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "test_key");
+        assert!(matches!(result, Err(JwtError::InvalidToken)));
     }
 
     #[test]
@@ -89,7 +135,7 @@ mod tests {
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
         // Sign with key1, but validator only has key2
-        let claims = json!({"sub": "user123"});
+        let claims = json!({"sub": "user123", "exp": future_exp()});
         let token = sign_jwt(&private_pem1, claims);
 
         let result = validator.validate(&token);
@@ -121,14 +167,14 @@ mod tests {
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
         // Token signed with key1 should match key1
-        let claims1 = json!({"sub": "user1"});
+        let claims1 = json!({"sub": "user1", "exp": future_exp()});
         let token1 = sign_jwt(&private_pem1, claims1);
         let result1 = validator.validate(&token1);
         assert!(result1.is_ok());
         assert_eq!(result1.unwrap(), "key1");
 
         // Token signed with key2 should match key2
-        let claims2 = json!({"sub": "user2"});
+        let claims2 = json!({"sub": "user2", "exp": future_exp()});
         let token2 = sign_jwt(&private_pem2, claims2);
         let result2 = validator.validate(&token2);
         assert!(result2.is_ok());
@@ -141,7 +187,7 @@ mod tests {
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
         let (private_pem, _public_pem) = generate_es256_keypair();
-        let claims = json!({"sub": "user123"});
+        let claims = json!({"sub": "user123", "exp": future_exp()});
         let token = sign_jwt(&private_pem, claims);
 
         let result = validator.validate(&token);

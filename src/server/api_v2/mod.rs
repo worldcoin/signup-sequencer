@@ -8,6 +8,7 @@ use crate::server::api_v2::data::{
     ErrorResponse, InclusionProofResponse, VerifySemaphoreProofRequest,
     VerifySemaphoreProofResponse,
 };
+use crate::utils::jwt::JwtValidator;
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::header::CONTENT_TYPE;
@@ -246,19 +247,42 @@ fn parse_commitment(raw_commitment: String) -> Result<Hash, Error> {
     })
 }
 
-pub fn api_v2_router(app: Arc<App>, serve_timeout: Duration) -> Router {
-    Router::new()
-        .route(
-            "/v2/identities/:commitment",
-            post(insert_identity).delete(delete_identity),
-        )
+pub fn api_v2_router(
+    app: Arc<App>,
+    serve_timeout: Duration,
+    jwt_validator: Option<JwtValidator>,
+) -> Router {
+    // Protected routes that require authentication
+    // Note: POST and DELETE on /v2/identities/:commitment need auth
+    let protected_routes = Router::new().route(
+        "/v2/identities/:commitment",
+        post(insert_identity).delete(delete_identity),
+    );
+
+    // Apply JWT auth layer to protected routes if validator is configured
+    let protected_routes = if let Some(validator) = jwt_validator {
+        protected_routes.layer(middleware::from_fn_with_state(
+            validator,
+            custom_middleware::jwt_auth_layer::middleware,
+        ))
+    } else {
+        protected_routes
+    };
+
+    // Public routes that don't require authentication
+    let public_routes = Router::new()
         .route(
             "/v2/identities/:commitment/inclusion-proof",
             get(inclusion_proof),
         )
         .route("/v2/semaphore-proof/verify", post(verify_semaphore_proof))
         .route("/v2/health", get(health))
-        .route("/v2/metrics", get(metrics))
+        .route("/v2/metrics", get(metrics));
+
+    // Merge protected and public routes
+    Router::new()
+        .merge(protected_routes)
+        .merge(public_routes)
         .layer(middleware::from_fn_with_state(
             serve_timeout,
             custom_middleware::timeout_layer::middleware,
@@ -355,7 +379,7 @@ mod test {
         app.clone().init_tree().await?;
 
         Ok((
-            TestServer::new(api_v2_router(app.clone(), Duration::from_secs(300)))?,
+            TestServer::new(api_v2_router(app.clone(), Duration::from_secs(300), None))?,
             app,
             db_container,
             temp_dir,

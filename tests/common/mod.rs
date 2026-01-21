@@ -663,12 +663,13 @@ pub async fn spawn_app_returning_initialized_tree(
 
     let app_clone = app.clone();
     let shutdown_clone = shutdown.clone();
+    let server_config_clone = server_config.clone();
     let app_handle = spawn({
         async move {
             info!("App thread starting");
             server::bind_from_listener(
                 app_clone,
-                Duration::from_secs(30),
+                &server_config_clone,
                 listener,
                 shutdown_clone,
             )

@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::app::App;
+use crate::utils::jwt::JwtValidator;
 use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::response::Response;
@@ -137,24 +138,44 @@ async fn metrics() -> Result<Response<Body>, Error> {
     Ok(response)
 }
 
-pub fn api_v1_router(app: Arc<App>, serve_timeout: Duration) -> Router {
-    Router::new()
-        // Operate on identity commitments
+pub fn api_v1_router(
+    app: Arc<App>,
+    serve_timeout: Duration,
+    jwt_validator: Option<JwtValidator>,
+) -> Router {
+    // Protected routes that require authentication
+    let protected_routes = Router::new()
+        .route("/insertIdentity", post(insert_identity))
+        .route("/deleteIdentity", post(delete_identity));
+
+    // Apply JWT auth layer to protected routes if validator is configured
+    let protected_routes = if let Some(validator) = jwt_validator {
+        protected_routes.layer(middleware::from_fn_with_state(
+            validator,
+            custom_middleware::jwt_auth_layer::middleware,
+        ))
+    } else {
+        protected_routes
+    };
+
+    // Public routes that don't require authentication
+    let public_routes = Router::new()
         .route("/verifySemaphoreProof", post(verify_semaphore_proof))
         .route(
             "/verifyCompressedSemaphoreProof",
             post(verify_compressed_semaphore_proof),
         )
         .route("/inclusionProof", post(inclusion_proof))
-        .route("/insertIdentity", post(insert_identity))
-        .route("/deleteIdentity", post(delete_identity))
-        // Operate on batch sizes
         .route("/addBatchSize", post(add_batch_size))
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
-        // Health check, return 200 OK
         .route("/health", get(health))
-        .route("/metrics", get(metrics))
+        .route("/metrics", get(metrics));
+
+    // Merge protected and public routes
+    Router::new()
+        .merge(protected_routes)
+        .merge(public_routes)
         .layer(middleware::from_fn(
             custom_middleware::api_metrics_layer::middleware,
         ))

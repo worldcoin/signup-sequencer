@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use axum::body::Body;
 use axum::Router;
@@ -11,6 +10,7 @@ use tracing::info;
 use crate::app::App;
 use crate::config::ServerConfig;
 use crate::shutdown::Shutdown;
+use crate::utils::jwt::JwtValidator;
 
 pub mod api_v1;
 mod api_v2;
@@ -24,7 +24,7 @@ pub async fn run(app: Arc<App>, config: ServerConfig, shutdown: Shutdown) -> any
     info!("Will listen on {}", config.address);
     let listener = TcpListener::bind(config.address).await?;
 
-    bind_from_listener(app, config.serve_timeout, listener, shutdown).await?;
+    bind_from_listener(app, &config, listener, shutdown).await?;
 
     Ok(())
 }
@@ -53,13 +53,40 @@ impl ResponseForPanic for PanicHandler {
 /// if the server fails to bind to the given address.
 pub async fn bind_from_listener(
     app: Arc<App>,
-    serve_timeout: Duration,
+    config: &ServerConfig,
     listener: TcpListener,
     shutdown: Shutdown,
 ) -> anyhow::Result<()> {
+    // Build JWT validator if auth is enabled and keys are configured
+    let jwt_validator = if config.auth_enabled {
+        let validator = JwtValidator::new(&config.authorized_keys, config.require_auth)?;
+        if validator.has_keys() {
+            info!(
+                "JWT authentication enabled with {} authorized key(s), require_auth={}",
+                config.authorized_keys.len(),
+                config.require_auth
+            );
+            Some(validator)
+        } else {
+            info!("JWT authentication enabled but no keys configured - auth middleware will not be applied");
+            None
+        }
+    } else {
+        info!("JWT authentication disabled (auth_enabled=false)");
+        None
+    };
+
     let router = Router::new()
-        .merge(api_v1::api_v1_router(app.clone(), serve_timeout))
-        .merge(api_v2::api_v2_router(app.clone(), serve_timeout))
+        .merge(api_v1::api_v1_router(
+            app.clone(),
+            config.serve_timeout,
+            jwt_validator.clone(),
+        ))
+        .merge(api_v2::api_v2_router(
+            app.clone(),
+            config.serve_timeout,
+            jwt_validator,
+        ))
         .layer(CatchPanicLayer::custom(PanicHandler {}));
 
     let _shutdown_handle = shutdown.handle();

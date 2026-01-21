@@ -211,27 +211,6 @@ mod tests {
         builder.body(axum::body::Body::empty()).unwrap()
     }
 
-    fn make_request_with_both_headers(
-        username: &str,
-        password: &str,
-        bearer_token: &str,
-    ) -> Request {
-        let credentials = format!("{}:{}", username, password);
-        let encoded = BASE64_STANDARD.encode(credentials.as_bytes());
-
-        // Note: HTTP allows multiple Authorization headers or we can use a custom scheme
-        // For this test, we'll simulate by using X-Basic-Auth header for basic auth
-        // In practice, the middleware will need to handle this differently
-        // For testing, let's just use the Basic auth in the main header and Bearer in a custom one
-        HttpRequest::builder()
-            .uri("/test")
-            .method("GET")
-            .header("Authorization", format!("Bearer {}", bearer_token))
-            .header("X-Basic-Auth", format!("Basic {}", encoded))
-            .body(axum::body::Body::empty())
-            .unwrap()
-    }
-
     #[test]
     fn disabled_mode_allows_all() {
         let validator =

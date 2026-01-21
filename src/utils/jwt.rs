@@ -73,40 +73,63 @@ mod tests {
     /// Generates an ES256 key pair for testing.
     /// Returns (private_key_pem, public_key_pem).
     fn generate_es256_keypair() -> (String, String) {
-        use std::process::Command;
+        use std::io::Write;
+        use std::process::{Command, Stdio};
 
-        // Generate private key
-        let private_key_output = Command::new("openssl")
+        // Generate private key in SEC1 format
+        let sec1_key_output = Command::new("openssl")
             .args(["ecparam", "-genkey", "-name", "prime256v1", "-noout"])
             .output()
             .expect("Failed to generate private key");
 
-        let private_key_pem = String::from_utf8(private_key_output.stdout)
-            .expect("Invalid UTF-8 in private key");
+        let sec1_key_pem =
+            String::from_utf8(sec1_key_output.stdout).expect("Invalid UTF-8 in private key");
 
-        // Extract public key from private key
-        let public_key_output = Command::new("openssl")
-            .args(["ec", "-pubout"])
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
+        // Convert to PKCS#8 format (required by jsonwebtoken)
+        let mut pkcs8_process = Command::new("openssl")
+            .args(["pkcs8", "-topk8", "-nocrypt"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
             .spawn()
             .expect("Failed to spawn openssl");
 
-        use std::io::Write;
-        public_key_output
+        pkcs8_process
             .stdin
-            .as_ref()
+            .as_mut()
             .unwrap()
-            .write_all(private_key_pem.as_bytes())
+            .write_all(sec1_key_pem.as_bytes())
             .expect("Failed to write to stdin");
 
-        let output = public_key_output
+        let pkcs8_output = pkcs8_process
+            .wait_with_output()
+            .expect("Failed to convert to PKCS#8");
+
+        let private_key_pem =
+            String::from_utf8(pkcs8_output.stdout).expect("Invalid UTF-8 in private key");
+
+        // Extract public key from the original SEC1 key
+        let mut public_key_process = Command::new("openssl")
+            .args(["ec", "-pubout"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("Failed to spawn openssl");
+
+        public_key_process
+            .stdin
+            .as_mut()
+            .unwrap()
+            .write_all(sec1_key_pem.as_bytes())
+            .expect("Failed to write to stdin");
+
+        let public_output = public_key_process
             .wait_with_output()
             .expect("Failed to extract public key");
 
         let public_key_pem =
-            String::from_utf8(output.stdout).expect("Invalid UTF-8 in public key");
+            String::from_utf8(public_output.stdout).expect("Invalid UTF-8 in public key");
 
         (private_key_pem, public_key_pem)
     }

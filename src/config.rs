@@ -436,6 +436,8 @@ mod tests {
         auth_enabled = true
         require_auth = false
 
+        [server.authorized_keys]
+
         [service]
         service_name = "signup-sequencer"
 
@@ -477,6 +479,8 @@ mod tests {
         serve_timeout = "30s"
         auth_enabled = true
         require_auth = false
+
+        [server.authorized_keys]
 
         [service]
         service_name = "signup-sequencer"

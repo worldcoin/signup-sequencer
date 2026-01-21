@@ -4,18 +4,11 @@ use std::collections::HashMap;
 
 use axum::extract::Request;
 use base64::prelude::*;
-use thiserror::Error;
 
 use crate::config::AuthMode;
 use crate::utils::jwt::JwtValidator;
 
-#[derive(Debug, Error)]
-pub enum AuthError {
-    #[error("Invalid JWT key: {0}")]
-    InvalidJwtKey(#[from] crate::utils::jwt::JwtError),
-    #[error("auth_mode=jwt_only requires at least one authorized_keys entry")]
-    MissingJwtKeys,
-}
+use super::jwt::JwtError;
 
 /// Result of authentication validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,7 +26,7 @@ pub enum AuthResult {
 pub struct AuthValidator {
     mode: AuthMode,
     basic_credentials: HashMap<String, String>, // username -> password
-    jwt_validator: Option<JwtValidator>,
+    jwt_validator: JwtValidator,
 }
 
 impl AuthValidator {
@@ -45,16 +38,9 @@ impl AuthValidator {
         mode: AuthMode,
         basic_credentials: HashMap<String, String>,
         jwt_keys: &HashMap<String, String>,
-    ) -> Result<Self, AuthError> {
+    ) -> Result<Self, JwtError> {
         // Build JWT validator if mode requires it
-        let jwt_validator = if matches!(mode, AuthMode::BasicWithSoftJwt | AuthMode::JwtOnly) {
-            if mode == AuthMode::JwtOnly && jwt_keys.is_empty() {
-                return Err(AuthError::MissingJwtKeys);
-            }
-            Some(JwtValidator::new(jwt_keys)?)
-        } else {
-            None
-        };
+        let jwt_validator = JwtValidator::new(jwt_keys)?;
 
         Ok(Self {
             mode,
@@ -109,24 +95,16 @@ impl AuthValidator {
         match bearer_token {
             Some(token) => {
                 // Token present - validate it
-                match &self.jwt_validator {
-                    Some(validator) => match validator.validate(token) {
-                        Ok(key_name) => {
-                            tracing::info!(
-                                basic_user = %basic_username,
-                                jwt_key = %key_name,
-                                "Basic + JWT auth validated"
-                            );
-                            AuthResult::Allowed
-                        }
-                        Err(e) => AuthResult::Denied(format!("Invalid JWT token: {e}")),
-                    },
-                    None => {
-                        // No JWT validator configured - misconfiguration, reject
-                        AuthResult::Denied(
-                            "JWT token provided but no validator configured".to_string(),
-                        )
+                match self.jwt_validator.validate(token) {
+                    Ok(key_name) => {
+                        tracing::info!(
+                            basic_user = %basic_username,
+                            jwt_key = %key_name,
+                            "Basic + JWT auth validated"
+                        );
+                        AuthResult::Allowed
                     }
+                    Err(e) => AuthResult::Denied(format!("Invalid JWT token: {e}")),
                 }
             }
             None => {
@@ -145,19 +123,12 @@ impl AuthValidator {
             Some(token) => token,
             None => return AuthResult::Denied("Missing Authorization Bearer token".to_string()),
         };
-
-        match &self.jwt_validator {
-            Some(validator) => match validator.validate(token) {
-                Ok(key_name) => {
-                    tracing::info!(jwt_key = %key_name, "JWT auth validated");
-                    AuthResult::Allowed
-                }
-                Err(e) => AuthResult::Denied(format!("Invalid JWT token: {e}")),
-            },
-            None => {
-                // No keys configured - this is a misconfiguration
-                AuthResult::Denied("JWT authentication enabled but no keys configured".to_string())
+        match self.jwt_validator.validate(token) {
+            Ok(key_name) => {
+                tracing::info!(jwt_key = %key_name, "JWT auth validated");
+                AuthResult::Allowed
             }
+            Err(e) => AuthResult::Denied(format!("Invalid JWT token: {e}")),
         }
     }
 
@@ -261,13 +232,6 @@ mod tests {
             validator.validate(&request),
             AuthResult::Denied(_)
         ));
-    }
-
-    #[test]
-    fn jwt_only_rejects_missing_keys() {
-        // JwtOnly with no keys should error at construction
-        let result = AuthValidator::new(AuthMode::JwtOnly, hashmap! {}, &hashmap! {});
-        assert!(matches!(result, Err(AuthError::MissingJwtKeys)));
     }
 
     #[test]

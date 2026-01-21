@@ -8,7 +8,7 @@ use crate::server::api_v2::data::{
     ErrorResponse, InclusionProofResponse, VerifySemaphoreProofRequest,
     VerifySemaphoreProofResponse,
 };
-use crate::utils::jwt::JwtValidator;
+use crate::utils::auth::AuthValidator;
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::header::CONTENT_TYPE;
@@ -250,20 +250,25 @@ fn parse_commitment(raw_commitment: String) -> Result<Hash, Error> {
 pub fn api_v2_router(
     app: Arc<App>,
     serve_timeout: Duration,
-    jwt_validator: Option<JwtValidator>,
+    auth_validator: Option<AuthValidator>,
 ) -> Router {
     // Protected routes that require authentication
     // Note: POST and DELETE on /v2/identities/:commitment need auth
-    let protected_routes = Router::new().route(
-        "/v2/identities/:commitment",
-        post(insert_identity).delete(delete_identity),
-    );
+    // Apply remove_auth FIRST (inner), then auth LAST (outer) so auth runs before remove_auth
+    let protected_routes = Router::new()
+        .route(
+            "/v2/identities/:commitment",
+            post(insert_identity).delete(delete_identity),
+        )
+        .layer(middleware::from_fn(
+            custom_middleware::remove_auth_layer::middleware,
+        ));
 
-    // Apply JWT auth layer to protected routes if validator is configured
-    let protected_routes = if let Some(validator) = jwt_validator {
+    // Apply auth layer to protected routes if validator is configured
+    let protected_routes = if let Some(validator) = auth_validator {
         protected_routes.layer(middleware::from_fn_with_state(
             validator,
-            custom_middleware::jwt_auth_layer::middleware,
+            custom_middleware::auth_layer::middleware,
         ))
     } else {
         protected_routes
@@ -277,7 +282,10 @@ pub fn api_v2_router(
         )
         .route("/v2/semaphore-proof/verify", post(verify_semaphore_proof))
         .route("/v2/health", get(health))
-        .route("/v2/metrics", get(metrics));
+        .route("/v2/metrics", get(metrics))
+        .layer(middleware::from_fn(
+            custom_middleware::remove_auth_layer::middleware,
+        ));
 
     // Merge protected and public routes
     Router::new()
@@ -290,9 +298,6 @@ pub fn api_v2_router(
         .layer(middleware::from_fn(
             custom_middleware::logging_layer::middleware,
         ))
-        .layer(middleware::from_fn(
-            custom_middleware::remove_auth_layer::middleware,
-        ))
         .with_state(app.clone())
 }
 
@@ -300,8 +305,8 @@ pub fn api_v2_router(
 mod test {
     use crate::app::App;
     use crate::config::{
-        default, AppConfig, Config, DatabaseConfig, OffchainModeConfig, ServerConfig,
-        ServiceConfig, TreeConfig,
+        default, AppConfig, AuthMode, Config, DatabaseConfig, OffchainModeConfig,
+        ServerConfig, ServiceConfig, TreeConfig,
     };
     use crate::database::methods::DbMethods;
     use crate::database::IsolationLevel;
@@ -366,9 +371,9 @@ mod test {
             server: ServerConfig {
                 address: SocketAddr::from(([127, 0, 0, 1], 0)),
                 serve_timeout: default::serve_timeout(),
+                auth_mode: AuthMode::Disabled,
+                basic_auth_credentials: Default::default(),
                 authorized_keys: Default::default(),
-                auth_enabled: false,
-                require_auth: false,
             },
             service: ServiceConfig::default(),
             offchain_mode: OffchainModeConfig { enabled: true },

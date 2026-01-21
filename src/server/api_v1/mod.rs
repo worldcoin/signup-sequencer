@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::app::App;
-use crate::utils::jwt::JwtValidator;
+use crate::utils::auth::AuthValidator;
 use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::response::Response;
@@ -141,18 +141,22 @@ async fn metrics() -> Result<Response<Body>, Error> {
 pub fn api_v1_router(
     app: Arc<App>,
     serve_timeout: Duration,
-    jwt_validator: Option<JwtValidator>,
+    auth_validator: Option<AuthValidator>,
 ) -> Router {
     // Protected routes that require authentication
+    // Apply remove_auth FIRST (inner), then auth LAST (outer) so auth runs before remove_auth
     let protected_routes = Router::new()
         .route("/insertIdentity", post(insert_identity))
-        .route("/deleteIdentity", post(delete_identity));
+        .route("/deleteIdentity", post(delete_identity))
+        .layer(middleware::from_fn(
+            custom_middleware::remove_auth_layer::middleware,
+        ));
 
-    // Apply JWT auth layer to protected routes if validator is configured
-    let protected_routes = if let Some(validator) = jwt_validator {
+    // Apply auth layer to protected routes if validator is configured
+    let protected_routes = if let Some(validator) = auth_validator {
         protected_routes.layer(middleware::from_fn_with_state(
             validator,
-            custom_middleware::jwt_auth_layer::middleware,
+            custom_middleware::auth_layer::middleware,
         ))
     } else {
         protected_routes
@@ -170,7 +174,10 @@ pub fn api_v1_router(
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
         .route("/health", get(health))
-        .route("/metrics", get(metrics));
+        .route("/metrics", get(metrics))
+        .layer(middleware::from_fn(
+            custom_middleware::remove_auth_layer::middleware,
+        ));
 
     // Merge protected and public routes
     Router::new()
@@ -185,9 +192,6 @@ pub fn api_v1_router(
         ))
         .layer(middleware::from_fn(
             custom_middleware::logging_layer::middleware,
-        ))
-        .layer(middleware::from_fn(
-            custom_middleware::remove_auth_layer::middleware,
         ))
         .with_state(app.clone())
 }

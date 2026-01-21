@@ -8,8 +8,9 @@ use tower_http::catch_panic::{CatchPanicLayer, ResponseForPanic};
 use tracing::info;
 
 use crate::app::App;
-use crate::config::ServerConfig;
+use crate::config::{AuthMode, ServerConfig};
 use crate::shutdown::Shutdown;
+use crate::utils::auth::AuthValidator;
 use crate::utils::jwt::JwtValidator;
 
 pub mod api_v1;
@@ -57,35 +58,62 @@ pub async fn bind_from_listener(
     listener: TcpListener,
     shutdown: Shutdown,
 ) -> anyhow::Result<()> {
-    // Build JWT validator if auth is enabled and keys are configured
-    let jwt_validator = if config.auth_enabled {
-        let validator = JwtValidator::new(&config.authorized_keys, config.require_auth)?;
-        if validator.has_keys() {
-            info!(
-                "JWT authentication enabled with {} authorized key(s), require_auth={}",
-                config.authorized_keys.len(),
-                config.require_auth
-            );
-            Some(validator)
-        } else {
-            info!("JWT authentication enabled but no keys configured - auth middleware will not be applied");
-            None
-        }
-    } else {
-        info!("JWT authentication disabled (auth_enabled=false)");
+    // Build auth validator based on auth mode
+    let auth_validator = if config.auth_mode == AuthMode::Disabled {
+        info!("Authentication disabled (auth_mode=disabled)");
         None
+    } else {
+        // Build JWT validator if we need JWT validation
+        let jwt_validator = if matches!(
+            config.auth_mode,
+            AuthMode::BasicWithSoftJwt | AuthMode::JwtOnly
+        ) {
+            if config.authorized_keys.is_empty() {
+                if config.auth_mode == AuthMode::JwtOnly {
+                    anyhow::bail!(
+                        "auth_mode=jwt_only requires at least one authorized_keys entry"
+                    );
+                }
+                info!("No JWT keys configured - JWT validation will be skipped");
+                None
+            } else {
+                let validator = JwtValidator::new(&config.authorized_keys)?;
+                info!(
+                    "JWT validation enabled with {} authorized key(s)",
+                    config.authorized_keys.len()
+                );
+                Some(validator)
+            }
+        } else {
+            None
+        };
+
+        let validator = AuthValidator::new(
+            config.auth_mode.clone(),
+            config.basic_auth_credentials.clone(),
+            jwt_validator,
+        )?;
+
+        info!(
+            "Authentication enabled: mode={:?}, basic_auth_users={}, jwt_keys={}",
+            config.auth_mode,
+            config.basic_auth_credentials.len(),
+            config.authorized_keys.len()
+        );
+
+        Some(validator)
     };
 
     let router = Router::new()
         .merge(api_v1::api_v1_router(
             app.clone(),
             config.serve_timeout,
-            jwt_validator.clone(),
+            auth_validator.clone(),
         ))
         .merge(api_v2::api_v2_router(
             app.clone(),
             config.serve_timeout,
-            jwt_validator,
+            auth_validator,
         ))
         .layer(CatchPanicLayer::custom(PanicHandler {}));
 

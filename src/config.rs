@@ -229,6 +229,18 @@ pub struct ServerConfig {
     #[serde(with = "humantime_serde")]
     #[serde(default = "default::serve_timeout")]
     pub serve_timeout: Duration,
+
+    /// Named authorized keys for JWT authentication: key_name -> PEM public key
+    #[serde(default)]
+    pub authorized_keys: HashMap<String, String>,
+
+    /// Master switch - if false, auth middleware is bypassed entirely
+    #[serde(default = "default::auth_enabled")]
+    pub auth_enabled: bool,
+
+    /// If false, missing/invalid auth logs warning but allows request
+    #[serde(default)]
+    pub require_auth: bool,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -350,6 +362,10 @@ pub mod default {
     pub fn offchain_mode_enabled() -> bool {
         false
     }
+
+    pub fn auth_enabled() -> bool {
+        true
+    }
 }
 
 #[cfg(test)]
@@ -417,6 +433,8 @@ mod tests {
         [server]
         address = "0.0.0.0:3001"
         serve_timeout = "30s"
+        auth_enabled = true
+        require_auth = false
 
         [service]
         service_name = "signup-sequencer"
@@ -457,6 +475,8 @@ mod tests {
         [server]
         address = "0.0.0.0:3001"
         serve_timeout = "30s"
+        auth_enabled = true
+        require_auth = false
 
         [service]
         service_name = "signup-sequencer"
@@ -504,6 +524,8 @@ mod tests {
 
         SEQ__SERVER__ADDRESS=0.0.0.0:3001
         SEQ__SERVER__SERVE_TIMEOUT=30s
+        SEQ__SERVER__AUTH_ENABLED=true
+        SEQ__SERVER__REQUIRE_AUTH=false
 
         SEQ__SERVICE__SERVICE_NAME=signup-sequencer
 
@@ -537,6 +559,8 @@ mod tests {
 
         SEQ__SERVER__ADDRESS=0.0.0.0:3001
         SEQ__SERVER__SERVE_TIMEOUT=30s
+        SEQ__SERVER__AUTH_ENABLED=true
+        SEQ__SERVER__REQUIRE_AUTH=false
 
         SEQ__SERVICE__SERVICE_NAME=signup-sequencer
 

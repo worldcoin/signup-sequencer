@@ -141,7 +141,7 @@ async fn metrics() -> Result<Response<Body>, Error> {
 pub fn api_v1_router(
     app: Arc<App>,
     serve_timeout: Duration,
-    auth_validator: Option<AuthValidator>,
+    auth_validator: AuthValidator,
 ) -> Router {
     // Protected routes that require authentication
     // Apply remove_auth FIRST (inner), then auth LAST (outer) so auth runs before remove_auth
@@ -150,17 +150,11 @@ pub fn api_v1_router(
         .route("/deleteIdentity", post(delete_identity))
         .layer(middleware::from_fn(
             custom_middleware::remove_auth_layer::middleware,
-        ));
-
-    // Apply auth layer to protected routes if validator is configured
-    let protected_routes = if let Some(validator) = auth_validator {
-        protected_routes.layer(middleware::from_fn_with_state(
-            validator,
-            custom_middleware::auth_layer::middleware,
         ))
-    } else {
-        protected_routes
-    };
+        .layer(middleware::from_fn_with_state(
+            auth_validator,
+            custom_middleware::auth_layer::middleware,
+        ));
 
     // Public routes that don't require authentication
     let public_routes = Router::new()

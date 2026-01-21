@@ -250,7 +250,7 @@ fn parse_commitment(raw_commitment: String) -> Result<Hash, Error> {
 pub fn api_v2_router(
     app: Arc<App>,
     serve_timeout: Duration,
-    auth_validator: Option<AuthValidator>,
+    auth_validator: AuthValidator,
 ) -> Router {
     // Protected routes that require authentication
     // Note: POST and DELETE on /v2/identities/:commitment need auth
@@ -262,17 +262,11 @@ pub fn api_v2_router(
         )
         .layer(middleware::from_fn(
             custom_middleware::remove_auth_layer::middleware,
-        ));
-
-    // Apply auth layer to protected routes if validator is configured
-    let protected_routes = if let Some(validator) = auth_validator {
-        protected_routes.layer(middleware::from_fn_with_state(
-            validator,
-            custom_middleware::auth_layer::middleware,
         ))
-    } else {
-        protected_routes
-    };
+        .layer(middleware::from_fn_with_state(
+            auth_validator,
+            custom_middleware::auth_layer::middleware,
+        ));
 
     // Public routes that don't require authentication
     let public_routes = Router::new()
@@ -313,6 +307,7 @@ mod test {
     use crate::identity_tree::db_sync::sync_tree;
     use crate::identity_tree::{Hash, TreeVersionReadOps};
     use crate::server::api_v2::api_v2_router;
+    use crate::utils::auth::AuthValidator;
     use crate::utils::secret::SecretUrl;
     use axum::http::StatusCode;
     use axum_test::{TestRequest, TestServer};
@@ -383,8 +378,18 @@ mod test {
 
         app.clone().init_tree().await?;
 
+        let auth_validator = AuthValidator::new(
+            AuthMode::Disabled,
+            Default::default(),
+            &Default::default(),
+        )?;
+
         Ok((
-            TestServer::new(api_v2_router(app.clone(), Duration::from_secs(300), None))?,
+            TestServer::new(api_v2_router(
+                app.clone(),
+                Duration::from_secs(300),
+                auth_validator,
+            ))?,
             app,
             db_container,
             temp_dir,

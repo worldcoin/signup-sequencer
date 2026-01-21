@@ -8,10 +8,9 @@ use tower_http::catch_panic::{CatchPanicLayer, ResponseForPanic};
 use tracing::info;
 
 use crate::app::App;
-use crate::config::{AuthMode, ServerConfig};
+use crate::config::ServerConfig;
 use crate::shutdown::Shutdown;
 use crate::utils::auth::AuthValidator;
-use crate::utils::jwt::JwtValidator;
 
 pub mod api_v1;
 mod api_v2;
@@ -58,41 +57,18 @@ pub async fn bind_from_listener(
     listener: TcpListener,
     shutdown: Shutdown,
 ) -> anyhow::Result<()> {
-    // Build auth validator based on auth mode
-    let auth_validator = if config.auth_mode == AuthMode::Disabled {
-        info!("Authentication disabled (auth_mode=disabled)");
-        None
-    } else {
-        // Build JWT validator if we need JWT validation
-        let jwt_validator = if matches!(
-            config.auth_mode,
-            AuthMode::BasicWithSoftJwt | AuthMode::JwtOnly
-        ) {
-            if config.auth_mode == AuthMode::JwtOnly && config.authorized_keys.is_empty() {
-                anyhow::bail!(
-                    "auth_mode=jwt_only requires at least one authorized_keys entry"
-                );
-            }
-            Some(JwtValidator::new(&config.authorized_keys)?)
-        } else {
-            None
-        };
+    let auth_validator = AuthValidator::new(
+        config.auth_mode.clone(),
+        config.basic_auth_credentials.clone(),
+        &config.authorized_keys,
+    )?;
 
-        let validator = AuthValidator::new(
-            config.auth_mode.clone(),
-            config.basic_auth_credentials.clone(),
-            jwt_validator,
-        )?;
-
-        info!(
-            "Authentication enabled: mode={:?}, basic_auth_users={}, jwt_keys={}",
-            config.auth_mode,
-            config.basic_auth_credentials.len(),
-            config.authorized_keys.len()
-        );
-
-        Some(validator)
-    };
+    info!(
+        "Authentication: mode={:?}, basic_auth_users={}, jwt_keys={}",
+        config.auth_mode,
+        config.basic_auth_credentials.len(),
+        config.authorized_keys.len()
+    );
 
     let router = Router::new()
         .merge(api_v1::api_v1_router(
@@ -101,7 +77,7 @@ pub async fn bind_from_listener(
             auth_validator.clone(),
         ))
         .merge(api_v2::api_v2_router(
-            app.clone(),
+            app,
             config.serve_timeout,
             auth_validator,
         ))

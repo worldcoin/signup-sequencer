@@ -658,4 +658,163 @@ mod tests {
             std::env::remove_var(key);
         }
     }
+
+    const AUTH_TOML: &str = indoc::indoc! {r#"
+        [app]
+        provers_urls = "[]"
+        batch_insertion_timeout = "3m"
+        batch_deletion_timeout = "1h"
+        min_batch_deletion_size = 100
+        scanning_window_size = 100
+        scanning_chain_head_offset = 0
+        time_between_scans = "30s"
+        monitored_txs_capacity = 100
+        shutdown_timeout = "30s"
+        shutdown_delay = "1s"
+
+        [tree]
+        tree_depth = 30
+        dense_tree_prefix_depth = 20
+        tree_gc_threshold = 10000
+        cache_file = "/data/cache_file"
+        force_cache_purge = false
+        initial_leaf_value = "0x1"
+
+        [database]
+        database = "postgres://user:password@localhost:5432/database"
+        migrate = true
+        max_connections = 10
+
+        [server]
+        address = "0.0.0.0:3001"
+        serve_timeout = "30s"
+        auth_mode = "basic_with_soft_jwt"
+
+        [server.basic_auth_credentials]
+        app_backend = "secretpass123"
+        other_service = "otherpass456"
+
+        [server.authorized_keys]
+        app_backend = "test_public_key_pem_content"
+
+        [service]
+        service_name = "signup-sequencer"
+
+        [service.datadog]
+        traces_endpoint = "http://localhost:8126"
+
+        [offchain_mode]
+        enabled = true
+    "#};
+
+    const AUTH_ENV: &str = indoc::indoc! {r#"
+        SEQ__APP__PROVERS_URLS=[]
+        SEQ__APP__BATCH_INSERTION_TIMEOUT=3m
+        SEQ__APP__BATCH_DELETION_TIMEOUT=1h
+        SEQ__APP__MIN_BATCH_DELETION_SIZE=100
+        SEQ__APP__SCANNING_WINDOW_SIZE=100
+        SEQ__APP__SCANNING_CHAIN_HEAD_OFFSET=0
+        SEQ__APP__TIME_BETWEEN_SCANS=30s
+        SEQ__APP__MONITORED_TXS_CAPACITY=100
+        SEQ__APP__SHUTDOWN_TIMEOUT=30s
+        SEQ__APP__SHUTDOWN_DELAY=1s
+
+        SEQ__TREE__TREE_DEPTH=30
+        SEQ__TREE__DENSE_TREE_PREFIX_DEPTH=20
+        SEQ__TREE__TREE_GC_THRESHOLD=10000
+        SEQ__TREE__CACHE_FILE=/data/cache_file
+        SEQ__TREE__FORCE_CACHE_PURGE=false
+        SEQ__TREE__INITIAL_LEAF_VALUE=0x1
+
+        SEQ__DATABASE__DATABASE=postgres://user:password@localhost:5432/database
+        SEQ__DATABASE__MIGRATE=true
+        SEQ__DATABASE__MAX_CONNECTIONS=10
+
+        SEQ__SERVER__ADDRESS=0.0.0.0:3001
+        SEQ__SERVER__SERVE_TIMEOUT=30s
+        SEQ__SERVER__AUTH_MODE=basic_with_soft_jwt
+        SEQ__SERVER__BASIC_AUTH_CREDENTIALS__APP_BACKEND=secretpass123
+        SEQ__SERVER__BASIC_AUTH_CREDENTIALS__OTHER_SERVICE=otherpass456
+        SEQ__SERVER__AUTHORIZED_KEYS__APP_BACKEND=test_public_key_pem_content
+
+        SEQ__SERVICE__SERVICE_NAME=signup-sequencer
+
+        SEQ__SERVICE__DATADOG__TRACES_ENDPOINT=http://localhost:8126
+
+        SEQ__OFFCHAIN_MODE__ENABLED=true
+    "#};
+
+    #[test]
+    fn auth_config_from_env() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
+        load_env(AUTH_ENV);
+
+        let parsed_config: Config = toml::from_str(AUTH_TOML).unwrap();
+        let env_config: Config = load_config(None).unwrap();
+
+        // Verify auth mode
+        assert_eq!(env_config.server.auth_mode, AuthMode::BasicWithSoftJwt);
+
+        // Verify basic auth credentials
+        assert_eq!(env_config.server.basic_auth_credentials.len(), 2);
+        assert_eq!(
+            env_config
+                .server
+                .basic_auth_credentials
+                .get("app_backend"),
+            Some(&"secretpass123".to_string())
+        );
+        assert_eq!(
+            env_config
+                .server
+                .basic_auth_credentials
+                .get("other_service"),
+            Some(&"otherpass456".to_string())
+        );
+
+        // Verify authorized keys
+        assert_eq!(env_config.server.authorized_keys.len(), 1);
+        assert!(env_config
+            .server
+            .authorized_keys
+            .get("app_backend")
+            .is_some());
+
+        // Verify full config matches
+        assert_eq!(parsed_config, env_config);
+
+        purge_env(AUTH_ENV);
+    }
+
+    #[test]
+    fn auth_mode_variants_from_env() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
+        // Test all auth mode variants
+        let modes = [
+            ("disabled", AuthMode::Disabled),
+            ("basic_only", AuthMode::BasicOnly),
+            ("basic_with_soft_jwt", AuthMode::BasicWithSoftJwt),
+            ("jwt_only", AuthMode::JwtOnly),
+        ];
+
+        for (env_value, expected_mode) in modes {
+            // Load minimal env vars needed for config first
+            load_env(OFFCHAIN_ENV);
+
+            // Set auth_mode AFTER loading base env to override its default
+            std::env::set_var("SEQ__SERVER__AUTH_MODE", env_value);
+
+            let config: Config = load_config(None).unwrap();
+            assert_eq!(
+                config.server.auth_mode, expected_mode,
+                "Failed for auth_mode={}",
+                env_value
+            );
+
+            purge_env(OFFCHAIN_ENV);
+            std::env::remove_var("SEQ__SERVER__AUTH_MODE");
+        }
+    }
 }

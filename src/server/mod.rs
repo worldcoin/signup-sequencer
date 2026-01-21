@@ -68,22 +68,12 @@ pub async fn bind_from_listener(
             config.auth_mode,
             AuthMode::BasicWithSoftJwt | AuthMode::JwtOnly
         ) {
-            if config.authorized_keys.is_empty() {
-                if config.auth_mode == AuthMode::JwtOnly {
-                    anyhow::bail!(
-                        "auth_mode=jwt_only requires at least one authorized_keys entry"
-                    );
-                }
-                info!("No JWT keys configured - JWT validation will be skipped");
-                None
-            } else {
-                let validator = JwtValidator::new(&config.authorized_keys)?;
-                info!(
-                    "JWT validation enabled with {} authorized key(s)",
-                    config.authorized_keys.len()
+            if config.auth_mode == AuthMode::JwtOnly && config.authorized_keys.is_empty() {
+                anyhow::bail!(
+                    "auth_mode=jwt_only requires at least one authorized_keys entry"
                 );
-                Some(validator)
             }
+            Some(JwtValidator::new(&config.authorized_keys)?)
         } else {
             None
         };

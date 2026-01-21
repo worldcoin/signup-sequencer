@@ -112,13 +112,10 @@ impl AuthValidator {
                         Err(e) => AuthResult::Denied(format!("Invalid JWT token: {}", e)),
                     },
                     None => {
-                        // No JWT validator configured but token provided
-                        // This shouldn't happen in normal config but allow it
-                        tracing::warn!(
-                            basic_user = %basic_username,
-                            "JWT token provided but no keys configured"
-                        );
-                        AuthResult::Allowed
+                        // No JWT validator configured - misconfiguration, reject
+                        AuthResult::Denied(
+                            "JWT token provided but no validator configured".to_string(),
+                        )
                     }
                 }
             }

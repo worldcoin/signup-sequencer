@@ -342,6 +342,9 @@ mod test {
             server: ServerConfig {
                 address: SocketAddr::from(([127, 0, 0, 1], 0)),
                 serve_timeout: default::serve_timeout(),
+                authorized_keys: Default::default(),
+                auth_enabled: false,
+                require_auth: false,
             },
             service: ServiceConfig::default(),
             offchain_mode: OffchainModeConfig { enabled: true },

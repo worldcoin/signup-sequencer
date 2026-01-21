@@ -957,3 +957,6 @@ pub async fn await_tree_state_with_mined_leafs_size(
         None => Err(anyhow!("Cannot get tree state")),
     }
 }
+
+// Re-export JWT test utilities from shared crate
+pub use test_utils::{generate_es256_keypair, sign_jwt};

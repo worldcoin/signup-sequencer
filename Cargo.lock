@@ -6119,6 +6119,7 @@ dependencies = [
  "telemetry-batteries",
  "tempfile",
  "test-case",
+ "test-utils",
  "testcontainers",
  "testcontainers-modules",
  "thiserror 1.0.69",
@@ -6775,6 +6776,14 @@ dependencies = [
  "quote",
  "syn 2.0.98",
  "test-case-core",
+]
+
+[[package]]
+name = "test-utils"
+version = "0.1.0"
+dependencies = [
+ "jsonwebtoken 9.3.1",
+ "serde_json",
 ]
 
 [[package]]

@@ -99,9 +99,7 @@ impl AuthValidator {
         let basic_username = match self.extract_and_validate_basic_auth(request) {
             Some(username) => username,
             None => {
-                return AuthResult::Denied(
-                    "Invalid or missing Basic Auth credentials".to_string(),
-                );
+                return AuthResult::Denied("Invalid or missing Basic Auth credentials".to_string());
             }
         };
 
@@ -202,6 +200,7 @@ impl AuthValidator {
 mod tests {
     use super::*;
     use axum::http::Request as HttpRequest;
+    use maplit::hashmap;
 
     fn make_request_with_headers(
         basic_auth: Option<(&str, &str)>,
@@ -223,7 +222,7 @@ mod tests {
     #[test]
     fn disabled_mode_allows_all() {
         let validator =
-            AuthValidator::new(AuthMode::Disabled, HashMap::new(), &HashMap::new()).unwrap();
+            AuthValidator::new(AuthMode::Disabled, hashmap! {}, &hashmap! {}).unwrap();
 
         let request = make_request_with_headers(None, None);
         assert_eq!(validator.validate(&request), AuthResult::Allowed);
@@ -231,19 +230,22 @@ mod tests {
 
     #[test]
     fn basic_only_requires_valid_basic_auth() {
-        let mut creds = HashMap::new();
-        creds.insert("user".to_string(), "pass".to_string());
-
-        let validator =
-            AuthValidator::new(AuthMode::BasicOnly, creds, &HashMap::new()).unwrap();
+        let creds = hashmap! { "user".to_string() => "pass".to_string() };
+        let validator = AuthValidator::new(AuthMode::BasicOnly, creds, &hashmap! {}).unwrap();
 
         // No auth - denied
         let request = make_request_with_headers(None, None);
-        assert!(matches!(validator.validate(&request), AuthResult::Denied(_)));
+        assert!(matches!(
+            validator.validate(&request),
+            AuthResult::Denied(_)
+        ));
 
         // Wrong credentials - denied
         let request = make_request_with_headers(Some(("user", "wrong")), None);
-        assert!(matches!(validator.validate(&request), AuthResult::Denied(_)));
+        assert!(matches!(
+            validator.validate(&request),
+            AuthResult::Denied(_)
+        ));
 
         // Correct credentials - allowed
         let request = make_request_with_headers(Some(("user", "pass")), None);
@@ -252,35 +254,30 @@ mod tests {
 
     #[test]
     fn basic_only_ignores_bearer_token() {
-        let mut creds = HashMap::new();
-        creds.insert("user".to_string(), "pass".to_string());
-
-        let validator =
-            AuthValidator::new(AuthMode::BasicOnly, creds, &HashMap::new()).unwrap();
+        let creds = hashmap! { "user".to_string() => "pass".to_string() };
+        let validator = AuthValidator::new(AuthMode::BasicOnly, creds, &hashmap! {}).unwrap();
 
         // Bearer token without basic auth - denied (basic auth required)
         let request = make_request_with_headers(None, Some("some.jwt.token"));
-        assert!(matches!(validator.validate(&request), AuthResult::Denied(_)));
+        assert!(matches!(
+            validator.validate(&request),
+            AuthResult::Denied(_)
+        ));
     }
 
     #[test]
     fn jwt_only_rejects_missing_keys() {
         // JwtOnly with no keys should error at construction
-        let result = AuthValidator::new(AuthMode::JwtOnly, HashMap::new(), &HashMap::new());
+        let result = AuthValidator::new(AuthMode::JwtOnly, hashmap! {}, &hashmap! {});
         assert!(matches!(result, Err(AuthError::MissingJwtKeys)));
     }
 
     #[test]
     fn jwt_only_ignores_basic_auth() {
-        // Use empty keys - will reject all tokens but allows construction
-        // Actually JwtOnly requires keys, so we need at least a dummy key
-        // But for this test we just want to verify basic auth is ignored
-        // Since we can't have JwtOnly with no keys, we test with BasicWithSoftJwt instead
-        let mut creds = HashMap::new();
-        creds.insert("user".to_string(), "pass".to_string());
-
+        // Since JwtOnly requires keys, we test with BasicWithSoftJwt instead
+        let creds = hashmap! { "user".to_string() => "pass".to_string() };
         let validator =
-            AuthValidator::new(AuthMode::BasicWithSoftJwt, creds, &HashMap::new()).unwrap();
+            AuthValidator::new(AuthMode::BasicWithSoftJwt, creds, &hashmap! {}).unwrap();
 
         // This mode requires basic auth, so test that having basic auth alone works
         // (with warning about missing JWT)
@@ -293,28 +290,30 @@ mod tests {
 
     #[test]
     fn basic_with_soft_jwt_requires_basic_auth() {
-        let mut creds = HashMap::new();
-        creds.insert("user".to_string(), "pass".to_string());
-
+        let creds = hashmap! { "user".to_string() => "pass".to_string() };
         let validator =
-            AuthValidator::new(AuthMode::BasicWithSoftJwt, creds, &HashMap::new()).unwrap();
+            AuthValidator::new(AuthMode::BasicWithSoftJwt, creds, &hashmap! {}).unwrap();
 
         // No auth - denied
         let request = make_request_with_headers(None, None);
-        assert!(matches!(validator.validate(&request), AuthResult::Denied(_)));
+        assert!(matches!(
+            validator.validate(&request),
+            AuthResult::Denied(_)
+        ));
 
         // Only bearer token - denied (basic auth required)
         let request = make_request_with_headers(None, Some("some.jwt.token"));
-        assert!(matches!(validator.validate(&request), AuthResult::Denied(_)));
+        assert!(matches!(
+            validator.validate(&request),
+            AuthResult::Denied(_)
+        ));
     }
 
     #[test]
     fn basic_with_soft_jwt_warns_on_missing_bearer() {
-        let mut creds = HashMap::new();
-        creds.insert("user".to_string(), "pass".to_string());
-
+        let creds = hashmap! { "user".to_string() => "pass".to_string() };
         let validator =
-            AuthValidator::new(AuthMode::BasicWithSoftJwt, creds, &HashMap::new()).unwrap();
+            AuthValidator::new(AuthMode::BasicWithSoftJwt, creds, &hashmap! {}).unwrap();
 
         // Basic auth only - allowed with warning
         let request = make_request_with_headers(Some(("user", "pass")), None);

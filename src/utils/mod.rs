@@ -8,6 +8,7 @@ use tokio::task::JoinHandle;
 use tracing::error;
 pub mod batch_type;
 pub mod index_packing;
+pub mod jwt;
 pub mod min_map;
 pub mod secret;
 pub mod serde_utils;

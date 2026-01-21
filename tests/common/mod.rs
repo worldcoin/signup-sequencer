@@ -667,14 +667,9 @@ pub async fn spawn_app_returning_initialized_tree(
     let app_handle = spawn({
         async move {
             info!("App thread starting");
-            server::bind_from_listener(
-                app_clone,
-                &server_config_clone,
-                listener,
-                shutdown_clone,
-            )
-            .await
-            .expect("Failed to bind address");
+            server::bind_from_listener(app_clone, &server_config_clone, listener, shutdown_clone)
+                .await
+                .expect("Failed to bind address");
             info!("App thread stopping");
         }
     });

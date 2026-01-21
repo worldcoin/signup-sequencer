@@ -119,7 +119,7 @@ impl AuthValidator {
                             );
                             AuthResult::Allowed
                         }
-                        Err(e) => AuthResult::Denied(format!("Invalid JWT token: {}", e)),
+                        Err(e) => AuthResult::Denied(format!("Invalid JWT token: {e}")),
                     },
                     None => {
                         // No JWT validator configured - misconfiguration, reject
@@ -133,8 +133,7 @@ impl AuthValidator {
                 // No Bearer token - warn but allow
                 tracing::info!(basic_user = %basic_username, "Basic auth validated");
                 AuthResult::AllowedWithWarning(format!(
-                    "Basic auth validated for user '{}' but no JWT token provided",
-                    basic_username
+                    "Basic auth validated for user '{basic_username}' but no JWT token provided"
                 ))
             }
         }
@@ -153,7 +152,7 @@ impl AuthValidator {
                     tracing::info!(jwt_key = %key_name, "JWT auth validated");
                     AuthResult::Allowed
                 }
-                Err(e) => AuthResult::Denied(format!("Invalid JWT token: {}", e)),
+                Err(e) => AuthResult::Denied(format!("Invalid JWT token: {e}")),
             },
             None => {
                 // No keys configured - this is a misconfiguration
@@ -209,11 +208,11 @@ mod tests {
         let mut builder = HttpRequest::builder().uri("/test").method("GET");
 
         if let Some((username, password)) = basic_auth {
-            let credentials = format!("{}:{}", username, password);
+            let credentials = format!("{username}:{password}");
             let encoded = BASE64_STANDARD.encode(credentials.as_bytes());
-            builder = builder.header("Authorization", format!("Basic {}", encoded));
+            builder = builder.header("Authorization", format!("Basic {encoded}"));
         } else if let Some(token) = bearer_token {
-            builder = builder.header("Authorization", format!("Bearer {}", token));
+            builder = builder.header("Authorization", format!("Bearer {token}"));
         }
 
         builder.body(axum::body::Body::empty()).unwrap()
@@ -221,8 +220,7 @@ mod tests {
 
     #[test]
     fn disabled_mode_allows_all() {
-        let validator =
-            AuthValidator::new(AuthMode::Disabled, hashmap! {}, &hashmap! {}).unwrap();
+        let validator = AuthValidator::new(AuthMode::Disabled, hashmap! {}, &hashmap! {}).unwrap();
 
         let request = make_request_with_headers(None, None);
         assert_eq!(validator.validate(&request), AuthResult::Allowed);

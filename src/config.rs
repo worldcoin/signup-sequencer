@@ -759,10 +759,7 @@ mod tests {
         // Verify basic auth credentials
         assert_eq!(env_config.server.basic_auth_credentials.len(), 2);
         assert_eq!(
-            env_config
-                .server
-                .basic_auth_credentials
-                .get("app_backend"),
+            env_config.server.basic_auth_credentials.get("app_backend"),
             Some(&"secretpass123".to_string())
         );
         assert_eq!(
@@ -778,8 +775,7 @@ mod tests {
         assert!(env_config
             .server
             .authorized_keys
-            .get("app_backend")
-            .is_some());
+            .contains_key("app_backend"));
 
         // Verify full config matches
         assert_eq!(parsed_config, env_config);
@@ -809,8 +805,7 @@ mod tests {
             let config: Config = load_config(None).unwrap();
             assert_eq!(
                 config.server.auth_mode, expected_mode,
-                "Failed for auth_mode={}",
-                env_value
+                "Failed for auth_mode={env_value}"
             );
 
             purge_env(OFFCHAIN_ENV);

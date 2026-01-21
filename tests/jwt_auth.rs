@@ -85,19 +85,20 @@ async fn setup_test_app_with_auth(
     auth_mode: AuthMode,
     authorized_keys: HashMap<String, String>,
     basic_auth_credentials: HashMap<String, String>,
-) -> anyhow::Result<(std::sync::Arc<signup_sequencer::app::App>, JoinHandle<()>, std::net::SocketAddr, Shutdown, DockerContainer<'static>, tempfile::TempDir)> {
+) -> anyhow::Result<(
+    std::sync::Arc<signup_sequencer::app::App>,
+    JoinHandle<()>,
+    std::net::SocketAddr,
+    Shutdown,
+    DockerContainer<'static>,
+    tempfile::TempDir,
+)> {
     let ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
     let initial_root: U256 = ref_tree.root().into();
 
     let docker = Box::leak(Box::new(Cli::default()));
-    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
-        initial_root,
-        &[3],
-        &[],
-        DEFAULT_TREE_DEPTH as u8,
-        docker,
-    )
-    .await?;
+    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) =
+        spawn_deps(initial_root, &[3], &[], DEFAULT_TREE_DEPTH as u8, docker).await?;
 
     let prover_mock = &insertion_prover_map[&3];
     let db_socket_addr = db_container.address();
@@ -122,7 +123,14 @@ async fn setup_test_app_with_auth(
 
     let (app, app_handle, local_addr, shutdown) = spawn_app(config).await?;
 
-    Ok((app, app_handle, local_addr, shutdown, db_container, temp_dir))
+    Ok((
+        app,
+        app_handle,
+        local_addr,
+        shutdown,
+        db_container,
+        temp_dir,
+    ))
 }
 
 #[tokio::test]
@@ -317,7 +325,10 @@ async fn v2_insert_identity_requires_auth_when_enforced() -> anyhow::Result<()> 
     let commitment = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
     let client = Client::new();
     let response = client
-        .post(format!("http://{}/v2/identities/{}", local_addr, commitment))
+        .post(format!(
+            "http://{}/v2/identities/{}",
+            local_addr, commitment
+        ))
         .send()
         .await?;
 
@@ -343,7 +354,10 @@ async fn v2_delete_identity_requires_auth_when_enforced() -> anyhow::Result<()> 
     let commitment = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
     let client = Client::new();
     let response = client
-        .delete(format!("http://{}/v2/identities/{}", local_addr, commitment))
+        .delete(format!(
+            "http://{}/v2/identities/{}",
+            local_addr, commitment
+        ))
         .send()
         .await?;
 

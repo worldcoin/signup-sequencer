@@ -299,8 +299,8 @@ pub fn api_v2_router(
 mod test {
     use crate::app::App;
     use crate::config::{
-        default, AppConfig, AuthMode, Config, DatabaseConfig, OffchainModeConfig,
-        ServerConfig, ServiceConfig, TreeConfig,
+        default, AppConfig, AuthMode, Config, DatabaseConfig, OffchainModeConfig, ServerConfig,
+        ServiceConfig, TreeConfig,
     };
     use crate::database::methods::DbMethods;
     use crate::database::IsolationLevel;
@@ -378,11 +378,8 @@ mod test {
 
         app.clone().init_tree().await?;
 
-        let auth_validator = AuthValidator::new(
-            AuthMode::Disabled,
-            Default::default(),
-            &Default::default(),
-        )?;
+        let auth_validator =
+            AuthValidator::new(AuthMode::Disabled, Default::default(), &Default::default())?;
 
         Ok((
             TestServer::new(api_v2_router(

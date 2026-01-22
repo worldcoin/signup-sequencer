@@ -4,6 +4,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use serde::Serialize;
 
 /// Generates an ES256 key pair for testing.
 /// Returns (private_key_pem, public_key_pem).
@@ -67,10 +68,10 @@ pub fn generate_es256_keypair() -> (String, String) {
 }
 
 /// Signs a JWT with the given private key and claims.
-pub fn sign_jwt(private_key_pem: &str, claims: serde_json::Value) -> String {
+pub fn sign_jwt(private_key_pem: &str, claims: &impl Serialize) -> String {
     let encoding_key = EncodingKey::from_ec_pem(private_key_pem.as_bytes())
         .expect("Failed to create encoding key");
 
     let header = Header::new(Algorithm::ES256);
-    encode(&header, &claims, &encoding_key).expect("Failed to encode JWT")
+    encode(&header, claims, &encoding_key).expect("Failed to encode JWT")
 }

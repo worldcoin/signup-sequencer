@@ -10,6 +10,7 @@ use common::{generate_es256_keypair, sign_jwt};
 use maplit::hashmap;
 use reqwest::header::AUTHORIZATION;
 use signup_sequencer::config::AuthMode;
+use signup_sequencer::utils::jwt::Claims;
 
 fn future_exp() -> u64 {
     SystemTime::now()
@@ -157,7 +158,8 @@ async fn insert_identity_succeeds_with_valid_token() -> anyhow::Result<()> {
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
         setup_test_app_with_auth(AuthMode::JwtOnly, keys, hashmap! {}).await?;
 
-    let token = sign_jwt(&private_pem, json!({"sub": "test", "exp": future_exp()}));
+    let claims = Claims::new(future_exp()).with_sub("test");
+    let token = sign_jwt(&private_pem, &claims);
 
     let client = Client::new();
     let response = client
@@ -340,10 +342,8 @@ async fn wrong_key_rejected() -> anyhow::Result<()> {
         setup_test_app_with_auth(AuthMode::JwtOnly, keys, hashmap! {}).await?;
 
     // Sign with wrong key
-    let token = sign_jwt(
-        &wrong_private_pem,
-        json!({"sub": "test", "exp": future_exp()}),
-    );
+    let claims = Claims::new(future_exp()).with_sub("test");
+    let token = sign_jwt(&wrong_private_pem, &claims);
 
     let client = Client::new();
     let response = client

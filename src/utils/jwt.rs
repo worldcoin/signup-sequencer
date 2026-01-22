@@ -1,6 +1,35 @@
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
+
+/// JWT claims structure.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Claims {
+    /// Expiration time (required)
+    pub exp: u64,
+    /// Subject (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sub: Option<String>,
+    /// Issued at (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iat: Option<u64>,
+}
+
+impl Claims {
+    pub fn new(exp: u64) -> Self {
+        Self {
+            exp,
+            sub: None,
+            iat: None,
+        }
+    }
+
+    pub fn with_sub(mut self, sub: impl Into<String>) -> Self {
+        self.sub = Some(sub.into());
+        self
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum JwtError {
@@ -44,7 +73,7 @@ impl JwtValidator {
         let validation = Validation::new(Algorithm::ES256);
 
         for (name, key) in &self.keys {
-            if decode::<serde_json::Value>(token, key, &validation).is_ok() {
+            if decode::<Claims>(token, key, &validation).is_ok() {
                 return Ok(name.clone());
             }
         }
@@ -84,8 +113,8 @@ mod tests {
 
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
-        let claims = json!({"sub": "user123", "exp": future_exp()});
-        let token = sign_jwt(&private_pem, claims);
+        let claims = Claims::new(future_exp()).with_sub("user123");
+        let token = sign_jwt(&private_pem, &claims);
 
         let result = validator.validate(&token);
         assert!(result.is_ok());
@@ -101,8 +130,8 @@ mod tests {
 
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
-        let claims = json!({"sub": "user123", "exp": past_exp()});
-        let token = sign_jwt(&private_pem, claims);
+        let claims = Claims::new(past_exp()).with_sub("user123");
+        let token = sign_jwt(&private_pem, &claims);
 
         let result = validator.validate(&token);
         assert!(matches!(result, Err(JwtError::InvalidToken)));
@@ -117,8 +146,9 @@ mod tests {
 
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
+        // Use json! to create a token without exp claim
         let claims = json!({"sub": "user123"});
-        let token = sign_jwt(&private_pem, claims);
+        let token = sign_jwt(&private_pem, &claims);
 
         let result = validator.validate(&token);
         assert!(matches!(result, Err(JwtError::InvalidToken)));
@@ -135,8 +165,8 @@ mod tests {
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
         // Sign with key1, but validator only has key2
-        let claims = json!({"sub": "user123", "exp": future_exp()});
-        let token = sign_jwt(&private_pem1, claims);
+        let claims = Claims::new(future_exp()).with_sub("user123");
+        let token = sign_jwt(&private_pem1, &claims);
 
         let result = validator.validate(&token);
         assert!(matches!(result, Err(JwtError::InvalidToken)));
@@ -167,15 +197,15 @@ mod tests {
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
         // Token signed with key1 should match key1
-        let claims1 = json!({"sub": "user1", "exp": future_exp()});
-        let token1 = sign_jwt(&private_pem1, claims1);
+        let claims1 = Claims::new(future_exp()).with_sub("user1");
+        let token1 = sign_jwt(&private_pem1, &claims1);
         let result1 = validator.validate(&token1);
         assert!(result1.is_ok());
         assert_eq!(result1.unwrap(), "key1");
 
         // Token signed with key2 should match key2
-        let claims2 = json!({"sub": "user2", "exp": future_exp()});
-        let token2 = sign_jwt(&private_pem2, claims2);
+        let claims2 = Claims::new(future_exp()).with_sub("user2");
+        let token2 = sign_jwt(&private_pem2, &claims2);
         let result2 = validator.validate(&token2);
         assert!(result2.is_ok());
         assert_eq!(result2.unwrap(), "key2");
@@ -187,8 +217,8 @@ mod tests {
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
         let (private_pem, _public_pem) = generate_es256_keypair();
-        let claims = json!({"sub": "user123", "exp": future_exp()});
-        let token = sign_jwt(&private_pem, claims);
+        let claims = Claims::new(future_exp()).with_sub("user123");
+        let token = sign_jwt(&private_pem, &claims);
 
         let result = validator.validate(&token);
         assert!(matches!(result, Err(JwtError::InvalidToken)));

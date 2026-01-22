@@ -8,6 +8,7 @@ use crate::server::api_v2::data::{
     ErrorResponse, InclusionProofResponse, VerifySemaphoreProofRequest,
     VerifySemaphoreProofResponse,
 };
+use crate::utils::auth::AuthValidator;
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::header::CONTENT_TYPE;
@@ -246,12 +247,29 @@ fn parse_commitment(raw_commitment: String) -> Result<Hash, Error> {
     })
 }
 
-pub fn api_v2_router(app: Arc<App>, serve_timeout: Duration) -> Router {
-    Router::new()
+pub fn api_v2_router(
+    app: Arc<App>,
+    serve_timeout: Duration,
+    auth_validator: AuthValidator,
+) -> Router {
+    // Protected routes that require authentication
+    // Note: POST and DELETE on /v2/identities/:commitment need auth
+    // Apply remove_auth FIRST (inner), then auth LAST (outer) so auth runs before remove_auth
+    let protected_routes = Router::new()
         .route(
             "/v2/identities/:commitment",
             post(insert_identity).delete(delete_identity),
         )
+        .layer(middleware::from_fn(
+            custom_middleware::remove_auth_layer::middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            auth_validator,
+            custom_middleware::auth_layer::middleware,
+        ));
+
+    // Public routes that don't require authentication
+    let public_routes = Router::new()
         .route(
             "/v2/identities/:commitment/inclusion-proof",
             get(inclusion_proof),
@@ -259,15 +277,20 @@ pub fn api_v2_router(app: Arc<App>, serve_timeout: Duration) -> Router {
         .route("/v2/semaphore-proof/verify", post(verify_semaphore_proof))
         .route("/v2/health", get(health))
         .route("/v2/metrics", get(metrics))
+        .layer(middleware::from_fn(
+            custom_middleware::remove_auth_layer::middleware,
+        ));
+
+    // Merge protected and public routes
+    Router::new()
+        .merge(protected_routes)
+        .merge(public_routes)
         .layer(middleware::from_fn_with_state(
             serve_timeout,
             custom_middleware::timeout_layer::middleware,
         ))
         .layer(middleware::from_fn(
             custom_middleware::logging_layer::middleware,
-        ))
-        .layer(middleware::from_fn(
-            custom_middleware::remove_auth_layer::middleware,
         ))
         .with_state(app.clone())
 }
@@ -276,7 +299,7 @@ pub fn api_v2_router(app: Arc<App>, serve_timeout: Duration) -> Router {
 mod test {
     use crate::app::App;
     use crate::config::{
-        default, AppConfig, Config, DatabaseConfig, OffchainModeConfig, ServerConfig,
+        default, AppConfig, AuthMode, Config, DatabaseConfig, OffchainModeConfig, ServerConfig,
         ServiceConfig, TreeConfig,
     };
     use crate::database::methods::DbMethods;
@@ -284,6 +307,7 @@ mod test {
     use crate::identity_tree::db_sync::sync_tree;
     use crate::identity_tree::{Hash, TreeVersionReadOps};
     use crate::server::api_v2::api_v2_router;
+    use crate::utils::auth::AuthValidator;
     use crate::utils::secret::SecretUrl;
     use axum::http::StatusCode;
     use axum_test::{TestRequest, TestServer};
@@ -342,6 +366,9 @@ mod test {
             server: ServerConfig {
                 address: SocketAddr::from(([127, 0, 0, 1], 0)),
                 serve_timeout: default::serve_timeout(),
+                auth_mode: AuthMode::Disabled,
+                basic_auth_credentials: Default::default(),
+                authorized_keys: Default::default(),
             },
             service: ServiceConfig::default(),
             offchain_mode: OffchainModeConfig { enabled: true },
@@ -351,8 +378,15 @@ mod test {
 
         app.clone().init_tree().await?;
 
+        let auth_validator =
+            AuthValidator::new(AuthMode::Disabled, Default::default(), &Default::default())?;
+
         Ok((
-            TestServer::new(api_v2_router(app.clone(), Duration::from_secs(300)))?,
+            TestServer::new(api_v2_router(
+                app.clone(),
+                Duration::from_secs(300),
+                auth_validator,
+            ))?,
             app,
             db_container,
             temp_dir,

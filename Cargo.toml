@@ -24,6 +24,7 @@ default = []
 [dependencies]
 anyhow = { version = "1.0.68" }
 async-stream = "0.3.3"
+base64 = "0.22"
 async-trait = "0.1.86"
 axum = "0.7.7"
 axum-server = "0.7.1"
@@ -41,6 +42,7 @@ futures = "0.3"
 futures-util = { version = "^0.3" }
 hex = "0.4.3"
 hex-literal = "0.4.1"
+jsonwebtoken = "9"
 humantime = "2.1.0"
 humantime-serde = "1.1.1"
 hyper = { version = "1.4.1", features = ["server", "http1", "http2"] }
@@ -94,6 +96,7 @@ lazy_static = "1.4.0"
 maplit = "1.0.2"
 micro-oz = { path = "crates/micro-oz" }
 postgres-docker-utils = { path = "crates/postgres-docker-utils" }
+test-utils = { path = "crates/test-utils" }
 regex = { version = "1.7.1", features = ["std"] }
 semaphore-rs = { git = "https://github.com/worldcoin/semaphore-rs", rev = "85f9e29", features = [
     "depth_20",

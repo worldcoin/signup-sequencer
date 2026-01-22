@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use axum::body::Body;
 use axum::Router;
@@ -11,6 +10,7 @@ use tracing::info;
 use crate::app::App;
 use crate::config::ServerConfig;
 use crate::shutdown::Shutdown;
+use crate::utils::auth::AuthValidator;
 
 pub mod api_v1;
 mod api_v2;
@@ -24,7 +24,7 @@ pub async fn run(app: Arc<App>, config: ServerConfig, shutdown: Shutdown) -> any
     info!("Will listen on {}", config.address);
     let listener = TcpListener::bind(config.address).await?;
 
-    bind_from_listener(app, config.serve_timeout, listener, shutdown).await?;
+    bind_from_listener(app, &config, listener, shutdown).await?;
 
     Ok(())
 }
@@ -53,13 +53,34 @@ impl ResponseForPanic for PanicHandler {
 /// if the server fails to bind to the given address.
 pub async fn bind_from_listener(
     app: Arc<App>,
-    serve_timeout: Duration,
+    config: &ServerConfig,
     listener: TcpListener,
     shutdown: Shutdown,
 ) -> anyhow::Result<()> {
+    let auth_validator = AuthValidator::new(
+        config.auth_mode.clone(),
+        config.basic_auth_credentials.clone(),
+        &config.authorized_keys,
+    )?;
+
+    info!(
+        "Authentication: mode={:?}, basic_auth_users={}, jwt_keys={}",
+        config.auth_mode,
+        config.basic_auth_credentials.len(),
+        config.authorized_keys.len()
+    );
+
     let router = Router::new()
-        .merge(api_v1::api_v1_router(app.clone(), serve_timeout))
-        .merge(api_v2::api_v2_router(app.clone(), serve_timeout))
+        .merge(api_v1::api_v1_router(
+            app.clone(),
+            config.serve_timeout,
+            auth_validator.clone(),
+        ))
+        .merge(api_v2::api_v2_router(
+            app,
+            config.serve_timeout,
+            auth_validator,
+        ))
         .layer(CatchPanicLayer::custom(PanicHandler {}));
 
     let _shutdown_handle = shutdown.handle();

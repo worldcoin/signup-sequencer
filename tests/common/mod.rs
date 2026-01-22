@@ -663,17 +663,13 @@ pub async fn spawn_app_returning_initialized_tree(
 
     let app_clone = app.clone();
     let shutdown_clone = shutdown.clone();
+    let server_config_clone = server_config.clone();
     let app_handle = spawn({
         async move {
             info!("App thread starting");
-            server::bind_from_listener(
-                app_clone,
-                Duration::from_secs(30),
-                listener,
-                shutdown_clone,
-            )
-            .await
-            .expect("Failed to bind address");
+            server::bind_from_listener(app_clone, &server_config_clone, listener, shutdown_clone)
+                .await
+                .expect("Failed to bind address");
             info!("App thread stopping");
         }
     });
@@ -961,3 +957,6 @@ pub async fn await_tree_state_with_mined_leafs_size(
         None => Err(anyhow!("Cannot get tree state")),
     }
 }
+
+// Re-export JWT test utilities from shared crate
+pub use test_utils::{generate_es256_keypair, sign_jwt};

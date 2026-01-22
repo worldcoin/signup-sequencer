@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::app::App;
+use crate::utils::auth::AuthValidator;
 use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::response::Response;
@@ -137,24 +138,45 @@ async fn metrics() -> Result<Response<Body>, Error> {
     Ok(response)
 }
 
-pub fn api_v1_router(app: Arc<App>, serve_timeout: Duration) -> Router {
-    Router::new()
-        // Operate on identity commitments
+pub fn api_v1_router(
+    app: Arc<App>,
+    serve_timeout: Duration,
+    auth_validator: AuthValidator,
+) -> Router {
+    // Protected routes that require authentication
+    // Apply remove_auth FIRST (inner), then auth LAST (outer) so auth runs before remove_auth
+    let protected_routes = Router::new()
+        .route("/insertIdentity", post(insert_identity))
+        .route("/deleteIdentity", post(delete_identity))
+        .layer(middleware::from_fn(
+            custom_middleware::remove_auth_layer::middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            auth_validator,
+            custom_middleware::auth_layer::middleware,
+        ));
+
+    // Public routes that don't require authentication
+    let public_routes = Router::new()
         .route("/verifySemaphoreProof", post(verify_semaphore_proof))
         .route(
             "/verifyCompressedSemaphoreProof",
             post(verify_compressed_semaphore_proof),
         )
         .route("/inclusionProof", post(inclusion_proof))
-        .route("/insertIdentity", post(insert_identity))
-        .route("/deleteIdentity", post(delete_identity))
-        // Operate on batch sizes
         .route("/addBatchSize", post(add_batch_size))
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
-        // Health check, return 200 OK
         .route("/health", get(health))
         .route("/metrics", get(metrics))
+        .layer(middleware::from_fn(
+            custom_middleware::remove_auth_layer::middleware,
+        ));
+
+    // Merge protected and public routes
+    Router::new()
+        .merge(protected_routes)
+        .merge(public_routes)
         .layer(middleware::from_fn(
             custom_middleware::api_metrics_layer::middleware,
         ))
@@ -164,9 +186,6 @@ pub fn api_v1_router(app: Arc<App>, serve_timeout: Duration) -> Router {
         ))
         .layer(middleware::from_fn(
             custom_middleware::logging_layer::middleware,
-        ))
-        .layer(middleware::from_fn(
-            custom_middleware::remove_auth_layer::middleware,
         ))
         .with_state(app.clone())
 }

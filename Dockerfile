@@ -23,6 +23,7 @@ RUN mkdir -p ./src \
     && mkdir -p ./crates/micro-oz/src \
     && mkdir -p ./crates/oz-api/src \
     && mkdir -p ./crates/postgres-docker-utils/src \
+    && mkdir -p ./crates/test-utils/src \
     && mkdir -p ./crates/tx-sitter-client/src \
     && mkdir -p ./e2e_tests/scenarios/src
 
@@ -34,6 +35,7 @@ COPY ./crates/cognitoauth/Cargo.toml ./crates/cognitoauth/Cargo.toml
 COPY ./crates/micro-oz/Cargo.toml ./crates/micro-oz/Cargo.toml
 COPY ./crates/oz-api/Cargo.toml ./crates/oz-api/Cargo.toml
 COPY ./crates/postgres-docker-utils/Cargo.toml ./crates/postgres-docker-utils/Cargo.toml
+COPY ./crates/test-utils/Cargo.toml ./crates/test-utils/Cargo.toml
 COPY ./crates/tx-sitter-client/Cargo.toml ./crates/tx-sitter-client/Cargo.toml
 COPY ./e2e_tests/scenarios/Cargo.toml ./e2e_tests/scenarios/Cargo.toml
 
@@ -42,6 +44,7 @@ RUN echo "fn main() {}" > ./src/main.rs \
     && echo "fn main() {}" > ./crates/micro-oz/src/main.rs \
     && echo "fn main() {}" > ./crates/oz-api/src/main.rs \
     && echo "fn main() {}" > ./crates/postgres-docker-utils/src/main.rs \
+    && echo "fn main() {}" > ./crates/test-utils/src/lib.rs \
     && echo "fn main() {}" > ./crates/tx-sitter-client/src/main.rs \
     && echo "fn main() {}" > ./e2e_tests/scenarios/src/main.rs
 

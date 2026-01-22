@@ -96,10 +96,10 @@ impl AuthValidator {
             Some(token) => {
                 // Token present - validate it
                 match self.jwt_validator.validate(token) {
-                    Ok(key_name) => {
+                    Ok(claims) => {
                         tracing::info!(
                             basic_user = %basic_username,
-                            jwt_key = %key_name,
+                            jwt_sub = %claims.sub,
                             "Basic + JWT auth validated"
                         );
                         AuthResult::Allowed
@@ -124,8 +124,8 @@ impl AuthValidator {
             None => return AuthResult::Denied("Missing Authorization Bearer token".to_string()),
         };
         match self.jwt_validator.validate(token) {
-            Ok(key_name) => {
-                tracing::info!(jwt_key = %key_name, "JWT auth validated");
+            Ok(claims) => {
+                tracing::info!(jwt_sub = %claims.sub, "JWT auth validated");
                 AuthResult::Allowed
             }
             Err(e) => AuthResult::Denied(format!("Invalid JWT token: {e}")),

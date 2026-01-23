@@ -59,7 +59,7 @@ impl AuthValidator {
         match self.mode {
             AuthMode::Disabled => AuthResult::Allowed,
             AuthMode::BasicOnly => self.validate_basic_only(request),
-            AuthMode::BasicWithSoftJwt => self.validate_basic_with_soft_jwt(request),
+            AuthMode::BasicOrJwt => self.validate_basic_or_jwt(request),
             AuthMode::JwtOnly => self.validate_jwt_only(request),
         }
     }
@@ -75,46 +75,41 @@ impl AuthValidator {
         }
     }
 
-    /// BasicWithSoftJwt: Requires valid Basic Auth + soft-validates JWT.
-    /// - If Basic Auth fails: deny
-    /// - If Basic Auth passes but no Bearer token: allow with warning
-    /// - If Basic Auth passes and Bearer token is invalid: deny
-    /// - If Basic Auth passes and Bearer token is valid: allow
-    fn validate_basic_with_soft_jwt(&self, request: &Request) -> AuthResult {
-        // First validate Basic Auth
-        let basic_username = match self.extract_and_validate_basic_auth(request) {
-            Some(username) => username,
-            None => {
-                return AuthResult::Denied("Invalid or missing Basic Auth credentials".to_string());
-            }
-        };
-
-        // Now check Bearer token
+    /// BasicOrJwt: Requires valid Basic Auth OR valid JWT (at least one).
+    /// - If JWT present and invalid: deny
+    /// - If JWT present and valid: allow
+    /// - If no JWT but Basic Auth valid: allow with warning
+    /// - If neither valid: deny
+    fn validate_basic_or_jwt(&self, request: &Request) -> AuthResult {
+        // Check JWT first - if present, it must be valid
         let bearer_token = self.extract_bearer_token(request);
 
-        match bearer_token {
-            Some(token) => {
-                // Token present - validate it
-                match self.jwt_validator.validate(token) {
-                    Ok(claims) => {
-                        tracing::info!(
-                            basic_user = %basic_username,
-                            jwt_sub = %claims.sub,
-                            "Basic + JWT auth validated"
-                        );
-                        AuthResult::Allowed
-                    }
-                    Err(e) => AuthResult::Denied(format!("Invalid JWT token: {e}")),
+        if let Some(token) = bearer_token {
+            match self.jwt_validator.validate(token) {
+                Ok(claims) => {
+                    tracing::info!(jwt_sub = %claims.sub, "JWT auth validated");
+                    return AuthResult::Allowed;
+                }
+                Err(e) => {
+                    // JWT present but invalid - deny immediately
+                    return AuthResult::Denied(format!("Invalid JWT token: {e}"));
                 }
             }
-            None => {
-                // No Bearer token - warn but allow
-                tracing::info!(basic_user = %basic_username, "Basic auth validated");
-                AuthResult::AllowedWithWarning(format!(
-                    "Basic auth validated for user '{basic_username}' but no JWT token provided"
-                ))
-            }
         }
+
+        // No JWT token - check Basic Auth
+        if let Some(username) = self.extract_and_validate_basic_auth(request) {
+            tracing::warn!(
+                basic_user = %username,
+                "Request authenticated with Basic Auth only - JWT recommended"
+            );
+            return AuthResult::AllowedWithWarning(format!(
+                "Authenticated with Basic Auth (user '{username}') but JWT is recommended"
+            ));
+        }
+
+        // Neither JWT nor Basic Auth valid
+        AuthResult::Denied("Authentication required: provide valid JWT or Basic Auth".to_string())
     }
 
     /// JwtOnly: Requires valid Bearer token, ignores Basic Auth.
@@ -235,14 +230,11 @@ mod tests {
     }
 
     #[test]
-    fn jwt_only_ignores_basic_auth() {
-        // Since JwtOnly requires keys, we test with BasicWithSoftJwt instead
+    fn basic_or_jwt_allows_basic_auth_with_warning() {
         let creds = hashmap! { "user".to_string() => "pass".to_string() };
-        let validator =
-            AuthValidator::new(AuthMode::BasicWithSoftJwt, creds, &hashmap! {}).unwrap();
+        let validator = AuthValidator::new(AuthMode::BasicOrJwt, creds, &hashmap! {}).unwrap();
 
-        // This mode requires basic auth, so test that having basic auth alone works
-        // (with warning about missing JWT)
+        // Basic auth only - allowed with warning
         let request = make_request_with_headers(Some(("user", "pass")), None);
         assert!(matches!(
             validator.validate(&request),
@@ -251,10 +243,9 @@ mod tests {
     }
 
     #[test]
-    fn basic_with_soft_jwt_requires_basic_auth() {
+    fn basic_or_jwt_denies_when_neither_present() {
         let creds = hashmap! { "user".to_string() => "pass".to_string() };
-        let validator =
-            AuthValidator::new(AuthMode::BasicWithSoftJwt, creds, &hashmap! {}).unwrap();
+        let validator = AuthValidator::new(AuthMode::BasicOrJwt, creds, &hashmap! {}).unwrap();
 
         // No auth - denied
         let request = make_request_with_headers(None, None);
@@ -262,26 +253,18 @@ mod tests {
             validator.validate(&request),
             AuthResult::Denied(_)
         ));
-
-        // Only bearer token - denied (basic auth required)
-        let request = make_request_with_headers(None, Some("some.jwt.token"));
-        assert!(matches!(
-            validator.validate(&request),
-            AuthResult::Denied(_)
-        ));
     }
 
     #[test]
-    fn basic_with_soft_jwt_warns_on_missing_bearer() {
+    fn basic_or_jwt_denies_invalid_jwt() {
         let creds = hashmap! { "user".to_string() => "pass".to_string() };
-        let validator =
-            AuthValidator::new(AuthMode::BasicWithSoftJwt, creds, &hashmap! {}).unwrap();
+        let validator = AuthValidator::new(AuthMode::BasicOrJwt, creds, &hashmap! {}).unwrap();
 
-        // Basic auth only - allowed with warning
-        let request = make_request_with_headers(Some(("user", "pass")), None);
+        // Invalid JWT - denied (even without checking basic auth)
+        let request = make_request_with_headers(None, Some("invalid.jwt.token"));
         assert!(matches!(
             validator.validate(&request),
-            AuthResult::AllowedWithWarning(_)
+            AuthResult::Denied(_)
         ));
     }
 }

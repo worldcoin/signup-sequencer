@@ -212,7 +212,7 @@ async fn auth_disabled_bypasses_all_checks() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn basic_with_soft_jwt_allows_without_jwt() -> anyhow::Result<()> {
+async fn basic_or_jwt_allows_with_basic_auth() -> anyhow::Result<()> {
     init_tracing_subscriber();
 
     let (_, public_pem) = generate_es256_keypair();
@@ -220,9 +220,9 @@ async fn basic_with_soft_jwt_allows_without_jwt() -> anyhow::Result<()> {
 
     let basic_creds = hashmap! { "testuser".to_string() => "testpass".to_string() };
 
-    // BasicWithSoftJwt mode: basic auth required, JWT soft-validated
+    // BasicOrJwt mode: either basic auth OR JWT is required
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
-        setup_test_app_with_auth(AuthMode::BasicWithSoftJwt, keys, basic_creds).await?;
+        setup_test_app_with_auth(AuthMode::BasicOrJwt, keys, basic_creds).await?;
 
     let client = Client::new();
     let response = client
@@ -235,7 +235,43 @@ async fn basic_with_soft_jwt_allows_without_jwt() -> anyhow::Result<()> {
         .send()
         .await?;
 
-    // Should not be 401 since basic auth is valid and JWT is soft-validated (missing is allowed with warning)
+    // Should not be 401 since basic auth is valid (allowed with warning)
+    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+
+    shutdown.shutdown();
+    app_handle.await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn basic_or_jwt_allows_with_jwt_only() -> anyhow::Result<()> {
+    init_tracing_subscriber();
+
+    let (private_pem, public_pem) = generate_es256_keypair();
+    let keys = hashmap! { "test_key".to_string() => public_pem };
+
+    let basic_creds = hashmap! { "testuser".to_string() => "testpass".to_string() };
+
+    // BasicOrJwt mode: either basic auth OR JWT is required
+    let (_app, app_handle, local_addr, shutdown, _db, _temp) =
+        setup_test_app_with_auth(AuthMode::BasicOrJwt, keys, basic_creds).await?;
+
+    let claims = Claims::new("test_key", future_exp());
+    let token = sign_jwt(&private_pem, &claims);
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/insertIdentity", local_addr))
+        .header("Content-Type", "application/json")
+        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .body(
+            r#"{"identityCommitment":"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"}"#,
+        )
+        .send()
+        .await?;
+
+    // Should not be 401 since JWT is valid (no basic auth needed)
     assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
 
     shutdown.shutdown();

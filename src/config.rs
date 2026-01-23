@@ -20,8 +20,8 @@ pub enum AuthMode {
     Disabled,
     /// Basic Auth required only
     BasicOnly,
-    /// Basic Auth required + soft-validate JWT (warn if missing, error if invalid)
-    BasicWithSoftJwt,
+    /// Basic Auth OR JWT required (at least one). Warns if only Basic Auth is used.
+    BasicOrJwt,
     /// JWT required
     JwtOnly,
 }
@@ -688,7 +688,7 @@ mod tests {
         [server]
         address = "0.0.0.0:3001"
         serve_timeout = "30s"
-        auth_mode = "basic_with_soft_jwt"
+        auth_mode = "basic_or_jwt"
 
         [server.basic_auth_credentials]
         app_backend = "secretpass123"
@@ -732,7 +732,7 @@ mod tests {
 
         SEQ__SERVER__ADDRESS=0.0.0.0:3001
         SEQ__SERVER__SERVE_TIMEOUT=30s
-        SEQ__SERVER__AUTH_MODE=basic_with_soft_jwt
+        SEQ__SERVER__AUTH_MODE=basic_or_jwt
         SEQ__SERVER__BASIC_AUTH_CREDENTIALS__APP_BACKEND=secretpass123
         SEQ__SERVER__BASIC_AUTH_CREDENTIALS__OTHER_SERVICE=otherpass456
         SEQ__SERVER__AUTHORIZED_KEYS__APP_BACKEND=test_public_key_pem_content
@@ -754,7 +754,7 @@ mod tests {
         let env_config: Config = load_config(None).unwrap();
 
         // Verify auth mode
-        assert_eq!(env_config.server.auth_mode, AuthMode::BasicWithSoftJwt);
+        assert_eq!(env_config.server.auth_mode, AuthMode::BasicOrJwt);
 
         // Verify basic auth credentials
         assert_eq!(env_config.server.basic_auth_credentials.len(), 2);
@@ -791,7 +791,7 @@ mod tests {
         let modes = [
             ("disabled", AuthMode::Disabled),
             ("basic_only", AuthMode::BasicOnly),
-            ("basic_with_soft_jwt", AuthMode::BasicWithSoftJwt),
+            ("basic_or_jwt", AuthMode::BasicOrJwt),
             ("jwt_only", AuthMode::JwtOnly),
         ];
 

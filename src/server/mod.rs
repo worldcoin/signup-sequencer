@@ -14,6 +14,7 @@ use crate::utils::auth::AuthValidator;
 
 pub mod api_v1;
 mod api_v2;
+mod api_v3;
 
 /// # Errors
 ///
@@ -77,9 +78,14 @@ pub async fn bind_from_listener(
             auth_validator.clone(),
         ))
         .merge(api_v2::api_v2_router(
-            app,
+            app.clone(),
             config.serve_timeout,
-            auth_validator,
+            auth_validator.clone(),
+        ))
+        .merge(api_v3::api_v3_router(
+            app.clone(),
+            config.serve_timeout,
+            auth_validator.clone(),
         ))
         .layer(CatchPanicLayer::custom(PanicHandler {}));
 

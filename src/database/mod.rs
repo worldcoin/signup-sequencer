@@ -778,18 +778,14 @@ mod test {
             &initial_root,
         )
         .await?;
+        let time_of_insertion = Utc::now();
 
         let root = db
             .get_root_state(&roots[0])
             .await?
             .context("Fetching root state")?;
-        let time_of_insertion = Utc::now();
 
-        assert_same_time!(
-            root.pending_valid_as_of,
-            time_of_insertion,
-            chrono::Duration::milliseconds(100)
-        );
+        assert_same_time!(root.pending_valid_as_of, time_of_insertion);
 
         assert!(
             root.mined_valid_as_of.is_none(),
@@ -797,27 +793,19 @@ mod test {
         );
 
         db.mark_root_as_processed(&roots[0]).await?;
+        let time_of_mining = Utc::now();
 
         let root = db
             .get_root_state(&roots[0])
             .await?
             .context("Fetching root state")?;
-        let time_of_mining = Utc::now();
 
         let mined_valid_as_of = root
             .mined_valid_as_of
             .context("Root should have been mined")?;
 
-        assert_same_time!(
-            root.pending_valid_as_of,
-            time_of_insertion,
-            chrono::Duration::milliseconds(100)
-        );
-        assert_same_time!(
-            mined_valid_as_of,
-            time_of_mining,
-            chrono::Duration::milliseconds(100)
-        );
+        assert_same_time!(root.pending_valid_as_of, time_of_insertion);
+        assert_same_time!(mined_valid_as_of, time_of_mining);
 
         Ok(())
     }

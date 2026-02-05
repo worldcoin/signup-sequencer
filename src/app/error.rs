@@ -3,6 +3,24 @@ use thiserror::Error;
 use crate::database;
 
 #[derive(Debug, Error)]
+pub enum InsertIdentityV3Error {
+    #[error("provided identity commitment is invalid")]
+    InvalidCommitment,
+    #[error("provided identity commitment is not in reduced form")]
+    UnreducedCommitment,
+    #[error("provided identity commitment is already included")]
+    AlreadyIncludedCommitment,
+    #[error("provided identity commitment was already added for insertion")]
+    AddedForInsertionCommitment,
+    #[error("provided identity commitment was already added for deletion")]
+    AddedForDeletionCommitment,
+    #[error(transparent)]
+    Database(#[from] database::Error),
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+}
+
+#[derive(Debug, Error)]
 pub enum InsertIdentityV2Error {
     #[error("provided identity commitment is invalid")]
     InvalidCommitment,
@@ -50,6 +68,24 @@ pub enum InclusionProofV2Error {
     CommitmentNotFound,
     #[error("provided identity commitment was deleted")]
     DeletedCommitment,
+    #[error("invalid internal state")]
+    InvalidInternalState,
+    #[error(transparent)]
+    Database(#[from] database::Error),
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    AnyhowError(#[from] anyhow::Error),
+}
+
+#[derive(Debug, Error)]
+pub enum InclusionProofV3Error {
+    #[error("provided identity commitment is invalid")]
+    InvalidCommitment,
+    #[error("provided identity commitment is not in reduced form")]
+    UnreducedCommitment,
+    #[error("provided identity commitment was not found in the tree")]
+    CommitmentNotFound,
     #[error("invalid internal state")]
     InvalidInternalState,
     #[error(transparent)]

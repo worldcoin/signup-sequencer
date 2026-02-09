@@ -1,5 +1,5 @@
 use crate::app::error::{
-    DeleteIdentityV2Error, InclusionProofV2Error, InclusionProofV3Error, InsertIdentityV3Error,
+    DeleteIdentityV2Error, InclusionProofV3Error, InsertIdentityV3Error,
     VerifySemaphoreProofV2Error,
 };
 use crate::app::App;

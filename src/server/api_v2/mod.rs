@@ -185,36 +185,6 @@ async fn verify_semaphore_proof(
     Ok((StatusCode::OK, Json(VerifySemaphoreProofResponse { valid })))
 }
 
-async fn health() -> Result<(), Error> {
-    Ok(())
-}
-
-async fn metrics() -> Result<Response<Body>, Error> {
-    let encoder = TextEncoder::new();
-
-    let metric_families = prometheus::gather();
-    let mut buffer = vec![];
-    encoder
-        .encode(&metric_families, &mut buffer)
-        .map_err(|err| {
-            Error::InternalServerError(ErrorResponse::new("metrics_error", &err.to_string()))
-        })?;
-
-    Ok((
-        StatusCode::OK,
-        [(
-            CONTENT_TYPE,
-            HeaderValue::from_str(encoder.format_type()).map_err(|err| {
-                Error::InternalServerError(ErrorResponse::new("metrics_error", &err.to_string()))
-            })?,
-        )]
-        .into_iter()
-        .collect::<HeaderMap>(),
-        Body::from(buffer),
-    )
-        .into_response())
-}
-
 fn parse_commitment(raw_commitment: String) -> Result<Hash, Error> {
     let re = Regex::new(r"^(0x)?[a-fA-F0-9]{1,64}$").unwrap();
     if !re.is_match(&raw_commitment) {
@@ -275,8 +245,6 @@ pub fn api_v2_router(
             get(inclusion_proof),
         )
         .route("/v2/semaphore-proof/verify", post(verify_semaphore_proof))
-        .route("/v2/health", get(health))
-        .route("/v2/metrics", get(metrics))
         .layer(middleware::from_fn(
             custom_middleware::remove_auth_layer::middleware,
         ));

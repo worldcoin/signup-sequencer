@@ -106,8 +106,7 @@ async fn delete_identity(
 
 async fn inclusion_proof(
     State(app): State<Arc<App>>,
-    Path(raw_commitment): Path<String>,
-    Path(raw_inclusion_proof_type): Path<String>,
+    Path((raw_commitment, raw_inclusion_proof_type)): Path<(String, String)>,
 ) -> Result<(StatusCode, Json<InclusionProofResponse>), Error> {
     let commitment = parse_commitment(raw_commitment)?;
     let inclusion_proof_type = parse_inclusion_proof_type(raw_inclusion_proof_type)?;
@@ -184,36 +183,6 @@ async fn verify_semaphore_proof(
         })?;
 
     Ok((StatusCode::OK, Json(VerifySemaphoreProofResponse { valid })))
-}
-
-async fn health() -> Result<(), Error> {
-    Ok(())
-}
-
-async fn metrics() -> Result<Response<Body>, Error> {
-    let encoder = TextEncoder::new();
-
-    let metric_families = prometheus::gather();
-    let mut buffer = vec![];
-    encoder
-        .encode(&metric_families, &mut buffer)
-        .map_err(|err| {
-            Error::InternalServerError(ErrorResponse::new("metrics_error", &err.to_string()))
-        })?;
-
-    Ok((
-        StatusCode::OK,
-        [(
-            CONTENT_TYPE,
-            HeaderValue::from_str(encoder.format_type()).map_err(|err| {
-                Error::InternalServerError(ErrorResponse::new("metrics_error", &err.to_string()))
-            })?,
-        )]
-        .into_iter()
-        .collect::<HeaderMap>(),
-        Body::from(buffer),
-    )
-        .into_response())
 }
 
 fn parse_commitment(raw_commitment: String) -> Result<Hash, Error> {
@@ -293,8 +262,6 @@ pub fn api_v3_router(
             get(inclusion_proof),
         )
         .route("/v3/semaphore-proof/verify", post(verify_semaphore_proof))
-        .route("/v3/health", get(health))
-        .route("/v3/metrics", get(metrics))
         .layer(middleware::from_fn(
             custom_middleware::remove_auth_layer::middleware,
         ));

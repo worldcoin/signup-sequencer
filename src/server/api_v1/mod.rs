@@ -3,16 +3,12 @@ use std::time::Duration;
 
 use crate::app::App;
 use crate::utils::auth::AuthValidator;
-use axum::body::Body;
 use axum::extract::{Query, State};
-use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{middleware, Json, Router};
 use data::VerifyCompressedSemaphoreProofRequest;
 use error::Error;
-use hyper::header::CONTENT_TYPE;
 use hyper::StatusCode;
-use prometheus::{Encoder, TextEncoder};
 
 mod custom_middleware;
 pub mod data;
@@ -117,27 +113,6 @@ async fn list_batch_sizes(
     Ok((result.to_response_code(), Json(result)))
 }
 
-async fn health() -> Result<(), Error> {
-    Ok(())
-}
-
-async fn metrics() -> Result<Response<Body>, Error> {
-    let encoder = TextEncoder::new();
-
-    let metric_families = prometheus::gather();
-    let mut buffer = vec![];
-    encoder
-        .encode(&metric_families, &mut buffer)
-        .map_err(|e| Error::Other(e.into()))?;
-
-    let response = Response::builder()
-        .status(200)
-        .header(CONTENT_TYPE, encoder.format_type())
-        .body(Body::from(buffer))?;
-
-    Ok(response)
-}
-
 pub fn api_v1_router(
     app: Arc<App>,
     serve_timeout: Duration,
@@ -167,8 +142,6 @@ pub fn api_v1_router(
         .route("/addBatchSize", post(add_batch_size))
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
-        .route("/health", get(health))
-        .route("/metrics", get(metrics))
         .layer(middleware::from_fn(
             custom_middleware::remove_auth_layer::middleware,
         ));

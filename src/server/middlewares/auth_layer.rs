@@ -1,12 +1,11 @@
 use axum::extract::{Request, State};
-use axum::http::StatusCode;
 use axum::middleware::Next;
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 
-use crate::utils::auth::{AuthResult, AuthValidator};
+use crate::utils::auth::{AuthResponseFormatter, AuthResult, AuthValidator};
 
 pub async fn middleware(
-    State(validator): State<AuthValidator>,
+    State((validator, response_formatter)): State<(AuthValidator, AuthResponseFormatter)>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -18,7 +17,7 @@ pub async fn middleware(
         }
         AuthResult::Denied(msg) => {
             tracing::warn!("Authentication failed: {}", msg);
-            (StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
+            response_formatter(msg)
         }
     }
 }

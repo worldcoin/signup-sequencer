@@ -8,23 +8,20 @@ use crate::server::api_v3::data::{
     ErrorResponse, InclusionProofResponse, InclusionProofType, VerifySemaphoreProofRequest,
     VerifySemaphoreProofResponse,
 };
-use crate::utils::auth::AuthValidator;
-use axum::body::Body;
+use crate::server::middlewares;
+use crate::utils::auth::{AuthResponseFormatter, AuthValidator};
 use axum::extract::{Path, State};
-use axum::http::header::CONTENT_TYPE;
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{middleware, Json, Router};
 use error::Error;
-use prometheus::{Encoder, TextEncoder};
 use regex::Regex;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::log::error;
 
-mod custom_middleware;
 mod data;
 mod error;
 
@@ -234,6 +231,17 @@ fn parse_inclusion_proof_type(
         })
 }
 
+fn auth_error_formatter(_msg: String) -> Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(ErrorResponse::new(
+            "unauthorized",
+            "Invalid or missing authentication credentials",
+        )),
+    )
+        .into_response()
+}
+
 pub fn api_v3_router(
     app: Arc<App>,
     serve_timeout: Duration,
@@ -248,11 +256,14 @@ pub fn api_v3_router(
             post(insert_identity).delete(delete_identity),
         )
         .layer(middleware::from_fn(
-            custom_middleware::remove_auth_layer::middleware,
+            middlewares::remove_auth_layer::middleware,
         ))
         .layer(middleware::from_fn_with_state(
-            auth_validator,
-            custom_middleware::auth_layer::middleware,
+            (
+                auth_validator,
+                auth_error_formatter as AuthResponseFormatter,
+            ),
+            middlewares::auth_layer::middleware,
         ));
 
     // Public routes that don't require authentication
@@ -263,7 +274,7 @@ pub fn api_v3_router(
         )
         .route("/v3/semaphore-proof/verify", post(verify_semaphore_proof))
         .layer(middleware::from_fn(
-            custom_middleware::remove_auth_layer::middleware,
+            middlewares::remove_auth_layer::middleware,
         ));
 
     // Merge protected and public routes
@@ -272,11 +283,9 @@ pub fn api_v3_router(
         .merge(public_routes)
         .layer(middleware::from_fn_with_state(
             serve_timeout,
-            custom_middleware::timeout_layer::middleware,
+            middlewares::timeout_layer::middleware,
         ))
-        .layer(middleware::from_fn(
-            custom_middleware::logging_layer::middleware,
-        ))
+        .layer(middleware::from_fn(middlewares::logging_layer::middleware))
         .with_state(app.clone())
 }
 

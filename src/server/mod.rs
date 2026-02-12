@@ -20,6 +20,7 @@ use crate::utils::auth::AuthValidator;
 pub mod api_v1;
 mod api_v2;
 mod api_v3;
+mod middlewares;
 
 /// # Errors
 ///

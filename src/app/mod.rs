@@ -3,8 +3,8 @@ use std::sync::{Arc, OnceLock};
 
 use crate::app::error::VerifySemaphoreProofV2Error::RootAgeCheckingError;
 use crate::app::error::{
-    DeleteIdentityV2Error, InclusionProofV2Error, InsertIdentityV2Error,
-    VerifySemaphoreProofV2Error,
+    DeleteIdentityV2Error, InclusionProofV2Error, InclusionProofV3Error, InsertIdentityV2Error,
+    InsertIdentityV3Error, VerifySemaphoreProofV2Error,
 };
 use crate::config::Config;
 use crate::contracts::IdentityManager;
@@ -226,6 +226,60 @@ impl App {
             }
 
             return Err(InsertIdentityV2Error::DuplicateCommitment);
+        }
+
+        tx.insert_unprocessed_identity(commitment).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    /// Queues an insert into the merkle tree.
+    ///
+    /// # Errors
+    ///
+    /// Will return `Err` if identity is already queued for insertion or deletion, already in the tree, or the
+    /// queue malfunctions.
+    #[instrument(level = "debug", skip(self))]
+    pub async fn insert_identity_v3(&self, commitment: Hash) -> Result<(), InsertIdentityV3Error> {
+        if self.identity_validator.is_initial_leaf(&commitment) {
+            warn!(?commitment, "Attempt to insert initial leaf.");
+            return Err(InsertIdentityV3Error::InvalidCommitment);
+        }
+
+        if !self.identity_validator.is_reduced(commitment) {
+            warn!(
+                ?commitment,
+                "The provided commitment is not an element of the field."
+            );
+            return Err(InsertIdentityV3Error::UnreducedCommitment);
+        }
+
+        let mut tx = self
+            .database
+            .begin_tx(IsolationLevel::RepeatableRead)
+            .await?;
+
+        let unprocessed = tx.get_unprocessed_commitment(&commitment).await?;
+        if unprocessed.is_some() {
+            return Err(InsertIdentityV3Error::AddedForInsertionCommitment);
+        }
+
+        let deletion = tx.get_deletion(&commitment).await?;
+        if deletion.is_some() {
+            return Err(InsertIdentityV3Error::AddedForDeletionCommitment);
+        }
+
+        let processed = tx.get_tree_item(&commitment).await?;
+        if let Some(processed) = processed {
+            let latest_at_index = tx.get_tree_item_by_leaf_index(processed.leaf_index).await?;
+
+            if let Some(latest_at_index) = latest_at_index {
+                if latest_at_index.element != Hash::ZERO {
+                    return Err(InsertIdentityV3Error::AlreadyIncludedCommitment);
+                }
+            }
         }
 
         tx.insert_unprocessed_identity(commitment).await?;
@@ -560,6 +614,163 @@ impl App {
         tx.commit().await?;
 
         Ok((leaf, root, proof))
+    }
+
+    /// Returns inclusion proof using processed tree (commitment on the main chain).
+    /// Return not found error if it can't find such commitment in the tree, which means:
+    /// * maybe it was not yet processed
+    /// * maybe it was deleted
+    /// There also might be some other cases like returning deleted commitment:
+    /// * user deletes commitment, it was not yet processed
+    /// * from the processed tree perspective it was not yet there
+    #[instrument(level = "debug", skip(self))]
+    pub async fn inclusion_proof_v3_processed(
+        &self,
+        commitment: Hash,
+    ) -> Result<(Field, Field, semaphore_rs::poseidon_tree::Proof), InclusionProofV3Error> {
+        if self.identity_validator.is_initial_leaf(&commitment) {
+            return Err(InclusionProofV3Error::InvalidCommitment);
+        }
+
+        if !self.identity_validator.is_reduced(commitment) {
+            warn!(
+                ?commitment,
+                "The provided commitment is not an element of the field."
+            );
+            return Err(InclusionProofV3Error::UnreducedCommitment);
+        }
+
+        let item = self.database.get_tree_item(&commitment).await?;
+
+        if let Some(item) = item {
+            let (leaf, root, proof) = {
+                let tree_state = self.tree_state().await?;
+                tree_state
+                    .get_latest_tree()
+                    .get_leaf_and_proof(item.leaf_index)
+            };
+
+            if leaf != Hash::ZERO {
+                if leaf != commitment {
+                    error!(
+                        "Mismatch between database and in-memory tree. This should never happen."
+                    );
+                    return Err(InclusionProofV3Error::InvalidInternalState);
+                }
+
+                return Ok((leaf, root, proof));
+            }
+        }
+
+        Err(InclusionProofV3Error::CommitmentNotFound)
+    }
+
+    /// Returns inclusion proof using processed tree (commitment on the main chain).
+    /// Return not found error if it can't find such commitment in the tree, which means:
+    /// * maybe it was not yet processed
+    /// * maybe it was deleted
+    /// There also might be some other cases like returning deleted commitment:
+    /// * user deletes commitment, it was not yet processed
+    /// * from the processed tree perspective it was not yet there
+    #[instrument(level = "debug", skip(self))]
+    pub async fn inclusion_proof_v3_mined(
+        &self,
+        commitment: Hash,
+    ) -> Result<(Field, Field, semaphore_rs::poseidon_tree::Proof), InclusionProofV3Error> {
+        if self.identity_validator.is_initial_leaf(&commitment) {
+            return Err(InclusionProofV3Error::InvalidCommitment);
+        }
+
+        if !self.identity_validator.is_reduced(commitment) {
+            warn!(
+                ?commitment,
+                "The provided commitment is not an element of the field."
+            );
+            return Err(InclusionProofV3Error::UnreducedCommitment);
+        }
+
+        let item = self
+            .database
+            .get_tree_item_by_statuses(
+                &commitment,
+                vec![ProcessedStatus::Processed, ProcessedStatus::Mined],
+            )
+            .await?;
+
+        if let Some(item) = item {
+            let (leaf, root, proof) = {
+                let tree_state = self.tree_state().await?;
+                tree_state
+                    .get_processed_tree()
+                    .get_leaf_and_proof(item.leaf_index)
+            };
+
+            if leaf != Hash::ZERO {
+                if leaf != commitment {
+                    error!(
+                        "Mismatch between database and in-memory tree. This should never happen."
+                    );
+                    return Err(InclusionProofV3Error::InvalidInternalState);
+                }
+
+                return Ok((leaf, root, proof));
+            }
+        }
+
+        Err(InclusionProofV3Error::CommitmentNotFound)
+    }
+
+    /// Returns inclusion proof using mined tree (commitment bridged to other chains).
+    /// Return not found error if it can't find such commitment in the tree, which means:
+    /// * maybe it was not yet processed
+    /// * maybe it was not yet bridged
+    /// * maybe it was deleted
+    /// There also might be some other cases like returning deleted commitment:
+    /// * user deletes commitment, it was processed but not yet bridged
+    /// * from the mined tree perspective it was not yet bridged
+    #[instrument(level = "debug", skip(self))]
+    pub async fn inclusion_proof_v3_bridged(
+        &self,
+        commitment: Hash,
+    ) -> Result<(Field, Field, semaphore_rs::poseidon_tree::Proof), InclusionProofV3Error> {
+        if self.identity_validator.is_initial_leaf(&commitment) {
+            return Err(InclusionProofV3Error::InvalidCommitment);
+        }
+
+        if !self.identity_validator.is_reduced(commitment) {
+            warn!(
+                ?commitment,
+                "The provided commitment is not an element of the field."
+            );
+            return Err(InclusionProofV3Error::UnreducedCommitment);
+        }
+
+        let item = self
+            .database
+            .get_tree_item_by_statuses(&commitment, vec![ProcessedStatus::Mined])
+            .await?;
+
+        if let Some(item) = item {
+            let (leaf, root, proof) = {
+                let tree_state = self.tree_state().await?;
+                tree_state
+                    .get_mined_tree()
+                    .get_leaf_and_proof(item.leaf_index)
+            };
+
+            if leaf != Hash::ZERO {
+                if leaf != commitment {
+                    error!(
+                        "Mismatch between database and in-memory tree. This should never happen."
+                    );
+                    return Err(InclusionProofV3Error::InvalidInternalState);
+                }
+
+                return Ok((leaf, root, proof));
+            }
+        }
+
+        Err(InclusionProofV3Error::CommitmentNotFound)
     }
 
     /// # Errors

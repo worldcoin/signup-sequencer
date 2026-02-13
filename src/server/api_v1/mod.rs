@@ -2,19 +2,16 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::app::App;
-use crate::utils::auth::AuthValidator;
-use axum::body::Body;
+use crate::server::middlewares;
+use crate::utils::auth::{AuthResponseFormatter, AuthValidator};
 use axum::extract::{Query, State};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{middleware, Json, Router};
 use data::VerifyCompressedSemaphoreProofRequest;
 use error::Error;
-use hyper::header::CONTENT_TYPE;
 use hyper::StatusCode;
-use prometheus::{Encoder, TextEncoder};
 
-mod custom_middleware;
 pub mod data;
 pub mod error;
 
@@ -117,25 +114,8 @@ async fn list_batch_sizes(
     Ok((result.to_response_code(), Json(result)))
 }
 
-async fn health() -> Result<(), Error> {
-    Ok(())
-}
-
-async fn metrics() -> Result<Response<Body>, Error> {
-    let encoder = TextEncoder::new();
-
-    let metric_families = prometheus::gather();
-    let mut buffer = vec![];
-    encoder
-        .encode(&metric_families, &mut buffer)
-        .map_err(|e| Error::Other(e.into()))?;
-
-    let response = Response::builder()
-        .status(200)
-        .header(CONTENT_TYPE, encoder.format_type())
-        .body(Body::from(buffer))?;
-
-    Ok(response)
+fn auth_error_formatter(_msg: String) -> Response {
+    (StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
 }
 
 pub fn api_v1_router(
@@ -149,11 +129,14 @@ pub fn api_v1_router(
         .route("/insertIdentity", post(insert_identity))
         .route("/deleteIdentity", post(delete_identity))
         .layer(middleware::from_fn(
-            custom_middleware::remove_auth_layer::middleware,
+            middlewares::remove_auth_layer::middleware,
         ))
         .layer(middleware::from_fn_with_state(
-            auth_validator,
-            custom_middleware::auth_layer::middleware,
+            (
+                auth_validator,
+                auth_error_formatter as AuthResponseFormatter,
+            ),
+            middlewares::auth_layer::middleware,
         ));
 
     // Public routes that don't require authentication
@@ -167,25 +150,18 @@ pub fn api_v1_router(
         .route("/addBatchSize", post(add_batch_size))
         .route("/removeBatchSize", post(remove_batch_size))
         .route("/listBatchSizes", get(list_batch_sizes))
-        .route("/health", get(health))
-        .route("/metrics", get(metrics))
         .layer(middleware::from_fn(
-            custom_middleware::remove_auth_layer::middleware,
+            middlewares::remove_auth_layer::middleware,
         ));
 
     // Merge protected and public routes
     Router::new()
         .merge(protected_routes)
         .merge(public_routes)
-        .layer(middleware::from_fn(
-            custom_middleware::api_metrics_layer::middleware,
-        ))
         .layer(middleware::from_fn_with_state(
             serve_timeout,
-            custom_middleware::timeout_layer::middleware,
+            middlewares::timeout_layer::middleware,
         ))
-        .layer(middleware::from_fn(
-            custom_middleware::logging_layer::middleware,
-        ))
+        .layer(middleware::from_fn(middlewares::logging_layer::middleware))
         .with_state(app.clone())
 }

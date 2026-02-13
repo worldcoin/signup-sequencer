@@ -236,6 +236,30 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
     }
 
     #[instrument(skip(self), level = "debug")]
+    async fn get_tree_item_by_statuses(
+        self,
+        identity: &Hash,
+        statuses: Vec<ProcessedStatus>,
+    ) -> Result<Option<TreeItem>, Error> {
+        let mut conn = self.acquire().await?;
+
+        let statuses: Vec<&str> = statuses.into_iter().map(<&str>::from).collect();
+        Ok(sqlx::query_as(
+            r#"
+                SELECT leaf_index, status, id as sequence_id, commitment as element
+                FROM identities
+                WHERE commitment = $1 AND status = ANY($2)
+                ORDER BY id DESC
+                LIMIT 1;
+                "#,
+        )
+        .bind(identity)
+        .bind(&statuses[..]) // Official workaround https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-do-a-select--where-foo-in--query
+        .fetch_optional(&mut *conn)
+        .await?)
+    }
+
+    #[instrument(skip(self), level = "debug")]
     async fn get_tree_item_by_leaf_index(
         self,
         leaf_index: usize,

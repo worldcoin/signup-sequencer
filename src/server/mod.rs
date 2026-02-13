@@ -1,8 +1,13 @@
 use std::sync::Arc;
 
 use axum::body::Body;
+use axum::http::header::CONTENT_TYPE;
+use axum::response::{IntoResponse, Response};
+use axum::routing::get;
 use axum::Router;
 use hyper::StatusCode;
+use prometheus::{Encoder, TextEncoder};
+use thiserror::Error;
 use tokio::net::TcpListener;
 use tower_http::catch_panic::{CatchPanicLayer, ResponseForPanic};
 use tracing::info;
@@ -14,6 +19,8 @@ use crate::utils::auth::AuthValidator;
 
 pub mod api_v1;
 mod api_v2;
+mod api_v3;
+mod middlewares;
 
 /// # Errors
 ///
@@ -47,6 +54,59 @@ impl ResponseForPanic for PanicHandler {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(transparent)]
+    Hyper(#[from] hyper::Error),
+    #[error(transparent)]
+    Http(#[from] hyper::http::Error),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+impl Error {
+    fn to_status_code(&self) -> StatusCode {
+        match self {
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+impl IntoResponse for Error {
+    fn into_response(self) -> axum::response::Response {
+        let status_code = self.to_status_code();
+
+        let body = if let Self::Other(err) = self {
+            format!("{err}")
+        } else {
+            self.to_string()
+        };
+
+        (status_code, body).into_response()
+    }
+}
+
+async fn health() -> Result<(), Error> {
+    Ok(())
+}
+
+async fn metrics() -> Result<Response<Body>, Error> {
+    let encoder = TextEncoder::new();
+
+    let metric_families = prometheus::gather();
+    let mut buffer = vec![];
+    encoder
+        .encode(&metric_families, &mut buffer)
+        .map_err(|e| Error::Other(e.into()))?;
+
+    let response = Response::builder()
+        .status(200)
+        .header(CONTENT_TYPE, encoder.format_type())
+        .body(Body::from(buffer))?;
+
+    Ok(response)
+}
+
 /// # Errors
 ///
 /// Will return `Err` if the provided `listener` address cannot be accessed or
@@ -77,10 +137,17 @@ pub async fn bind_from_listener(
             auth_validator.clone(),
         ))
         .merge(api_v2::api_v2_router(
-            app,
+            app.clone(),
             config.serve_timeout,
-            auth_validator,
+            auth_validator.clone(),
         ))
+        .merge(api_v3::api_v3_router(
+            app.clone(),
+            config.serve_timeout,
+            auth_validator.clone(),
+        ))
+        .route("/health", get(health))
+        .route("/metrics", get(metrics))
         .layer(CatchPanicLayer::custom(PanicHandler {}));
 
     let _shutdown_handle = shutdown.handle();

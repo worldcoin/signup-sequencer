@@ -3,12 +3,15 @@
 use std::collections::HashMap;
 
 use axum::extract::Request;
+use axum::response::Response;
 use base64::prelude::*;
 
 use crate::config::AuthMode;
 use crate::utils::jwt::JwtValidator;
 
 use super::jwt::JwtError;
+
+pub type AuthResponseFormatter = fn(msg: String) -> Response;
 
 /// Result of authentication validation.
 #[derive(Debug, Clone, PartialEq, Eq)]

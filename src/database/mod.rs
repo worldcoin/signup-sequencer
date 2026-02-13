@@ -778,18 +778,14 @@ mod test {
             &initial_root,
         )
         .await?;
+        let time_of_insertion = Utc::now();
 
         let root = db
             .get_root_state(&roots[0])
             .await?
             .context("Fetching root state")?;
-        let time_of_insertion = Utc::now();
 
-        assert_same_time!(
-            root.pending_valid_as_of,
-            time_of_insertion,
-            chrono::Duration::milliseconds(100)
-        );
+        assert_same_time!(root.pending_valid_as_of, time_of_insertion);
 
         assert!(
             root.mined_valid_as_of.is_none(),
@@ -797,27 +793,19 @@ mod test {
         );
 
         db.mark_root_as_processed(&roots[0]).await?;
+        let time_of_mining = Utc::now();
 
         let root = db
             .get_root_state(&roots[0])
             .await?
             .context("Fetching root state")?;
-        let time_of_mining = Utc::now();
 
         let mined_valid_as_of = root
             .mined_valid_as_of
             .context("Root should have been mined")?;
 
-        assert_same_time!(
-            root.pending_valid_as_of,
-            time_of_insertion,
-            chrono::Duration::milliseconds(100)
-        );
-        assert_same_time!(
-            mined_valid_as_of,
-            time_of_mining,
-            chrono::Duration::milliseconds(100)
-        );
+        assert_same_time!(root.pending_valid_as_of, time_of_insertion);
+        assert_same_time!(mined_valid_as_of, time_of_mining);
 
         Ok(())
     }
@@ -1316,6 +1304,306 @@ mod test {
 
         db.insert_new_transaction(&transaction_id, &roots[0])
             .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_tree_item_by_statuses_single_status() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+
+        let initial_root = LazyPoseidonTree::new(4, Hash::ZERO).root();
+        let identities = mock_identities(5);
+        let roots = mock_roots(5);
+
+        // Insert identities with pending status
+        let mut pre_root = &initial_root;
+        for i in 0..5 {
+            db.insert_pending_identity(i, &identities[i], Some(Utc::now()), &roots[i], pre_root)
+                .await
+                .context("Inserting identity")?;
+            pre_root = &roots[i];
+        }
+
+        // Mark first 3 as processed
+        db.mark_root_as_processed(&roots[2]).await?;
+
+        // Test getting by Processed status
+        let item = db
+            .get_tree_item_by_statuses(&identities[0], vec![ProcessedStatus::Processed])
+            .await?;
+        assert!(item.is_some(), "Should find processed identity");
+        let item = item.unwrap();
+        assert_eq!(item.element, identities[0]);
+        assert_eq!(item.leaf_index, 0);
+        assert_eq!(item.status, ProcessedStatus::Processed);
+
+        // Test getting by Pending status
+        let item = db
+            .get_tree_item_by_statuses(&identities[3], vec![ProcessedStatus::Pending])
+            .await?;
+        assert!(item.is_some(), "Should find pending identity");
+        let item = item.unwrap();
+        assert_eq!(item.element, identities[3]);
+        assert_eq!(item.leaf_index, 3);
+        assert_eq!(item.status, ProcessedStatus::Pending);
+
+        // Test querying processed identity with wrong status
+        let item = db
+            .get_tree_item_by_statuses(&identities[0], vec![ProcessedStatus::Pending])
+            .await?;
+        assert!(
+            item.is_none(),
+            "Should not find processed identity when querying for pending"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_tree_item_by_statuses_multiple_statuses() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+
+        let initial_root = LazyPoseidonTree::new(4, Hash::ZERO).root();
+        let identities = mock_identities(5);
+        let roots = mock_roots(5);
+
+        // Insert identities
+        let mut pre_root = &initial_root;
+        for i in 0..5 {
+            db.insert_pending_identity(i, &identities[i], Some(Utc::now()), &roots[i], pre_root)
+                .await
+                .context("Inserting identity")?;
+            pre_root = &roots[i];
+        }
+
+        // Mark some as processed and some as mined
+        db.mark_root_as_processed(&roots[2]).await?;
+        db.mark_root_as_mined(&roots[1]).await?;
+
+        // Test getting mined identity with multiple statuses
+        let item = db
+            .get_tree_item_by_statuses(
+                &identities[0],
+                vec![ProcessedStatus::Pending, ProcessedStatus::Mined],
+            )
+            .await?;
+        assert!(
+            item.is_some(),
+            "Should find mined identity when querying for pending or mined"
+        );
+        let item = item.unwrap();
+        assert_eq!(item.element, identities[0]);
+        assert_eq!(item.status, ProcessedStatus::Mined);
+
+        // Test getting processed identity with multiple statuses
+        let item = db
+            .get_tree_item_by_statuses(
+                &identities[2],
+                vec![ProcessedStatus::Processed, ProcessedStatus::Mined],
+            )
+            .await?;
+        assert!(
+            item.is_some(),
+            "Should find processed identity when querying for processed or mined"
+        );
+        let item = item.unwrap();
+        assert_eq!(item.element, identities[2]);
+        assert_eq!(item.status, ProcessedStatus::Processed);
+
+        // Test getting pending identity with all statuses
+        let item = db
+            .get_tree_item_by_statuses(
+                &identities[4],
+                vec![
+                    ProcessedStatus::Pending,
+                    ProcessedStatus::Processed,
+                    ProcessedStatus::Mined,
+                ],
+            )
+            .await?;
+        assert!(
+            item.is_some(),
+            "Should find pending identity when querying for all statuses"
+        );
+        let item = item.unwrap();
+        assert_eq!(item.element, identities[4]);
+        assert_eq!(item.status, ProcessedStatus::Pending);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_tree_item_by_statuses_nonexistent_identity() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+
+        let nonexistent_identity = Field::from(999999);
+
+        // Test with single status
+        let item = db
+            .get_tree_item_by_statuses(&nonexistent_identity, vec![ProcessedStatus::Pending])
+            .await?;
+        assert!(
+            item.is_none(),
+            "Should return None for nonexistent identity"
+        );
+
+        // Test with multiple statuses
+        let item = db
+            .get_tree_item_by_statuses(
+                &nonexistent_identity,
+                vec![
+                    ProcessedStatus::Pending,
+                    ProcessedStatus::Processed,
+                    ProcessedStatus::Mined,
+                ],
+            )
+            .await?;
+        assert!(
+            item.is_none(),
+            "Should return None for nonexistent identity with multiple statuses"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_tree_item_by_statuses_returns_latest() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+
+        let initial_root = LazyPoseidonTree::new(4, Hash::ZERO).root();
+        let identities = mock_identities(5);
+        let roots = mock_roots(5);
+
+        // Insert multiple identities
+        let mut pre_root = &initial_root;
+        for i in 0..5 {
+            db.insert_pending_identity(i, &identities[i], Some(Utc::now()), &roots[i], pre_root)
+                .await
+                .context("Inserting identity")?;
+            pre_root = &roots[i];
+        }
+
+        // Mark first 2 as processed
+        db.mark_root_as_processed(&roots[1]).await?;
+
+        // Mark first 1 as mined
+        db.mark_root_as_mined(&roots[0]).await?;
+
+        // Query for identity[0] - it has transitioned from Pending -> Processed -> Mined
+        // The latest status should be Mined
+        let item = db
+            .get_tree_item_by_statuses(&identities[0], vec![ProcessedStatus::Mined])
+            .await?;
+        assert!(
+            item.is_some(),
+            "Should find the identity with latest status (Mined)"
+        );
+        let item = item.unwrap();
+        assert_eq!(item.element, identities[0]);
+        assert_eq!(item.leaf_index, 0);
+        assert_eq!(item.status, ProcessedStatus::Mined);
+
+        // Query for identity[1] - it should be Processed
+        let item = db
+            .get_tree_item_by_statuses(&identities[1], vec![ProcessedStatus::Processed])
+            .await?;
+        assert!(item.is_some(), "Should find processed identity");
+        let item = item.unwrap();
+        assert_eq!(item.element, identities[1]);
+        assert_eq!(item.status, ProcessedStatus::Processed);
+
+        // When querying with multiple statuses, should still return the item with current status
+        let item = db
+            .get_tree_item_by_statuses(
+                &identities[0],
+                vec![
+                    ProcessedStatus::Pending,
+                    ProcessedStatus::Processed,
+                    ProcessedStatus::Mined,
+                ],
+            )
+            .await?;
+        assert!(item.is_some());
+        let item = item.unwrap();
+        assert_eq!(item.status, ProcessedStatus::Mined);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_tree_item_by_statuses_status_transitions() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+
+        let initial_root = LazyPoseidonTree::new(4, Hash::ZERO).root();
+        let identities = mock_identities(3);
+        let roots = mock_roots(3);
+
+        // Insert identities
+        let mut pre_root = &initial_root;
+        for i in 0..3 {
+            db.insert_pending_identity(i, &identities[i], Some(Utc::now()), &roots[i], pre_root)
+                .await
+                .context("Inserting identity")?;
+            pre_root = &roots[i];
+        }
+
+        // Initially all are pending
+        let item = db
+            .get_tree_item_by_statuses(&identities[0], vec![ProcessedStatus::Pending])
+            .await?;
+        assert!(item.is_some());
+        assert_eq!(item.unwrap().status, ProcessedStatus::Pending);
+
+        // Mark as processed
+        db.mark_root_as_processed(&roots[0]).await?;
+
+        // Should not be found as pending anymore
+        let item = db
+            .get_tree_item_by_statuses(&identities[0], vec![ProcessedStatus::Pending])
+            .await?;
+        assert!(
+            item.is_none(),
+            "Should not find as pending after processing"
+        );
+
+        // Should be found as processed
+        let item = db
+            .get_tree_item_by_statuses(&identities[0], vec![ProcessedStatus::Processed])
+            .await?;
+        assert!(item.is_some());
+        assert_eq!(item.unwrap().status, ProcessedStatus::Processed);
+
+        // Mark as mined
+        db.mark_root_as_mined(&roots[0]).await?;
+
+        // Should not be found as processed anymore
+        let item = db
+            .get_tree_item_by_statuses(&identities[0], vec![ProcessedStatus::Processed])
+            .await?;
+        assert!(item.is_none(), "Should not find as processed after mining");
+
+        // Should be found as mined
+        let item = db
+            .get_tree_item_by_statuses(&identities[0], vec![ProcessedStatus::Mined])
+            .await?;
+        assert!(item.is_some());
+        assert_eq!(item.unwrap().status, ProcessedStatus::Mined);
+
+        // Should be found when querying for mined OR processed
+        let item = db
+            .get_tree_item_by_statuses(
+                &identities[0],
+                vec![ProcessedStatus::Processed, ProcessedStatus::Mined],
+            )
+            .await?;
+        assert!(item.is_some());
+        assert_eq!(item.unwrap().status, ProcessedStatus::Mined);
 
         Ok(())
     }

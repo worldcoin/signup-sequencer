@@ -1,11 +1,11 @@
 use crate::app::error::{
-    DeleteIdentityV2Error, InclusionProofV2Error, InsertIdentityV2Error,
+    DeleteIdentityV2Error, InclusionProofV3Error, InsertIdentityV3Error,
     VerifySemaphoreProofV2Error,
 };
 use crate::app::App;
 use crate::identity_tree::Hash;
-use crate::server::api_v2::data::{
-    ErrorResponse, InclusionProofResponse, VerifySemaphoreProofRequest,
+use crate::server::api_v3::data::{
+    ErrorResponse, InclusionProofResponse, InclusionProofType, VerifySemaphoreProofRequest,
     VerifySemaphoreProofResponse,
 };
 use crate::server::middlewares;
@@ -31,22 +31,25 @@ async fn insert_identity(
 ) -> Result<StatusCode, Error> {
     let commitment = parse_commitment(raw_commitment)?;
 
-    app.insert_identity_v2(commitment)
+    app.insert_identity_v3(commitment)
         .await
         .map_err(|err| match err {
-            InsertIdentityV2Error::InvalidCommitment => {
+            InsertIdentityV3Error::InvalidCommitment => {
                 Error::BadRequest(ErrorResponse::new("invalid_commitment", &err.to_string()))
             }
-            InsertIdentityV2Error::UnreducedCommitment => {
+            InsertIdentityV3Error::UnreducedCommitment => {
                 Error::BadRequest(ErrorResponse::new("unreduced_commitment", &err.to_string()))
             }
-            InsertIdentityV2Error::DuplicateCommitment => {
-                Error::Conflict(ErrorResponse::new("duplicate_commitment", &err.to_string()))
+            InsertIdentityV3Error::AlreadyIncludedCommitment => {
+                Error::Conflict(ErrorResponse::new("already_included", &err.to_string()))
             }
-            InsertIdentityV2Error::DeletedCommitment => {
-                Error::Gone(ErrorResponse::new("deleted_commitment", &err.to_string()))
+            InsertIdentityV3Error::AddedForInsertionCommitment => {
+                Error::Conflict(ErrorResponse::new("added_for_insertion", &err.to_string()))
             }
-            InsertIdentityV2Error::Database(_) | InsertIdentityV2Error::Sqlx(_) => {
+            InsertIdentityV3Error::AddedForDeletionCommitment => {
+                Error::Conflict(ErrorResponse::new("added_for_deletion", &err.to_string()))
+            }
+            InsertIdentityV3Error::Database(_) | InsertIdentityV3Error::Sqlx(_) => {
                 error!("Database error: {}", err);
                 Error::InternalServerError(ErrorResponse::new(
                     "internal_database_error",
@@ -100,42 +103,39 @@ async fn delete_identity(
 
 async fn inclusion_proof(
     State(app): State<Arc<App>>,
-    Path(raw_commitment): Path<String>,
+    Path((raw_commitment, raw_inclusion_proof_type)): Path<(String, String)>,
 ) -> Result<(StatusCode, Json<InclusionProofResponse>), Error> {
     let commitment = parse_commitment(raw_commitment)?;
+    let inclusion_proof_type = parse_inclusion_proof_type(raw_inclusion_proof_type)?;
 
-    let (_, root, proof) = app
-        .inclusion_proof_v2(commitment)
-        .await
-        .map_err(|err| match err {
-            InclusionProofV2Error::InvalidCommitment => {
-                Error::BadRequest(ErrorResponse::new("invalid_commitment", &err.to_string()))
-            }
-            InclusionProofV2Error::UnreducedCommitment => {
-                Error::BadRequest(ErrorResponse::new("unreduced_commitment", &err.to_string()))
-            }
-            InclusionProofV2Error::UnprocessedCommitment => Error::Conflict(ErrorResponse::new(
-                "unprocessed_commitment",
+    let res = match inclusion_proof_type {
+        InclusionProofType::Processed => app.inclusion_proof_v3_processed(commitment).await,
+        InclusionProofType::Mined => app.inclusion_proof_v3_mined(commitment).await,
+        InclusionProofType::Bridged => app.inclusion_proof_v3_bridged(commitment).await,
+    };
+
+    let (_, root, proof) = res.map_err(|err| match err {
+        InclusionProofV3Error::InvalidCommitment => {
+            Error::BadRequest(ErrorResponse::new("invalid_commitment", &err.to_string()))
+        }
+        InclusionProofV3Error::UnreducedCommitment => {
+            Error::BadRequest(ErrorResponse::new("unreduced_commitment", &err.to_string()))
+        }
+        InclusionProofV3Error::CommitmentNotFound => {
+            Error::NotFound(ErrorResponse::new("not_found", &err.to_string()))
+        }
+        InclusionProofV3Error::Database(_) | InclusionProofV3Error::Sqlx(_) => {
+            error!("Database error: {}", err);
+            Error::InternalServerError(ErrorResponse::new(
+                "internal_database_error",
                 &err.to_string(),
-            )),
-            InclusionProofV2Error::CommitmentNotFound => {
-                Error::NotFound(ErrorResponse::new("not_found", &err.to_string()))
-            }
-            InclusionProofV2Error::DeletedCommitment => {
-                Error::Gone(ErrorResponse::new("deleted_commitment", &err.to_string()))
-            }
-            InclusionProofV2Error::Database(_) | InclusionProofV2Error::Sqlx(_) => {
-                error!("Database error: {}", err);
-                Error::InternalServerError(ErrorResponse::new(
-                    "internal_database_error",
-                    &err.to_string(),
-                ))
-            }
-            InclusionProofV2Error::InvalidInternalState | InclusionProofV2Error::AnyhowError(_) => {
-                error!("Error: {}", err);
-                Error::InternalServerError(ErrorResponse::new("internal_error", &err.to_string()))
-            }
-        })?;
+            ))
+        }
+        InclusionProofV3Error::InvalidInternalState | InclusionProofV3Error::AnyhowError(_) => {
+            error!("Error: {}", err);
+            Error::InternalServerError(ErrorResponse::new("internal_error", &err.to_string()))
+        }
+    })?;
 
     Ok((StatusCode::OK, Json(InclusionProofResponse { root, proof })))
 }
@@ -214,6 +214,23 @@ fn parse_commitment(raw_commitment: String) -> Result<Hash, Error> {
     })
 }
 
+fn parse_inclusion_proof_type(
+    raw_inclusion_proof_type: String,
+) -> Result<InclusionProofType, Error> {
+    raw_inclusion_proof_type
+        .parse::<InclusionProofType>()
+        .map_err(|err| {
+            Error::BadRequest(ErrorResponse::new(
+                "invalid_path_param",
+                &format!(
+                    "Path parameter 'inclusion_proof_type' has invalid value '{}': {}",
+                    raw_inclusion_proof_type,
+                    err.to_string()
+                ),
+            ))
+        })
+}
+
 fn auth_error_formatter(_msg: String) -> Response {
     (
         StatusCode::UNAUTHORIZED,
@@ -225,7 +242,7 @@ fn auth_error_formatter(_msg: String) -> Response {
         .into_response()
 }
 
-pub fn api_v2_router(
+pub fn api_v3_router(
     app: Arc<App>,
     serve_timeout: Duration,
     auth_validator: AuthValidator,
@@ -235,7 +252,7 @@ pub fn api_v2_router(
     // Apply remove_auth FIRST (inner), then auth LAST (outer) so auth runs before remove_auth
     let protected_routes = Router::new()
         .route(
-            "/v2/identities/:commitment",
+            "/v3/identities/:commitment",
             post(insert_identity).delete(delete_identity),
         )
         .layer(middleware::from_fn(
@@ -252,10 +269,10 @@ pub fn api_v2_router(
     // Public routes that don't require authentication
     let public_routes = Router::new()
         .route(
-            "/v2/identities/:commitment/inclusion-proof",
+            "/v3/identities/:commitment/inclusion-proof/:inclusion_proof_type",
             get(inclusion_proof),
         )
-        .route("/v2/semaphore-proof/verify", post(verify_semaphore_proof))
+        .route("/v3/semaphore-proof/verify", post(verify_semaphore_proof))
         .layer(middleware::from_fn(
             middlewares::remove_auth_layer::middleware,
         ));

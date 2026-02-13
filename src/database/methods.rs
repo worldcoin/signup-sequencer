@@ -248,7 +248,7 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
             r#"
                 SELECT leaf_index, status, id as sequence_id, commitment as element
                 FROM identities
-                WHERE commitment = $1 AND status = ANY($1)
+                WHERE commitment = $1 AND status = ANY($2)
                 ORDER BY id DESC
                 LIMIT 1;
                 "#,

@@ -111,6 +111,9 @@ tracing-test = "0.2"
 [patch.crates-io]
 # Necessary until https://github.com/recmo/uint/pull/400 is merged and released
 ruint = { git = "https://github.com/Dzejkop/uint", rev = "9a1a6019c519e9cd76add2494190d21fc5f574f9" }
+# Patch ark-relations to use tracing-subscriber 0.3 instead of 0.2, eliminating
+# the duplicate tracing-subscriber versions in the dependency tree.
+ark-relations = { path = "patches/ark-relations" }
 
 [profile.release]
 overflow-checks = true

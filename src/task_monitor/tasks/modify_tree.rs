@@ -274,3 +274,142 @@ pub async fn run_deletions(
 
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use chrono::Utc;
+    use postgres_docker_utils::DockerContainer;
+    use testcontainers::clients::Cli;
+    use tokio::sync::Mutex;
+
+    use super::{run_deletions, run_insertions};
+    use crate::config::DatabaseConfig;
+    use crate::database::methods::DbMethods;
+    use crate::database::types::DeletionEntry;
+    use crate::database::{Database, IsolationLevel};
+    use crate::identity_tree::builder::CanonicalTreeBuilder;
+    use crate::identity_tree::{Hash, TreeState};
+    use crate::utils::secret::SecretUrl;
+
+    async fn setup_db(docker: &Cli) -> anyhow::Result<(Database, DockerContainer)> {
+        let db_container = postgres_docker_utils::setup(docker).await?;
+        let url = format!(
+            "postgres://postgres:postgres@{}/database",
+            db_container.address()
+        );
+        let db = Database::new(&DatabaseConfig {
+            database: SecretUrl::from_str(&url)?,
+            migrate: true,
+            max_connections: 2,
+        })
+        .await?;
+        Ok((db, db_container))
+    }
+
+    fn empty_tree_state(mmap_path: &str) -> TreeState {
+        let (mined, b) =
+            CanonicalTreeBuilder::new(4, 4, 1000, Hash::ZERO, &[], mmap_path).seal();
+        let (processed, b) = b.seal_and_continue();
+        let (batching, b) = b.seal_and_continue();
+        let latest = b.seal();
+        TreeState::new(mined, processed, batching, latest)
+    }
+
+    // When a commitment is already active in identities, a stale
+    // unprocessed_identities entry for the same commitment must be silently
+    // dropped — not inserted a second time into the tree.
+    #[tokio::test]
+    async fn run_insertions_skips_stale_entry_for_active_commitment() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+
+        let commitment: Hash = ruint::Uint::from(12345u64);
+        let pre_root: Hash = ruint::Uint::from(1u64);
+        let root: Hash = ruint::Uint::from(2u64);
+
+        // Simulate W1 having already processed the commitment into identities.
+        db.insert_pending_identity(0, &commitment, Some(Utc::now()), &root, &pre_root)
+            .await?;
+
+        // Stale re-insert from a concurrent API call with a stale snapshot.
+        db.insert_unprocessed_identity(commitment).await?;
+
+        let temp_file = tempfile::NamedTempFile::new()?;
+        let tree_state = Mutex::new(empty_tree_state(temp_file.path().to_str().unwrap()));
+        let guard = tree_state.lock().await;
+
+        let mut tx = db.begin_tx(IsolationLevel::RepeatableRead).await?;
+        let modified = run_insertions(&mut tx, &guard).await?;
+        tx.commit().await?;
+
+        assert!(
+            !modified,
+            "run_insertions must return false when all unprocessed entries are already active"
+        );
+        let unprocessed = db.get_unprocessed_identities().await?;
+        assert!(
+            unprocessed.is_empty(),
+            "stale unprocessed entry must be trimmed and not re-queued"
+        );
+
+        Ok(())
+    }
+
+    // When a leaf's latest identities row is already ZERO (deletion already
+    // processed), a stale deletions table entry for that leaf must be silently
+    // removed — not applied again to the tree.
+    #[tokio::test]
+    async fn run_deletions_skips_stale_entry_for_already_deleted_leaf() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+
+        let commitment: Hash = ruint::Uint::from(99999u64);
+        let pre_root: Hash = ruint::Uint::from(1u64);
+        let insertion_root: Hash = ruint::Uint::from(2u64);
+        let deletion_root: Hash = ruint::Uint::from(3u64);
+
+        // Original insertion processed.
+        db.insert_pending_identity(0, &commitment, Some(Utc::now()), &insertion_root, &pre_root)
+            .await?;
+        // Deletion already processed — leaf is now ZERO.
+        db.insert_pending_identity(
+            0,
+            &Hash::ZERO,
+            Some(Utc::now()),
+            &deletion_root,
+            &insertion_root,
+        )
+        .await?;
+
+        // Stale deletion entry re-queued by a concurrent API call.
+        db.insert_new_deletion(0, &commitment).await?;
+
+        let stale_entry = DeletionEntry {
+            leaf_index: 0,
+            commitment,
+            created_at: Some(Utc::now()),
+        };
+
+        let temp_file = tempfile::NamedTempFile::new()?;
+        let tree_state = Mutex::new(empty_tree_state(temp_file.path().to_str().unwrap()));
+        let guard = tree_state.lock().await;
+
+        let mut tx = db.begin_tx(IsolationLevel::RepeatableRead).await?;
+        let modified = run_deletions(&mut tx, &guard, vec![stale_entry]).await?;
+        tx.commit().await?;
+
+        assert!(
+            !modified,
+            "run_deletions must return false when all entries are already deleted"
+        );
+        let deletions = db.get_deletions().await?;
+        assert!(
+            deletions.is_empty(),
+            "stale deletion entry must be removed from the deletions table"
+        );
+
+        Ok(())
+    }
+}

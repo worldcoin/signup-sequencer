@@ -309,8 +309,7 @@ mod tests {
     }
 
     fn empty_tree_state(mmap_path: &str) -> TreeState {
-        let (mined, b) =
-            CanonicalTreeBuilder::new(4, 4, 1000, Hash::ZERO, &[], mmap_path).seal();
+        let (mined, b) = CanonicalTreeBuilder::new(4, 4, 1000, Hash::ZERO, &[], mmap_path).seal();
         let (processed, b) = b.seal_and_continue();
         let (batching, b) = b.seal_and_continue();
         let latest = b.seal();

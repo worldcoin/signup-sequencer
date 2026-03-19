@@ -71,8 +71,8 @@ pub mod prelude {
 }
 
 use async_trait::async_trait;
-use sqlx::{Executor, Pool, Postgres, Transaction};
 use signup_sequencer::IsolationLevel;
+use sqlx::{Executor, Pool, Postgres, Transaction};
 
 #[async_trait]
 pub trait BeginTx {

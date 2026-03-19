@@ -73,7 +73,7 @@ macro_rules! retry_tx {
         $crate::retry_tx!(
             $pool,
             $tx,
-            $crate::database::IsolationLevel::ReadCommitted,
+            $crate::IsolationLevel::ReadCommitted,
             $expression
         )
     };

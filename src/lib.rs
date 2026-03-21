@@ -6,6 +6,7 @@ pub mod app;
 pub mod config;
 mod contracts;
 mod database;
+pub use database::IsolationLevel;
 mod ethereum;
 mod identity;
 pub mod identity_tree;

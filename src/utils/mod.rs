@@ -30,12 +30,12 @@ pub const TX_RETRY_LIMIT: u32 = 10;
 /// }).await;
 #[macro_export]
 macro_rules! retry_tx {
-    ($pool:expr, $tx:ident, $expression:expr) => {
+    ($pool:expr, $tx:ident, $isolation:expr, $expression:expr) => {
         async {
             let mut res;
             let mut counter = 0;
             loop {
-                let mut $tx = $pool.begin().await?;
+                let mut $tx = $pool.begin_tx($isolation).await?;
                 res = async { $expression }.await;
                 let limit = 10;
                 if let Err(e) = res {
@@ -68,6 +68,14 @@ macro_rules! retry_tx {
             }
             res
         }
+    };
+    ($pool:expr, $tx:ident, $expression:expr) => {
+        $crate::retry_tx!(
+            $pool,
+            $tx,
+            $crate::IsolationLevel::ReadCommitted,
+            $expression
+        )
     };
 }
 

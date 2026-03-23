@@ -406,7 +406,7 @@ impl OnChainIdentityProcessor {
                 continue;
             }
 
-            retry_tx!(self.database.pool, tx, {
+            retry_tx!(self.database, tx, {
                 // With current flow it is required to mark root as processed first as this is
                 // how required mined_at field is set, We set proper state only if not set
                 // previously.
@@ -451,7 +451,7 @@ impl OnChainIdentityProcessor {
                 continue;
             }
 
-            retry_tx!(self.database.pool, tx, {
+            retry_tx!(self.database, tx, {
                 // With current flow it is required to mark root as processed first as this is
                 // how required mined_at field is set, We set proper state only if not set
                 // previously.

@@ -59,7 +59,6 @@ pub mod prelude {
         self, TestConfigBuilder, DEFAULT_BATCH_DELETION_TIMEOUT_SECONDS,
         DEFAULT_TREE_DENSE_PREFIX_DEPTH, DEFAULT_TREE_DEPTH,
     };
-    pub use super::BeginTx;
     pub use super::{
         abi as ContractAbi, await_tree_state_with_mined_leafs_size, generate_reference_proof,
         generate_test_identities, init_tracing_subscriber, spawn_app, spawn_deps,
@@ -73,43 +72,6 @@ pub mod prelude {
 use async_trait::async_trait;
 use signup_sequencer::IsolationLevel;
 use sqlx::{Executor, Pool, Postgres, Transaction};
-
-#[async_trait]
-pub trait BeginTx {
-    async fn begin_tx(
-        &self,
-        isolation_level: IsolationLevel,
-    ) -> Result<Transaction<'static, Postgres>, sqlx::Error>;
-}
-
-#[async_trait]
-impl BeginTx for Pool<Postgres> {
-    async fn begin_tx(
-        &self,
-        isolation_level: IsolationLevel,
-    ) -> Result<Transaction<'static, Postgres>, sqlx::Error> {
-        let mut tx = self.begin().await?;
-        match isolation_level {
-            IsolationLevel::ReadUncommited => {
-                tx.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
-                    .await?;
-            }
-            IsolationLevel::ReadCommitted => {
-                tx.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
-                    .await?;
-            }
-            IsolationLevel::RepeatableRead => {
-                tx.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-                    .await?;
-            }
-            IsolationLevel::Serializable => {
-                tx.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
-                    .await?;
-            }
-        }
-        Ok(tx)
-    }
-}
 
 use self::chain_mock::{spawn_mock_chain, MockChain, SpecialisedContract};
 use self::prelude::*;

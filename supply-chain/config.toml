@@ -197,11 +197,11 @@ version = "1.2.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.aws-lc-rs]]
-version = "1.12.4"
+version = "1.16.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.aws-lc-sys]]
-version = "0.26.0"
+version = "0.39.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.aws-runtime]]
@@ -369,7 +369,7 @@ version = "0.1.9"
 criteria = "safe-to-deploy"
 
 [[exemptions.cc]]
-version = "1.2.15"
+version = "1.2.57"
 criteria = "safe-to-deploy"
 
 [[exemptions.chrono]]
@@ -706,6 +706,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.fiat-crypto]]
 version = "0.2.9"
+criteria = "safe-to-deploy"
+
+[[exemptions.find-msvc-tools]]
+version = "0.1.9"
 criteria = "safe-to-deploy"
 
 [[exemptions.fixed-hash]]

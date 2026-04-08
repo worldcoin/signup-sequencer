@@ -6,7 +6,7 @@ use axum::extract::Request;
 use axum::response::Response;
 use base64::prelude::*;
 
-use crate::config::AuthMode;
+use crate::config::{AuthMode, AuthorizedKey};
 use crate::utils::jwt::JwtValidator;
 
 use super::jwt::JwtError;
@@ -40,7 +40,7 @@ impl AuthValidator {
     pub fn new(
         mode: AuthMode,
         basic_credentials: HashMap<String, String>,
-        jwt_keys: &HashMap<String, String>,
+        jwt_keys: &HashMap<String, Vec<AuthorizedKey>>,
     ) -> Result<Self, JwtError> {
         // Build JWT validator if mode requires it
         let jwt_validator = JwtValidator::new(jwt_keys)?;

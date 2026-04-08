@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::time::Duration;
 
+use chrono::{DateTime, Utc};
 use ethers::types::{Address, H160};
 use semaphore_rs::Field;
 use serde::{Deserialize, Serialize};
@@ -10,6 +11,80 @@ use serde::{Deserialize, Serialize};
 use crate::prover::ProverConfig;
 use crate::utils::secret::SecretUrl;
 use crate::utils::serde_utils::JsonStrWrapper;
+
+/// The `config` crate (0.13) stores env var values as raw strings even with `try_parsing(true)`.
+/// This module provides a custom deserializer for `HashMap<String, Vec<AuthorizedKey>>` that
+/// accepts both sequences (TOML) and JSON-encoded strings (env vars).
+mod authorized_keys_serde {
+    use super::AuthorizedKey;
+    use serde::de::{MapAccess, SeqAccess, Visitor};
+    use serde::{Deserialize, Deserializer};
+    use std::collections::HashMap;
+
+    pub fn deserialize<'de, D>(d: D) -> Result<HashMap<String, Vec<AuthorizedKey>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct MapVisitor;
+
+        impl<'de> Visitor<'de> for MapVisitor {
+            type Value = HashMap<String, Vec<AuthorizedKey>>;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "a map of key names to authorized key lists")
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                let mut result = HashMap::new();
+                while let Some((name, keys)) = map.next_entry::<String, KeyList>()? {
+                    result.insert(name, keys.0);
+                }
+                Ok(result)
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                serde_json::from_str::<HashMap<String, Vec<AuthorizedKey>>>(v).map_err(E::custom)
+            }
+        }
+
+        d.deserialize_any(MapVisitor)
+    }
+
+    struct KeyList(Vec<AuthorizedKey>);
+
+    impl<'de> Deserialize<'de> for KeyList {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            struct KeyListVisitor;
+
+            impl<'de> Visitor<'de> for KeyListVisitor {
+                type Value = KeyList;
+
+                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    write!(
+                        f,
+                        "a sequence of authorized keys or a JSON-encoded sequence"
+                    )
+                }
+
+                fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                    let mut keys = Vec::new();
+                    while let Some(key) = seq.next_element::<AuthorizedKey>()? {
+                        keys.push(key);
+                    }
+                    Ok(KeyList(keys))
+                }
+
+                fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                    serde_json::from_str::<Vec<AuthorizedKey>>(v)
+                        .map(KeyList)
+                        .map_err(E::custom)
+                }
+            }
+
+            d.deserialize_any(KeyListVisitor)
+        }
+    }
+}
 
 /// Authentication mode for the server API endpoints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -238,6 +313,12 @@ pub struct DatabaseConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorizedKey {
+    pub pem: String,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub address: SocketAddr,
 
@@ -253,9 +334,14 @@ pub struct ServerConfig {
     #[serde(default)]
     pub basic_auth_credentials: HashMap<String, String>,
 
-    /// Named authorized keys for JWT authentication: key_name -> PEM public key
-    #[serde(default)]
-    pub authorized_keys: HashMap<String, String>,
+    /// Named authorized keys for JWT authentication: key_name -> list of authorized keys
+    #[serde(
+        rename = "authorized_keys_json",
+        alias = "authorized_keys",
+        default,
+        deserialize_with = "authorized_keys_serde::deserialize"
+    )]
+    pub authorized_keys: HashMap<String, Vec<AuthorizedKey>>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -448,7 +534,7 @@ mod tests {
 
         [server.basic_auth_credentials]
 
-        [server.authorized_keys]
+        [server.authorized_keys_json]
 
         [service]
         service_name = "signup-sequencer"
@@ -493,7 +579,7 @@ mod tests {
 
         [server.basic_auth_credentials]
 
-        [server.authorized_keys]
+        [server.authorized_keys_json]
 
         [service]
         service_name = "signup-sequencer"
@@ -694,8 +780,8 @@ mod tests {
         app_backend = "secretpass123"
         other_service = "otherpass456"
 
-        [server.authorized_keys]
-        app_backend = "test_public_key_pem_content"
+        [server.authorized_keys_json]
+        app_backend = [{ pem = "test_public_key_pem_content" }]
 
         [service]
         service_name = "signup-sequencer"
@@ -735,7 +821,7 @@ mod tests {
         SEQ__SERVER__AUTH_MODE=basic_or_jwt
         SEQ__SERVER__BASIC_AUTH_CREDENTIALS__APP_BACKEND=secretpass123
         SEQ__SERVER__BASIC_AUTH_CREDENTIALS__OTHER_SERVICE=otherpass456
-        SEQ__SERVER__AUTHORIZED_KEYS__APP_BACKEND=test_public_key_pem_content
+        SEQ__SERVER__AUTHORIZED_KEYS_JSON={"app_backend":[{"pem":"test_public_key_pem_content"}]}
 
         SEQ__SERVICE__SERVICE_NAME=signup-sequencer
 
@@ -781,6 +867,103 @@ mod tests {
         assert_eq!(parsed_config, env_config);
 
         purge_env(AUTH_ENV);
+    }
+
+    #[test]
+    fn authorized_keys_multiple_names_from_toml() {
+        let keys: HashMap<String, Vec<AuthorizedKey>> = toml::from_str(indoc::indoc! {r#"
+            key1 = [{ pem = "pem_content_1" }]
+            key2 = [{ pem = "pem_content_2" }]
+        "#})
+        .unwrap();
+
+        assert_eq!(keys.len(), 2);
+        assert_eq!(keys["key1"][0].pem, "pem_content_1");
+        assert_eq!(keys["key2"][0].pem, "pem_content_2");
+    }
+
+    #[test]
+    fn authorized_keys_multiple_pems_per_name_from_toml() {
+        let keys: HashMap<String, Vec<AuthorizedKey>> = toml::from_str(indoc::indoc! {r#"
+            app_backend = [
+                { pem = "old_pem_content" },
+                { pem = "new_pem_content" },
+            ]
+        "#})
+        .unwrap();
+
+        assert_eq!(keys["app_backend"].len(), 2);
+        assert_eq!(keys["app_backend"][0].pem, "old_pem_content");
+        assert_eq!(keys["app_backend"][1].pem, "new_pem_content");
+        assert!(keys["app_backend"][0].expires_at.is_none());
+        assert!(keys["app_backend"][1].expires_at.is_none());
+    }
+
+    #[test]
+    fn authorized_keys_multiple_pems_per_name_with_expiry_from_toml() {
+        let keys: HashMap<String, Vec<AuthorizedKey>> = toml::from_str(indoc::indoc! {r#"
+            app_backend = [
+                { pem = "old_pem_content", expires_at = "2025-01-01T00:00:00Z" },
+                { pem = "new_pem_content" },
+            ]
+        "#})
+        .unwrap();
+
+        assert_eq!(keys["app_backend"].len(), 2);
+        assert!(keys["app_backend"][0].expires_at.is_some());
+        assert!(keys["app_backend"][1].expires_at.is_none());
+    }
+
+    #[test]
+    fn authorized_keys_multiple_names_from_env() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
+        load_env(OFFCHAIN_ENV);
+        std::env::set_var(
+            "SEQ__SERVER__AUTHORIZED_KEYS_JSON",
+            r#"{"key1":[{"pem":"pem_content_1"}],"key2":[{"pem":"pem_content_2"}]}"#,
+        );
+
+        let config: Config = load_config(None).unwrap();
+
+        assert_eq!(config.server.authorized_keys.len(), 2);
+        assert_eq!(
+            config.server.authorized_keys["key1"][0].pem,
+            "pem_content_1"
+        );
+        assert_eq!(
+            config.server.authorized_keys["key2"][0].pem,
+            "pem_content_2"
+        );
+
+        purge_env(OFFCHAIN_ENV);
+        std::env::remove_var("SEQ__SERVER__AUTHORIZED_KEYS_JSON");
+    }
+
+    #[test]
+    fn authorized_keys_multiple_pems_per_name_from_env() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
+        load_env(OFFCHAIN_ENV);
+        std::env::set_var(
+            "SEQ__SERVER__AUTHORIZED_KEYS_JSON",
+            r#"{"app_backend":[{"pem":"old_pem_content"},{"pem":"new_pem_content"}]}"#,
+        );
+
+        let config: Config = load_config(None).unwrap();
+
+        assert_eq!(config.server.authorized_keys["app_backend"].len(), 2);
+        assert_eq!(
+            config.server.authorized_keys["app_backend"][0].pem,
+            "old_pem_content"
+        );
+        assert_eq!(
+            config.server.authorized_keys["app_backend"][1].pem,
+            "new_pem_content"
+        );
+
+        purge_env(OFFCHAIN_ENV);
+        std::env::remove_var("SEQ__SERVER__AUTHORIZED_KEYS_JSON");
     }
 
     #[test]

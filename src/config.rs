@@ -337,7 +337,6 @@ pub struct ServerConfig {
     /// Named authorized keys for JWT authentication: key_name -> list of authorized keys
     #[serde(
         rename = "authorized_keys_json",
-        alias = "authorized_keys",
         default,
         deserialize_with = "authorized_keys_serde::deserialize"
     )]

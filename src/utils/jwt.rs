@@ -83,14 +83,16 @@ impl JwtValidator {
         let now = Utc::now();
         for (name, keys) in &self.keys {
             for loaded in keys {
-                if loaded.expires_at.is_some_and(|exp| exp <= now) {
-                    continue;
-                }
                 if let Ok(token_data) = decode::<Claims>(token, &loaded.key, &validation) {
                     // Signature valid - now check sub matches key name
-                    if token_data.claims.sub == *name {
-                        return Ok(token_data.claims);
+                    if token_data.claims.sub != *name {
+                        continue;
                     }
+                    if loaded.expires_at.is_some_and(|exp| exp <= now) {
+                        tracing::warn!(key = %name, "JWT validated against an expired authorized key");
+                        return Err(JwtError::InvalidToken);
+                    }
+                    return Ok(token_data.claims);
                 }
             }
         }
@@ -414,19 +416,20 @@ mod tests {
     }
 
     #[test]
-    fn expired_key_superseded_by_valid_key_with_same_name() {
-        let (private_pem, public_pem) = generate_es256_keypair();
+    fn new_key_accepted_when_old_key_expired() {
+        let (old_private_pem, old_public_pem) = generate_es256_keypair();
+        let (new_private_pem, new_public_pem) = generate_es256_keypair();
 
         let mut keys = HashMap::new();
         keys.insert(
             "test_key".to_string(),
             vec![
                 AuthorizedKey {
-                    pem: public_pem.clone(),
+                    pem: old_public_pem,
                     expires_at: Some(Utc::now() - chrono::Duration::hours(1)),
                 },
                 AuthorizedKey {
-                    pem: public_pem,
+                    pem: new_public_pem,
                     expires_at: None,
                 },
             ],
@@ -434,10 +437,17 @@ mod tests {
 
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
+        // Token signed with new key — accepted
         let claims = Claims::new("test_key", future_exp());
-        let token = sign_jwt(&private_pem, &claims);
-
+        let token = sign_jwt(&new_private_pem, &claims);
         assert!(validator.validate(&token).is_ok());
+
+        // Token signed with old (expired) key — rejected with warning
+        let old_token = sign_jwt(&old_private_pem, &claims);
+        assert!(matches!(
+            validator.validate(&old_token),
+            Err(JwtError::InvalidToken)
+        ));
     }
 
     #[test]

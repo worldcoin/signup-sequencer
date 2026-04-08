@@ -43,8 +43,7 @@ mod authorized_keys_serde {
             }
 
             fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                serde_json::from_str::<HashMap<String, Vec<AuthorizedKey>>>(v)
-                    .map_err(E::custom)
+                serde_json::from_str::<HashMap<String, Vec<AuthorizedKey>>>(v).map_err(E::custom)
             }
         }
 
@@ -61,13 +60,13 @@ mod authorized_keys_serde {
                 type Value = KeyList;
 
                 fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                    write!(f, "a sequence of authorized keys or a JSON-encoded sequence")
+                    write!(
+                        f,
+                        "a sequence of authorized keys or a JSON-encoded sequence"
+                    )
                 }
 
-                fn visit_seq<A: SeqAccess<'de>>(
-                    self,
-                    mut seq: A,
-                ) -> Result<Self::Value, A::Error> {
+                fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
                     let mut keys = Vec::new();
                     while let Some(key) = seq.next_element::<AuthorizedKey>()? {
                         keys.push(key);
@@ -336,7 +335,12 @@ pub struct ServerConfig {
     pub basic_auth_credentials: HashMap<String, String>,
 
     /// Named authorized keys for JWT authentication: key_name -> list of authorized keys
-    #[serde(rename = "authorized_keys_json", alias = "authorized_keys", default, deserialize_with = "authorized_keys_serde::deserialize")]
+    #[serde(
+        rename = "authorized_keys_json",
+        alias = "authorized_keys",
+        default,
+        deserialize_with = "authorized_keys_serde::deserialize"
+    )]
     pub authorized_keys: HashMap<String, Vec<AuthorizedKey>>,
 }
 
@@ -870,7 +874,8 @@ mod tests {
         let keys: HashMap<String, Vec<AuthorizedKey>> = toml::from_str(indoc::indoc! {r#"
             key1 = [{ pem = "pem_content_1" }]
             key2 = [{ pem = "pem_content_2" }]
-        "#}).unwrap();
+        "#})
+        .unwrap();
 
         assert_eq!(keys.len(), 2);
         assert_eq!(keys["key1"][0].pem, "pem_content_1");
@@ -884,7 +889,8 @@ mod tests {
                 { pem = "old_pem_content" },
                 { pem = "new_pem_content" },
             ]
-        "#}).unwrap();
+        "#})
+        .unwrap();
 
         assert_eq!(keys["app_backend"].len(), 2);
         assert_eq!(keys["app_backend"][0].pem, "old_pem_content");
@@ -900,7 +906,8 @@ mod tests {
                 { pem = "old_pem_content", expires_at = "2025-01-01T00:00:00Z" },
                 { pem = "new_pem_content" },
             ]
-        "#}).unwrap();
+        "#})
+        .unwrap();
 
         assert_eq!(keys["app_backend"].len(), 2);
         assert!(keys["app_backend"][0].expires_at.is_some());
@@ -920,8 +927,14 @@ mod tests {
         let config: Config = load_config(None).unwrap();
 
         assert_eq!(config.server.authorized_keys.len(), 2);
-        assert_eq!(config.server.authorized_keys["key1"][0].pem, "pem_content_1");
-        assert_eq!(config.server.authorized_keys["key2"][0].pem, "pem_content_2");
+        assert_eq!(
+            config.server.authorized_keys["key1"][0].pem,
+            "pem_content_1"
+        );
+        assert_eq!(
+            config.server.authorized_keys["key2"][0].pem,
+            "pem_content_2"
+        );
 
         purge_env(OFFCHAIN_ENV);
         std::env::remove_var("SEQ__SERVER__AUTHORIZED_KEYS_JSON");
@@ -940,8 +953,14 @@ mod tests {
         let config: Config = load_config(None).unwrap();
 
         assert_eq!(config.server.authorized_keys["app_backend"].len(), 2);
-        assert_eq!(config.server.authorized_keys["app_backend"][0].pem, "old_pem_content");
-        assert_eq!(config.server.authorized_keys["app_backend"][1].pem, "new_pem_content");
+        assert_eq!(
+            config.server.authorized_keys["app_backend"][0].pem,
+            "old_pem_content"
+        );
+        assert_eq!(
+            config.server.authorized_keys["app_backend"][1].pem,
+            "new_pem_content"
+        );
 
         purge_env(OFFCHAIN_ENV);
         std::env::remove_var("SEQ__SERVER__AUTHORIZED_KEYS_JSON");

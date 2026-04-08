@@ -1,7 +1,16 @@
+use chrono::{DateTime, Utc};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
+
+use crate::config::AuthorizedKey;
+
+#[derive(Clone)]
+struct LoadedKey {
+    key: DecodingKey,
+    expires_at: Option<DateTime<Utc>>,
+}
 
 /// JWT claims structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,19 +40,25 @@ pub enum JwtError {
 
 #[derive(Clone)]
 pub struct JwtValidator {
-    keys: HashMap<String, DecodingKey>,
+    keys: HashMap<String, Vec<LoadedKey>>,
 }
 
 impl JwtValidator {
-    /// Creates a new JWT validator from a map of named PEM public keys.
+    /// Creates a new JWT validator from a map of named authorized keys.
     ///
     /// # Errors
     /// Returns an error if any of the provided PEM keys are invalid.
-    pub fn new(pem_keys: &HashMap<String, String>) -> Result<Self, JwtError> {
+    pub fn new(authorized_keys: &HashMap<String, Vec<AuthorizedKey>>) -> Result<Self, JwtError> {
         let mut keys = HashMap::new();
-        for (name, pem) in pem_keys {
-            let key = DecodingKey::from_ec_pem(pem.as_bytes())?;
-            keys.insert(name.clone(), key);
+        for (name, entries) in authorized_keys {
+            let mut loaded = Vec::new();
+            for entry in entries {
+                loaded.push(LoadedKey {
+                    key: DecodingKey::from_ec_pem(entry.pem.as_bytes())?,
+                    expires_at: entry.expires_at,
+                });
+            }
+            keys.insert(name.clone(), loaded);
         }
         Ok(Self { keys })
     }
@@ -65,11 +80,17 @@ impl JwtValidator {
     pub fn validate(&self, token: &str) -> Result<Claims, JwtError> {
         let validation = Validation::new(Algorithm::ES256);
 
-        for (name, key) in &self.keys {
-            if let Ok(token_data) = decode::<Claims>(token, key, &validation) {
-                // Signature valid - now check sub matches key name
-                if token_data.claims.sub == *name {
-                    return Ok(token_data.claims);
+        let now = Utc::now();
+        for (name, keys) in &self.keys {
+            for loaded in keys {
+                if loaded.expires_at.is_some_and(|exp| exp <= now) {
+                    continue;
+                }
+                if let Ok(token_data) = decode::<Claims>(token, &loaded.key, &validation) {
+                    // Signature valid - now check sub matches key name
+                    if token_data.claims.sub == *name {
+                        return Ok(token_data.claims);
+                    }
                 }
             }
         }
@@ -105,7 +126,7 @@ mod tests {
         let (private_pem, public_pem) = generate_es256_keypair();
 
         let mut keys = HashMap::new();
-        keys.insert("test_key".to_string(), public_pem);
+        keys.insert("test_key".to_string(), vec![AuthorizedKey { pem: public_pem, expires_at: None }]);
 
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
@@ -122,7 +143,7 @@ mod tests {
         let (private_pem, public_pem) = generate_es256_keypair();
 
         let mut keys = HashMap::new();
-        keys.insert("test_key".to_string(), public_pem);
+        keys.insert("test_key".to_string(), vec![AuthorizedKey { pem: public_pem, expires_at: None }]);
 
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
@@ -138,7 +159,7 @@ mod tests {
         let (private_pem, public_pem) = generate_es256_keypair();
 
         let mut keys = HashMap::new();
-        keys.insert("test_key".to_string(), public_pem);
+        keys.insert("test_key".to_string(), vec![AuthorizedKey { pem: public_pem, expires_at: None }]);
 
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
@@ -155,7 +176,7 @@ mod tests {
         let (private_pem, public_pem) = generate_es256_keypair();
 
         let mut keys = HashMap::new();
-        keys.insert("test_key".to_string(), public_pem);
+        keys.insert("test_key".to_string(), vec![AuthorizedKey { pem: public_pem, expires_at: None }]);
 
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
@@ -173,7 +194,7 @@ mod tests {
         let (_private_pem2, public_pem2) = generate_es256_keypair();
 
         let mut keys = HashMap::new();
-        keys.insert("test_key".to_string(), public_pem2);
+        keys.insert("test_key".to_string(), vec![AuthorizedKey { pem: public_pem2, expires_at: None }]);
 
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
@@ -190,7 +211,7 @@ mod tests {
         let (_private_pem, public_pem) = generate_es256_keypair();
 
         let mut keys = HashMap::new();
-        keys.insert("test_key".to_string(), public_pem);
+        keys.insert("test_key".to_string(), vec![AuthorizedKey { pem: public_pem, expires_at: None }]);
 
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
@@ -204,8 +225,8 @@ mod tests {
         let (private_pem2, public_pem2) = generate_es256_keypair();
 
         let mut keys = HashMap::new();
-        keys.insert("key1".to_string(), public_pem1);
-        keys.insert("key2".to_string(), public_pem2);
+        keys.insert("key1".to_string(), vec![AuthorizedKey { pem: public_pem1, expires_at: None }]);
+        keys.insert("key2".to_string(), vec![AuthorizedKey { pem: public_pem2, expires_at: None }]);
 
         let validator = JwtValidator::new(&keys).expect("Failed to create validator");
 
@@ -238,6 +259,107 @@ mod tests {
     }
 
     #[test]
+    fn multiple_pems_per_key_both_validate() {
+        let (private_pem1, public_pem1) = generate_es256_keypair();
+        let (private_pem2, public_pem2) = generate_es256_keypair();
+
+        let mut keys = HashMap::new();
+        keys.insert("test_key".to_string(), vec![
+            AuthorizedKey { pem: public_pem1, expires_at: None },
+            AuthorizedKey { pem: public_pem2, expires_at: None },
+        ]);
+
+        let validator = JwtValidator::new(&keys).expect("Failed to create validator");
+
+        for private_pem in [&private_pem1, &private_pem2] {
+            let claims = Claims::new("test_key", future_exp());
+            let token = sign_jwt(private_pem, &claims);
+            let result = validator.validate(&token);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().sub, "test_key");
+        }
+    }
+
+    #[test]
+    fn multiple_pems_per_key_wrong_sub_still_rejected() {
+        let (private_pem1, public_pem1) = generate_es256_keypair();
+        let (_private_pem2, public_pem2) = generate_es256_keypair();
+
+        let mut keys = HashMap::new();
+        keys.insert("key1".to_string(), vec![
+            AuthorizedKey { pem: public_pem1, expires_at: None },
+            AuthorizedKey { pem: public_pem2, expires_at: None },
+        ]);
+
+        let validator = JwtValidator::new(&keys).expect("Failed to create validator");
+
+        // Token signed with key1's private key but claiming sub=key2 — must be rejected
+        let claims = Claims::new("key2", future_exp());
+        let token = sign_jwt(&private_pem1, &claims);
+        assert!(matches!(validator.validate(&token), Err(JwtError::InvalidToken)));
+    }
+
+    #[test]
+    fn key_with_future_expiry_accepts_valid_token() {
+        let (private_pem, public_pem) = generate_es256_keypair();
+
+        let mut keys = HashMap::new();
+        keys.insert("test_key".to_string(), vec![AuthorizedKey {
+            pem: public_pem,
+            expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
+        }]);
+
+        let validator = JwtValidator::new(&keys).expect("Failed to create validator");
+
+        let claims = Claims::new("test_key", future_exp());
+        let token = sign_jwt(&private_pem, &claims);
+
+        assert!(validator.validate(&token).is_ok());
+    }
+
+    #[test]
+    fn key_with_past_expiry_rejects_valid_token() {
+        let (private_pem, public_pem) = generate_es256_keypair();
+
+        let mut keys = HashMap::new();
+        keys.insert("test_key".to_string(), vec![AuthorizedKey {
+            pem: public_pem,
+            expires_at: Some(Utc::now() - chrono::Duration::hours(1)),
+        }]);
+
+        let validator = JwtValidator::new(&keys).expect("Failed to create validator");
+
+        let claims = Claims::new("test_key", future_exp());
+        let token = sign_jwt(&private_pem, &claims);
+
+        assert!(matches!(validator.validate(&token), Err(JwtError::InvalidToken)));
+    }
+
+    #[test]
+    fn expired_key_superseded_by_valid_key_with_same_name() {
+        let (private_pem, public_pem) = generate_es256_keypair();
+
+        let mut keys = HashMap::new();
+        keys.insert("test_key".to_string(), vec![
+            AuthorizedKey {
+                pem: public_pem.clone(),
+                expires_at: Some(Utc::now() - chrono::Duration::hours(1)),
+            },
+            AuthorizedKey {
+                pem: public_pem,
+                expires_at: None,
+            },
+        ]);
+
+        let validator = JwtValidator::new(&keys).expect("Failed to create validator");
+
+        let claims = Claims::new("test_key", future_exp());
+        let token = sign_jwt(&private_pem, &claims);
+
+        assert!(validator.validate(&token).is_ok());
+    }
+
+    #[test]
     fn has_keys_returns_correct_value() {
         let empty_keys = HashMap::new();
         let validator_empty = JwtValidator::new(&empty_keys).expect("Failed to create validator");
@@ -245,7 +367,7 @@ mod tests {
 
         let (_, public_pem) = generate_es256_keypair();
         let mut keys = HashMap::new();
-        keys.insert("test".to_string(), public_pem);
+        keys.insert("test".to_string(), vec![AuthorizedKey { pem: public_pem, expires_at: None }]);
         let validator_with_keys = JwtValidator::new(&keys).expect("Failed to create validator");
         assert!(validator_with_keys.has_keys());
     }

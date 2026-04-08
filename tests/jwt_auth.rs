@@ -9,7 +9,7 @@ use common::prelude::*;
 use common::{generate_es256_keypair, sign_jwt};
 use maplit::hashmap;
 use reqwest::header::AUTHORIZATION;
-use signup_sequencer::config::AuthMode;
+use signup_sequencer::config::{AuthMode, AuthorizedKey};
 use signup_sequencer::utils::jwt::Claims;
 
 fn future_exp() -> u64 {
@@ -22,7 +22,7 @@ fn future_exp() -> u64 {
 
 async fn setup_test_app_with_auth(
     auth_mode: AuthMode,
-    authorized_keys: HashMap<String, String>,
+    authorized_keys: HashMap<String, Vec<AuthorizedKey>>,
     basic_auth_credentials: HashMap<String, String>,
 ) -> anyhow::Result<(
     std::sync::Arc<signup_sequencer::app::App>,
@@ -77,7 +77,7 @@ async fn health_no_auth_required() -> anyhow::Result<()> {
     init_tracing_subscriber();
 
     let (_, public_pem) = generate_es256_keypair();
-    let keys = hashmap! { "test_key".to_string() => public_pem };
+    let keys = hashmap! { "test_key".to_string() => vec![AuthorizedKey { pem: public_pem, expires_at: None }] };
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
         setup_test_app_with_auth(AuthMode::JwtOnly, keys, hashmap! {}).await?;
@@ -101,7 +101,7 @@ async fn metrics_no_auth_required() -> anyhow::Result<()> {
     init_tracing_subscriber();
 
     let (_, public_pem) = generate_es256_keypair();
-    let keys = hashmap! { "test_key".to_string() => public_pem };
+    let keys = hashmap! { "test_key".to_string() => vec![AuthorizedKey { pem: public_pem, expires_at: None }] };
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
         setup_test_app_with_auth(AuthMode::JwtOnly, keys, hashmap! {}).await?;
@@ -125,7 +125,7 @@ async fn insert_identity_requires_auth_when_enforced() -> anyhow::Result<()> {
     init_tracing_subscriber();
 
     let (_, public_pem) = generate_es256_keypair();
-    let keys = hashmap! { "test_key".to_string() => public_pem };
+    let keys = hashmap! { "test_key".to_string() => vec![AuthorizedKey { pem: public_pem, expires_at: None }] };
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
         setup_test_app_with_auth(AuthMode::JwtOnly, keys, hashmap! {}).await?;
@@ -153,7 +153,7 @@ async fn insert_identity_succeeds_with_valid_token() -> anyhow::Result<()> {
     init_tracing_subscriber();
 
     let (private_pem, public_pem) = generate_es256_keypair();
-    let keys = hashmap! { "test_key".to_string() => public_pem };
+    let keys = hashmap! { "test_key".to_string() => vec![AuthorizedKey { pem: public_pem, expires_at: None }] };
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
         setup_test_app_with_auth(AuthMode::JwtOnly, keys, hashmap! {}).await?;
@@ -186,7 +186,7 @@ async fn auth_disabled_bypasses_all_checks() -> anyhow::Result<()> {
     init_tracing_subscriber();
 
     let (_, public_pem) = generate_es256_keypair();
-    let keys = hashmap! { "test_key".to_string() => public_pem };
+    let keys = hashmap! { "test_key".to_string() => vec![AuthorizedKey { pem: public_pem, expires_at: None }] };
 
     // Auth is disabled entirely
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
@@ -216,7 +216,7 @@ async fn basic_or_jwt_allows_with_basic_auth() -> anyhow::Result<()> {
     init_tracing_subscriber();
 
     let (_, public_pem) = generate_es256_keypair();
-    let keys = hashmap! { "test_key".to_string() => public_pem };
+    let keys = hashmap! { "test_key".to_string() => vec![AuthorizedKey { pem: public_pem, expires_at: None }] };
 
     let basic_creds = hashmap! { "testuser".to_string() => "testpass".to_string() };
 
@@ -249,7 +249,7 @@ async fn basic_or_jwt_allows_with_jwt_only() -> anyhow::Result<()> {
     init_tracing_subscriber();
 
     let (private_pem, public_pem) = generate_es256_keypair();
-    let keys = hashmap! { "test_key".to_string() => public_pem };
+    let keys = hashmap! { "test_key".to_string() => vec![AuthorizedKey { pem: public_pem, expires_at: None }] };
 
     let basic_creds = hashmap! { "testuser".to_string() => "testpass".to_string() };
 
@@ -285,7 +285,7 @@ async fn v2_insert_identity_requires_auth_when_enforced() -> anyhow::Result<()> 
     init_tracing_subscriber();
 
     let (_, public_pem) = generate_es256_keypair();
-    let keys = hashmap! { "test_key".to_string() => public_pem };
+    let keys = hashmap! { "test_key".to_string() => vec![AuthorizedKey { pem: public_pem, expires_at: None }] };
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
         setup_test_app_with_auth(AuthMode::JwtOnly, keys, hashmap! {}).await?;
@@ -313,7 +313,7 @@ async fn v2_delete_identity_requires_auth_when_enforced() -> anyhow::Result<()> 
     init_tracing_subscriber();
 
     let (_, public_pem) = generate_es256_keypair();
-    let keys = hashmap! { "test_key".to_string() => public_pem };
+    let keys = hashmap! { "test_key".to_string() => vec![AuthorizedKey { pem: public_pem, expires_at: None }] };
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
         setup_test_app_with_auth(AuthMode::JwtOnly, keys, hashmap! {}).await?;
@@ -341,7 +341,7 @@ async fn inclusion_proof_no_auth_required() -> anyhow::Result<()> {
     init_tracing_subscriber();
 
     let (_, public_pem) = generate_es256_keypair();
-    let keys = hashmap! { "test_key".to_string() => public_pem };
+    let keys = hashmap! { "test_key".to_string() => vec![AuthorizedKey { pem: public_pem, expires_at: None }] };
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
         setup_test_app_with_auth(AuthMode::JwtOnly, keys, hashmap! {}).await?;
@@ -372,7 +372,7 @@ async fn wrong_key_rejected() -> anyhow::Result<()> {
     let (wrong_private_pem, _) = generate_es256_keypair();
     let (_, correct_public_pem) = generate_es256_keypair();
 
-    let keys = hashmap! { "test_key".to_string() => correct_public_pem };
+    let keys = hashmap! { "test_key".to_string() => vec![AuthorizedKey { pem: correct_public_pem, expires_at: None }] };
 
     let (_app, app_handle, local_addr, shutdown, _db, _temp) =
         setup_test_app_with_auth(AuthMode::JwtOnly, keys, hashmap! {}).await?;

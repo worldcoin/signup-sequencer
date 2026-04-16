@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::Context;
 use chrono::Utc;
@@ -33,7 +32,7 @@ pub async fn modify_tree(
         .context("Invalid batch deletion timeout duration")?;
     let min_batch_deletion_size = app.config.app.min_batch_deletion_size;
 
-    let mut timer = time::interval(Duration::from_secs(5));
+    let mut timer = time::interval(app.config.app.tree_modify_interval);
     timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     loop {

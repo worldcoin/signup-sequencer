@@ -330,6 +330,7 @@ mod test {
         let config = Config {
             app: AppConfig {
                 provers_urls: vec![].into(),
+                tree_modify_interval: default::tree_modify_interval(),
                 batch_insertion_timeout: default::batch_insertion_timeout(),
                 batch_deletion_timeout: default::batch_deletion_timeout(),
                 min_batch_deletion_size: default::min_batch_deletion_size(),

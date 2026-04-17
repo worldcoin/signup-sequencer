@@ -9,7 +9,7 @@ use semaphore_rs_poseidon::poseidon;
 use std::sync::Arc;
 use tokio::sync::watch::Sender;
 use tokio::sync::Notify;
-use tokio::time::{Duration, MissedTickBehavior};
+use tokio::time::MissedTickBehavior;
 use tokio::{select, time};
 
 pub async fn sync_tree_state_with_db(
@@ -19,7 +19,7 @@ pub async fn sync_tree_state_with_db(
 ) -> anyhow::Result<()> {
     tracing::info!("Starting Sync TreeState with DB.");
 
-    let mut timer = time::interval(Duration::from_secs(5));
+    let mut timer = time::interval(app.config.app.tree_sync_interval);
     timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     loop {

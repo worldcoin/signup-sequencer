@@ -43,7 +43,7 @@ futures-util = { version = "^0.3" }
 hex = "0.4.3"
 hex-literal = "0.4.1"
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
-humantime = "2.1.0"
+humantime = "2.3.0"
 humantime-serde = "1.1.1"
 hyper = { version = "1.4.1", features = ["server", "http1", "http2"] }
 indoc = "2.0.4"

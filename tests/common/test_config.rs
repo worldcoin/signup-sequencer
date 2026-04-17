@@ -148,6 +148,7 @@ impl TestConfigBuilder {
             app: AppConfig {
                 provers_urls: self.prover_urls.into(),
                 tree_modify_interval: default::tree_modify_interval(),
+                tree_sync_interval: default::tree_sync_interval(),
                 batch_insertion_timeout: self.batch_insertion_timeout,
                 batch_deletion_timeout: self.batch_deletion_timeout,
                 min_batch_deletion_size: self.min_batch_deletion_size,

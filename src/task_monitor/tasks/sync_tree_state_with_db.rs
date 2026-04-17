@@ -1,5 +1,7 @@
-use crate::identity_tree::db_sync::{sync_tree, SyncTreeResult};
-use crate::identity_tree::{ProcessedStatus, TreeUpdate};
+use crate::identity_tree::db_sync::{
+    apply_sync_plan, build_sync_plan, sync_tree, SyncTreeResult, TreeStateSnapshot,
+};
+use crate::identity_tree::{ProcessedStatus, TreeUpdate, TreeVersionReadOps};
 use crate::retry_tx;
 use crate::task_monitor::App;
 use chrono::Utc;
@@ -7,7 +9,7 @@ use semaphore_rs_poseidon::poseidon;
 use std::sync::Arc;
 use tokio::sync::watch::Sender;
 use tokio::sync::Notify;
-use tokio::time::{Duration, MissedTickBehavior};
+use tokio::time::MissedTickBehavior;
 use tokio::{select, time};
 
 pub async fn sync_tree_state_with_db(
@@ -17,7 +19,7 @@ pub async fn sync_tree_state_with_db(
 ) -> anyhow::Result<()> {
     tracing::info!("Starting Sync TreeState with DB.");
 
-    let mut timer = time::interval(Duration::from_secs(5));
+    let mut timer = time::interval(app.config.app.tree_sync_interval);
     timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     loop {
@@ -42,7 +44,54 @@ pub async fn sync_tree_state_with_db(
     }
 }
 
+/// Two-phase sync that keeps the `TreeState` mutex held only for brief,
+/// CPU-bound operations, never across database I/O.
+///
+/// Phase 1 – Snapshot (lock held ~microseconds):
+///   Acquire the `TreeState` mutex, read the current sequence IDs from all
+///   four tree tiers, then immediately release the lock.
+///
+/// Phase 2 – DB reads (no lock held):
+///   Issue all necessary Postgres queries inside a `retry_tx!` loop. The
+///   results are packaged into a [`SyncPlan`] that contains no references to
+///   the `MutexGuard`.
+///
+/// Phase 3 – Apply (lock held ~microseconds):
+///   Acquire the `TreeState` mutex again. Verify the sequence IDs still match
+///   the snapshot (another writer could have changed things between phases 1
+///   and 3). If they match, apply the pre-computed plan to the in-memory
+///   trees and release the lock. If they don't match, skip — the next timed
+///   cycle will start fresh.
 async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
+    // ── Phase 1: snapshot sequence IDs while briefly holding the lock ──────
+    let snapshot = {
+        let tree_state = app.tree_state().await?;
+        TreeStateSnapshot {
+            mined_last_seq: tree_state.mined_tree().get_last_sequence_id(),
+            processed_last_seq: tree_state.processed_tree().get_last_sequence_id(),
+            batching_last_seq: tree_state.batching_tree().get_last_sequence_id(),
+            latest_last_seq: tree_state.latest_tree().get_last_sequence_id(),
+        }
+        // MutexGuard is dropped here
+    };
+
+    // ── Phase 2: DB reads — no lock held ──────────────────────────────────
+    let plan = retry_tx!(&app.database, tx, build_sync_plan(&mut tx, &snapshot).await).await?;
+
+    // ── Phase 3: apply plan — lock held briefly for in-memory writes only ──
+    let tree_state = app.tree_state().await?;
+    let res = apply_sync_plan(&tree_state, plan)?;
+
+    tracing::info!("TreeState synced with DB");
+
+    Ok(res)
+}
+
+/// Kept for callers that still use the original one-phase path (e.g.
+/// `identity_tree/initializer.rs`). The startup path runs before any
+/// concurrent tasks are active, so the long lock hold is not a problem there.
+#[allow(dead_code)]
+async fn run_sync_tree_legacy(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
     let tree_state = app.tree_state().await?;
 
     let res = retry_tx!(&app.database, tx, sync_tree(&mut tx, &tree_state).await).await?;

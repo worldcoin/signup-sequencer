@@ -148,6 +148,12 @@ pub struct AppConfig {
     #[serde(default = "default::tree_modify_interval")]
     pub tree_modify_interval: Duration,
 
+    /// The interval used for syncing the in-memory tree state with the
+    /// database.
+    #[serde(with = "humantime_serde")]
+    #[serde(default = "default::tree_sync_interval")]
+    pub tree_sync_interval: Duration,
+
     /// The maximum number of seconds the sequencer will wait before sending a
     /// batch of identities to the chain, even if the batch is not full.
     #[serde(with = "humantime_serde")]
@@ -394,6 +400,10 @@ pub mod default {
         Duration::from_secs(5)
     }
 
+    pub fn tree_sync_interval() -> Duration {
+        Duration::from_secs(5)
+    }
+
     pub fn batch_insertion_timeout() -> Duration {
         Duration::from_secs(180)
     }
@@ -499,6 +509,7 @@ mod tests {
         [app]
         provers_urls = "[]"
         tree_modify_interval = "1s"
+        tree_sync_interval = "5s"
         batch_insertion_timeout = "3m"
         batch_deletion_timeout = "1h"
         min_batch_deletion_size = 100
@@ -559,6 +570,7 @@ mod tests {
         [app]
         provers_urls = "[]"
         tree_modify_interval = "1s"
+        tree_sync_interval = "5s"
         batch_insertion_timeout = "3m"
         batch_deletion_timeout = "1h"
         min_batch_deletion_size = 100
@@ -604,6 +616,7 @@ mod tests {
     const FULL_ENV: &str = indoc::indoc! {r#"
         SEQ__APP__PROVERS_URLS=[]
         SEQ__APP__TREE_MODIFY_INTERVAL=1s
+        SEQ__APP__TREE_SYNC_INTERVAL=5s
         SEQ__APP__BATCH_INSERTION_TIMEOUT=3m
         SEQ__APP__BATCH_DELETION_TIMEOUT=1h
         SEQ__APP__MIN_BATCH_DELETION_SIZE=100
@@ -650,6 +663,7 @@ mod tests {
     const OFFCHAIN_ENV: &str = indoc::indoc! {r#"
         SEQ__APP__PROVERS_URLS=[]
         SEQ__APP__TREE_MODIFY_INTERVAL=1s
+        SEQ__APP__TREE_SYNC_INTERVAL=5s
         SEQ__APP__BATCH_INSERTION_TIMEOUT=3m
         SEQ__APP__BATCH_DELETION_TIMEOUT=1h
         SEQ__APP__MIN_BATCH_DELETION_SIZE=100
@@ -761,6 +775,7 @@ mod tests {
         [app]
         provers_urls = "[]"
         tree_modify_interval = "1s"
+        tree_sync_interval = "5s"
         batch_insertion_timeout = "3m"
         batch_deletion_timeout = "1h"
         min_batch_deletion_size = 100
@@ -809,6 +824,7 @@ mod tests {
     const AUTH_ENV: &str = indoc::indoc! {r#"
         SEQ__APP__PROVERS_URLS=[]
         SEQ__APP__TREE_MODIFY_INTERVAL=1s
+        SEQ__APP__TREE_SYNC_INTERVAL=5s
         SEQ__APP__BATCH_INSERTION_TIMEOUT=3m
         SEQ__APP__BATCH_DELETION_TIMEOUT=1h
         SEQ__APP__MIN_BATCH_DELETION_SIZE=100

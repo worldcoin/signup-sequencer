@@ -210,7 +210,7 @@ impl Pinhead {
 
         let tx = txs
             .get(tx_id)
-            .context(format!("Transaction {} not found", tx_id))?;
+            .context(format!("Transaction {tx_id} not found"))?;
 
         let tx_guard = tx.lock().await;
 
@@ -223,6 +223,6 @@ impl Pinhead {
             .tx_id_counter
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
-        format!("tx-{}", id)
+        format!("tx-{id}")
     }
 }

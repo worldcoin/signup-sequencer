@@ -66,9 +66,7 @@ pub enum Error {
 
 impl Error {
     fn to_status_code(&self) -> StatusCode {
-        match self {
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        }
+        StatusCode::INTERNAL_SERVER_ERROR
     }
 }
 
@@ -118,7 +116,7 @@ pub async fn bind_from_listener(
     shutdown: Shutdown,
 ) -> anyhow::Result<()> {
     let auth_validator = AuthValidator::new(
-        config.auth_mode.clone(),
+        config.auth_mode,
         config.basic_auth_credentials.clone(),
         &config.authorized_keys,
     )?;

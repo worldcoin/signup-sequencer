@@ -189,9 +189,7 @@ fn parse_commitment(raw_commitment: String) -> Result<Hash, Error> {
             Error::BadRequest(ErrorResponse::new(
                 "invalid_path_param",
                 &format!(
-                    "Path parameter 'commitment' has invalid value '{}' which doesn't match required format '{}'",
-                    raw_commitment,
-                    re
+                    "Path parameter 'commitment' has invalid value '{raw_commitment}' which doesn't match required format '{re}'"
                 ),
             ))
         );
@@ -200,15 +198,14 @@ fn parse_commitment(raw_commitment: String) -> Result<Hash, Error> {
     let commitment = if raw_commitment.starts_with("0x") {
         raw_commitment.clone()
     } else {
-        format!("0x{}", raw_commitment)
+        format!("0x{raw_commitment}")
     };
 
     Hash::from_str(&commitment).map_err(|parse_err| {
         Error::BadRequest(ErrorResponse::new(
             "invalid_path_param",
             &format!(
-                "Path parameter 'commitment' has invalid value '{}': {}",
-                raw_commitment, parse_err
+                "Path parameter 'commitment' has invalid value '{raw_commitment}': {parse_err}"
             ),
         ))
     })
@@ -540,7 +537,7 @@ mod test {
         let (server, app, _db_container, _temp_dir) = setup_server(&docker).await?;
 
         let query = |server: &TestServer, commitment: &str| {
-            server.post(&format!("/v2/identities/{}", commitment))
+            server.post(&format!("/v2/identities/{commitment}"))
         };
 
         let test_success = async |commitment| {
@@ -627,7 +624,7 @@ mod test {
         let (server, app, _db_container, _temp_dir) = setup_server(&docker).await?;
 
         let query = |server: &TestServer, commitment: &str| {
-            server.delete(&format!("/v2/identities/{}", commitment))
+            server.delete(&format!("/v2/identities/{commitment}"))
         };
 
         let test_success = async |commitment| {
@@ -716,7 +713,7 @@ mod test {
         let (server, app, _db_container, _temp_dir) = setup_server(&docker).await?;
 
         let query = |server: &TestServer, commitment: &str| {
-            server.get(&format!("/v2/identities/{}/inclusion-proof", commitment))
+            server.get(&format!("/v2/identities/{commitment}/inclusion-proof"))
         };
 
         let test_success = async |commitment, result_json| {

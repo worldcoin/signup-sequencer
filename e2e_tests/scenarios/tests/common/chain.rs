@@ -43,7 +43,7 @@ pub async fn create_chain(chain_addr: String) -> anyhow::Result<Chain> {
 
     let wallet = LocalWallet::from(private_key.clone()).with_chain_id(31337u64);
 
-    let provider = Provider::<Http>::try_from(format!("http://{}", chain_addr))
+    let provider = Provider::<Http>::try_from(format!("http://{chain_addr}"))
         .expect("Failed to initialize chain endpoint")
         .interval(Duration::from_millis(500u64));
 

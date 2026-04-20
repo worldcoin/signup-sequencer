@@ -691,7 +691,7 @@ mod tests {
     fn full_toml_round_trip() {
         let config: Config = toml::from_str(FULL_TOML).unwrap();
         let serialized = toml::to_string_pretty(&config).unwrap();
-        println!("{}", serialized);
+        println!("{serialized}");
         similar_asserts::assert_eq!(serialized.trim(), FULL_TOML.trim());
     }
 
@@ -699,7 +699,7 @@ mod tests {
     fn offchain_config() {
         let config: Config = toml::from_str(OFFCHAIN_TOML).unwrap();
         let serialized = toml::to_string_pretty(&config).unwrap();
-        println!("{}", serialized);
+        println!("{serialized}");
         similar_asserts::assert_eq!(serialized.trim(), OFFCHAIN_TOML.trim());
     }
 
@@ -743,7 +743,7 @@ mod tests {
             let key = parts.next().expect("Missing key");
             let value = parts.next().expect("Missing value");
 
-            println!("Setting '{}'='{}'", key, value);
+            println!("Setting '{key}'='{value}'");
             std::env::set_var(key, value);
         }
     }

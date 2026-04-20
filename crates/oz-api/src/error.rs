@@ -6,7 +6,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Authentication failed: {0}")]
-    AuthFailed(#[from] CognitoSrpAuthError),
+    AuthFailed(#[source] Box<CognitoSrpAuthError>),
 
     #[error("Unauthorized")]
     Unauthorized,
@@ -25,4 +25,10 @@ pub enum Error {
 
     #[error("Invalid response with status code: {0}")]
     InvalidResponse(StatusCode),
+}
+
+impl From<CognitoSrpAuthError> for Error {
+    fn from(error: CognitoSrpAuthError) -> Self {
+        Self::AuthFailed(Box::new(error))
+    }
 }

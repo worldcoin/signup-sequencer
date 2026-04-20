@@ -84,7 +84,7 @@ async fn health_no_auth_required() -> anyhow::Result<()> {
 
     let client = Client::new();
     let response = client
-        .get(format!("http://{}/health", local_addr))
+        .get(format!("http://{local_addr}/health"))
         .send()
         .await?;
 
@@ -108,7 +108,7 @@ async fn metrics_no_auth_required() -> anyhow::Result<()> {
 
     let client = Client::new();
     let response = client
-        .get(format!("http://{}/metrics", local_addr))
+        .get(format!("http://{local_addr}/metrics"))
         .send()
         .await?;
 
@@ -132,7 +132,7 @@ async fn insert_identity_requires_auth_when_enforced() -> anyhow::Result<()> {
 
     let client = Client::new();
     let response = client
-        .post(format!("http://{}/insertIdentity", local_addr))
+        .post(format!("http://{local_addr}/insertIdentity"))
         .header("Content-Type", "application/json")
         .body(
             r#"{"identityCommitment":"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"}"#,
@@ -163,9 +163,9 @@ async fn insert_identity_succeeds_with_valid_token() -> anyhow::Result<()> {
 
     let client = Client::new();
     let response = client
-        .post(format!("http://{}/insertIdentity", local_addr))
+        .post(format!("http://{local_addr}/insertIdentity"))
         .header("Content-Type", "application/json")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(
             r#"{"identityCommitment":"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"}"#,
         )
@@ -194,7 +194,7 @@ async fn auth_disabled_bypasses_all_checks() -> anyhow::Result<()> {
 
     let client = Client::new();
     let response = client
-        .post(format!("http://{}/insertIdentity", local_addr))
+        .post(format!("http://{local_addr}/insertIdentity"))
         .header("Content-Type", "application/json")
         .body(
             r#"{"identityCommitment":"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"}"#,
@@ -226,7 +226,7 @@ async fn basic_or_jwt_allows_with_basic_auth() -> anyhow::Result<()> {
 
     let client = Client::new();
     let response = client
-        .post(format!("http://{}/insertIdentity", local_addr))
+        .post(format!("http://{local_addr}/insertIdentity"))
         .header("Content-Type", "application/json")
         .basic_auth("testuser", Some("testpass"))
         .body(
@@ -262,9 +262,9 @@ async fn basic_or_jwt_allows_with_jwt_only() -> anyhow::Result<()> {
 
     let client = Client::new();
     let response = client
-        .post(format!("http://{}/insertIdentity", local_addr))
+        .post(format!("http://{local_addr}/insertIdentity"))
         .header("Content-Type", "application/json")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(
             r#"{"identityCommitment":"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"}"#,
         )
@@ -293,10 +293,7 @@ async fn v2_insert_identity_requires_auth_when_enforced() -> anyhow::Result<()> 
     let commitment = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
     let client = Client::new();
     let response = client
-        .post(format!(
-            "http://{}/v2/identities/{}",
-            local_addr, commitment
-        ))
+        .post(format!("http://{local_addr}/v2/identities/{commitment}"))
         .send()
         .await?;
 
@@ -321,10 +318,7 @@ async fn v2_delete_identity_requires_auth_when_enforced() -> anyhow::Result<()> 
     let commitment = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
     let client = Client::new();
     let response = client
-        .delete(format!(
-            "http://{}/v2/identities/{}",
-            local_addr, commitment
-        ))
+        .delete(format!("http://{local_addr}/v2/identities/{commitment}"))
         .send()
         .await?;
 
@@ -350,8 +344,7 @@ async fn inclusion_proof_no_auth_required() -> anyhow::Result<()> {
     let client = Client::new();
     let response = client
         .get(format!(
-            "http://{}/v2/identities/{}/inclusion-proof",
-            local_addr, commitment
+            "http://{local_addr}/v2/identities/{commitment}/inclusion-proof"
         ))
         .send()
         .await?;
@@ -383,9 +376,9 @@ async fn wrong_key_rejected() -> anyhow::Result<()> {
 
     let client = Client::new();
     let response = client
-        .post(format!("http://{}/insertIdentity", local_addr))
+        .post(format!("http://{local_addr}/insertIdentity"))
         .header("Content-Type", "application/json")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(
             r#"{"identityCommitment":"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"}"#,
         )

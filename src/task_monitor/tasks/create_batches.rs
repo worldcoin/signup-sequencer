@@ -390,9 +390,8 @@ fn assert_updates_are_consecutive(updates: &[AppliedTreeUpdate]) {
                 .collect::<Vec<_>>();
 
             panic!(
-                "Identities are not consecutive leaves in the tree (leaf_indexes = {:?}, \
-                 commitments = {:?})",
-                leaf_indexes, commitments
+                "Identities are not consecutive leaves in the tree (leaf_indexes = {leaf_indexes:?}, \
+                 commitments = {commitments:?})"
             );
         }
     }

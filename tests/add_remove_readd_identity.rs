@@ -16,12 +16,12 @@ async fn wait_for_identity_processed(
     max_attempts: usize,
     sleep_duration: Duration,
 ) -> anyhow::Result<bool> {
-    let identity_hex = format!("0x{:x}", identity);
+    let identity_hex = format!("0x{identity:x}");
 
     for attempt in 0..max_attempts {
         // Try to insert using v2 API - it returns 409 Conflict if identity already exists
         let response = client
-            .post(format!("{}/v2/identities/{}", uri, identity_hex))
+            .post(format!("{uri}/v2/identities/{identity_hex}"))
             .send()
             .await?;
 
@@ -59,12 +59,12 @@ async fn wait_for_identity_deleted(
     max_attempts: usize,
     sleep_duration: Duration,
 ) -> anyhow::Result<bool> {
-    let identity_hex = format!("0x{:x}", identity);
+    let identity_hex = format!("0x{identity:x}");
 
     for attempt in 0..max_attempts {
         // Try to insert using v2 API - it returns 410 Gone if identity was deleted
         let response = client
-            .post(format!("{}/v2/identities/{}", uri, identity_hex))
+            .post(format!("{uri}/v2/identities/{identity_hex}"))
             .send()
             .await?;
 
@@ -244,10 +244,10 @@ async fn add_remove_readd_identity(offchain_mode_enabled: bool) -> anyhow::Resul
     // not back at its original position. So the identity originally at index 0 will now
     // be at index 6 (after indices 0-5, where 3-5 are the new identities we added)
     let original_identity = identities_ref[0];
-    let commitment_hex = format!("0x{:x}", original_identity);
+    let commitment_hex = format!("0x{original_identity:x}");
 
     let response = client
-        .post(format!("{}/v3/identities/{}", uri, commitment_hex))
+        .post(format!("{uri}/v3/identities/{commitment_hex}"))
         .send()
         .await
         .expect("Failed to send re-add request");

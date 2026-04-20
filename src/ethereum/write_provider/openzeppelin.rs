@@ -87,7 +87,7 @@ impl OzRelay {
             // Terminal failure. The transaction won't be retried by OpenZeppelin. No reason
             // provided
             match status {
-                Status::Failed => return Err(TxError::Failed(None)),
+                Status::Failed => return Err(TxError::Failed(Box::new(None))),
                 Status::Mined | Status::Confirmed => return Ok(transaction),
                 _ => {
                     info!("waiting 5 s to mine");

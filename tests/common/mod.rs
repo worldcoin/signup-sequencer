@@ -173,9 +173,7 @@ pub async fn test_verify_proof_builder(
         assert!(!response_status.is_success());
         assert!(
             result.contains(expected_failure),
-            "Result (`{}`) did not contain expected failure (`{}`)",
-            result,
-            expected_failure
+            "Result (`{result}`) did not contain expected failure (`{expected_failure}`)"
         );
     } else {
         assert!(response_status.is_success());
@@ -696,7 +694,7 @@ pub async fn spawn_app_returning_initialized_tree(
 }
 
 pub async fn check_metrics(socket_addr: &SocketAddr) -> anyhow::Result<()> {
-    let uri = format!("http://{}", socket_addr);
+    let uri = format!("http://{socket_addr}");
     let client = Client::new();
     let response = client
         .get(uri.to_owned() + "/metrics")
@@ -712,7 +710,7 @@ pub async fn check_metrics(socket_addr: &SocketAddr) -> anyhow::Result<()> {
 }
 
 pub async fn check_health(socket_addr: &SocketAddr) -> anyhow::Result<()> {
-    let uri = format!("http://{}", socket_addr);
+    let uri = format!("http://{socket_addr}");
     let client = Client::new();
 
     let response = client

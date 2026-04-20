@@ -23,6 +23,17 @@ pub struct TreeStateSnapshot {
     pub latest_last_seq: usize,
 }
 
+impl TreeStateSnapshot {
+    pub fn from_tree_state(tree_state: &TreeState) -> Self {
+        Self {
+            mined_last_seq: tree_state.mined_tree().get_last_sequence_id(),
+            processed_last_seq: tree_state.processed_tree().get_last_sequence_id(),
+            batching_last_seq: tree_state.batching_tree().get_last_sequence_id(),
+            latest_last_seq: tree_state.latest_tree().get_last_sequence_id(),
+        }
+    }
+}
+
 /// Everything the DB read phase determined about what needs to change in each
 /// tree. No `MutexGuard` is stored here — this is safe to keep across an
 /// `.await` boundary.

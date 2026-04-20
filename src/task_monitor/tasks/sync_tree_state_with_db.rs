@@ -66,12 +66,7 @@ async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
     // ── Phase 1: snapshot sequence IDs while briefly holding the lock ──────
     let snapshot = {
         let tree_state = app.tree_state().await?;
-        TreeStateSnapshot {
-            mined_last_seq: tree_state.mined_tree().get_last_sequence_id(),
-            processed_last_seq: tree_state.processed_tree().get_last_sequence_id(),
-            batching_last_seq: tree_state.batching_tree().get_last_sequence_id(),
-            latest_last_seq: tree_state.latest_tree().get_last_sequence_id(),
-        }
+        TreeStateSnapshot::from_tree_state(&tree_state)
         // MutexGuard is dropped here
     };
 
@@ -81,20 +76,6 @@ async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
     // ── Phase 3: apply plan — lock held briefly for in-memory writes only ──
     let tree_state = app.tree_state().await?;
     let res = apply_sync_plan(&tree_state, plan)?;
-
-    tracing::info!("TreeState synced with DB");
-
-    Ok(res)
-}
-
-/// Kept for callers that still use the original one-phase path (e.g.
-/// `identity_tree/initializer.rs`). The startup path runs before any
-/// concurrent tasks are active, so the long lock hold is not a problem there.
-#[allow(dead_code)]
-async fn run_sync_tree_legacy(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
-    let tree_state = app.tree_state().await?;
-
-    let res = retry_tx!(&app.database, tx, sync_tree(&mut tx, &tree_state).await).await?;
 
     tracing::info!("TreeState synced with DB");
 

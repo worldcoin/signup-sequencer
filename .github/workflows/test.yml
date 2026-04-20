@@ -52,10 +52,8 @@ jobs:
         with:
           command: fmt
           args: --all -- --check
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --workspace --tests --locked --all-targets
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Check docs
         uses: actions-rs/cargo@v1
         with:

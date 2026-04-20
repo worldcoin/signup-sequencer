@@ -896,8 +896,7 @@ mod test {
         for (idx, identity) in identities.iter().enumerate() {
             assert_eq!(
                 pending_tree_updates[idx].element, *identity,
-                "Element {} is the original value",
-                idx
+                "Element {idx} is the original value"
             );
         }
 

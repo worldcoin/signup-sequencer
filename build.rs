@@ -8,5 +8,5 @@ fn main() {
 
     let git_description = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
-    println!("cargo:rustc-env=GIT_VERSION={}", git_description);
+    println!("cargo:rustc-env=GIT_VERSION={git_description}");
 }

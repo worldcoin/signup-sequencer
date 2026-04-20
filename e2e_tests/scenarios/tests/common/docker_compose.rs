@@ -148,7 +148,7 @@ impl Drop for DockerComposeGuard<'_> {
             self.envs_with_ports(),
             self.generate_command("down -v"),
         ) {
-            eprintln!("Failed to put down docker compose: {}", err);
+            eprintln!("Failed to put down docker compose: {err}");
         }
     }
 }
@@ -256,7 +256,7 @@ async fn await_running(docker_compose_guard: &DockerComposeGuard<'_>) -> anyhow:
 }
 
 async fn check_health(local_addr: String) -> anyhow::Result<bool> {
-    let uri = format!("http://{}", local_addr);
+    let uri = format!("http://{local_addr}");
     let client = Client::new();
 
     let healthcheck = Request::builder()
@@ -291,7 +291,7 @@ fn run_cmd_to_output(
 
     let output = command
         .output()
-        .with_context(|| format!("Failed to run command: {}", cmd_str))?;
+        .with_context(|| format!("Failed to run command: {cmd_str}"))?;
 
     let stdout_utf = String::from_utf8(output.stdout)?;
     let stderr_utf = String::from_utf8(output.stderr)?;

@@ -116,7 +116,7 @@ async fn main() -> anyhow::Result<()> {
                 println!("Identity: {}", identity.trapdoor);
             }
 
-            println!("{}", commitment);
+            println!("{commitment}");
         }
         Command::InsertIdentity(x) => {
             let basic_auth_username = args
@@ -185,7 +185,7 @@ async fn main() -> anyhow::Result<()> {
                 tokio::fs::write(inclusion_proof_file, &proof_serialized).await?;
             }
 
-            println!("{}", proof_serialized);
+            println!("{proof_serialized}");
         }
         Command::VerifyProof(_x) => {
             let proof_request = tokio::fs::read_to_string(
@@ -209,7 +209,7 @@ async fn main() -> anyhow::Result<()> {
             let response: VerifySemaphoreProofResponse = response.json().await?;
             let response_serialized = serde_json::to_string_pretty(&response)?;
 
-            println!("{}", response_serialized);
+            println!("{response_serialized}");
         }
         Command::GenerateProof(x) => {
             let identity =
@@ -257,7 +257,7 @@ async fn main() -> anyhow::Result<()> {
                 tokio::fs::write(semaphore_proof_file, &semaphore_request_serialized).await?;
             }
 
-            println!("{}", semaphore_request_serialized);
+            println!("{semaphore_request_serialized}");
         }
     }
 

@@ -57,7 +57,7 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     let (_, app_handle, local_addr, shutdown) =
         spawn_app(config).await.expect("Failed to spawn app.");
 
-    let uri = format!("http://{}", local_addr);
+    let uri = format!("http://{local_addr}");
     let client = Client::new();
 
     // Generate test identities
@@ -70,18 +70,21 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     info!("Testing API v3 identity insertion");
 
     // Test 1: Insert identities via v3 API
-    for i in 0..insertion_batch_size {
-        let commitment = format!("0x{}", test_identities[i]);
+    for (i, identity) in test_identities
+        .iter()
+        .enumerate()
+        .take(insertion_batch_size)
+    {
+        let commitment = format!("0x{identity}");
         let response = client
-            .post(format!("{}/v3/identities/{}", uri, commitment))
+            .post(format!("{uri}/v3/identities/{commitment}"))
             .send()
             .await?;
 
         assert_eq!(
             response.status(),
             StatusCode::ACCEPTED,
-            "Failed to insert identity {}",
-            i
+            "Failed to insert identity {i}"
         );
 
         // Update reference tree
@@ -93,7 +96,7 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Test 2: Try to insert duplicate - should get conflict
     let duplicate_commitment = format!("0x{}", test_identities[0]);
     let response = client
-        .post(format!("{}/v3/identities/{}", uri, duplicate_commitment))
+        .post(format!("{uri}/v3/identities/{duplicate_commitment}"))
         .send()
         .await?;
 
@@ -109,12 +112,15 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     info!("Testing inclusion proof endpoints with different types");
 
     // Test 3: Get inclusion proof - processed type
-    for i in 0..insertion_batch_size {
-        let commitment = format!("0x{}", test_identities[i]);
+    for (i, identity) in test_identities
+        .iter()
+        .enumerate()
+        .take(insertion_batch_size)
+    {
+        let commitment = format!("0x{identity}");
         let response = client
             .get(format!(
-                "{}/v3/identities/{}/inclusion-proof/processed",
-                uri, commitment
+                "{uri}/v3/identities/{commitment}/inclusion-proof/processed"
             ))
             .send()
             .await?;
@@ -132,12 +138,15 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     }
 
     // Test 4: Get inclusion proof - mined type
-    for i in 0..insertion_batch_size {
-        let commitment = format!("0x{}", test_identities[i]);
+    for (i, identity) in test_identities
+        .iter()
+        .enumerate()
+        .take(insertion_batch_size)
+    {
+        let commitment = format!("0x{identity}");
         let response = client
             .get(format!(
-                "{}/v3/identities/{}/inclusion-proof/mined",
-                uri, commitment
+                "{uri}/v3/identities/{commitment}/inclusion-proof/mined"
             ))
             .send()
             .await?;
@@ -155,12 +164,15 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     }
 
     // Test 5: Get inclusion proof - bridged type (should work for mined identities)
-    for i in 0..insertion_batch_size {
-        let commitment = format!("0x{}", test_identities[i]);
+    for (i, identity) in test_identities
+        .iter()
+        .enumerate()
+        .take(insertion_batch_size)
+    {
+        let commitment = format!("0x{identity}");
         let response = client
             .get(format!(
-                "{}/v3/identities/{}/inclusion-proof/bridged",
-                uri, commitment
+                "{uri}/v3/identities/{commitment}/inclusion-proof/bridged"
             ))
             .send()
             .await?;
@@ -183,8 +195,7 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     let non_existent = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
     let response = client
         .get(format!(
-            "{}/v3/identities/{}/inclusion-proof/processed",
-            uri, non_existent
+            "{uri}/v3/identities/{non_existent}/inclusion-proof/processed"
         ))
         .send()
         .await?;
@@ -201,8 +212,7 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     let commitment = format!("0x{}", test_identities[0]);
     let response = client
         .get(format!(
-            "{}/v3/identities/{}/inclusion-proof/invalid_type",
-            uri, commitment
+            "{uri}/v3/identities/{commitment}/inclusion-proof/invalid_type"
         ))
         .send()
         .await?;
@@ -218,7 +228,7 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Test 8: Delete an identity via v3 API
     let commitment_to_delete = format!("0x{}", test_identities[0]);
     let response = client
-        .delete(format!("{}/v3/identities/{}", uri, commitment_to_delete))
+        .delete(format!("{uri}/v3/identities/{commitment_to_delete}"))
         .send()
         .await?;
 
@@ -233,7 +243,7 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Test 9: Invalid commitment format
     let invalid_commitment = "not_a_hex_value";
     let response = client
-        .post(format!("{}/v3/identities/{}", uri, invalid_commitment))
+        .post(format!("{uri}/v3/identities/{invalid_commitment}"))
         .send()
         .await?;
 
@@ -248,7 +258,7 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     // Test 12: Unreduced commitment (too large value)
     let unreduced_commitment = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
     let response = client
-        .post(format!("{}/v3/identities/{}", uri, unreduced_commitment))
+        .post(format!("{uri}/v3/identities/{unreduced_commitment}"))
         .send()
         .await?;
 
@@ -319,7 +329,7 @@ async fn api_v3_inclusion_proof_transitions(offchain_mode_enabled: bool) -> anyh
     let (_, app_handle, local_addr, shutdown) =
         spawn_app(config).await.expect("Failed to spawn app.");
 
-    let uri = format!("http://{}", local_addr);
+    let uri = format!("http://{local_addr}");
     let client = Client::new();
 
     let test_identities = generate_test_identities(insertion_batch_size);
@@ -333,7 +343,7 @@ async fn api_v3_inclusion_proof_transitions(offchain_mode_enabled: bool) -> anyh
     // Insert single identity
     let commitment = format!("0x{}", test_identities[0]);
     let response = client
-        .post(format!("{}/v3/identities/{}", uri, commitment))
+        .post(format!("{uri}/v3/identities/{commitment}"))
         .send()
         .await?;
 
@@ -348,8 +358,7 @@ async fn api_v3_inclusion_proof_transitions(offchain_mode_enabled: bool) -> anyh
     // Should be able to get processed proof after insertion
     let response = client
         .get(format!(
-            "{}/v3/identities/{}/inclusion-proof/processed",
-            uri, commitment
+            "{uri}/v3/identities/{commitment}/inclusion-proof/processed"
         ))
         .send()
         .await?;
@@ -368,16 +377,14 @@ async fn api_v3_inclusion_proof_transitions(offchain_mode_enabled: bool) -> anyh
     for proof_type in ["processed", "mined", "bridged"] {
         let response = client
             .get(format!(
-                "{}/v3/identities/{}/inclusion-proof/{}",
-                uri, commitment, proof_type
+                "{uri}/v3/identities/{commitment}/inclusion-proof/{proof_type}"
             ))
             .send()
             .await?;
 
         assert!(
             response.status().is_success(),
-            "Failed to get {} proof after mining",
-            proof_type
+            "Failed to get {proof_type} proof after mining"
         );
 
         let body: serde_json::Value = response.json().await?;
@@ -385,21 +392,18 @@ async fn api_v3_inclusion_proof_transitions(offchain_mode_enabled: bool) -> anyh
         // Verify response structure
         assert!(
             body.get("root").is_some(),
-            "Missing root in {} proof",
-            proof_type
+            "Missing root in {proof_type} proof"
         );
         assert!(
             body.get("proof").is_some(),
-            "Missing proof in {} proof",
-            proof_type
+            "Missing proof in {proof_type} proof"
         );
 
         // Verify proof is an array
         let proof = body.get("proof").unwrap();
         assert!(
             proof.is_array(),
-            "Proof should be an array for {}",
-            proof_type
+            "Proof should be an array for {proof_type}"
         );
     }
 

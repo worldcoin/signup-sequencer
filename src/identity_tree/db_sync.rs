@@ -16,6 +16,7 @@ pub struct SyncTreeResult {
 /// A point-in-time snapshot of the last sequence IDs for all four tree
 /// versions. Captured while the `TreeState` mutex is held, then used as
 /// anchors for the subsequent DB-only read phase.
+#[derive(Copy, Clone, Debug)]
 pub struct TreeStateSnapshot {
     pub mined_last_seq: usize,
     pub processed_last_seq: usize,
@@ -38,9 +39,7 @@ impl TreeStateSnapshot {
 /// tree. No `MutexGuard` is stored here — this is safe to keep across an
 /// `.await` boundary.
 pub struct SyncPlan {
-    /// The snapshot that was used to build this plan. Used in the apply phase
-    /// to detect if another writer changed the trees between the two lock
-    /// acquisitions.
+    /// The snapshot that was used to build this plan.
     pub snapshot: TreeStateSnapshot,
     /// Row-level updates to append to the latest tree (forward-only).
     pub latest_tree_updates: Vec<TreeUpdate>,
@@ -118,10 +117,8 @@ pub async fn sync_tree(
     })
 }
 
-/// Phase 2 of the two-phase sync: issue all DB reads needed to produce a
-/// [`SyncPlan`]. The `TreeState` mutex is **not** held during this call.
-///
-/// `snapshot` must have been captured in phase 1 while the mutex was held.
+/// Issue all DB reads needed to produce a [`SyncPlan`]. The `TreeState` mutex is **not** held
+/// during this call.
 pub async fn build_sync_plan(
     tx: &mut Transaction<'_, Postgres>,
     snapshot: &TreeStateSnapshot,
@@ -169,12 +166,7 @@ pub async fn build_sync_plan(
     };
 
     Ok(SyncPlan {
-        snapshot: TreeStateSnapshot {
-            mined_last_seq: snapshot.mined_last_seq,
-            processed_last_seq: snapshot.processed_last_seq,
-            batching_last_seq: snapshot.batching_last_seq,
-            latest_last_seq: snapshot.latest_last_seq,
-        },
+        snapshot: snapshot.clone(),
         latest_tree_updates,
         latest_target,
         batching_target,
@@ -183,41 +175,37 @@ pub async fn build_sync_plan(
     })
 }
 
-/// Phase 3 of the two-phase sync: apply a [`SyncPlan`] to the in-memory trees.
-/// The `TreeState` mutex **must** be held by the caller for the duration of
-/// this call.
-///
-/// If the trees were modified between phase 1 (snapshot) and phase 3 (apply),
-/// this function detects the staleness and returns an empty result. The next
-/// timed cycle will produce a fresh plan.
-pub fn apply_sync_plan(
-    tree_state: &MutexGuard<'_, TreeState>,
-    plan: SyncPlan,
-) -> anyhow::Result<SyncTreeResult> {
+impl SyncPlan {
+    /// Apply this plan to the in-memory trees. The `TreeState` mutex **must**
+    /// be held by the caller for the duration of this call.
+    ///
+    /// If another writer advanced the trees between phase 1 and phase 3,
+    /// already-applied `latest_tree_updates` are filtered out before applying.
+    /// Rewind and error semantics follow the same rules as [`sync_tree`]:
+    /// non-mined trees rewind in-memory; the mined tree returns an error.
+    pub fn apply(
+        self,
+        tree_state: &MutexGuard<'_, TreeState>,
+    ) -> anyhow::Result<SyncTreeResult> {
+        let plan = self;
     let mined_tree = tree_state.mined_tree();
     let processed_tree = tree_state.processed_tree();
     let batching_tree = tree_state.batching_tree();
     let latest_tree = tree_state.latest_tree();
 
-    // Staleness check: if any tree's sequence ID changed between the snapshot
-    // and now, another writer beat us. Skip this cycle — the next 5 s tick
-    // will build a fresh plan on top of the new state.
-    let stale = mined_tree.get_last_sequence_id() != plan.snapshot.mined_last_seq
-        || processed_tree.get_last_sequence_id() != plan.snapshot.processed_last_seq
-        || batching_tree.get_last_sequence_id() != plan.snapshot.batching_last_seq
-        || latest_tree.get_last_sequence_id() != plan.snapshot.latest_last_seq;
+    let latest_seq = latest_tree.get_last_sequence_id();
 
-    if stale {
-        debug!("Sync plan is stale (tree state changed between snapshot and apply). Skipping.");
-        return Ok(SyncTreeResult {
-            latest_tree_updates: vec![],
-        });
-    }
+    // Filter out updates already applied by another writer between phases.
+    let latest_tree_updates: Vec<_> = plan
+        .latest_tree_updates
+        .into_iter()
+        .filter(|u| u.sequence_id > latest_seq)
+        .collect();
 
     let tree_updates = apply_latest_tree(
         latest_tree,
         &plan.latest_target,
-        plan.latest_tree_updates,
+        latest_tree_updates,
         || {
             apply_batching_tree(batching_tree, &plan.batching_target, || {
                 apply_processed_tree(processed_tree, &plan.processed_target, || {
@@ -230,10 +218,11 @@ pub fn apply_sync_plan(
     Ok(SyncTreeResult {
         latest_tree_updates: tree_updates,
     })
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Private helpers used by both sync_tree (original) and apply_sync_plan (new)
+// Private helpers used by both sync_tree (original) and SyncPlan::apply
 // ──────────────────────────────────────────────────────────────────────────────
 
 async fn update_latest_tree<F: Fn() -> anyhow::Result<()>>(
@@ -284,7 +273,7 @@ async fn update_latest_tree<F: Fn() -> anyhow::Result<()>>(
     Ok(tree_updates)
 }
 
-/// DB-free version of `update_latest_tree`, used in `apply_sync_plan`.
+/// DB-free version of `update_latest_tree`, used in [`SyncPlan::apply`].
 /// The incremental updates were already fetched during `build_sync_plan`.
 fn apply_latest_tree<F: Fn() -> anyhow::Result<()>>(
     latest_tree: &TreeVersion<Latest>,

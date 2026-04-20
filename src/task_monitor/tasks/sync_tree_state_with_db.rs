@@ -1,7 +1,5 @@
-use crate::identity_tree::db_sync::{
-    apply_sync_plan, build_sync_plan, sync_tree, SyncTreeResult, TreeStateSnapshot,
-};
-use crate::identity_tree::{ProcessedStatus, TreeUpdate, TreeVersionReadOps};
+use crate::identity_tree::db_sync::{build_sync_plan, SyncTreeResult, TreeStateSnapshot};
+use crate::identity_tree::{ProcessedStatus, TreeUpdate};
 use crate::retry_tx;
 use crate::task_monitor::App;
 use chrono::Utc;
@@ -44,24 +42,8 @@ pub async fn sync_tree_state_with_db(
     }
 }
 
-/// Two-phase sync that keeps the `TreeState` mutex held only for brief,
-/// CPU-bound operations, never across database I/O.
-///
-/// Phase 1 – Snapshot (lock held ~microseconds):
-///   Acquire the `TreeState` mutex, read the current sequence IDs from all
-///   four tree tiers, then immediately release the lock.
-///
-/// Phase 2 – DB reads (no lock held):
-///   Issue all necessary Postgres queries inside a `retry_tx!` loop. The
-///   results are packaged into a [`SyncPlan`] that contains no references to
-///   the `MutexGuard`.
-///
-/// Phase 3 – Apply (lock held ~microseconds):
-///   Acquire the `TreeState` mutex again. Verify the sequence IDs still match
-///   the snapshot (another writer could have changed things between phases 1
-///   and 3). If they match, apply the pre-computed plan to the in-memory
-///   trees and release the lock. If they don't match, skip — the next timed
-///   cycle will start fresh.
+/// Three-phase sync: snapshots tree sequence IDs, fetches a [`SyncPlan`] from
+/// the database via [`build_sync_plan`], then applies it via [`SyncPlan::apply`].
 async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
     // ── Phase 1: snapshot sequence IDs while briefly holding the lock ──────
     let snapshot = {
@@ -75,7 +57,7 @@ async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
 
     // ── Phase 3: apply plan — lock held briefly for in-memory writes only ──
     let tree_state = app.tree_state().await?;
-    let res = apply_sync_plan(&tree_state, plan)?;
+    let res = plan.apply(&tree_state)?;
 
     tracing::info!("TreeState synced with DB");
 

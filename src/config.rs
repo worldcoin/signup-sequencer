@@ -485,8 +485,8 @@ pub mod default {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
     use super::*;
+    use std::sync::Mutex;
 
     const MINIMAL_TOML: &str = indoc::indoc! {r#"
         [app]

@@ -183,41 +183,38 @@ impl SyncPlan {
     /// already-applied `latest_tree_updates` are filtered out before applying.
     /// Rewind and error semantics follow the same rules as [`sync_tree`]:
     /// non-mined trees rewind in-memory; the mined tree returns an error.
-    pub fn apply(
-        self,
-        tree_state: &MutexGuard<'_, TreeState>,
-    ) -> anyhow::Result<SyncTreeResult> {
+    pub fn apply(self, tree_state: &MutexGuard<'_, TreeState>) -> anyhow::Result<SyncTreeResult> {
         let plan = self;
-    let mined_tree = tree_state.mined_tree();
-    let processed_tree = tree_state.processed_tree();
-    let batching_tree = tree_state.batching_tree();
-    let latest_tree = tree_state.latest_tree();
+        let mined_tree = tree_state.mined_tree();
+        let processed_tree = tree_state.processed_tree();
+        let batching_tree = tree_state.batching_tree();
+        let latest_tree = tree_state.latest_tree();
 
-    let latest_seq = latest_tree.get_last_sequence_id();
+        let latest_seq = latest_tree.get_last_sequence_id();
 
-    // Filter out updates already applied by another writer between phases.
-    let latest_tree_updates: Vec<_> = plan
-        .latest_tree_updates
-        .into_iter()
-        .filter(|u| u.sequence_id > latest_seq)
-        .collect();
+        // Filter out updates already applied by another writer between phases.
+        let latest_tree_updates: Vec<_> = plan
+            .latest_tree_updates
+            .into_iter()
+            .filter(|u| u.sequence_id > latest_seq)
+            .collect();
 
-    let tree_updates = apply_latest_tree(
-        latest_tree,
-        &plan.latest_target,
-        latest_tree_updates,
-        || {
-            apply_batching_tree(batching_tree, &plan.batching_target, || {
-                apply_processed_tree(processed_tree, &plan.processed_target, || {
-                    apply_mined_tree(mined_tree, &plan.mined_target)
+        let tree_updates = apply_latest_tree(
+            latest_tree,
+            &plan.latest_target,
+            latest_tree_updates,
+            || {
+                apply_batching_tree(batching_tree, &plan.batching_target, || {
+                    apply_processed_tree(processed_tree, &plan.processed_target, || {
+                        apply_mined_tree(mined_tree, &plan.mined_target)
+                    })
                 })
-            })
-        },
-    )?;
+            },
+        )?;
 
-    Ok(SyncTreeResult {
-        latest_tree_updates: tree_updates,
-    })
+        Ok(SyncTreeResult {
+            latest_tree_updates: tree_updates,
+        })
     }
 }
 

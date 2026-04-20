@@ -1,4 +1,4 @@
-use crate::identity_tree::db_sync::{sync_tree, SyncTreeResult};
+use crate::identity_tree::db_sync::{build_sync_plan, SyncTreeResult, TreeStateSnapshot};
 use crate::identity_tree::{ProcessedStatus, TreeUpdate};
 use crate::retry_tx;
 use crate::task_monitor::App;
@@ -7,7 +7,7 @@ use semaphore_rs_poseidon::poseidon;
 use std::sync::Arc;
 use tokio::sync::watch::Sender;
 use tokio::sync::Notify;
-use tokio::time::{Duration, MissedTickBehavior};
+use tokio::time::MissedTickBehavior;
 use tokio::{select, time};
 
 pub async fn sync_tree_state_with_db(
@@ -17,7 +17,7 @@ pub async fn sync_tree_state_with_db(
 ) -> anyhow::Result<()> {
     tracing::info!("Starting Sync TreeState with DB.");
 
-    let mut timer = time::interval(Duration::from_secs(5));
+    let mut timer = time::interval(app.config.app.tree_sync_interval);
     timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     loop {
@@ -42,10 +42,22 @@ pub async fn sync_tree_state_with_db(
     }
 }
 
+/// Three-phase sync: snapshots tree sequence IDs, fetches a [`SyncPlan`] from
+/// the database via [`build_sync_plan`], then applies it via [`SyncPlan::apply`].
 async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
-    let tree_state = app.tree_state().await?;
+    // ── Phase 1: snapshot sequence IDs while briefly holding the lock ──────
+    let snapshot = {
+        let tree_state = app.tree_state().await?;
+        TreeStateSnapshot::from_tree_state(&tree_state)
+        // MutexGuard is dropped here
+    };
 
-    let res = retry_tx!(&app.database, tx, sync_tree(&mut tx, &tree_state).await).await?;
+    // ── Phase 2: DB reads — no lock held ──────────────────────────────────
+    let plan = retry_tx!(&app.database, tx, build_sync_plan(&mut tx, &snapshot).await).await?;
+
+    // ── Phase 3: apply plan — lock held briefly for in-memory writes only ──
+    let tree_state = app.tree_state().await?;
+    let res = plan.apply(&tree_state)?;
 
     tracing::info!("TreeState synced with DB");
 

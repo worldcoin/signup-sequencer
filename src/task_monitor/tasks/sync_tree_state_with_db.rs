@@ -24,11 +24,11 @@ pub async fn sync_tree_state_with_db(
         // We wait either for a timer tick or a full batch
         select! {
             _ = timer.tick() => {
-                tracing::info!("Sync TreeState with DB task woken due to timeout");
+                tracing::trace!("Sync TreeState with DB task woken due to timeout");
             }
 
             () = sync_tree_notify.notified() => {
-                tracing::info!("Sync TreeState with DB task woken due to sync request");
+                tracing::trace!("Sync TreeState with DB task woken due to sync request");
             },
         }
 
@@ -59,7 +59,7 @@ async fn run_sync_tree(app: &Arc<App>) -> anyhow::Result<SyncTreeResult> {
     let tree_state = app.tree_state().await?;
     let res = plan.apply(&tree_state)?;
 
-    tracing::info!("TreeState synced with DB");
+    tracing::debug!("TreeState synced with DB");
 
     Ok(res)
 }
@@ -70,14 +70,14 @@ fn log_synced_commitment(tree_update: TreeUpdate) {
         .map(|v| Utc::now().timestamp_millis() - v.timestamp_millis());
     let hashed_commitment_str = format!("{:x}", poseidon::hash1(tree_update.element));
     if let Some(took) = took {
-        tracing::info!(
+        tracing::debug!(
             hashed_commitment = hashed_commitment_str,
             status = ?ProcessedStatus::Pending,
             took,
             "Commitment added to latest tree."
         );
     } else {
-        tracing::info!(
+        tracing::debug!(
             commitment = hashed_commitment_str,
             status = ?ProcessedStatus::Pending,
             "Commitment added to latest tree."

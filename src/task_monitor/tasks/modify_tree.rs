@@ -8,7 +8,7 @@ use tokio::sync::watch::Receiver;
 use tokio::sync::{MutexGuard, Notify};
 use tokio::time::MissedTickBehavior;
 use tokio::{select, time};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::app::App;
 use crate::database::methods::DbMethods;
@@ -248,7 +248,7 @@ pub async fn run_deletions(
     // the caller to fall through to insertions instead.
     for (root, _proof) in &data {
         if let Some(_existing) = tx.get_root_state(root).await? {
-            warn!(
+            debug!(
                 "Deletion batch would create duplicate root. Skipping deletions to allow \
                  insertions instead"
             );

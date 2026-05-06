@@ -46,7 +46,7 @@ pub async fn create_batches(
         // We wait either for a timer tick or a full batch
         select! {
             _ = timer.tick() => {
-                tracing::info!("Create batches woken due to timeout");
+                tracing::trace!("Create batches woken due to timeout");
             }
 
             res = tree_synced_rx.changed() => {

@@ -26,7 +26,7 @@ pub async fn process_batches(
         // We wait either for a timer tick or a full batch
         select! {
             _ = timer.tick() => {
-                tracing::info!("Process batches woken due to timeout");
+                tracing::trace!("Process batches woken due to timeout");
             }
 
             () = next_batch_notify.notified() => {

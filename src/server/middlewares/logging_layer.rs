@@ -33,13 +33,6 @@ pub async fn middleware(request: Request, next: Next) -> Result<Response, Status
         async {
             trace_from_headers(&parts.headers);
 
-            info!(
-                uri_path,
-                ?request_method,
-                ?request_query,
-                "Processing request"
-            );
-
             let body = Body::empty();
             let request = Request::from_parts(parts, body);
 
@@ -67,14 +60,6 @@ pub async fn middleware(request: Request, next: Next) -> Result<Response, Status
 
         async {
             trace_from_headers(&parts.headers);
-
-            info!(
-                ?uri_path,
-                ?request_method,
-                ?request_query,
-                ?body,
-                "Processing request"
-            );
 
             let body = Body::from(body);
             let request = Request::from_parts(parts, body);

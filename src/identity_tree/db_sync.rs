@@ -166,7 +166,7 @@ pub async fn build_sync_plan(
     };
 
     Ok(SyncPlan {
-        snapshot: snapshot.clone(),
+        snapshot: *snapshot,
         latest_tree_updates,
         latest_target,
         batching_target,

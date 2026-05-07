@@ -17,9 +17,12 @@ runs:
   steps:
     - name: Prepare
       shell: bash
+      env:
+        PLATFORM_INPUT: ${{ inputs.platform }}
+        REF_NAME_INPUT: ${{ github.ref_name }}
       run: |
-        platform='${{ inputs.platform }}'
-        ref_name='${{ github.ref_name }}'
+        platform="$PLATFORM_INPUT"
+        ref_name="$REF_NAME_INPUT"
         echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
         echo "CACHE_SCOPE=${ref_name//\//-}" >> "$GITHUB_ENV"
 

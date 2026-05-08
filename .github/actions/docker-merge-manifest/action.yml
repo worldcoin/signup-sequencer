@@ -49,6 +49,20 @@ runs:
         docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
           $(printf "$REGISTRY/$IMAGE_NAME@sha256:%s " *)
 
+    - name: Print image tags
+      shell: bash
+      env:
+        TAGS: ${{ steps.meta.outputs.tags }}
+      run: |
+        echo "### 🐳 Docker image tags" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        while IFS= read -r tag; do
+          [ -n "$tag" ] && echo "- \`$tag\`" >> "$GITHUB_STEP_SUMMARY"
+        done <<< "$TAGS"
+        echo ""
+        echo "Built image tags:"
+        echo "$TAGS"
+
     - name: Inspect image
       shell: bash
       env:

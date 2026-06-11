@@ -1,7 +1,9 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::header::CONTENT_TYPE;
+use axum::http::{HeaderName, Method};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
@@ -10,6 +12,7 @@ use prometheus::{Encoder, TextEncoder};
 use thiserror::Error;
 use tokio::net::TcpListener;
 use tower_http::catch_panic::{CatchPanicLayer, ResponseForPanic};
+use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
 use crate::app::App;
@@ -146,7 +149,26 @@ pub async fn bind_from_listener(
         ))
         .route("/health", get(health))
         .route("/metrics", get(metrics))
-        .layer(CatchPanicLayer::custom(PanicHandler {}));
+        .layer(CatchPanicLayer::custom(PanicHandler {}))
+        .layer(
+            // CORS must be the outermost layer so OPTIONS preflight requests are
+            // handled and returned (200) before any auth middleware can reject them
+            // (tower layers wrap inside-out: the last .layer() call is outermost).
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::DELETE,
+                    Method::OPTIONS,
+                ])
+                .allow_headers([
+                    HeaderName::from_static("content-type"),
+                    HeaderName::from_static("authorization"),
+                ])
+                .max_age(Duration::from_secs(100)),
+        );
 
     let _shutdown_handle = shutdown.handle();
 

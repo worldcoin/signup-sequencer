@@ -107,12 +107,14 @@ impl TaskMonitor {
         // Process batches
         let app = main_app.clone();
         let next_batch_notify = base_next_batch_notify.clone();
+        let sync_tree_notify = base_sync_tree_notify.clone();
 
         let process_batches = move || {
             tasks::process_batches::process_batches(
                 app.clone(),
                 monitored_txs_sender.clone(),
                 next_batch_notify.clone(),
+                sync_tree_notify.clone(),
             )
         };
         let process_batches_handle = crate::utils::spawn_with_backoff_cancel_on_shutdown(

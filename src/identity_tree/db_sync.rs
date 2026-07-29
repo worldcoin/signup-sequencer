@@ -1,7 +1,7 @@
 use crate::database::methods::DbMethods;
 use crate::identity_tree::{
-    Canonical, Intermediate, Latest, ProcessedStatus, ReversibleVersion, TreeState, TreeUpdate,
-    TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
+    Canonical, Hash, Intermediate, Latest, ProcessedStatus, ReversibleVersion, TreeState,
+    TreeUpdate, TreeVersion, TreeVersionReadOps, TreeWithNextVersion,
 };
 use anyhow::bail;
 use sqlx::{Postgres, Transaction};
@@ -46,7 +46,7 @@ pub struct SyncPlan {
     /// Target tree-update (post-root + seq-id) for each tree tier. `None`
     /// means "no data in DB yet — leave the tree alone".
     pub latest_target: Option<TreeUpdate>,
-    pub batching_target: Option<TreeUpdate>,
+    pub batching_target: Option<(usize, Hash)>,
     pub processed_target: Option<TreeUpdate>,
     pub mined_target: Option<TreeUpdate>,
 }
@@ -96,9 +96,16 @@ pub async fn sync_tree(
 
     let latest_batch = tx.get_latest_batch().await?;
     let latest_batching_tree_update = if let Some(latest_batch) = latest_batch {
-        tx.get_tree_update_by_root(&latest_batch.next_root).await?
+        Some(
+            match tx.get_tree_update_by_root(&latest_batch.next_root).await? {
+                Some(update) => (update.sequence_id, update.post_root),
+                None => (0, latest_batch.next_root),
+            },
+        )
     } else {
-        latest_processed_tree_update.clone()
+        latest_processed_tree_update
+            .as_ref()
+            .map(|update| (update.sequence_id, update.post_root))
     };
 
     // And then update trees
@@ -150,9 +157,16 @@ pub async fn build_sync_plan(
 
     let latest_batch = tx.get_latest_batch().await?;
     let batching_target = if let Some(latest_batch) = latest_batch {
-        tx.get_tree_update_by_root(&latest_batch.next_root).await?
+        Some(
+            match tx.get_tree_update_by_root(&latest_batch.next_root).await? {
+                Some(update) => (update.sequence_id, update.post_root),
+                None => (0, latest_batch.next_root),
+            },
+        )
     } else {
-        processed_target.clone()
+        processed_target
+            .as_ref()
+            .map(|update| (update.sequence_id, update.post_root))
     };
 
     // Eagerly fetch the incremental updates for the latest tree so that the
@@ -312,7 +326,7 @@ fn apply_latest_tree<F: Fn() -> anyhow::Result<()>>(
 
 fn update_batching_tree<F: Fn() -> anyhow::Result<()>>(
     batching_tree: &TreeVersion<Intermediate>,
-    batching_tree_update: &Option<TreeUpdate>,
+    batching_tree_update: &Option<(usize, Hash)>,
     update_processed_tree: F,
 ) -> anyhow::Result<()> {
     let Some(batching_tree_update) = batching_tree_update else {
@@ -323,12 +337,12 @@ fn update_batching_tree<F: Fn() -> anyhow::Result<()>>(
     };
 
     let current_sequence_id = batching_tree.get_last_sequence_id();
-    let new_sequence_id = batching_tree_update.sequence_id;
+    let (new_sequence_id, post_root) = batching_tree_update;
 
     match new_sequence_id.cmp(&current_sequence_id) {
         Ordering::Greater => {
             debug!("Applying batching tree updates up to {}", new_sequence_id);
-            batching_tree.apply_updates_up_to(batching_tree_update.post_root);
+            batching_tree.apply_updates_up_to(*post_root);
 
             update_processed_tree()?;
         }
@@ -336,7 +350,7 @@ fn update_batching_tree<F: Fn() -> anyhow::Result<()>>(
             debug!("Rewinding batching tree updates up to {}", new_sequence_id);
             update_processed_tree()?;
 
-            batching_tree.rewind_updates_up_to(batching_tree_update.post_root);
+            batching_tree.rewind_updates_up_to(*post_root);
         }
         Ordering::Equal => {
             debug!("Batching tree already up to date {}", new_sequence_id);
@@ -351,7 +365,7 @@ fn update_batching_tree<F: Fn() -> anyhow::Result<()>>(
 // apply_batching_tree is identical to update_batching_tree (no DB I/O needed).
 fn apply_batching_tree<F: Fn() -> anyhow::Result<()>>(
     batching_tree: &TreeVersion<Intermediate>,
-    batching_tree_update: &Option<TreeUpdate>,
+    batching_tree_update: &Option<(usize, Hash)>,
     update_processed_tree: F,
 ) -> anyhow::Result<()> {
     update_batching_tree(batching_tree, batching_tree_update, update_processed_tree)

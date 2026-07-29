@@ -1262,6 +1262,100 @@ mod test {
     }
 
     #[tokio::test]
+    async fn remove_unsubmitted_batch_chain_removes_descendants() -> anyhow::Result<()> {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let identities: Vec<_> = mock_identities(3)
+            .iter()
+            .map(|commitment| {
+                Identity::new(
+                    (*commitment).into(),
+                    mock_roots(3).iter().map(|root| (*root).into()).collect(),
+                )
+            })
+            .collect();
+        let roots = mock_roots(3);
+
+        db.insert_new_batch_head(&roots[0]).await?;
+        db.insert_new_batch(
+            &roots[1],
+            &roots[0],
+            BatchType::Insertion,
+            &identities,
+            &[0],
+        )
+        .await?;
+        db.insert_new_batch(
+            &roots[2],
+            &roots[1],
+            BatchType::Insertion,
+            &identities,
+            &[1],
+        )
+        .await?;
+
+        let first_batch = db.get_next_batch(&roots[0]).await?.unwrap();
+        assert!(
+            db.remove_unsubmitted_batch_chain(first_batch.id).await?,
+            "Expected the unsubmitted batch chain to be removed"
+        );
+
+        let latest_batch = db.get_latest_batch().await?.unwrap();
+        assert_eq!(latest_batch.next_root, roots[0]);
+        assert!(db.get_next_batch(&roots[0]).await?.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn remove_unsubmitted_batch_chain_preserves_submitted_descendants() -> anyhow::Result<()>
+    {
+        let docker = Cli::default();
+        let (db, _db_container) = setup_db(&docker).await?;
+        let identities: Vec<_> = mock_identities(3)
+            .iter()
+            .map(|commitment| {
+                Identity::new(
+                    (*commitment).into(),
+                    mock_roots(3).iter().map(|root| (*root).into()).collect(),
+                )
+            })
+            .collect();
+        let roots = mock_roots(3);
+
+        db.insert_new_batch_head(&roots[0]).await?;
+        db.insert_new_batch(
+            &roots[1],
+            &roots[0],
+            BatchType::Insertion,
+            &identities,
+            &[0],
+        )
+        .await?;
+        db.insert_new_batch(
+            &roots[2],
+            &roots[1],
+            BatchType::Insertion,
+            &identities,
+            &[1],
+        )
+        .await?;
+        db.insert_new_transaction(&"submitted-descendant".to_string(), &roots[2])
+            .await?;
+
+        let first_batch = db.get_next_batch(&roots[0]).await?.unwrap();
+        assert!(
+            !db.remove_unsubmitted_batch_chain(first_batch.id).await?,
+            "A batch chain containing a transaction must not be removed"
+        );
+
+        assert!(db.get_next_batch(&roots[0]).await?.is_some());
+        assert_eq!(db.get_latest_batch().await?.unwrap().next_root, roots[2]);
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn get_batch_head() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;

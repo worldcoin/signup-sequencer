@@ -7,6 +7,132 @@ use crate::common::{test_add_batch_size, test_remove_batch_size};
 const IDLE_TIME: u64 = 15;
 
 #[tokio::test]
+async fn rebuilds_unsubmitted_batch_after_its_prover_is_removed() -> anyhow::Result<()> {
+    init_tracing_subscriber();
+
+    let removed_batch_size = 4;
+    let replacement_batch_size = 2;
+    let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
+    let initial_root: U256 = ref_tree.root().into();
+
+    let docker = Cli::default();
+    let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
+        initial_root,
+        &[removed_batch_size, replacement_batch_size],
+        &[],
+        DEFAULT_TREE_DEPTH as u8,
+        &docker,
+    )
+    .await?;
+
+    let removed_prover = &insertion_prover_map[&removed_batch_size];
+    let replacement_prover = &insertion_prover_map[&replacement_batch_size];
+    removed_prover.set_availability(false).await;
+
+    let db_socket_addr = db_container.address();
+    let db_url = format!("postgres://postgres:postgres@{db_socket_addr}/database");
+    let temp_dir = tempfile::tempdir()?;
+
+    let config = TestConfigBuilder::new()
+        .db_url(&db_url)
+        .oz_api_url(&micro_oz.endpoint())
+        .oz_address(micro_oz.address())
+        .identity_manager_address(mock_chain.identity_manager.address())
+        .primary_network_provider(mock_chain.anvil.endpoint())
+        .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
+        .batch_insertion_timeout(Duration::from_secs(60))
+        .add_prover(removed_prover)
+        .add_prover(replacement_prover)
+        .build()?;
+
+    let (app, app_handle, local_addr, shutdown) = spawn_app(config).await?;
+    let uri = "http://".to_owned() + &local_addr.to_string();
+    let client = Client::new();
+
+    sqlx::query(
+        r#"
+        INSERT INTO latest_insertion_timestamp (Lock, insertion_timestamp)
+        VALUES ('X', CURRENT_TIMESTAMP)
+        ON CONFLICT (Lock)
+        DO UPDATE SET insertion_timestamp = CURRENT_TIMESTAMP
+        "#,
+    )
+    .execute(&app.database.pool)
+    .await?;
+
+    let test_identities = generate_test_identities(removed_batch_size);
+    let identities_ref: Vec<Field> = test_identities
+        .iter()
+        .map(|identity| Hash::from_str_radix(identity, 16).unwrap())
+        .collect();
+
+    for leaf_index in 0..removed_batch_size {
+        test_insert_identity(&uri, &client, &mut ref_tree, &identities_ref, leaf_index).await;
+    }
+
+    let mut stale_batch_created = false;
+    for _ in 0..100 {
+        let batch_size: Option<i32> = sqlx::query_scalar(
+            r#"
+            SELECT json_array_length(batches.data->'identities')
+            FROM batches
+            LEFT JOIN transactions ON batches.next_root = transactions.batch_next_root
+            WHERE transactions.batch_next_root IS NULL
+              AND batches.prev_root IS NOT NULL
+            ORDER BY batches.id ASC
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(&app.database.pool)
+        .await?;
+
+        if batch_size == Some(removed_batch_size as i32) {
+            stale_batch_created = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        stale_batch_created,
+        "Expected an unsubmitted batch using the prover that will be removed"
+    );
+
+    test_remove_batch_size(
+        &uri,
+        removed_batch_size as u64,
+        &client,
+        removed_prover.prover_type(),
+        false,
+    )
+    .await?;
+
+    // Check the last rebuilt batch first so earlier identities are verified
+    // against the final rebuilt root rather than an intermediate mined root.
+    for leaf_index in (0..removed_batch_size).rev() {
+        test_inclusion_proof(
+            &mock_chain,
+            &uri,
+            &client,
+            leaf_index,
+            &ref_tree,
+            &Hash::from_str_radix(&test_identities[leaf_index], 16)
+                .expect("Failed to parse test identity"),
+            false,
+            false,
+        )
+        .await;
+    }
+
+    shutdown.shutdown();
+    app_handle.await.unwrap();
+    for (_, prover) in insertion_prover_map {
+        prover.stop();
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn dynamic_batch_sizes_onchain() -> anyhow::Result<()> {
     dynamic_batch_sizes(false).await
 }

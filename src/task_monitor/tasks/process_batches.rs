@@ -3,7 +3,9 @@ use std::time::Duration;
 
 use crate::app::App;
 use crate::database::methods::DbMethods as _;
+use crate::database::types::BatchType;
 use crate::identity::processor::TransactionId;
+use anyhow::ensure;
 use tokio::sync::{mpsc, Notify};
 use tokio::time::MissedTickBehavior;
 use tokio::{select, time};
@@ -14,6 +16,7 @@ pub async fn process_batches(
     app: Arc<App>,
     monitored_txs_sender: Arc<mpsc::Sender<TransactionId>>,
     next_batch_notify: Arc<Notify>,
+    sync_tree_notify: Arc<Notify>,
 ) -> anyhow::Result<()> {
     tracing::info!("Starting identity processor.");
 
@@ -38,7 +41,7 @@ pub async fn process_batches(
             },
         }
 
-        if run(&app, &monitored_txs_sender).await? {
+        if run(&app, &monitored_txs_sender, &sync_tree_notify).await? {
             // We want to check if there's a full batch available immediately
             check_next_batch_notify.notify_one();
         }
@@ -48,6 +51,7 @@ pub async fn process_batches(
 async fn run(
     app: &Arc<App>,
     monitored_txs_sender: &Arc<mpsc::Sender<TransactionId>>,
+    sync_tree_notify: &Arc<Notify>,
 ) -> anyhow::Result<bool> {
     let mut tx = app.database.pool.begin().await?;
 
@@ -66,6 +70,42 @@ async fn run(
         tx.commit().await?;
         return Ok(false);
     };
+
+    let batch_size = next_batch.data.0.identities.len();
+    let has_matching_prover = match next_batch.batch_type {
+        BatchType::Insertion => {
+            app.prover_repository
+                .has_insertion_batch_size(batch_size)
+                .await
+        }
+        BatchType::Deletion => {
+            app.prover_repository
+                .has_deletion_batch_size(batch_size)
+                .await
+        }
+    };
+
+    if !app.config.offchain_mode.enabled && !has_matching_prover {
+        let removed = tx.remove_unsubmitted_batch_chain(next_batch.id).await?;
+        ensure!(
+            removed,
+            "Refusing to abandon batch {} because it or a descendant already has a transaction",
+            next_batch.id
+        );
+
+        tx.commit().await?;
+
+        tracing::warn!(
+            batch_id = next_batch.id,
+            batch_type = %next_batch.batch_type,
+            batch_size,
+            ?next_batch.next_root,
+            "Abandoned unsubmitted batch chain with no matching prover"
+        );
+
+        sync_tree_notify.notify_one();
+        return Ok(false);
+    }
 
     let tx_id = app
         .identity_processor

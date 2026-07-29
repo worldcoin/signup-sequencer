@@ -926,6 +926,45 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .await?)
     }
 
+    /// Removes an unsubmitted batch and all batches derived from it.
+    ///
+    /// Returns `false` without deleting anything if the batch does not exist or
+    /// if it or any of its descendants already has an associated transaction.
+    /// Callers must serialize transaction creation while invoking this method.
+    #[instrument(skip(self), level = "debug")]
+    async fn remove_unsubmitted_batch_chain(self, batch_id: i64) -> Result<bool, Error> {
+        let mut conn = self.acquire().await?;
+
+        let result = sqlx::query(
+            r#"
+            WITH RECURSIVE batch_chain AS (
+                SELECT id, next_root
+                FROM batches
+                WHERE id = $1
+
+                UNION ALL
+
+                SELECT child.id, child.next_root
+                FROM batches child
+                INNER JOIN batch_chain parent ON child.prev_root = parent.next_root
+            )
+            DELETE FROM batches
+            WHERE id = $1
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM transactions
+                  INNER JOIN batch_chain
+                      ON transactions.batch_next_root = batch_chain.next_root
+              )
+            "#,
+        )
+        .bind(batch_id)
+        .execute(&mut *conn)
+        .await?;
+
+        Ok(result.rows_affected() == 1)
+    }
+
     #[instrument(skip(self), level = "debug")]
     async fn get_batch_head(self) -> Result<Option<BatchEntry>, Error> {
         let mut conn = self.acquire().await?;

@@ -103,6 +103,20 @@ impl ProverRepository {
         self.deletion_prover_map.read().await.max_batch_size()
     }
 
+    pub async fn has_insertion_batch_size(&self, batch_size: usize) -> bool {
+        self.insertion_prover_map
+            .read()
+            .await
+            .batch_size_exists(batch_size)
+    }
+
+    pub async fn has_deletion_batch_size(&self, batch_size: usize) -> bool {
+        self.deletion_prover_map
+            .read()
+            .await
+            .batch_size_exists(batch_size)
+    }
+
     pub async fn get_suitable_deletion_batch_size(
         &self,
         num_identities: usize,

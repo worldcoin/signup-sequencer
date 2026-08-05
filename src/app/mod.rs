@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
 use crate::app::error::VerifySemaphoreProofV2Error::RootAgeCheckingError;
@@ -21,7 +20,6 @@ use crate::identity_tree::{
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::repository::ProverRepository;
-use crate::prover::ProverConfig;
 use crate::server::api_v1::data::{
     InclusionProofResponse, VerifySemaphoreProofQuery, VerifySemaphoreProofRequest,
     VerifySemaphoreProofResponse,
@@ -60,14 +58,9 @@ impl App {
     pub async fn new(config: Config) -> anyhow::Result<Arc<Self>> {
         let db = Database::new(&config.database).await?;
         let database = Arc::new(db);
-        let mut provers: HashSet<ProverConfig> = database.get_provers().await?;
 
-        let non_inserted_provers =
-            Self::merge_env_provers(&config.app.provers_urls.0, &mut provers);
-
-        database.insert_provers(non_inserted_provers).await?;
-
-        let (insertion_prover_map, deletion_prover_map) = initialize_prover_maps(provers)?;
+        let (insertion_prover_map, deletion_prover_map) =
+            initialize_prover_maps(&config.app.provers_urls.0)?;
 
         let prover_repository = Arc::new(ProverRepository::new(
             insertion_prover_map,
@@ -413,30 +406,6 @@ impl App {
         tx.commit().await?;
 
         Ok(())
-    }
-
-    fn merge_env_provers(
-        prover_urls: &[ProverConfig],
-        existing_provers: &mut HashSet<ProverConfig>,
-    ) -> HashSet<ProverConfig> {
-        let options_set: HashSet<ProverConfig> = prover_urls
-            .iter()
-            .cloned()
-            .map(|opt| ProverConfig {
-                url: opt.url,
-                batch_size: opt.batch_size,
-                timeout_s: opt.timeout_s,
-                prover_type: opt.prover_type,
-            })
-            .collect();
-
-        let env_provers: HashSet<_> = options_set.difference(existing_provers).cloned().collect();
-
-        for unique in &env_provers {
-            existing_provers.insert(unique.clone());
-        }
-
-        env_provers
     }
 
     /// # Errors

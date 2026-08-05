@@ -177,7 +177,6 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
     use std::str::FromStr;
     use std::time::Duration;
 
@@ -196,7 +195,6 @@ mod test {
     use crate::database::types::BatchType;
     use crate::identity_tree::{Hash, ProcessedStatus};
     use crate::prover::identity::Identity;
-    use crate::prover::{ProverConfig, ProverType};
     use crate::utils::secret::SecretUrl;
 
     macro_rules! assert_same_time {
@@ -352,40 +350,6 @@ mod test {
 
         assert_eq!(item.leaf_index, 0);
 
-        Ok(())
-    }
-
-    fn mock_provers() -> HashSet<ProverConfig> {
-        let mut provers = HashSet::new();
-
-        provers.insert(ProverConfig {
-            batch_size: 100,
-            url: "http://localhost:8080".to_string(),
-            timeout_s: 100,
-            prover_type: ProverType::Insertion,
-        });
-
-        provers.insert(ProverConfig {
-            batch_size: 100,
-            url: "http://localhost:8080".to_string(),
-            timeout_s: 100,
-            prover_type: ProverType::Deletion,
-        });
-
-        provers
-    }
-
-    #[tokio::test]
-    async fn insert_provers() -> anyhow::Result<()> {
-        let docker = Cli::default();
-        let (db, _db_container) = setup_db(&docker).await?;
-        let mock_provers = mock_provers();
-
-        db.insert_provers(mock_provers.clone()).await?;
-
-        let provers = db.get_provers().await?;
-
-        assert_eq!(provers, mock_provers);
         Ok(())
     }
 

@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use crate::prover::{Prover, ProverConfig, ProverType};
 use crate::utils::min_map::MinMap;
 
@@ -31,21 +29,21 @@ impl ProverMap {
     }
 }
 
-/// Builds an insertion prover map from the provided configuration.
+/// Builds insertion and deletion prover maps from the provided configuration.
 pub fn initialize_prover_maps(
-    db_provers: HashSet<ProverConfig>,
+    configured_provers: &[ProverConfig],
 ) -> anyhow::Result<(ProverMap, ProverMap)> {
     let mut insertion_map = ProverMap::default();
     let mut deletion_map = ProverMap::default();
 
-    for prover in db_provers {
+    for prover in configured_provers {
         match prover.prover_type {
             ProverType::Insertion => {
-                insertion_map.add(prover.batch_size, Prover::from_prover_conf(&prover)?);
+                insertion_map.add(prover.batch_size, Prover::from_prover_conf(prover)?);
             }
 
             ProverType::Deletion => {
-                deletion_map.add(prover.batch_size, Prover::from_prover_conf(&prover)?);
+                deletion_map.add(prover.batch_size, Prover::from_prover_conf(prover)?);
             }
         }
     }

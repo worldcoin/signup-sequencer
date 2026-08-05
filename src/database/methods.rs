@@ -1,8 +1,6 @@
-use std::collections::HashSet;
-
 use axum::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::{Acquire, Executor, Postgres, Row};
+use sqlx::{Acquire, Postgres, Row};
 use tracing::instrument;
 
 use super::types::{
@@ -12,7 +10,6 @@ use crate::database::types::{BatchEntry, BatchEntryData, BatchType};
 use crate::database::Error;
 use crate::identity_tree::{Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate};
 use crate::prover::identity::Identity;
-use crate::prover::ProverConfig;
 
 const MAX_UNPROCESSED_FETCH_COUNT: i64 = 10_000;
 
@@ -451,50 +448,6 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .await?;
 
         Ok(count as i32)
-    }
-
-    #[instrument(skip(self), level = "debug")]
-    async fn get_provers(self) -> Result<HashSet<ProverConfig>, Error> {
-        let mut conn = self.acquire().await?;
-
-        Ok(sqlx::query_as(
-            r#"
-            SELECT batch_size, url, timeout_s, prover_type
-            FROM provers
-            "#,
-        )
-        .fetch_all(&mut *conn)
-        .await?
-        .into_iter()
-        .collect())
-    }
-
-    #[instrument(skip(self), level = "debug")]
-    async fn insert_provers(self, provers: HashSet<ProverConfig>) -> Result<(), Error> {
-        let mut conn = self.acquire().await?;
-
-        if provers.is_empty() {
-            return Ok(());
-        }
-
-        let mut query_builder = sqlx::QueryBuilder::new(
-            r#"
-            INSERT INTO provers (batch_size, url, timeout_s, prover_type)
-            "#,
-        );
-
-        query_builder.push_values(provers, |mut b, prover| {
-            b.push_bind(prover.batch_size as i64)
-                .push_bind(prover.url)
-                .push_bind(prover.timeout_s as i64)
-                .push_bind(prover.prover_type);
-        });
-
-        let query = query_builder.build();
-
-        conn.execute(query).await?;
-
-        Ok(())
     }
 
     #[instrument(skip(self), level = "debug")]

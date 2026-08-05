@@ -6,7 +6,7 @@ use crate::server::middlewares;
 use crate::utils::auth::{AuthResponseFormatter, AuthValidator};
 use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::post;
 use axum::{middleware, Json, Router};
 use data::VerifyCompressedSemaphoreProofRequest;
 use error::Error;
@@ -16,9 +16,9 @@ pub mod data;
 pub mod error;
 
 use self::data::{
-    AddBatchSizeRequest, DeletionRequest, InclusionProofRequest, InclusionProofResponse,
-    InsertCommitmentRequest, ListBatchSizesResponse, RemoveBatchSizeRequest, ToResponseCode,
-    VerifySemaphoreProofQuery, VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
+    DeletionRequest, InclusionProofRequest, InclusionProofResponse, InsertCommitmentRequest,
+    ToResponseCode, VerifySemaphoreProofQuery, VerifySemaphoreProofRequest,
+    VerifySemaphoreProofResponse,
 };
 
 async fn inclusion_proof(
@@ -72,46 +72,12 @@ async fn verify_compressed_semaphore_proof(
     .await
 }
 
-async fn add_batch_size(
-    State(app): State<Arc<App>>,
-    Json(req): Json<AddBatchSizeRequest>,
-) -> Result<(), Error> {
-    app.add_batch_size(
-        req.url,
-        req.batch_size,
-        req.timeout_seconds,
-        req.prover_type,
-    )
-    .await?;
-
-    Ok(())
-}
-
 async fn delete_identity(
     State(app): State<Arc<App>>,
     Json(req): Json<DeletionRequest>,
 ) -> Result<(), Error> {
     app.delete_identity(&req.identity_commitment).await?;
     Ok(())
-}
-
-async fn remove_batch_size(
-    State(app): State<Arc<App>>,
-    Json(req): Json<RemoveBatchSizeRequest>,
-) -> Result<(), Error> {
-    app.remove_batch_size(req.batch_size, req.prover_type)
-        .await?;
-
-    Ok(())
-}
-
-async fn list_batch_sizes(
-    State(app): State<Arc<App>>,
-) -> Result<(StatusCode, Json<ListBatchSizesResponse>), Error> {
-    let batches = app.list_batch_sizes().await?;
-    let result = batches;
-
-    Ok((result.to_response_code(), Json(result)))
 }
 
 fn auth_error_formatter(_msg: String) -> Response {
@@ -147,9 +113,6 @@ pub fn api_v1_router(
             post(verify_compressed_semaphore_proof),
         )
         .route("/inclusionProof", post(inclusion_proof))
-        .route("/addBatchSize", post(add_batch_size))
-        .route("/removeBatchSize", post(remove_batch_size))
-        .route("/listBatchSizes", get(list_batch_sizes))
         .layer(middleware::from_fn(
             middlewares::remove_auth_layer::middleware,
         ));

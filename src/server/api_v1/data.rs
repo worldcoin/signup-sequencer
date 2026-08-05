@@ -1,6 +1,5 @@
 use crate::app::App;
 use crate::identity_tree::{Hash, InclusionProof, ProcessedStatus, RootItem, Status};
-use crate::prover::{ProverConfig, ProverType};
 use chrono::Utc;
 use hyper::StatusCode;
 use semaphore_rs::protocol::compression::CompressedProof;
@@ -19,9 +18,6 @@ pub struct InclusionProofResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ListBatchSizesResponse(pub Vec<ProverConfig>);
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct VerifySemaphoreProofResponse {
     pub root: Field,
     pub status: ProcessedStatus,
@@ -34,30 +30,6 @@ pub struct VerifySemaphoreProofResponse {
 #[serde(deny_unknown_fields)]
 pub struct InsertCommitmentRequest {
     pub identity_commitment: Hash,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct AddBatchSizeRequest {
-    /// The URL of the prover for the provided batch size.
-    pub url: String,
-    /// The batch size to add.
-    pub batch_size: usize,
-    /// The timeout for communications with the prover service.
-    pub timeout_seconds: u64,
-    // TODO: add docs
-    pub prover_type: ProverType,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct RemoveBatchSizeRequest {
-    /// The batch size to remove from the prover map.
-    pub batch_size: usize,
-    // TODO: add docs
-    pub prover_type: ProverType,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -151,18 +123,6 @@ impl From<InclusionProof> for InclusionProofResponse {
 }
 
 impl ToResponseCode for InclusionProofResponse {
-    fn to_response_code(&self) -> StatusCode {
-        StatusCode::OK
-    }
-}
-
-impl From<Vec<ProverConfig>> for ListBatchSizesResponse {
-    fn from(value: Vec<ProverConfig>) -> Self {
-        Self(value)
-    }
-}
-
-impl ToResponseCode for ListBatchSizesResponse {
     fn to_response_code(&self) -> StatusCode {
         StatusCode::OK
     }

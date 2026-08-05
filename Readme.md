@@ -8,42 +8,9 @@ Sign-up Sequencer does sequencing of data (identities) that are committed in a b
 
 ## Table of Contents
 
-1. [Introduction](#introduction)
-2. [Getting Started](#getting-started)
-3. [Tests](#tests)
-4. [Contributing](#contributing)
-
-## Introduction
-
-Sequencer has 6 API routes.
-
-1. `/insertIdentity` - Accepts identity commitment hash as input which gets added in queue for processing.
-   Identities go through three tasks.
-    1. Insertion: In the initial stage, the identities are placed into the Sequencer's database.
-       The database is polled every few seconds and added to insertion task.
-    2. Processing: The processing of identities, where current batching tree is taken and processed so we
-       end up with pre root (the root of tree before proofs are generated), post root, start index and
-       identity commitments (with their proofs). All of those get sent to a [prover](#semaphore-mtb) for proof
-       generation.
-       The identities transaction is then mined, with aforementioned fields and pending identities are sent to task to
-       be mined on-chain.
-    3. Mining: The transaction ID from processing task gets mined and Sequencer database gets updated accordingly.
-       Now with blockchain and database being in sync, the mined tree gets updated as well.
-2. `/inclusionProof` - Takes the identity commitment hash, and checks for any errors that might have occurred in the
-   insert identity steps.
-   Then leaf index is fetched from the database, corresponding to the identity hash provided, and then we check if the
-   identity is
-   indeed in the tree. The inclusion proof is then returned to the API caller.
-3. `/deleteIdentity` - Takes an identity commitment hash, ensures that it exists and hasn't been deleted yet. This
-   identity is then scheduled for deletion.
-4. `/verifySemaphoreProof` - This call takes root, signal hash, nullifier hash, external nullifier hash and a proof.
-   The proving key is fetched based on the depth index, and verification key as well.
-   The list of prime fields is created based on request input mentioned before, and then we proceed to verify the proof.
-   Sequencer uses groth16 zk-SNARK implementation.
-   The API call returns the proof as a response.
-5. `/addBatchSize` - Adds a prover with specific batch size to a list of provers.
-6. `/removeBatchSize` - Removes the prover based on batch size.
-7. `/listBatchSizes` - Lists all provers that are added to the Sequencer.
+1. [Getting Started](#getting-started)
+2. [Tests](#tests)
+3. [Contributing](#contributing)
 
 ## Getting Started
 

@@ -54,12 +54,6 @@ pub enum Error {
     ProverError,
     #[error("Failed to insert identity")]
     FailedToInsert,
-    #[error("The provided batch size already exists")]
-    BatchSizeAlreadyExists,
-    #[error("The requested batch size does not exist")]
-    NoSuchBatchSize,
-    #[error("The last batch size cannot be removed")]
-    CannotRemoveLastBatchSize,
     #[error("Identity Manager had no provers on point of identity insertion.")]
     NoProversOnIdInsert,
     #[error("Identity Manager had no provers on point of identity deletion.")]

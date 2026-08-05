@@ -139,8 +139,7 @@ pub struct Config {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppConfig {
-    /// A list of prover urls (along with batch size, type and timeout) that
-    /// will be inserted into the DB at startup
+    /// The prover URLs and their batch sizes, types, and timeouts.
     pub provers_urls: JsonStrWrapper<Vec<ProverConfig>>,
 
     /// The interval used for batched tree modification (insertions/deletions).

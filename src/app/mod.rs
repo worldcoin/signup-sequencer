@@ -21,10 +21,10 @@ use crate::identity_tree::{
 };
 use crate::prover::map::initialize_prover_maps;
 use crate::prover::repository::ProverRepository;
-use crate::prover::{ProverConfig, ProverType};
+use crate::prover::ProverConfig;
 use crate::server::api_v1::data::{
-    InclusionProofResponse, ListBatchSizesResponse, VerifySemaphoreProofQuery,
-    VerifySemaphoreProofRequest, VerifySemaphoreProofResponse,
+    InclusionProofResponse, VerifySemaphoreProofQuery, VerifySemaphoreProofRequest,
+    VerifySemaphoreProofResponse,
 };
 use crate::server::api_v1::error::Error as ServerError;
 use chrono::{Duration, Utc};
@@ -152,8 +152,7 @@ impl App {
         if !self.prover_repository.has_insertion_provers().await {
             warn!(
                 ?commitment,
-                "Identity Manager has no insertion provers. Add provers with /addBatchSize \
-                 request."
+                "Identity Manager has no insertion provers configured."
             );
             return Err(ServerError::NoProversOnIdInsert);
         }
@@ -306,7 +305,7 @@ impl App {
         if !self.prover_repository.has_deletion_provers().await {
             warn!(
                 ?commitment,
-                "Identity Manager has no deletion provers. Add provers with /addBatchSize request."
+                "Identity Manager has no deletion provers configured."
             );
             return Err(ServerError::NoProversOnIdDeletion);
         }
@@ -438,58 +437,6 @@ impl App {
         }
 
         env_provers
-    }
-
-    /// # Errors
-    ///
-    /// Will return `Err` if the provided batch size already exists.
-    /// Will return `Err` if the batch size fails to write to database.
-    #[instrument(level = "debug", skip(self))]
-    pub async fn add_batch_size(
-        &self,
-        url: String,
-        batch_size: usize,
-        timeout_seconds: u64,
-        prover_type: ProverType,
-    ) -> Result<(), ServerError> {
-        self.prover_repository
-            .add_batch_size(&url, batch_size, timeout_seconds, prover_type)
-            .await?;
-
-        self.database
-            .insert_prover_configuration(batch_size, url, timeout_seconds, prover_type)
-            .await?;
-
-        Ok(())
-    }
-
-    /// # Errors
-    ///
-    /// Will return `Err` if the requested batch size does not exist.
-    /// Will return `Err` if batch size fails to be removed from database.
-    #[instrument(level = "debug", skip(self))]
-    pub async fn remove_batch_size(
-        &self,
-        batch_size: usize,
-        prover_type: ProverType,
-    ) -> Result<(), ServerError> {
-        self.prover_repository
-            .remove_batch_size(batch_size, prover_type)
-            .await?;
-
-        self.database.remove_prover(batch_size, prover_type).await?;
-
-        Ok(())
-    }
-
-    /// # Errors
-    ///
-    /// Will return `Err` if something unknown went wrong.
-    #[instrument(level = "debug", skip(self))]
-    pub async fn list_batch_sizes(&self) -> Result<ListBatchSizesResponse, ServerError> {
-        let batches = self.prover_repository.list_batch_sizes().await?;
-
-        Ok(ListBatchSizesResponse::from(batches))
     }
 
     /// # Errors

@@ -12,7 +12,7 @@ use crate::database::types::{BatchEntry, BatchEntryData, BatchType};
 use crate::database::Error;
 use crate::identity_tree::{Hash, ProcessedStatus, RootItem, TreeItem, TreeUpdate};
 use crate::prover::identity::Identity;
-use crate::prover::{ProverConfig, ProverType};
+use crate::prover::ProverConfig;
 
 const MAX_UNPROCESSED_FETCH_COUNT: i64 = 10_000;
 
@@ -469,34 +469,6 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         .collect())
     }
 
-    #[instrument(skip(self, url), level = "debug")]
-    async fn insert_prover_configuration(
-        self,
-        batch_size: usize,
-        url: impl ToString + Send,
-        timeout_seconds: u64,
-        prover_type: ProverType,
-    ) -> Result<(), Error> {
-        let mut conn = self.acquire().await?;
-
-        let url = url.to_string();
-
-        sqlx::query(
-            r#"
-            INSERT INTO provers (batch_size, url, timeout_s, prover_type)
-            VALUES ($1, $2, $3, $4)
-            "#,
-        )
-        .bind(batch_size as i64)
-        .bind(url)
-        .bind(timeout_seconds as i64)
-        .bind(prover_type)
-        .execute(&mut *conn)
-        .await?;
-
-        Ok(())
-    }
-
     #[instrument(skip(self), level = "debug")]
     async fn insert_provers(self, provers: HashSet<ProverConfig>) -> Result<(), Error> {
         let mut conn = self.acquire().await?;
@@ -521,23 +493,6 @@ pub trait DbMethods<'c>: Acquire<'c, Database = Postgres> + Sized {
         let query = query_builder.build();
 
         conn.execute(query).await?;
-
-        Ok(())
-    }
-
-    #[instrument(skip(self), level = "debug")]
-    async fn remove_prover(self, batch_size: usize, prover_type: ProverType) -> Result<(), Error> {
-        let mut conn = self.acquire().await?;
-
-        sqlx::query(
-            r#"
-            DELETE FROM provers WHERE batch_size = $1 AND prover_type = $2
-            "#,
-        )
-        .bind(batch_size as i64)
-        .bind(prover_type)
-        .execute(&mut *conn)
-        .await?;
 
         Ok(())
     }

@@ -88,8 +88,8 @@ use signup_sequencer::identity_tree::{
 };
 use signup_sequencer::server::api_v1::data::VerifyCompressedSemaphoreProofRequest;
 use signup_sequencer::server::api_v1::data::{
-    AddBatchSizeRequest, DeletionRequest, InclusionProofRequest, InclusionProofResponse,
-    InsertCommitmentRequest, RemoveBatchSizeRequest, VerifySemaphoreProofRequest,
+    DeletionRequest, InclusionProofRequest, InclusionProofResponse, InsertCommitmentRequest,
+    VerifySemaphoreProofRequest,
 };
 use signup_sequencer::server::api_v1::error::Error as ServerError;
 use signup_sequencer::task_monitor::TaskMonitor;
@@ -482,67 +482,6 @@ pub async fn test_delete_identity(
     api_delete_identity(uri, client, &test_leaves[leaf_index], expect_failure).await;
     ref_tree.set(leaf_index, Hash::ZERO);
     (ref_tree.proof(leaf_index).unwrap(), ref_tree.root())
-}
-
-#[instrument(skip_all)]
-pub async fn test_add_batch_size(
-    uri: impl Into<String>,
-    prover_url: impl Into<String>,
-    batch_size: u64,
-    prover_type: ProverType,
-    client: &Client,
-) -> anyhow::Result<()> {
-    let body = Body::from(serde_json::to_string(&AddBatchSizeRequest {
-        url: prover_url.into(),
-        batch_size: batch_size as usize,
-        timeout_seconds: 3,
-        prover_type,
-    })?);
-
-    client
-        .post(uri.into() + "/addBatchSize")
-        .header("Content-Type", "application/json")
-        .body(body)
-        .send()
-        .await
-        .expect("Failed to create add batch size");
-
-    Ok(())
-}
-
-#[instrument(skip_all)]
-pub async fn test_remove_batch_size(
-    uri: impl Into<String>,
-    batch_size: u64,
-    client: &Client,
-    prover_type: ProverType,
-    expect_failure: bool,
-) -> anyhow::Result<()> {
-    let body = Body::from(serde_json::to_string(&RemoveBatchSizeRequest {
-        batch_size: batch_size as usize,
-        prover_type,
-    })?);
-
-    let response = client
-        .post(uri.into() + "/removeBatchSize")
-        .header("Content-Type", "application/json")
-        .body(body)
-        .send()
-        .await
-        .expect("Failed to create remove batch size");
-
-    let bytes = response
-        .bytes()
-        .await
-        .expect("Failed to get response bytes");
-
-    let body_str = String::from_utf8(bytes.to_vec()).expect("Failed to decode response.");
-
-    if expect_failure && body_str != "The last batch size cannot be removed" {
-        anyhow::bail!("Expected failure, but got success");
-    } else {
-        Ok(())
-    }
 }
 
 #[instrument(skip_all)]

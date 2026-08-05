@@ -15,7 +15,7 @@ Sign-up Sequencer does sequencing of data (identities) that are committed in a b
 
 ## Introduction
 
-Sequencer has 6 API routes.
+Sequencer has 5 API routes.
 
 1. `/insertIdentity` - Accepts identity commitment hash as input which gets added in queue for processing.
    Identities go through three tasks.
@@ -41,9 +41,6 @@ Sequencer has 6 API routes.
    The list of prime fields is created based on request input mentioned before, and then we proceed to verify the proof.
    Sequencer uses groth16 zk-SNARK implementation.
    The API call returns the proof as a response.
-5. `/addBatchSize` - Adds a prover with specific batch size to a list of provers.
-6. `/removeBatchSize` - Removes the prover based on batch size.
-7. `/listBatchSizes` - Lists all provers that are added to the Sequencer.
 
 ## Getting Started
 

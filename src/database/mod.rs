@@ -376,49 +376,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn insert_prover_configuration() -> anyhow::Result<()> {
-        let docker = Cli::default();
-        let (db, _db_container) = setup_db(&docker).await?;
-
-        let mock_prover_configuration_0 = ProverConfig {
-            batch_size: 100,
-            url: "http://localhost:8080".to_string(),
-            timeout_s: 100,
-            prover_type: ProverType::Insertion,
-        };
-
-        let mock_prover_configuration_1 = ProverConfig {
-            batch_size: 100,
-            url: "http://localhost:8081".to_string(),
-            timeout_s: 100,
-            prover_type: ProverType::Deletion,
-        };
-
-        db.insert_prover_configuration(
-            mock_prover_configuration_0.batch_size,
-            mock_prover_configuration_0.url.clone(),
-            mock_prover_configuration_0.timeout_s,
-            mock_prover_configuration_0.prover_type,
-        )
-        .await?;
-
-        db.insert_prover_configuration(
-            mock_prover_configuration_1.batch_size,
-            mock_prover_configuration_1.url.clone(),
-            mock_prover_configuration_1.timeout_s,
-            mock_prover_configuration_1.prover_type,
-        )
-        .await?;
-
-        let provers = db.get_provers().await?;
-
-        assert!(provers.contains(&mock_prover_configuration_0));
-        assert!(provers.contains(&mock_prover_configuration_1));
-
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn insert_provers() -> anyhow::Result<()> {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
@@ -429,24 +386,6 @@ mod test {
         let provers = db.get_provers().await?;
 
         assert_eq!(provers, mock_provers);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn remove_prover() -> anyhow::Result<()> {
-        let docker = Cli::default();
-        let (db, _db_container) = setup_db(&docker).await?;
-        let mock_provers = mock_provers();
-
-        db.insert_provers(mock_provers.clone()).await?;
-
-        db.remove_prover(100, ProverType::Insertion).await?;
-        db.remove_prover(100, ProverType::Deletion).await?;
-
-        let provers = db.get_provers().await?;
-
-        assert_eq!(provers, HashSet::new());
-
         Ok(())
     }
 

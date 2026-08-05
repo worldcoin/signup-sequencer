@@ -49,6 +49,32 @@ async fn wait_for_identity_processed(
     Ok(false)
 }
 
+/// Waits until all expected leaves are visible in the in-memory latest tree.
+async fn wait_for_latest_tree_size(
+    app: &App,
+    expected_size: usize,
+    max_attempts: usize,
+    sleep_duration: Duration,
+) -> anyhow::Result<bool> {
+    for attempt in 0..max_attempts {
+        let latest_size = app.tree_state().await?.latest_tree().next_leaf();
+        if latest_size >= expected_size {
+            info!(latest_size, "Latest tree synchronized");
+            return Ok(true);
+        }
+
+        if attempt < max_attempts - 1 {
+            info!(
+                latest_size,
+                expected_size, "Latest tree not yet synchronized, waiting"
+            );
+            tokio::time::sleep(sleep_duration).await;
+        }
+    }
+
+    Ok(false)
+}
+
 /// Polls by attempting to re-add a deleted identity using v2 API.
 /// The v2 API returns 410 Gone for deleted identities, which confirms the deletion was processed.
 /// Returns true if the identity is confirmed deleted (410 status), false otherwise.
@@ -160,7 +186,7 @@ async fn add_remove_readd_identity(offchain_mode_enabled: bool) -> anyhow::Resul
         .offchain_mode(offchain_mode_enabled)
         .build()?;
 
-    let (_, app_handle, local_addr, shutdown) =
+    let (app, app_handle, local_addr, shutdown) =
         spawn_app(config).await.expect("Failed to spawn app.");
 
     // Generate test identities
@@ -193,6 +219,13 @@ async fn add_remove_readd_identity(offchain_mode_enabled: bool) -> anyhow::Resul
     .await?;
     assert!(processed, "First batch was not processed within timeout");
 
+    let tree_synced =
+        wait_for_latest_tree_size(&app, insertion_batch_size, 30, Duration::from_secs(1)).await?;
+    assert!(
+        tree_synced,
+        "Latest tree was not synchronized within timeout"
+    );
+
     info!("Step 2: Insert more identities to have enough for deletions");
     // Insert more identities (indices 3, 4, 5) to have more material to work with
     for i in insertion_batch_size..(insertion_batch_size + 3) {
@@ -210,6 +243,14 @@ async fn add_remove_readd_identity(offchain_mode_enabled: bool) -> anyhow::Resul
     )
     .await?;
     assert!(processed, "Second batch was not processed within timeout");
+
+    let tree_synced =
+        wait_for_latest_tree_size(&app, insertion_batch_size + 3, 30, Duration::from_secs(1))
+            .await?;
+    assert!(
+        tree_synced,
+        "Latest tree was not synchronized within timeout"
+    );
 
     info!("Step 3: Delete identity at index 1");
     // Delete identity at index 1

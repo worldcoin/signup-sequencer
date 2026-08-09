@@ -81,7 +81,7 @@ tokio = { version = "1.38", features = [
     "tracing",
     "test-util",
 ] }
-toml = "0.9.5"
+toml = "1.0.6"
 tracing = "0.1"
 tracing-futures = "0.2"
 tx-sitter-client = { path = "crates/tx-sitter-client" }

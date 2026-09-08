@@ -77,7 +77,7 @@ impl IdentityManager {
         for (chain_id, address) in &network_config.relayed_identity_manager_addresses.0 {
             let provider = secondary_providers
                 .get(chain_id)
-                .ok_or_else(|| anyhow!("No provider for chain id: {}", chain_id))?;
+                .ok_or_else(|| anyhow!("No provider for chain id: {chain_id}"))?;
 
             let abi = BridgedWorldId::new(*address, provider.clone());
             secondary_abis.push(abi);
@@ -132,7 +132,7 @@ impl IdentityManager {
         self.ethereum
             .send_transaction(register_identities_transaction, true, Some(tx_id))
             .await
-            .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
+            .map_err(|tx_err| anyhow!("{tx_err}"))
     }
 
     // TODO: docs
@@ -165,7 +165,7 @@ impl IdentityManager {
         self.ethereum
             .send_transaction(delete_identities_transaction, true, Some(tx_id))
             .await
-            .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
+            .map_err(|tx_err| anyhow!("{tx_err}"))
     }
 
     #[instrument(level = "debug", skip_all)]

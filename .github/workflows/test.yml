@@ -12,6 +12,7 @@ on:
     types: [opened, synchronize, reopened]
     branches:
       - main
+      - chore/cargo-deny
 
 env:
   RUST_VERSION: "1.88.0"
@@ -102,22 +103,21 @@ jobs:
           command: nextest
           args: run --workspace --exclude e2e-tests
 
-  cargo-vet:
-    name: Vet Dependencies
+  deny:
+    name: Cargo deny
     runs-on: ubuntu-latest
-    env:
-      CARGO_VET_VERSION: 0.9.1
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        checks:
+          - advisories
+          - bans licenses sources
+    continue-on-error: ${{ matrix.checks == 'advisories' }}
     steps:
-      - uses: actions/checkout@master
-      - name: Install Rust
-        run: rustup update stable && rustup default stable
-      - uses: actions/cache@v5
+      - uses: actions/checkout@v6
         with:
-          path: ${{ runner.tool_cache }}/cargo-vet
-          key: cargo-vet-bin-${{ env.CARGO_VET_VERSION }}
-      - name: Add the tool cache directory to the search path
-        run: echo "${{ runner.tool_cache }}/cargo-vet/bin" >> $GITHUB_PATH
-      - name: Ensure that the tool cache is populated with the cargo-vet binary
-        run: cargo install --locked --root ${{ runner.tool_cache }}/cargo-vet --version ${{ env.CARGO_VET_VERSION }} cargo-vet
-      - name: Invoke cargo-vet
-        run: cargo vet --locked
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check ${{ matrix.checks }}

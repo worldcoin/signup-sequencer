@@ -1,0 +1,37 @@
+[graph]
+all-features = true
+
+[sources]
+unknown-registry = "deny"
+
+[bans]
+deny = [
+    { crate = "metrics", deny-multiple-versions = true, reason = "metrics crate uses a global recorder - multiple versions may break metrics silently" },
+]
+# Unlike world-id-protocol's mobile bindings, this service uses native-tls via ethers.
+# OpenSSL is therefore not banned here.
+
+[licenses]
+version = 2
+confidence-threshold = 1.0
+allow = [
+    "0BSD",
+    "Apache-2.0 WITH LLVM-exception",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "OpenSSL",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+
+# Report all advisories in the separate, non-blocking CI job.
+[advisories]
+ignore = []

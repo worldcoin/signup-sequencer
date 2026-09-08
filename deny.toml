@@ -32,6 +32,18 @@ allow = [
     "Zlib",
 ]
 
+[[licenses.clarify]]
+name = "ring"
+version = "0.16.20"
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+[[licenses.clarify]]
+name = "ring"
+version = "0.17.9"
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
 # Report all advisories in the separate, non-blocking CI job.
 [advisories]
 ignore = []

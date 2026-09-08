@@ -12,7 +12,7 @@ description = "A tool that processes WorldID signups on-chain."
 keywords = ["worldcoin", "protocol", "signup"]
 categories = ["cryptography::cryptocurrencies"]
 readme = "Readme.md"
-license-file = "LICENSE.md"
+license = "MIT"
 build = "build.rs"
 
 [workspace]

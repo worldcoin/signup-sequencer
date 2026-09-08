@@ -123,7 +123,7 @@ impl OzApi {
         Ok(self.api_url.join("txs")?)
     }
 
-    async fn headers(&self) -> Result<MutexGuard<ExpiringHeaders>> {
+    async fn headers(&self) -> Result<MutexGuard<'_, ExpiringHeaders>> {
         if self.auth_disabled {
             return Ok(self.expiring_headers.lock().await);
         }

@@ -317,7 +317,7 @@ mod test {
 
     async fn setup_server(
         docker: &Cli,
-    ) -> anyhow::Result<(TestServer, Arc<App>, DockerContainer, TempDir)> {
+    ) -> anyhow::Result<(TestServer, Arc<App>, DockerContainer<'_>, TempDir)> {
         let (db_config, db_container) = setup_db(docker).await?;
 
         let temp_dir = tempfile::tempdir()?;
@@ -384,7 +384,7 @@ mod test {
         ))
     }
 
-    async fn setup_db(docker: &Cli) -> anyhow::Result<(DatabaseConfig, DockerContainer)> {
+    async fn setup_db(docker: &Cli) -> anyhow::Result<(DatabaseConfig, DockerContainer<'_>)> {
         let db_container = postgres_docker_utils::setup(docker).await?;
         let url = format!(
             "postgres://postgres:postgres@{}/database",

@@ -741,7 +741,7 @@ pub async fn spawn_deps<'a>(
     ))
 }
 
-async fn spawn_db(docker: &Cli) -> anyhow::Result<DockerContainer> {
+async fn spawn_db(docker: &Cli) -> anyhow::Result<DockerContainer<'_>> {
     let db_container = postgres_docker_utils::setup(docker).await.unwrap();
 
     Ok(db_container)
@@ -881,7 +881,7 @@ pub async fn test_same_tree_states(
 pub async fn await_tree_state_with_mined_leafs_size(
     app: &App,
     mined_leafs_size: usize,
-) -> anyhow::Result<MutexGuard<TreeState>> {
+) -> anyhow::Result<MutexGuard<'_, TreeState>> {
     let number_of_tries = 30;
     let mut tree_state = None;
     for _ in 0..number_of_tries {

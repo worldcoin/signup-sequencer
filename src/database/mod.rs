@@ -219,7 +219,7 @@ mod test {
 
     // TODO: we should probably consolidate all tests that propagate errors to
     // TODO: either use anyhow or eyre
-    async fn setup_db(docker: &Cli) -> anyhow::Result<(Database, DockerContainer)> {
+    async fn setup_db(docker: &Cli) -> anyhow::Result<(Database, DockerContainer<'_>)> {
         let db_container = postgres_docker_utils::setup(docker).await?;
         let url = format!(
             "postgres://postgres:postgres@{}/database",

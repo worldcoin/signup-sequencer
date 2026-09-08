@@ -158,7 +158,7 @@ impl Drop for DockerComposeGuard<'_> {
 ///
 /// Note that we're using sync code here so we'll block the executor - but this
 /// is fine, because the spawned container will still run in the background.
-pub async fn setup(cwd: &str, offchain_mode: bool) -> anyhow::Result<DockerComposeGuard> {
+pub async fn setup(cwd: &str, offchain_mode: bool) -> anyhow::Result<DockerComposeGuard<'_>> {
     let mut res = DockerComposeGuard {
         cwd,
         project_name: generate_project_name(),

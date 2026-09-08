@@ -57,7 +57,7 @@ impl ProverRepository {
     pub async fn get_suitable_insertion_prover(
         &self,
         num_identities: usize,
-    ) -> anyhow::Result<RwLockReadGuard<Prover>> {
+    ) -> anyhow::Result<RwLockReadGuard<'_, Prover>> {
         let prover_map = self.insertion_prover_map.read().await;
 
         match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {
@@ -71,7 +71,7 @@ impl ProverRepository {
     pub async fn get_suitable_deletion_prover(
         &self,
         num_identities: usize,
-    ) -> anyhow::Result<RwLockReadGuard<Prover>> {
+    ) -> anyhow::Result<RwLockReadGuard<'_, Prover>> {
         let prover_map = self.deletion_prover_map.read().await;
 
         match RwLockReadGuard::try_map(prover_map, |map| map.get(num_identities)) {

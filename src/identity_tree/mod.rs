@@ -625,7 +625,7 @@ where
 }
 
 impl<V: Version> TreeVersion<V> {
-    fn get_data(&self) -> MutexGuard<TreeVersionData<V::TreeVersion>> {
+    fn get_data(&self) -> MutexGuard<'_, TreeVersionData<V::TreeVersion>> {
         self.0.lock().expect("no lock poisoning")
     }
 }

@@ -1,10 +1,8 @@
 use anyhow::anyhow;
 use chrono::{Duration as ChronoDuration, Utc};
-use ethers::abi::Error as AbiError;
 use ethers::providers::{Http, Middleware, Provider};
 use ethers::types::{BlockId, BlockNumber, Chain, U256};
 use futures::try_join;
-use thiserror::Error;
 use tracing::{error, info};
 use url::Url;
 
@@ -92,10 +90,4 @@ impl Middleware for ReadProvider {
     fn inner(&self) -> &Self::Inner {
         &self.inner
     }
-}
-
-#[derive(Debug, Error)]
-pub enum EventError {
-    #[error("Error parsing log event: {0}")]
-    Parsing(#[from] AbiError),
 }

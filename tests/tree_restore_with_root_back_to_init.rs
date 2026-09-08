@@ -164,7 +164,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
     );
     assert_eq!(
         restored_tree_state.processed_tree().get_root(),
-        initial_root.into()
+        Into::<Hash>::into(initial_root)
     );
 
     // Shutdown the app properly for the final time

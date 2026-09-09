@@ -1,9 +1,9 @@
 use std::fmt;
 use std::sync::Arc;
 
-use ethers::providers::Middleware;
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::{Address, U64};
+use alloy::primitives::Address;
+use alloy::providers::Provider;
+use alloy::rpc::types::TransactionRequest;
 use tracing::{info, warn};
 
 use self::inner::Inner;
@@ -58,7 +58,7 @@ impl WriteProvider {
 
     pub async fn send_transaction(
         &self,
-        tx: TypedTransaction,
+        tx: TransactionRequest,
         only_once: bool,
         tx_id: Option<String>,
     ) -> Result<TransactionId, TxError> {
@@ -98,7 +98,7 @@ impl WriteProvider {
             )))
         })?;
 
-        if tx.status == Some(U64::from(1u64)) {
+        if tx.status() {
             Ok(true)
         } else {
             warn!(?tx, "Transaction failed");

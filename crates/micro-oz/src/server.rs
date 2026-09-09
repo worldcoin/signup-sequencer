@@ -1,13 +1,13 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
+use alloy::primitives::Address;
 use anyhow::Context;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use ethers::prelude::k256::ecdsa::SigningKey;
-use ethers::types::Address;
+use k256::ecdsa::SigningKey;
 use oz_api::data::transactions::{RelayerTransactionBase, SendBaseTransactionRequestOwned, Status};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
@@ -75,12 +75,12 @@ pub struct ServerHandle {
     pinhead: Pinhead,
     addr: SocketAddr,
     shutdown_notify: Arc<Notify>,
-    server_join_handle: JoinHandle<Result<(), hyper::Error>>,
+    server_join_handle: JoinHandle<Result<(), std::io::Error>>,
 }
 
 impl ServerHandle {
     pub fn address(&self) -> Address {
-        self.pinhead.inner.signer.address()
+        self.pinhead.inner.address
     }
 
     pub fn addr(&self) -> SocketAddr {
@@ -109,21 +109,21 @@ pub async fn spawn(rpc_url: String, secret_key: SigningKey) -> anyhow::Result<Se
         .with_state(pinhead.clone());
 
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0);
-    let listener = TcpListener::bind(addr).context("Failed to bind random port")?;
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .context("Failed to bind random port")?;
     let local_addr = listener.local_addr()?;
 
     let shutdown_notify = Arc::new(Notify::new());
 
-    let server = axum::Server::from_tcp(listener)?
-        .serve(router.into_make_service())
-        .with_graceful_shutdown({
-            let shutdown_notify = shutdown_notify.clone();
-            async move {
-                shutdown_notify.notified().await;
-            }
-        });
+    let server = axum::serve(listener, router.into_make_service()).with_graceful_shutdown({
+        let shutdown_notify = shutdown_notify.clone();
+        async move {
+            shutdown_notify.notified().await;
+        }
+    });
 
-    let server_join_handle = tokio::spawn(server);
+    let server_join_handle = tokio::spawn(async move { server.await });
 
     Ok(ServerHandle {
         pinhead,

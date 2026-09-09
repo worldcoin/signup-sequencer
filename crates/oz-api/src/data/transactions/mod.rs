@@ -4,9 +4,22 @@
 
 use std::fmt;
 
+use alloy::primitives::{Address, Bytes, B256, U256};
 use chrono::{DateTime, Utc};
-use ethers::types::{Bytes, NameOrAddress, H256, U256};
 use serde::{Deserialize, Serialize};
+
+/// A relayer recipient is serialized as an Ethereum address or an ENS name.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum NameOrAddress {
+    Address(Address),
+    Name(String),
+}
+impl From<Address> for NameOrAddress {
+    fn from(address: Address) -> Self {
+        Self::Address(address)
+    }
+}
 
 /// OpenZeppelin Defender transaction status.
 ///
@@ -87,7 +100,7 @@ pub struct SendBaseTransactionRequestOwned {
 pub struct RelayerTransactionBase {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub hash: Option<H256>,
+    pub hash: Option<B256>,
     pub transaction_id: String,
     pub to: NameOrAddress,
     #[serde(skip_serializing_if = "Option::is_none")]

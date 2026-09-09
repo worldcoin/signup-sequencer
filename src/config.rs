@@ -3,8 +3,8 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::time::Duration;
 
+use alloy::primitives::Address;
 use chrono::{DateTime, Utc};
-use ethers::types::{Address, H160};
 use semaphore_rs::Field;
 use serde::{Deserialize, Serialize};
 
@@ -283,7 +283,7 @@ pub struct OzDefenderConfig {
     pub oz_api_secret: String,
 
     /// Address of OZ Relayer
-    pub oz_address: H160,
+    pub oz_address: Address,
 
     /// For how long should we track and retry the transaction (in
     /// seconds) Default: 7 days (7 * 24 * 60 * 60 = 604800 seconds)
@@ -306,7 +306,7 @@ pub struct OzDefenderConfig {
 pub struct TxSitterConfig {
     pub tx_sitter_url: String,
 
-    pub tx_sitter_address: H160,
+    pub tx_sitter_address: Address,
 
     pub tx_sitter_gas_limit: Option<u64>,
 }

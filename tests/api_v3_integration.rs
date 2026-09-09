@@ -21,7 +21,7 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
 
     let insertion_batch_size: usize = 3;
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
-    let initial_root: U256 = ref_tree.root().into();
+    let initial_root: U256 = ref_tree.root();
 
     let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
@@ -47,7 +47,7 @@ async fn api_v3_integration(offchain_mode_enabled: bool) -> anyhow::Result<()> {
         .db_url(&db_url)
         .oz_api_url(&micro_oz.endpoint())
         .oz_address(micro_oz.address())
-        .identity_manager_address(mock_chain.identity_manager.address())
+        .identity_manager_address(*mock_chain.identity_manager.address())
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)
@@ -297,7 +297,7 @@ async fn api_v3_inclusion_proof_transitions(offchain_mode_enabled: bool) -> anyh
 
     let insertion_batch_size: usize = 3;
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
-    let initial_root: U256 = ref_tree.root().into();
+    let initial_root: U256 = ref_tree.root();
 
     let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
@@ -319,7 +319,7 @@ async fn api_v3_inclusion_proof_transitions(offchain_mode_enabled: bool) -> anyh
         .db_url(&db_url)
         .oz_api_url(&micro_oz.endpoint())
         .oz_address(micro_oz.address())
-        .identity_manager_address(mock_chain.identity_manager.address())
+        .identity_manager_address(*mock_chain.identity_manager.address())
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)

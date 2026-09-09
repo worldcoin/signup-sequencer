@@ -34,7 +34,7 @@ async fn more_identities_than_dense_prefix(offchain_mode_enabled: bool) -> anyho
     let num_batches_total = num_identities_total / batch_size;
 
     let mut ref_tree = PoseidonTree::new(tree_depth, ruint::Uint::ZERO);
-    let initial_root: U256 = ref_tree.root().into();
+    let initial_root: U256 = ref_tree.root();
 
     let docker = Cli::default();
     let (mock_chain, db_container, prover_map, _deletion_prover_map, micro_oz) =
@@ -58,7 +58,7 @@ async fn more_identities_than_dense_prefix(offchain_mode_enabled: bool) -> anyho
         .oz_address(micro_oz.address())
         .tree_depth(tree_depth)
         .dense_tree_prefix_depth(dense_prefix)
-        .identity_manager_address(mock_chain.identity_manager.address())
+        .identity_manager_address(*mock_chain.identity_manager.address())
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)

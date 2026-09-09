@@ -1,12 +1,11 @@
 use std::fmt::Debug;
 
 use ::prometheus::{register_histogram, register_int_counter_vec, Histogram, IntCounterVec};
-use async_trait::async_trait;
-use ethers::providers::JsonRpcClient;
+use alloy::rpc::json_rpc::{RequestPacket, ResponsePacket};
+use alloy::transports::{TransportError, TransportFut};
 use once_cell::sync::Lazy;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use tracing::instrument;
+use std::task::{Context, Poll};
+use tower::Service;
 
 static REQUESTS: Lazy<IntCounterVec> = Lazy::new(|| {
     register_int_counter_vec!(
@@ -35,24 +34,33 @@ impl<Inner> RpcLogger<Inner> {
     }
 }
 
-#[async_trait]
-impl<Inner> JsonRpcClient for RpcLogger<Inner>
+impl<Inner> Service<RequestPacket> for RpcLogger<Inner>
 where
-    Inner: JsonRpcClient + 'static,
-    <Inner as JsonRpcClient>::Error: Sync + Send + 'static,
+    Inner:
+        Service<RequestPacket, Response = ResponsePacket, Error = TransportError> + Send + 'static,
+    Inner::Future: Send + 'static,
 {
-    type Error = Inner::Error;
-
-    #[instrument(name = "eth_rpc", level = "debug", skip(self))]
-    async fn request<T, R>(&self, method: &str, params: T) -> Result<R, Self::Error>
-    where
-        T: Debug + Serialize + Send + Sync,
-        R: DeserializeOwned + Send,
-    {
-        REQUESTS.with_label_values(&[method]).inc();
+    type Response = ResponsePacket;
+    type Error = TransportError;
+    type Future = TransportFut<'static>;
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+    fn call(&mut self, request: RequestPacket) -> Self::Future {
+        match &request {
+            RequestPacket::Single(req) => REQUESTS.with_label_values(&[req.method()]).inc(),
+            RequestPacket::Batch(reqs) => {
+                for req in reqs {
+                    REQUESTS.with_label_values(&[req.method()]).inc();
+                }
+            }
+        }
         let timer = LATENCY.start_timer();
-        let result = self.inner.request(method, params).await;
-        timer.observe_duration();
-        result
+        let future = self.inner.call(request);
+        Box::pin(async move {
+            let result = future.await;
+            timer.observe_duration();
+            result
+        })
     }
 }

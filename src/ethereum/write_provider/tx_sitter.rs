@@ -1,9 +1,9 @@
 use std::time::Duration;
 
+use alloy::primitives::U256;
+use alloy::rpc::types::TransactionRequest;
 use anyhow::Context;
 use async_trait::async_trait;
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::U256;
 use reqwest::StatusCode;
 use tx_sitter_client::data::{SendTxRequest, TransactionPriority, TxStatus};
 use tx_sitter_client::{ErrorResponse, TxSitterClient};
@@ -60,12 +60,12 @@ impl TxSitter {
 impl Inner for TxSitter {
     async fn send_transaction(
         &self,
-        mut tx: TypedTransaction,
+        mut tx: TransactionRequest,
         _only_once: bool,
         tx_id: Option<String>,
     ) -> Result<TransactionId, TxError> {
         if let Some(gas_limit) = self.gas_limit {
-            tx.set_gas(gas_limit);
+            tx.gas = Some(gas_limit);
         }
 
         // TODO: Handle only_once
@@ -73,15 +73,18 @@ impl Inner for TxSitter {
             .client
             .send_tx(&SendTxRequest {
                 to: *tx
-                    .to_addr()
+                    .to
+                    .as_ref()
+                    .and_then(|to| to.to())
                     .context("Tx receiver must be an address")
                     .map_err(TxError::Send)?,
-                value: tx.value().copied().unwrap_or(U256::zero()),
-                data: tx.data().cloned(),
-                gas_limit: *tx
-                    .gas()
-                    .context("Missing tx gas limit")
-                    .map_err(TxError::Send)?,
+                value: tx.value.unwrap_or(U256::ZERO),
+                data: tx.input.input().cloned(),
+                gas_limit: U256::from(
+                    tx.gas
+                        .context("Missing tx gas limit")
+                        .map_err(TxError::Send)?,
+                ),
                 priority: TransactionPriority::Regular,
                 tx_id: tx_id.clone(),
             })

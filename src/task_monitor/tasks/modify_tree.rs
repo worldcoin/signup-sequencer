@@ -292,7 +292,7 @@ mod tests {
     use crate::identity_tree::{Hash, TreeState};
     use crate::utils::secret::SecretUrl;
 
-    async fn setup_db(docker: &Cli) -> anyhow::Result<(Database, DockerContainer)> {
+    async fn setup_db(docker: &Cli) -> anyhow::Result<(Database, DockerContainer<'_>)> {
         let db_container = postgres_docker_utils::setup(docker).await?;
         let url = format!(
             "postgres://postgres:postgres@{}/database",

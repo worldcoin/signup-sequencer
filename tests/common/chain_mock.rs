@@ -1,30 +1,62 @@
+use alloy::network::TransactionBuilder;
 use std::fs::File;
 use std::io::BufReader;
-use std::sync::Arc;
 use std::time::Duration;
 
-use ethers::abi::AbiEncode;
-use ethers::contract::Contract;
-use ethers::core::k256::ecdsa::SigningKey;
-use ethers::prelude::{
-    ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer, SignerMiddleware,
-    Wallet,
-};
-use ethers::providers::Middleware;
-use ethers::types::{Bytes, U256};
-use ethers::utils::{Anvil, AnvilInstance};
-use ethers_solc::artifacts::BytecodeObject;
-use tracing::{info, instrument};
+use alloy::node_bindings::{Anvil, AnvilInstance};
+use alloy::primitives::{Address, Bytes, U256};
+use alloy::providers::{DynProvider, Provider, ProviderBuilder};
+use alloy::rpc::types::TransactionRequest;
+use alloy::signers::local::PrivateKeySigner;
+use alloy::sol_types::{SolCall, SolValue};
+use k256::ecdsa::SigningKey;
+use tracing::instrument;
 
 use super::abi::IWorldIDIdentityManager;
-use super::{abi as ContractAbi, CompiledContract};
+use super::CompiledContract;
 
-pub type SpecialisedContract = Contract<SpecialisedClient>;
+pub type SpecialisedClient = DynProvider;
+pub type SpecialisedContract =
+    IWorldIDIdentityManager::IWorldIDIdentityManagerInstance<DynProvider>;
 
 pub struct MockChain {
     pub anvil: AnvilInstance,
     pub private_key: SigningKey,
-    pub identity_manager: IWorldIDIdentityManager<SpecialisedClient>,
+    pub identity_manager: SpecialisedContract,
+}
+
+alloy::sol! {
+    #[sol(rpc)]
+    interface VerifierLookupTable {
+        function addVerifier(uint256 batchSize, address verifier) external;
+    }
+}
+
+fn load_contract(path: &str) -> anyhow::Result<CompiledContract> {
+    Ok(serde_json::from_reader(BufReader::new(File::open(path)?))?)
+}
+
+async fn deploy(
+    client: &DynProvider,
+    contract: CompiledContract,
+    constructor_args: Vec<u8>,
+) -> anyhow::Result<Address> {
+    let bytecode = contract
+        .bytecode
+        .object
+        .as_bytes()
+        .ok_or_else(|| anyhow::anyhow!("Unlinked contract bytecode"))?;
+    let mut input = bytecode.to_vec();
+    input.extend(constructor_args);
+    let receipt = client
+        .send_transaction(TransactionRequest::default().with_deploy_code(Bytes::from(input)))
+        .await?
+        .get_receipt()
+        .await?;
+    anyhow::ensure!(receipt.status(), "Contract deployment reverted");
+    receipt
+        .contract_address
+        .ok_or_else(|| anyhow::anyhow!("Deployment has no contract address"))
 }
 
 #[instrument(skip_all)]
@@ -35,214 +67,111 @@ pub async fn spawn_mock_chain(
     tree_depth: u8,
 ) -> anyhow::Result<MockChain> {
     let chain = Anvil::new().block_time(2u64).spawn();
-    let private_key = chain.keys()[0].clone().into();
+    let private_key: SigningKey = chain.keys()[0].clone().into();
+    let wallet = PrivateKeySigner::from(private_key.clone());
+    let client = ProviderBuilder::new()
+        .wallet(wallet)
+        .connect_http(chain.endpoint().parse()?)
+        .erased();
+    client
+        .client()
+        .set_poll_interval(Duration::from_millis(500));
 
-    let provider = Provider::<Http>::try_from(chain.endpoint())
-        .expect("Failed to initialize chain endpoint")
-        .interval(Duration::from_millis(500u64));
-
-    let chain_id = provider.get_chainid().await?.as_u64();
-
-    let wallet = LocalWallet::from(chain.keys()[0].clone()).with_chain_id(chain_id);
-
-    // connect the wallet to the provider
-    let client = SignerMiddleware::new(provider, wallet.clone());
-    let client = NonceManagerMiddleware::new(client, wallet.address());
-    let client = Arc::new(client);
-
-    // Loading the semaphore verifier contract is special as it requires replacing
-    // the address of the Pairing library.
-    let pairing_library_factory = load_and_build_contract("./sol/Pairing.json", client.clone())?;
-    let pairing_library = pairing_library_factory
-        .deploy(())?
-        .confirmations(0usize)
-        .send()
-        .await?;
-
-    let verifier_path = "./sol/SemaphoreVerifier20.json";
-    let verifier_file =
-        File::open(verifier_path).unwrap_or_else(|_| panic!("Failed to open `{verifier_path}`"));
-
-    let verifier_contract_json: CompiledContract =
-        serde_json::from_reader(BufReader::new(verifier_file))
-            .unwrap_or_else(|_| panic!("Could not parse the compiled contract at {verifier_path}"));
-
-    let mut verifier_bytecode_object: BytecodeObject = verifier_contract_json.bytecode.object;
-
-    verifier_bytecode_object
+    let pairing = deploy(&client, load_contract("./sol/Pairing.json")?, vec![]).await?;
+    let mut verifier = load_contract("./sol/SemaphoreVerifier20.json")?;
+    verifier
+        .bytecode
+        .object
         .link_fully_qualified(
             "lib/semaphore/packages/contracts/contracts/base/Pairing.sol:Pairing",
-            pairing_library.address(),
+            pairing,
         )
-        .resolve()
-        .unwrap();
-
-    if verifier_bytecode_object.is_unlinked() {
-        panic!("Could not link the Pairing library into the Verifier.");
-    }
-
-    let bytecode_bytes = verifier_bytecode_object.as_bytes().unwrap_or_else(|| {
-        panic!("Could not parse the bytecode for the contract at {verifier_path}")
-    });
-
-    let verifier_factory = ContractFactory::new(
-        verifier_contract_json.abi,
-        bytecode_bytes.clone(),
-        client.clone(),
+        .resolve();
+    anyhow::ensure!(
+        !verifier.bytecode.object.is_unlinked(),
+        "Could not link Pairing"
     );
+    let semaphore_verifier = deploy(&client, verifier, vec![]).await?;
+    let mock_verifier = deploy(
+        &client,
+        load_contract("./sol/SequencerVerifier.json")?,
+        vec![],
+    )
+    .await?;
+    let unimplemented = deploy(
+        &client,
+        load_contract("./sol/UnimplementedTreeVerifier.json")?,
+        vec![],
+    )
+    .await?;
 
-    let semaphore_verifier = verifier_factory
-        .deploy(())?
-        .confirmations(0usize)
-        .send()
-        .await?;
+    let first_insert = U256::from(insertion_batch_sizes.first().copied().unwrap_or(1));
+    let first_delete = U256::from(deletion_batch_sizes.first().copied().unwrap_or(1));
+    let insert_verifiers = deploy(
+        &client,
+        load_contract("./sol/VerifierLookupTable.json")?,
+        (first_insert, mock_verifier).abi_encode_params(),
+    )
+    .await?;
+    let update_verifiers = deploy(
+        &client,
+        load_contract("./sol/VerifierLookupTable.json")?,
+        (first_insert, unimplemented).abi_encode_params(),
+    )
+    .await?;
+    let delete_verifiers = deploy(
+        &client,
+        load_contract("./sol/VerifierLookupTable.json")?,
+        (first_delete, mock_verifier).abi_encode_params(),
+    )
+    .await?;
 
-    let mock_verifier_factory =
-        load_and_build_contract("./sol/SequencerVerifier.json", client.clone())?;
-
-    let mock_verifier = mock_verifier_factory
-        .deploy(())?
-        .confirmations(0usize)
-        .send()
-        .await?;
-
-    let unimplemented_verifier_factory =
-        load_and_build_contract("./sol/UnimplementedTreeVerifier.json", client.clone())?;
-
-    let unimplemented_verifier = unimplemented_verifier_factory
-        .deploy(())?
-        .confirmations(0usize)
-        .send()
-        .await?;
-
-    let verifier_lookup_table_factory =
-        load_and_build_contract("./sol/VerifierLookupTable.json", client.clone())?;
-
-    let first_insertion_batch_size = insertion_batch_sizes.first().copied().unwrap_or(1);
-    let first_deletion_batch_size = deletion_batch_sizes.first().copied().unwrap_or(1);
-
-    let insert_verifiers = verifier_lookup_table_factory
-        .clone()
-        .deploy((first_insertion_batch_size as u64, mock_verifier.address()))?
-        .confirmations(0usize)
-        .send()
-        .await?;
-
-    let update_verifiers = verifier_lookup_table_factory
-        .clone()
-        .deploy((
-            first_insertion_batch_size as u64,
-            unimplemented_verifier.address(),
-        ))?
-        .confirmations(0usize)
-        .send()
-        .await?;
-
-    let delete_verifiers = verifier_lookup_table_factory
-        .deploy((first_deletion_batch_size as u64, mock_verifier.address()))?
-        .confirmations(0usize)
-        .send()
-        .await?;
-
-    for batch_size in insertion_batch_sizes.iter().skip(1).copied() {
-        let batch_size = batch_size as u64;
-
-        info!("Adding verifier for batch size {}", batch_size);
-        insert_verifiers
-            .method::<_, ()>("addVerifier", (batch_size, mock_verifier.address()))?
-            .send()
-            .await?
-            .await?;
+    for (address, batch_sizes) in [
+        (insert_verifiers, insertion_batch_sizes),
+        (delete_verifiers, deletion_batch_sizes),
+    ] {
+        let table = VerifierLookupTable::new(address, client.clone());
+        for &batch_size in batch_sizes.iter().skip(1) {
+            let receipt = table
+                .addVerifier(U256::from(batch_size), mock_verifier)
+                .send()
+                .await?
+                .get_receipt()
+                .await?;
+            anyhow::ensure!(receipt.status(), "Adding verifier reverted");
+        }
     }
-
-    for batch_size in deletion_batch_sizes.iter().skip(1).copied() {
-        let batch_size = batch_size as u64;
-
-        info!("Adding verifier for batch size {}", batch_size);
-        delete_verifiers
-            .method::<_, ()>("addVerifier", (batch_size, mock_verifier.address()))?
-            .send()
-            .await?
-            .await?;
+    let implementation = deploy(
+        &client,
+        load_contract("./sol/WorldIDIdentityManagerImplV2.json")?,
+        vec![],
+    )
+    .await?;
+    let init = IWorldIDIdentityManager::initializeCall {
+        treeDepth: tree_depth,
+        initialRoot: initial_root,
+        _batchInsertionVerifiers: insert_verifiers,
+        _batchUpdateVerifiers: update_verifiers,
+        _semaphoreVerifier: semaphore_verifier,
     }
-
-    let identity_manager_impl_factory =
-        load_and_build_contract("./sol/WorldIDIdentityManagerImplV2.json", client.clone())?;
-
-    let identity_manager_impl = identity_manager_impl_factory
-        .deploy(())?
-        .confirmations(0usize)
-        .send()
-        .await?;
-
-    let identity_manager_factory =
-        load_and_build_contract("./sol/WorldIDIdentityManager.json", client.clone())?;
-
-    let identity_manager_impl_address = identity_manager_impl.address();
-
-    let init_call_data = ContractAbi::InitializeCall {
-        tree_depth,
-        initial_root,
-        batch_insertion_verifiers: insert_verifiers.address(),
-        batch_update_verifiers: update_verifiers.address(),
-        semaphore_verifier: semaphore_verifier.address(),
-    };
-    let init_call_encoded: Bytes = Bytes::from(init_call_data.encode());
-
-    let identity_manager_contract = identity_manager_factory
-        .deploy((identity_manager_impl_address, init_call_encoded))?
-        .confirmations(0usize)
-        .send()
-        .await?;
-
-    let identity_manager: SpecialisedContract = Contract::new(
-        identity_manager_contract.address(),
-        ContractAbi::IWORLDIDIDENTITYMANAGER_ABI.clone(),
-        client.clone(),
-    );
-
-    identity_manager
-        .method::<_, ()>("initializeV2", delete_verifiers.address())?
+    .abi_encode();
+    let address = deploy(
+        &client,
+        load_contract("./sol/WorldIDIdentityManager.json")?,
+        (implementation, Bytes::from(init)).abi_encode_params(),
+    )
+    .await?;
+    let identity_manager = IWorldIDIdentityManager::new(address, client);
+    let receipt = identity_manager
+        .initializeV2(delete_verifiers)
         .send()
         .await?
+        .get_receipt()
         .await?;
-
-    let identity_manager = IWorldIDIdentityManager::from(identity_manager);
-
+    anyhow::ensure!(receipt.status(), "initializeV2 reverted");
     Ok(MockChain {
         anvil: chain,
         private_key,
         identity_manager,
     })
-}
-
-pub type SpecialisedClient =
-    NonceManagerMiddleware<SignerMiddleware<Provider<Http>, Wallet<SigningKey>>>;
-type SharableClient = Arc<SpecialisedClient>;
-type SpecialisedFactory = ContractFactory<SpecialisedClient>;
-
-fn load_and_build_contract(
-    path: impl Into<String>,
-    client: SharableClient,
-) -> anyhow::Result<SpecialisedFactory> {
-    let path_string = path.into();
-    let contract_file = File::open(&path_string)
-        .unwrap_or_else(|_| panic!("Failed to open `{pth}`", pth = &path_string));
-
-    let contract_json: CompiledContract = serde_json::from_reader(BufReader::new(contract_file))
-        .unwrap_or_else(|_| {
-            panic!(
-                "Could not parse the compiled contract at {pth}",
-                pth = &path_string
-            )
-        });
-    let contract_bytecode = contract_json.bytecode.object.as_bytes().unwrap_or_else(|| {
-        panic!(
-            "Could not parse the bytecode for the contract at {pth}",
-            pth = &path_string
-        )
-    });
-    let contract_factory =
-        ContractFactory::new(contract_json.abi, contract_bytecode.clone(), client);
-    Ok(contract_factory)
 }

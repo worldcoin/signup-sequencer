@@ -19,6 +19,6 @@ impl<'a> DockerContainer<'a> {
     }
 }
 
-pub async fn setup(docker: &Cli) -> anyhow::Result<DockerContainer> {
+pub async fn setup(docker: &Cli) -> anyhow::Result<DockerContainer<'_>> {
     Ok(DockerContainer::new(docker))
 }

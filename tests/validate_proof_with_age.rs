@@ -20,7 +20,7 @@ async fn validate_proof_with_age(offchain_mode_enabled: bool) -> anyhow::Result<
     info!("Starting integration test");
 
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
-    let initial_root: U256 = ref_tree.root().into();
+    let initial_root: U256 = ref_tree.root();
 
     let batch_timeout_seconds: u64 = 1;
 
@@ -54,7 +54,7 @@ async fn validate_proof_with_age(offchain_mode_enabled: bool) -> anyhow::Result<
         .oz_api_url(&micro_oz.endpoint())
         .oz_address(micro_oz.address())
         .batch_insertion_timeout(Duration::from_secs(batch_timeout_seconds))
-        .identity_manager_address(mock_chain.identity_manager.address())
+        .identity_manager_address(*mock_chain.identity_manager.address())
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)

@@ -4,13 +4,13 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Error};
-use hyper::{Body, Client};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+use reqwest::Client;
 use tracing::{debug, info};
 use tracing_subscriber::fmt::format;
 
-use crate::common::prelude::{Request, StatusCode};
+use crate::common::prelude::StatusCode;
 
 const LOCAL_ADDR: &str = "localhost";
 
@@ -158,7 +158,7 @@ impl Drop for DockerComposeGuard<'_> {
 ///
 /// Note that we're using sync code here so we'll block the executor - but this
 /// is fine, because the spawned container will still run in the background.
-pub async fn setup(cwd: &str, offchain_mode: bool) -> anyhow::Result<DockerComposeGuard> {
+pub async fn setup(cwd: &str, offchain_mode: bool) -> anyhow::Result<DockerComposeGuard<'_>> {
     let mut res = DockerComposeGuard {
         cwd,
         project_name: generate_project_name(),
@@ -259,14 +259,7 @@ async fn check_health(local_addr: String) -> anyhow::Result<bool> {
     let uri = format!("http://{local_addr}");
     let client = Client::new();
 
-    let healthcheck = Request::builder()
-        .method("GET")
-        .uri(format!("{uri}/health"))
-        .header("Content-Type", "application/json")
-        .body(Body::empty())
-        .unwrap();
-
-    let response = client.request(healthcheck).await?;
+    let response = client.get(format!("{uri}/health")).send().await?;
 
     Ok(response.status() == StatusCode::OK)
 }

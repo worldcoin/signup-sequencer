@@ -1,10 +1,10 @@
-FROM rust:1.93-slim-bookworm AS build-env
+FROM rust:1.97.1-slim-bookworm AS build-env
 
 WORKDIR /src
 
 # Install dependencies
 RUN apt-get update && \
-    apt-get install -y git curl build-essential libssl-dev texinfo libcap2-bin pkg-config
+    apt-get install -y git curl build-essential cmake libssl-dev texinfo libcap2-bin pkg-config
 
 # Copy only rust-toolchain.toml for better caching
 COPY ./rust-toolchain.toml ./rust-toolchain.toml

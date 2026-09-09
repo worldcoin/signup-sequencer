@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
+use alloy::primitives::Address;
 use anyhow::Context;
-use ethers::types::Address;
 use signup_sequencer::config::{
     default, AppConfig, AuthMode, Config, DatabaseConfig, NetworkConfig, OffchainModeConfig,
     OzDefenderConfig, ProvidersConfig, RelayerConfig, ServerConfig, ServiceConfig, TreeConfig,

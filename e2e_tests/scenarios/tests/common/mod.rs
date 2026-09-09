@@ -4,11 +4,10 @@
 
 use std::time::Duration;
 
+use alloy::primitives::U256;
+use alloy::providers::Provider;
 use anyhow::anyhow;
-use ethers::providers::Middleware;
-use ethers::types::U256;
-use hyper::client::HttpConnector;
-use hyper::Client;
+use reqwest::Client;
 use serde_json::Value;
 use signup_sequencer::identity_tree::ProcessedStatus::Mined;
 use signup_sequencer::identity_tree::{Hash, Status};
@@ -33,8 +32,7 @@ pub mod prelude {
     pub use std::time::Duration;
 
     pub use anyhow::{Context, Error};
-    pub use hyper::client::HttpConnector;
-    pub use hyper::{Body, Client, Request, StatusCode};
+    pub use reqwest::{Client, StatusCode};
     pub use retry::delay::Fixed;
     pub use retry::retry;
     pub use serde_json::json;
@@ -96,7 +94,7 @@ pub fn generate_test_commitments(count: usize) -> Vec<Hash> {
 }
 
 pub async fn delete_identity_with_retries(
-    client: &Client<HttpConnector>,
+    client: &Client,
     uri: &String,
     commitment: &Hash,
     retries_count: usize,
@@ -116,7 +114,7 @@ pub async fn delete_identity_with_retries(
 }
 
 pub async fn insert_identity_with_retries(
-    client: &Client<HttpConnector>,
+    client: &Client,
     uri: &String,
     commitment: &Hash,
     retries_count: usize,
@@ -135,7 +133,7 @@ pub async fn insert_identity_with_retries(
 }
 
 pub async fn mined_inclusion_proof_with_retries(
-    client: &Client<HttpConnector>,
+    client: &Client,
     uri: &String,
     chain: &Chain,
     commitment: &Hash,
@@ -155,13 +153,9 @@ pub async fn mined_inclusion_proof_with_retries(
                             return Ok(());
                         }
                     } else if let Some(root) = inclusion_proof_json.root {
-                        let (root, ..) = chain
-                            .identity_manager
-                            .query_root(root.into())
-                            .call()
-                            .await?;
+                        let root_info = chain.identity_manager.queryRoot(root).call().await?;
 
-                        if root != U256::zero() {
+                        if root_info.root != U256::ZERO {
                             return Ok(());
                         }
                     }
@@ -184,7 +178,7 @@ pub async fn mined_inclusion_proof_with_retries(
 }
 
 pub async fn bad_request_inclusion_proof_with_retries(
-    client: &Client<HttpConnector>,
+    client: &Client,
     uri: &String,
     commitment: &Hash,
     retries_count: usize,

@@ -1,5 +1,5 @@
+use alloy::primitives::U256;
 use chrono::{DateTime, Utc};
-use ethers::prelude::U256;
 use ruint::Uint;
 use semaphore_rs::poseidon_tree::Branch;
 use semaphore_rs_poseidon::Poseidon as PoseidonHash;
@@ -270,10 +270,7 @@ pub async fn insert_identities(
     }
 
     let mut insertion_indices: Vec<_> = updates.iter().map(|f| f.update.leaf_index).collect();
-    let mut commitments: Vec<U256> = updates
-        .iter()
-        .map(|update| update.update.element.into())
-        .collect();
+    let mut commitments: Vec<U256> = updates.iter().map(|update| update.update.element).collect();
 
     let latest_tree_from_updates = updates
         .last()
@@ -312,7 +309,7 @@ pub async fn insert_identities(
             .leaf_index
             + 1;
         let padding = batch_size - commitment_count;
-        commitments.append(&mut vec![U256::zero(); padding]);
+        commitments.append(&mut vec![U256::ZERO; padding]);
 
         for i in start_index..(start_index + padding) {
             let proof = latest_tree_from_updates.proof(i);
@@ -457,7 +454,7 @@ pub async fn delete_identities(
 
     if commitment_count != batch_size {
         let padding = batch_size - commitment_count;
-        commitments.extend(vec![U256::zero(); padding]);
+        commitments.extend(vec![U256::ZERO; padding]);
         deletion_indices.extend(vec![pad_index; padding]);
 
         let zeroed_proof = InclusionProof(vec![
@@ -532,7 +529,7 @@ fn zip_commitments_and_proofs(
         .iter()
         .zip(merkle_proofs)
         .map(|(id, prf)| {
-            let commitment: U256 = id.into();
+            let commitment: U256 = *id;
             let proof: Vec<U256> = prf
                 .0
                 .iter()

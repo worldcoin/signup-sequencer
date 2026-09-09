@@ -1,7 +1,7 @@
 use std::error::Error;
 
-use ethers::providers::ProviderError;
-use ethers::types::{TransactionReceipt, H256};
+use alloy::transports::TransportError;
+use alloy::{primitives::B256, rpc::types::TransactionReceipt};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -23,10 +23,10 @@ pub enum TxError {
     ConfirmationTimeout,
 
     #[error("Error waiting for confirmations: {0}")]
-    Confirmation(ProviderError),
+    Confirmation(TransportError),
 
     #[error("Transaction dropped from mempool: {0}.")]
-    Dropped(H256),
+    Dropped(B256),
 
     #[error("Transaction failed: {0:?}.")]
     Failed(Box<Option<TransactionReceipt>>),

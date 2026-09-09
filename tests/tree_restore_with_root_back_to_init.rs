@@ -19,7 +19,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
     let batch_size: usize = 3;
 
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
-    let initial_root: U256 = ref_tree.root().into();
+    let initial_root: U256 = ref_tree.root();
 
     let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
@@ -47,7 +47,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         .db_url(&db_url)
         .oz_api_url(&micro_oz.endpoint())
         .oz_address(micro_oz.address())
-        .identity_manager_address(mock_chain.identity_manager.address())
+        .identity_manager_address(*mock_chain.identity_manager.address())
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)
@@ -138,7 +138,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
         .db_url(&db_url)
         .oz_api_url(&micro_oz.endpoint())
         .oz_address(micro_oz.address())
-        .identity_manager_address(mock_chain.identity_manager.address())
+        .identity_manager_address(*mock_chain.identity_manager.address())
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)
@@ -164,7 +164,7 @@ async fn tree_restore_with_root_back_to_init(offchain_mode_enabled: bool) -> any
     );
     assert_eq!(
         restored_tree_state.processed_tree().get_root(),
-        initial_root.into()
+        Into::<Hash>::into(initial_root)
     );
 
     // Shutdown the app properly for the final time

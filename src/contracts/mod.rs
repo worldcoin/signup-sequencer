@@ -2,10 +2,10 @@
 pub mod abi;
 pub mod scanner;
 
+use alloy::primitives::U256;
+use alloy::providers::Provider;
+use alloy::sol_types::SolValue;
 use anyhow::{anyhow, bail};
-use ethers::abi::AbiEncode;
-use ethers::providers::Middleware;
-use ethers::types::U256;
 use tracing::{error, info, instrument};
 
 use self::abi::{BridgedWorldId, WorldId};
@@ -20,17 +20,19 @@ use crate::prover::Proof;
 #[derive(Debug)]
 pub struct IdentityManager {
     ethereum: Ethereum,
-    abi: WorldId<ReadProvider>,
-    secondary_abis: Vec<BridgedWorldId<ReadProvider>>,
+    abi: WorldId::WorldIdInstance<std::sync::Arc<ReadProvider>>,
+    secondary_abis: Vec<BridgedWorldId::BridgedWorldIdInstance<std::sync::Arc<ReadProvider>>>,
 }
 
 impl IdentityManager {
     // TODO: I don't like these public getters
-    pub fn abi(&self) -> &WorldId<ReadProvider> {
+    pub fn abi(&self) -> &WorldId::WorldIdInstance<std::sync::Arc<ReadProvider>> {
         &self.abi
     }
 
-    pub fn secondary_abis(&self) -> &[BridgedWorldId<ReadProvider>] {
+    pub fn secondary_abis(
+        &self,
+    ) -> &[BridgedWorldId::BridgedWorldIdInstance<std::sync::Arc<ReadProvider>>] {
         &self.secondary_abis
     }
 
@@ -45,7 +47,7 @@ impl IdentityManager {
 
         // Check that there is code deployed at the target address.
         let address = network_config.identity_manager_address;
-        let code = ethereum.provider().get_code(address, None).await?;
+        let code = ethereum.provider().get_code_at(address).await?;
         if code.as_ref().is_empty() {
             error!(
                 ?address,
@@ -59,7 +61,7 @@ impl IdentityManager {
             ethereum.provider().clone(),
         );
 
-        let operator = abi.identity_operator().call().await?;
+        let operator = abi.identityOperator().call().await?;
         if operator != ethereum.address() {
             error!(?operator, signer = ?ethereum.address(), "Signer is not the identity operator of the identity manager contract.");
             panic!("Cannot currently continue in read-only mode.")
@@ -77,7 +79,7 @@ impl IdentityManager {
         for (chain_id, address) in &network_config.relayed_identity_manager_addresses.0 {
             let provider = secondary_providers
                 .get(chain_id)
-                .ok_or_else(|| anyhow!("No provider for chain id: {}", chain_id))?;
+                .ok_or_else(|| anyhow!("No provider for chain id: {chain_id}"))?;
 
             let abi = BridgedWorldId::new(*address, provider.clone());
             secondary_abis.push(abi);
@@ -114,25 +116,25 @@ impl IdentityManager {
         // it to complete.
         let register_identities_transaction = self
             .abi
-            .register_identities(
+            .registerIdentities(
                 proof_points_array,
                 pre_root,
                 actual_start_index,
                 identities,
                 post_root,
             )
-            .tx;
+            .into_transaction_request();
 
         let tx_id = format!(
             "tx-{}-{}",
-            hex::encode(pre_root.encode()),
-            hex::encode(post_root.encode())
+            hex::encode(pre_root.abi_encode()),
+            hex::encode(post_root.abi_encode())
         );
 
         self.ethereum
             .send_transaction(register_identities_transaction, true, Some(tx_id))
             .await
-            .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
+            .map_err(|tx_err| anyhow!("{tx_err}"))
     }
 
     // TODO: docs
@@ -148,36 +150,36 @@ impl IdentityManager {
 
         let delete_identities_transaction = self
             .abi
-            .delete_identities(
+            .deleteIdentities(
                 proof_points_array,
                 packed_deletion_indices.into(),
                 pre_root,
                 post_root,
             )
-            .tx;
+            .into_transaction_request();
 
         let tx_id = format!(
             "tx-{}-{}",
-            hex::encode(pre_root.encode()),
-            hex::encode(post_root.encode())
+            hex::encode(pre_root.abi_encode()),
+            hex::encode(post_root.abi_encode())
         );
 
         self.ethereum
             .send_transaction(delete_identities_transaction, true, Some(tx_id))
             .await
-            .map_err(|tx_err| anyhow!("{}", tx_err.to_string()))
+            .map_err(|tx_err| anyhow!("{tx_err}"))
     }
 
     #[instrument(level = "debug", skip_all)]
     pub async fn latest_root(&self) -> anyhow::Result<U256> {
-        let latest_root = self.abi.latest_root().call().await?;
+        let latest_root = self.abi.latestRoot().call().await?;
 
         Ok(latest_root)
     }
 
     #[instrument(level = "debug", skip_all)]
     pub async fn is_root_mined(&self, root: U256) -> anyhow::Result<bool> {
-        let (root_on_mainnet, ..) = self.abi.query_root(root).call().await?;
+        let root_on_mainnet = self.abi.queryRoot(root).call().await?.root;
 
         if root_on_mainnet.is_zero() {
             return Ok(false);
@@ -188,18 +190,18 @@ impl IdentityManager {
 
     #[instrument(level = "debug", skip_all)]
     pub async fn is_root_mined_multi_chain(&self, root: U256) -> anyhow::Result<bool> {
-        let (root_on_mainnet, ..) = self.abi.query_root(root).call().await?;
+        let root_on_mainnet = self.abi.queryRoot(root).call().await?.root;
 
         if root_on_mainnet.is_zero() {
             return Ok(false);
         }
 
         for bridged_world_id in &self.secondary_abis {
-            let root_timestamp = bridged_world_id.root_history(root).call().await?;
+            let root_timestamp = bridged_world_id.rootHistory(root).call().await?;
 
             // root_history only returns superseded roots, so we must also check the latest
             // root
-            let latest_root = bridged_world_id.latest_root().call().await?;
+            let latest_root = bridged_world_id.latestRoot().call().await?;
 
             // If root is not superseded and it's not the latest root
             // then it's not mined

@@ -120,7 +120,7 @@ impl App {
         Ok::<(), anyhow::Error>(())
     }
 
-    pub async fn tree_state(&self) -> anyhow::Result<MutexGuard<TreeState>> {
+    pub async fn tree_state(&self) -> anyhow::Result<MutexGuard<'_, TreeState>> {
         Ok(self
             .tree_state
             .get()

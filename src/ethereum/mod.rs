@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use alloy::primitives::Address;
+use alloy::rpc::types::TransactionRequest;
 use anyhow::bail;
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::Address;
 pub use read::ReadProvider;
 use tracing::instrument;
 pub use write::TxError;
@@ -44,7 +44,7 @@ impl Ethereum {
         for secondary_url in &providers_config.relayed_network_providers.0 {
             let secondary_read_provider = ReadProvider::new(secondary_url.clone().into()).await?;
             secondary_read_providers.insert(
-                secondary_read_provider.chain_id.as_u64(),
+                secondary_read_provider.chain_id.to::<u64>(),
                 Arc::new(secondary_read_provider),
             );
         }
@@ -76,7 +76,7 @@ impl Ethereum {
 
     pub async fn send_transaction(
         &self,
-        tx: TypedTransaction,
+        tx: TransactionRequest,
         only_once: bool,
         tx_id: Option<String>,
     ) -> Result<TransactionId, TxError> {

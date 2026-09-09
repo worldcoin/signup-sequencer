@@ -17,7 +17,6 @@ build = "build.rs"
 
 [workspace]
 members = ["crates/*", "e2e_tests/scenarios"]
-exclude = ["vendor/*"]
 
 [features]
 default = []
@@ -110,12 +109,6 @@ testcontainers-modules = { version = "0.3.7", features = ["postgres"] }
 tracing-subscriber = "0.3.20"
 tracing-test = "0.2"
 
-[patch.crates-io]
-reqwest = { path = "vendor/reqwest-compat" }
-ethers-providers = { path = "vendor/ethers-providers" }
-ethers-middleware = { path = "vendor/ethers-middleware" }
-ethers-etherscan = { path = "vendor/ethers-etherscan" }
-ethers-contract-abigen = { path = "vendor/ethers-contract-abigen" }
 [profile.release]
 overflow-checks = true
 lto = "thin"

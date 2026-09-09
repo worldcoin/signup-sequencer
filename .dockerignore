@@ -1,6 +1,5 @@
 target/
 README.md
-!vendor/**/README.md
 
 # Added by SEC-1406 patch
 .git

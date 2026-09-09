@@ -31,7 +31,6 @@ RUN mkdir -p ./src \
 COPY ./build.rs ./build.rs
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
-COPY ./vendor ./vendor
 COPY ./crates/cognitoauth/Cargo.toml ./crates/cognitoauth/Cargo.toml
 COPY ./crates/micro-oz/Cargo.toml ./crates/micro-oz/Cargo.toml
 COPY ./crates/oz-api/Cargo.toml ./crates/oz-api/Cargo.toml

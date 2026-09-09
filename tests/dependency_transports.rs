@@ -1,4 +1,4 @@
-//! Regression coverage for the patched Ethers transport dependencies.
+//! Regression coverage for Ethers authentication and HTTP transport compatibility.
 use axum::{http::HeaderMap, routing::post, Json, Router};
 use ethers::providers::{Authorization, Http, JsonRpcClient, JwtAuth, JwtKey};
 use serde_json::{json, Value};

@@ -4,7 +4,7 @@ WORKDIR /src
 
 # Install dependencies
 RUN apt-get update && \
-    apt-get install -y git curl build-essential libssl-dev texinfo libcap2-bin pkg-config
+    apt-get install -y git curl build-essential cmake libssl-dev texinfo libcap2-bin pkg-config
 
 # Copy only rust-toolchain.toml for better caching
 COPY ./rust-toolchain.toml ./rust-toolchain.toml
@@ -31,6 +31,7 @@ RUN mkdir -p ./src \
 COPY ./build.rs ./build.rs
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
+COPY ./vendor ./vendor
 COPY ./crates/cognitoauth/Cargo.toml ./crates/cognitoauth/Cargo.toml
 COPY ./crates/micro-oz/Cargo.toml ./crates/micro-oz/Cargo.toml
 COPY ./crates/oz-api/Cargo.toml ./crates/oz-api/Cargo.toml

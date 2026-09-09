@@ -17,6 +17,7 @@ build = "build.rs"
 
 [workspace]
 members = ["crates/*", "e2e_tests/scenarios"]
+exclude = ["vendor/*"]
 
 [features]
 default = []
@@ -110,6 +111,12 @@ tracing-subscriber = "0.3.20"
 tracing-test = "0.2"
 
 [patch.crates-io]
+ark-relations = { path = "vendor/ark-relations" }
+reqwest = { path = "vendor/reqwest-compat" }
+ethers-providers = { path = "vendor/ethers-providers" }
+ethers-middleware = { path = "vendor/ethers-middleware" }
+ethers-etherscan = { path = "vendor/ethers-etherscan" }
+ethers-contract-abigen = { path = "vendor/ethers-contract-abigen" }
 # Necessary until https://github.com/recmo/uint/pull/400 is merged and released
 ruint = { git = "https://github.com/Dzejkop/uint", rev = "9a1a6019c519e9cd76add2494190d21fc5f574f9" }
 

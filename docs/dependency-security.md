@@ -1,33 +1,34 @@
 # Dependency security checks
 
-CI runs `cargo deny check bans licenses sources` as a required check and
-`cargo deny check advisories` as a separate, non-blocking report, matching
-world-id-protocol. The advisory ignore list is empty: a passing required check
-does not mean the dependency graph is free of security advisories.
+CI runs required bans/licenses/sources checks and a separate advisory report.
+The policy mirrors world-id-protocol's specific unmaintained-crate exceptions.
+There are **no vulnerability advisory exceptions**.
 
-## Remediation on the cargo-deny branch
+## Security remediation
 
-- Update anyhow, crossbeam-epoch, h2 0.4, ring 0.17, and rustls 0.23/webpki to
-  patched releases.
-- Upgrade prometheus to 0.14 to replace vulnerable protobuf 2 with protobuf 3.7.2.
-- Use jsonwebtoken's AWS-LC backend in both production and test utilities,
-  removing the vulnerable RustCrypto RSA implementation from the active graph.
-- Upgrade config to 0.15 (yaml-rust2) and color-eyre/backtrace (adler2).
-- Update the yanked spin 0.9.8 release.
+- Update anyhow, crossbeam-epoch, h2, ring, rustls/webpki and prometheus/protobuf.
+- Use AWS-LC for JWT signing/verification instead of RustCrypto RSA.
+- Update AWS SDK dependencies and select the modern default HTTPS client.
+  Do not enable Cognito's legacy `rustls` feature: it pulls Hyper 0.14/Rustls 0.21.
+- Patch archived Ethers' transport dependencies while retaining its API; see
+  [vendor/README.md](../vendor/README.md) for provenance and changes.
+- Move the local relayer and end-to-end HTTP client to Axum 0.7/Reqwest 0.12.
+- Upgrade Arkworks 0.4's logging dependency to tracing-subscriber 0.3.
+- Redirect the old Semaphore build-time downloader to maintained Reqwest.
+- Replace yaml-rust, adler, fxhash and instant through maintained dependencies.
 
-## Remaining work
+## Maintenance notices
 
-The legacy dependency graph still reports advisories. Do not suppress these
-findings to make the advisory job green.
+The five explicit exceptions in deny.toml are already accepted by
+world-id-protocol: atomic-polyfill, bincode, derivative, paste and
+proc-macro-error2. They are maintenance notices, not accepted vulnerabilities.
+Each exception names its dependency path and removal plan.
 
-| Dependency | Required follow-up |
-| --- | --- |
-| h2 0.3 | Migrate the Hyper 0.14 consumers, including Ethers, AWS Smithy, and the older Axum/Reqwest clients, to a patched HTTP stack. |
-| ring 0.16 | Replace Ethers' jsonwebtoken 8 dependency through an upstream update or migration. |
-| rustls-webpki 0.101 | Migrate the old Rustls consumers in the Ethers/AWS HTTP and WebSocket stacks. |
-| tracing-subscriber 0.2 | Update the Arkworks dependency that still requires this version. |
-| Unmaintained crates | Replace remaining transitive atomic-polyfill, bincode, derivative, fxhash, instant, paste, proc-macro-error2, and rustls-pemfile through their parent libraries. |
+The stacked Semaphore upgrade removes atomic-polyfill, bincode and
+proc-macro-error2, as well as the temporary Arkworks 0.4 patch. The remaining
+derivative/paste notices require changes in upstream Arkworks/Alloy/telemetry.
+Do not modify persisted formats or proof arithmetic merely to remove a
+maintenance notice.
 
-Re-run the advisory report after the stacked semaphore upgrade; its graph differs
-from this branch. Library migrations must retain authentication, TLS validation,
-RPC/WebSocket behavior, persisted data compatibility, and proof compatibility.
+Run `cargo deny check` to check the complete policy. New vulnerabilities fail
+the advisory report; they must be remediated rather than added to the baseline.

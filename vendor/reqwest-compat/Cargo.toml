@@ -1,0 +1,17 @@
+[package]
+name = "reqwest"
+version = "0.11.27"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Compatibility re-export for Semaphore's build-time download using maintained Reqwest"
+
+[features]
+default = ["reqwest-current/default"]
+blocking = ["reqwest-current/blocking"]
+json = ["reqwest-current/json"]
+rustls-tls = ["reqwest-current/rustls-tls"]
+native-tls = ["reqwest-current/native-tls"]
+
+[dependencies]
+reqwest-current = { package = "reqwest", version = "0.12.28", default-features = false }

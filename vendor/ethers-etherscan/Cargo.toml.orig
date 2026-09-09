@@ -1,0 +1,56 @@
+[package]
+name = "ethers-etherscan"
+authors = [
+    "Matthias Seitz <matthias.seitz@outlook.de>",
+    "Georgios Konstantopoulos <me@gakonst.com>",
+]
+readme = "README.md"
+description = "Bindings for the etherscan.io web API"
+keywords = ["crypto", "ethers", "ethereum", "web3", "etherscan"]
+
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+documentation.workspace = true
+repository.workspace = true
+homepage.workspace = true
+categories.workspace = true
+exclude.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.playground]
+all-features = true
+
+[dependencies]
+ethers-core.workspace = true
+
+ethers-solc = { workspace = true, optional = true }
+
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+semver.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+ethers-solc.workspace = true
+
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+serial_test = "3.0.0"
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+
+[features]
+default = ["rustls"]
+rustls = ["reqwest/rustls-tls"]
+openssl = ["reqwest/native-tls"]
+
+ethers-solc = ["dep:ethers-solc"]
+solc-full = ["ethers-solc?/full"]
+solc-tests = ["ethers-solc?/tests"]

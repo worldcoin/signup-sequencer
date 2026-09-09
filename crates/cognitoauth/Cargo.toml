@@ -8,13 +8,13 @@ repository = "https://github.com/lucdew/cognito-srp-auth"
 keywords = ["crypto", "aws", "aws cognito"]
 categories = ["cryptography", "authentication"]
 readme = "README.md"
-rust-version = "1.56"
+rust-version = "1.88"
 
 [dependencies]
-aws-config = "1.5.6"
-aws-sdk-cognitoidentityprovider = "1.51.0"
-aws-smithy-client = { version = "0.60.3", features = [] }
+aws-config = "1.8.5"
+# The legacy `rustls` feature enables Hyper 0.14/Rustls 0.21. Keep HTTPS
+# through the default Hyper 1/AWS-LC client instead.
+aws-sdk-cognitoidentityprovider = { version = "1.96.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 cognito_srp = "0.1.1"
 thiserror = "1.0.32"
 tracing = "0.1"
-

@@ -1,8 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Error;
-use hyper::client::HttpConnector;
-use hyper::{Body, Client, Request};
+use reqwest::Client;
 use serde_json::{json, Value};
 use signup_sequencer::identity_tree::Hash;
 use signup_sequencer::server::api_v1::data::{
@@ -18,33 +17,30 @@ pub struct RawResponse {
 }
 
 pub async fn insert_identity(
-    client: &Client<HttpConnector>,
+    client: &Client,
     uri: &String,
     commitment: &Hash,
 ) -> anyhow::Result<()> {
     debug!("Calling /insertIdentity");
-    let body = Body::from(serde_json::to_string(&InsertCommitmentRequest {
+    let body = serde_json::to_string(&InsertCommitmentRequest {
         identity_commitment: *commitment,
-    })?);
+    })?;
 
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri.to_owned() + "/insertIdentity")
+    let response = client
+        .post(uri.to_owned() + "/insertIdentity")
         .header("Content-Type", "application/json")
         .body(body)
-        .expect("Failed to create insert identity hyper::Body");
-
-    let mut response = client
-        .request(req)
+        .send()
         .await
         .expect("Failed to execute request.");
-    let bytes = hyper::body::to_bytes(response.body_mut())
+    let status = response.status();
+    let bytes = response
+        .bytes()
         .await
         .expect("Failed to convert response body to bytes");
-    if !response.status().is_success() {
+    if !status.is_success() {
         return Err(Error::msg(format!(
-            "Failed to insert identity: response = {}",
-            response.status()
+            "Failed to insert identity: response = {status}"
         )));
     }
 
@@ -54,33 +50,30 @@ pub async fn insert_identity(
 }
 
 pub async fn delete_identity(
-    client: &Client<HttpConnector>,
+    client: &Client,
     uri: &String,
     commitment: &Hash,
 ) -> anyhow::Result<()> {
     debug!("Calling /deleteIdentity");
-    let body = Body::from(serde_json::to_string(&DeletionRequest {
+    let body = serde_json::to_string(&DeletionRequest {
         identity_commitment: *commitment,
-    })?);
+    })?;
 
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri.to_owned() + "/deleteIdentity")
+    let response = client
+        .post(uri.to_owned() + "/deleteIdentity")
         .header("Content-Type", "application/json")
         .body(body)
-        .expect("Failed to create delete identity hyper::Body");
-
-    let mut response = client
-        .request(req)
+        .send()
         .await
         .expect("Failed to execute request.");
-    let bytes = hyper::body::to_bytes(response.body_mut())
+    let status = response.status();
+    let bytes = response
+        .bytes()
         .await
         .expect("Failed to convert response body to bytes");
-    if !response.status().is_success() {
+    if !status.is_success() {
         return Err(Error::msg(format!(
-            "Failed to delete identity: response = {}",
-            response.status()
+            "Failed to delete identity: response = {status}"
         )));
     }
 
@@ -90,34 +83,32 @@ pub async fn delete_identity(
 }
 
 pub async fn inclusion_proof_raw(
-    client: &Client<HttpConnector>,
+    client: &Client,
     uri: &String,
     commitment: &Hash,
 ) -> anyhow::Result<RawResponse> {
     debug!("Calling /inclusionProof");
-    let body = Body::from(serde_json::to_string(&InclusionProofRequest {
+    let body = serde_json::to_string(&InclusionProofRequest {
         identity_commitment: *commitment,
-    })?);
+    })?;
 
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri.to_owned() + "/inclusionProof")
+    let response = client
+        .post(uri.to_owned() + "/inclusionProof")
         .header("Content-Type", "application/json")
         .body(body)
-        .expect("Failed to create inclusion proof hyper::Body");
-
-    let mut response = client
-        .request(req)
+        .send()
         .await
         .expect("Failed to execute request.");
-    let bytes = hyper::body::to_bytes(response.body_mut())
+    let status = response.status();
+    let bytes = response
+        .bytes()
         .await
         .expect("Failed to convert response body to bytes");
     let result = String::from_utf8(bytes.into_iter().collect())
         .expect("Could not parse response bytes to utf-8");
 
     let raw_response = RawResponse {
-        status_code: response.status(),
+        status_code: status,
         body: result,
     };
 
@@ -130,7 +121,7 @@ pub async fn inclusion_proof_raw(
 }
 
 pub async fn inclusion_proof(
-    client: &Client<HttpConnector>,
+    client: &Client,
     uri: &String,
     commitment: &Hash,
 ) -> anyhow::Result<(StatusCode, Option<InclusionProofResponse>)> {

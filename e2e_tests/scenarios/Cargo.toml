@@ -18,7 +18,7 @@ anyhow = "1.0.68"
 ethers = { version = "2.0.10" }
 hex = "0.4.3"
 hex-literal = "0.4.1"
-hyper = { version = "^0.14.17", features = ["tcp", "http1", "http2", "client"] }
+reqwest = { version = "0.12.28", features = ["json"] }
 rand = "0.8.5"
 retry = "2.0.0"
 serde = { version = "1.0", features = ["derive"] }

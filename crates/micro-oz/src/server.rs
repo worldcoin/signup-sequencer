@@ -1,4 +1,4 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -75,7 +75,7 @@ pub struct ServerHandle {
     pinhead: Pinhead,
     addr: SocketAddr,
     shutdown_notify: Arc<Notify>,
-    server_join_handle: JoinHandle<Result<(), hyper::Error>>,
+    server_join_handle: JoinHandle<Result<(), std::io::Error>>,
 }
 
 impl ServerHandle {
@@ -109,21 +109,21 @@ pub async fn spawn(rpc_url: String, secret_key: SigningKey) -> anyhow::Result<Se
         .with_state(pinhead.clone());
 
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0);
-    let listener = TcpListener::bind(addr).context("Failed to bind random port")?;
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .context("Failed to bind random port")?;
     let local_addr = listener.local_addr()?;
 
     let shutdown_notify = Arc::new(Notify::new());
 
-    let server = axum::Server::from_tcp(listener)?
-        .serve(router.into_make_service())
-        .with_graceful_shutdown({
-            let shutdown_notify = shutdown_notify.clone();
-            async move {
-                shutdown_notify.notified().await;
-            }
-        });
+    let server = axum::serve(listener, router.into_make_service()).with_graceful_shutdown({
+        let shutdown_notify = shutdown_notify.clone();
+        async move {
+            shutdown_notify.notified().await;
+        }
+    });
 
-    let server_join_handle = tokio::spawn(server);
+    let server_join_handle = tokio::spawn(async move { server.await });
 
     Ok(ServerHandle {
         pinhead,

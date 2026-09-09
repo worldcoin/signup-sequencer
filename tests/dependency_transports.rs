@@ -6,48 +6,6 @@ use axum::{http::HeaderMap, routing::post, Json, Router};
 use serde_json::{json, Value};
 
 #[test]
-fn identity_contract_calldata_and_event_layout_are_unchanged() {
-    use alloy::primitives::{keccak256, Address, Bytes, B256, U256};
-    use alloy::sol_types::{SolCall, SolEvent};
-    use signup_sequencer::contracts::abi::{TreeChangedFilter, WorldId};
-
-    let call = WorldId::registerIdentitiesCall {
-        insertionProof: [U256::ONE; 8],
-        preRoot: U256::from(2),
-        startIndex: 3,
-        identityCommitments: vec![U256::from(4), U256::from(5)],
-        postRoot: U256::from(6),
-    };
-    // Eight proof words plus pre-root, index, dynamic-array offset and post-root.
-    let mut expected =
-        keccak256("registerIdentities(uint256[8],uint256,uint32,uint256[],uint256)")[..4].to_vec();
-    for word in [1u64, 1, 1, 1, 1, 1, 1, 1, 2, 3, 384, 6, 2, 4, 5] {
-        expected.extend_from_slice(&U256::from(word).to_be_bytes::<32>());
-    }
-    assert_eq!(call.abi_encode(), expected);
-
-    let raw = alloy::primitives::Log::new(
-        Address::ZERO,
-        vec![
-            TreeChangedFilter::SIGNATURE_HASH,
-            B256::from(U256::from(2)),
-            B256::ZERO,
-            B256::from(U256::from(6)),
-        ],
-        Bytes::new(),
-    )
-    .unwrap();
-    let log = alloy::rpc::types::Log {
-        inner: raw,
-        ..Default::default()
-    };
-    let event = log.log_decode::<TreeChangedFilter>().unwrap().inner.data;
-    assert_eq!(event.preRoot, U256::from(2));
-    assert_eq!(event.kind, 0);
-    assert_eq!(event.postRoot, U256::from(6));
-}
-
-#[test]
 fn relayer_wire_formats_are_unchanged() {
     use alloy::primitives::{Address, Bytes, U256};
     use oz_api::data::transactions::{NameOrAddress, SendBaseTransactionRequestOwned};

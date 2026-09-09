@@ -12,8 +12,8 @@ pub fn deserialize<'de, D>(deserializer: D) -> Result<U256, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let s: &str = serde::Deserialize::deserialize(deserializer)?;
-    let u256 = U256::from_str_radix(s, 10).map_err(serde::de::Error::custom)?;
+    let s: String = serde::Deserialize::deserialize(deserializer)?;
+    let u256 = U256::from_str_radix(&s, 10).map_err(serde::de::Error::custom)?;
     Ok(u256)
 }
 

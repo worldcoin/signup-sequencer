@@ -11,22 +11,18 @@ pub mod test_config;
 pub mod prelude {
     pub use std::time::Duration;
 
+    pub use alloy::json_abi::JsonAbi as Abi;
+    pub use alloy::node_bindings::{Anvil, AnvilInstance};
+    pub use alloy::primitives::{Address, Bytes, B256, U128, U256};
+    pub use alloy::providers::Provider;
+    pub use alloy::sol_types::SolValue;
     pub use anyhow::Context;
     pub use clap::Parser;
-    pub use ethers::abi::{AbiEncode, Address};
-    pub use ethers::core::abi::Abi;
-    pub use ethers::core::k256::ecdsa::SigningKey;
-    pub use ethers::core::rand;
-    pub use ethers::prelude::{
-        ContractFactory, Http, LocalWallet, NonceManagerMiddleware, Provider, Signer,
-        SignerMiddleware, Wallet,
-    };
-    pub use ethers::providers::Middleware;
-    pub use ethers::types::{Bytes, H256, U128, U256};
-    pub use ethers::utils::{Anvil, AnvilInstance};
-    pub use ethers_solc::artifacts::{Bytecode, BytecodeObject};
+    pub use foundry_compilers_artifacts::{Bytecode, BytecodeObject};
+    pub use k256::ecdsa::SigningKey;
     pub use once_cell::sync::Lazy;
     pub use postgres_docker_utils::DockerContainer;
+    pub use rand;
     pub use reqwest::{Client, StatusCode};
     pub use semaphore_rs::identity::Identity;
     pub use semaphore_rs::poseidon_tree::PoseidonTree;
@@ -183,17 +179,17 @@ pub async fn test_verify_proof_builder(
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 pub async fn test_verify_proof_on_chain(
-    identity_manager: &IWorldIDIdentityManager<SpecialisedClient>,
+    identity_manager: &SpecialisedContract,
     root: Field,
     signal_hash: Field,
     nullifier_hash: Field,
     external_nullifier_hash: Field,
     proof: protocol::Proof,
 ) -> anyhow::Result<()> {
-    let root_tok: U256 = root.into();
-    let signal_hash_tok: U256 = signal_hash.into();
-    let nullifier_hash_tok: U256 = nullifier_hash.into();
-    let external_nullifier_hash_tok: U256 = external_nullifier_hash.into();
+    let root_tok: U256 = root;
+    let signal_hash_tok: U256 = signal_hash;
+    let nullifier_hash_tok: U256 = nullifier_hash;
+    let external_nullifier_hash_tok: U256 = external_nullifier_hash;
     let proof_tok: [_; 8] = match proof {
         protocol::Proof(ar, bs, krs) => {
             [ar.0, ar.1, bs.0[0], bs.0[1], bs.1[0], bs.1[1], krs.0, krs.1]
@@ -207,7 +203,7 @@ pub async fn test_verify_proof_on_chain(
         .unwrap();
 
     identity_manager
-        .verify_proof(
+        .verifyProof(
             root_tok,
             signal_hash_tok,
             nullifier_hash_tok,
@@ -279,16 +275,16 @@ pub async fn test_inclusion_proof(
 
                 return;
             }
-            let root: U256 = root.into();
+            let root: U256 = root;
 
-            let (root, ..) = mock_chain
+            let root_info = mock_chain
                 .identity_manager
-                .query_root(root)
+                .queryRoot(root)
                 .call()
                 .await
                 .expect("Failed to call method queryRoot on mocked chain.");
 
-            if root != U256::zero() {
+            if root_info.root != U256::ZERO {
                 let proof_json = generate_reference_proof(ref_tree, leaf_index, result.status);
                 assert_eq!(result, proof_json);
 
@@ -364,16 +360,16 @@ pub async fn test_inclusion_proof_mined(
                 // is valid.
                 return;
             }
-            let root: U256 = root.into();
+            let root: U256 = root;
 
-            let (root, ..) = mock_chain
+            let root_info = mock_chain
                 .identity_manager
-                .query_root(root)
+                .queryRoot(root)
                 .call()
                 .await
                 .expect("Failed to call method queryRoot on mocked chain.");
 
-            if root != U256::zero() {
+            if root_info.root != U256::ZERO {
                 return;
             }
         }
@@ -439,9 +435,9 @@ pub async fn test_in_tree(uri: &str, client: &Client, leaf: &Hash) {
     let result = serde_json::from_str::<InclusionProofResponse>(&result)
         .expect("Failed to parse InclusionProofResponse");
 
-    let root: U256 = result.root.expect("Failed to get root").into();
+    let root: U256 = result.root.expect("Failed to get root");
 
-    assert_ne!(root, U256::zero(), "Hash is not zero");
+    assert_ne!(root, U256::ZERO, "Hash is not zero");
 }
 
 pub async fn api_delete_identity(uri: &str, client: &Client, leaf: &Field, expect_failure: bool) {
@@ -584,7 +580,9 @@ pub async fn spawn_app_returning_initialized_tree(
     config: Config,
 ) -> anyhow::Result<(Arc<App>, JoinHandle<()>, SocketAddr, Shutdown, TreeState)> {
     let server_config = config.server.clone();
-    let app = App::new(config).await.expect("Failed to create App");
+    let app = Box::pin(App::new(config))
+        .await
+        .expect("Failed to create App");
     let shutdown = Shutdown::spawn(Duration::from_secs(30), Duration::from_secs(1));
 
     TaskMonitor::init(app.clone(), shutdown.clone()).await?;
@@ -825,7 +823,7 @@ pub fn generate_test_identities(identity_count: usize) -> Vec<String> {
     for _ in 0..identity_count {
         // Generate the identities using the just the last 64 bits (of 256) has so we're
         // guaranteed to be less than SNARK_SCALAR_FIELD.
-        let bytes: [u8; 32] = U256::from(rand::random::<u64>()).into();
+        let bytes: [u8; 32] = U256::from(rand::random::<u64>()).to_be_bytes::<32>();
         let identity_string: String = hex::encode(bytes);
 
         identities.push(identity_string);

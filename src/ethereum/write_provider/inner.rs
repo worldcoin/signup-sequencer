@@ -1,5 +1,5 @@
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::H256;
+use alloy::primitives::B256;
+use alloy::rpc::types::TransactionRequest;
 
 use crate::ethereum::TxError;
 use crate::identity::processor::TransactionId;
@@ -8,7 +8,7 @@ use crate::identity::processor::TransactionId;
 pub trait Inner: Send + Sync + 'static {
     async fn send_transaction(
         &self,
-        tx: TypedTransaction,
+        tx: TransactionRequest,
         only_once: bool,
         tx_id: Option<String>,
     ) -> Result<TransactionId, TxError>;
@@ -18,5 +18,5 @@ pub trait Inner: Send + Sync + 'static {
 
 pub struct TransactionResult {
     pub transaction_id: String,
-    pub hash: Option<H256>,
+    pub hash: Option<B256>,
 }

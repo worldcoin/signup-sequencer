@@ -6,13 +6,14 @@ edition = "2021"
 publish = false
 
 [dependencies]
+k256 = "0.13"
 
 anyhow = "1.0.72"
 async-trait = "0.1.71"
 axum = "0.7.9"
 chrono = "0.4.26"
 clap = { version = "4.3.14", features = ["env", "derive"] }
-ethers = { version = "2.0.10", features = ["openssl"] }
+alloy = { workspace = true }
 oz-api = { path = "../oz-api" }
 serde = "1.0.228"
 serde_json = "1.0.103"

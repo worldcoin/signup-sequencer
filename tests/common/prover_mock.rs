@@ -3,13 +3,13 @@ use std::mem::size_of;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
 
+use alloy::primitives::keccak256;
+use alloy::primitives::U256;
 use anyhow::Context;
 use axum::extract::State;
 use axum::routing::post;
 use axum::{Json, Router};
 use axum_server::Handle;
-use ethers::types::U256;
-use ethers::utils::keccak256;
 use hyper::StatusCode;
 use semaphore_rs::poseidon_tree::{Branch, Proof as TreeProof};
 use serde::{Deserialize, Serialize};
@@ -255,7 +255,7 @@ impl Prover {
         }
 
         // Next we verify the merkle proofs.
-        let empty_leaf = U256::zero();
+        let empty_leaf = U256::ZERO;
         let mut last_root = input.pre_root;
 
         for (index, (identity, merkle_proof)) in input
@@ -266,11 +266,11 @@ impl Prover {
         {
             let leaf_index = input.start_index as usize + index;
             let proof = Self::reconstruct_proof_with_directions(leaf_index, &merkle_proof);
-            let root: U256 = proof.root(empty_leaf.into()).into();
+            let root: U256 = proof.root(empty_leaf);
             if root != last_root {
                 break;
             }
-            last_root = proof.root((*identity).into()).into();
+            last_root = proof.root(*identity);
         }
 
         // If the final root doesn't match the post root something's broken so we error.
@@ -284,14 +284,26 @@ impl Prover {
         // If we succeed in verifying, the output should be correlated with the input,
         // so we use the input_hash as part of it.
         Ok(ProveResponse::success([
-            "0x2".into(),
+            "0x2".parse().unwrap(),
             input_hash,
-            "0x2413396a2af3add6fbe8137cfe7657917e31a5cdab0b7d1d645bd5eeb47ba601".into(),
-            "0x1ad029539528b32ba70964ce43dbf9bba2501cdb3aaa04e4d58982e2f6c34752".into(),
-            "0x5bb975296032b135458bd49f92d5e9d363367804440d4692708de92e887cf17".into(),
-            "0x14932600f53a1ceb11d79a7bdd9688a2f8d1919176f257f132587b2b3274c41e".into(),
-            "0x13d7b19c7b67bf5d3adf2ac2d3885fd5d49435b6069c0656939cd1fb7bef9dc9".into(),
-            "0x142e14f90c49c79b4edf5f6b7acbcdb0b0f376a4311fc036f1006679bd53ca9e".into(),
+            "0x2413396a2af3add6fbe8137cfe7657917e31a5cdab0b7d1d645bd5eeb47ba601"
+                .parse()
+                .unwrap(),
+            "0x1ad029539528b32ba70964ce43dbf9bba2501cdb3aaa04e4d58982e2f6c34752"
+                .parse()
+                .unwrap(),
+            "0x5bb975296032b135458bd49f92d5e9d363367804440d4692708de92e887cf17"
+                .parse()
+                .unwrap(),
+            "0x14932600f53a1ceb11d79a7bdd9688a2f8d1919176f257f132587b2b3274c41e"
+                .parse()
+                .unwrap(),
+            "0x13d7b19c7b67bf5d3adf2ac2d3885fd5d49435b6069c0656939cd1fb7bef9dc9"
+                .parse()
+                .unwrap(),
+            "0x142e14f90c49c79b4edf5f6b7acbcdb0b0f376a4311fc036f1006679bd53ca9e"
+                .parse()
+                .unwrap(),
         ]))
     }
 
@@ -313,7 +325,7 @@ impl Prover {
         }
 
         // Next we verify the merkle proofs.
-        let empty_leaf = U256::zero();
+        let empty_leaf = U256::ZERO;
         let mut last_root = input.pre_root;
 
         for (leaf_index, merkle_proof) in input.deletion_indices.iter().zip(input.merkle_proofs) {
@@ -324,7 +336,7 @@ impl Prover {
             let proof =
                 Self::reconstruct_proof_with_directions(*leaf_index as usize, &merkle_proof);
 
-            last_root = proof.root(empty_leaf.into()).into();
+            last_root = proof.root(empty_leaf);
         }
 
         // If the final root doesn't match the post root something's broken so we error.
@@ -336,14 +348,26 @@ impl Prover {
         }
 
         Ok(ProveResponse::success([
-            "0x2".into(),
+            "0x2".parse().unwrap(),
             input_hash,
-            "0x2413396a2af3add6fbe8137cfe7657917e31a5cdab0b7d1d645bd5eeb47ba601".into(),
-            "0x1ad029539528b32ba70964ce43dbf9bba2501cdb3aaa04e4d58982e2f6c34752".into(),
-            "0x5bb975296032b135458bd49f92d5e9d363367804440d4692708de92e887cf17".into(),
-            "0x14932600f53a1ceb11d79a7bdd9688a2f8d1919176f257f132587b2b3274c41e".into(),
-            "0x13d7b19c7b67bf5d3adf2ac2d3885fd5d49435b6069c0656939cd1fb7bef9dc9".into(),
-            "0x142e14f90c49c79b4edf5f6b7acbcdb0b0f376a4311fc036f1006679bd53ca9e".into(),
+            "0x2413396a2af3add6fbe8137cfe7657917e31a5cdab0b7d1d645bd5eeb47ba601"
+                .parse()
+                .unwrap(),
+            "0x1ad029539528b32ba70964ce43dbf9bba2501cdb3aaa04e4d58982e2f6c34752"
+                .parse()
+                .unwrap(),
+            "0x5bb975296032b135458bd49f92d5e9d363367804440d4692708de92e887cf17"
+                .parse()
+                .unwrap(),
+            "0x14932600f53a1ceb11d79a7bdd9688a2f8d1919176f257f132587b2b3274c41e"
+                .parse()
+                .unwrap(),
+            "0x13d7b19c7b67bf5d3adf2ac2d3885fd5d49435b6069c0656939cd1fb7bef9dc9"
+                .parse()
+                .unwrap(),
+            "0x142e14f90c49c79b4edf5f6b7acbcdb0b0f376a4311fc036f1006679bd53ca9e"
+                .parse()
+                .unwrap(),
         ]))
     }
 
@@ -357,9 +381,9 @@ impl Prover {
             .enumerate()
             .map(|(i, node)| {
                 if Self::is_left_node_at_depth(index, i) {
-                    Branch::Left((*node).into())
+                    Branch::Left(*node)
                 } else {
-                    Branch::Right((*node).into())
+                    Branch::Right(*node)
                 }
             })
             .collect();
@@ -387,16 +411,12 @@ impl Prover {
     fn calculate_identity_registration_input_hash(input: &InsertionProofInput) -> U256 {
         // Calculate the input hash as described by the prover.
         let mut hashable_bytes: Vec<u8> = vec![];
-        let mut buffer: [u8; size_of::<U256>()] = Default::default();
         hashable_bytes.extend(input.start_index.to_be_bytes());
-        input.pre_root.to_big_endian(&mut buffer);
-        hashable_bytes.extend(buffer);
-        input.post_root.to_big_endian(&mut buffer);
-        hashable_bytes.extend(buffer);
+        hashable_bytes.extend(input.pre_root.to_be_bytes::<32>());
+        hashable_bytes.extend(input.post_root.to_be_bytes::<32>());
 
         input.identity_commitments.iter().for_each(|id| {
-            id.to_big_endian(&mut buffer);
-            hashable_bytes.extend(buffer);
+            hashable_bytes.extend(id.to_be_bytes::<32>());
         });
 
         keccak256(hashable_bytes).into()
@@ -418,11 +438,9 @@ impl Prover {
         let packed_deletion_indices = pack_indices(deletion_indices);
 
         // Convert pre_root and post_root to bytes
-        let mut pre_root_bytes = vec![0u8; 32];
-        pre_root.to_big_endian(&mut pre_root_bytes);
+        let pre_root_bytes = pre_root.to_be_bytes::<32>();
 
-        let mut post_root_bytes = vec![0u8; 32];
-        post_root.to_big_endian(&mut post_root_bytes);
+        let post_root_bytes = post_root.to_be_bytes::<32>();
 
         let mut bytes = vec![];
 

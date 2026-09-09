@@ -19,7 +19,7 @@ async fn multi_prover(offchain_mode_enabled: bool) -> anyhow::Result<()> {
     info!("Starting multi prover test");
 
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
-    let initial_root: U256 = ref_tree.root().into();
+    let initial_root: U256 = ref_tree.root();
 
     let batch_timeout_seconds = Duration::from_secs(20);
     let insert_task_delay_seconds = Duration::from_secs(5);
@@ -60,7 +60,7 @@ async fn multi_prover(offchain_mode_enabled: bool) -> anyhow::Result<()> {
         .oz_api_url(&micro_oz.endpoint())
         .oz_address(micro_oz.address())
         .batch_insertion_timeout(batch_timeout_seconds)
-        .identity_manager_address(mock_chain.identity_manager.address())
+        .identity_manager_address(*mock_chain.identity_manager.address())
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock_batch_size_3)

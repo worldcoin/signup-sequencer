@@ -8,7 +8,7 @@ unknown-registry = "deny"
 deny = [
     { crate = "metrics", deny-multiple-versions = true, reason = "metrics crate uses a global recorder - multiple versions may break metrics silently" },
 ]
-# Unlike world-id-protocol's mobile bindings, this service uses native-tls via ethers.
+# Unlike world-id-protocol's mobile bindings, this service uses native-tls via SQLx.
 # OpenSSL is therefore not banned here.
 
 [licenses]
@@ -31,12 +31,6 @@ allow = [
     "Unlicense",
     "Zlib",
 ]
-
-[[licenses.clarify]]
-name = "ring"
-version = "0.16.20"
-expression = "ISC AND MIT AND OpenSSL"
-license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 
 [[licenses.clarify]]
 name = "ring"

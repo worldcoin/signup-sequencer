@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::time::Duration;
 
-use ethers::types::transaction::eip2718::TypedTransaction;
+use alloy::rpc::types::TransactionRequest;
 use once_cell::sync::Lazy;
 use oz_api::data::transactions::{RelayerTransactionBase, SendBaseTransactionRequest, Status};
 use oz_api::OzApi;
@@ -103,16 +103,21 @@ impl OzRelay {
             .map_err(|_| TxError::ConfirmationTimeout)?
     }
 
-    async fn send_oz_transaction<T: Into<TypedTransaction> + Send + Sync>(
+    async fn send_oz_transaction<T: Into<TransactionRequest> + Send + Sync>(
         &self,
         tx: T,
     ) -> Result<String, Error> {
-        let tx: TypedTransaction = tx.into();
+        let tx: TransactionRequest = tx.into();
+        let to = tx
+            .to
+            .and_then(|to| to.to().copied())
+            .map(oz_api::data::transactions::NameOrAddress::from);
+        let gas = tx.gas.map(alloy::primitives::U256::from);
         let api_tx = SendBaseTransactionRequest {
-            to: tx.to(),
-            value: tx.value(),
-            gas_limit: tx.gas(),
-            data: tx.data(),
+            to: to.as_ref(),
+            value: tx.value.as_ref(),
+            gas_limit: gas.as_ref(),
+            data: tx.input.input(),
             valid_until: Some(chrono::Utc::now() + self.transaction_validity),
         };
 
@@ -133,12 +138,12 @@ impl OzRelay {
     /// take multiple seconds to restart.
     pub async fn send_transaction(
         &self,
-        mut tx: TypedTransaction,
+        mut tx: TransactionRequest,
         only_once: bool,
         _tx_id: Option<String>,
     ) -> Result<TransactionId, TxError> {
         if let Some(gas_limit) = self.gas_limit {
-            tx.set_gas(gas_limit);
+            tx.gas = Some(gas_limit);
         }
 
         if only_once {
@@ -152,7 +157,7 @@ impl OzRelay {
             let existing_transaction =
                 existing_transactions
                     .iter()
-                    .find(|el| match (&el.data, tx.data()) {
+                    .find(|el| match (&el.data, tx.input.input()) {
                         (Some(a), Some(b)) => a == b,
                         _ => false,
                     });
@@ -168,8 +173,8 @@ impl OzRelay {
             }
         }
 
-        info!(?tx, gas_limit=?tx.gas(), "Sending transaction.");
-        let bytes4: u32 = tx.data().map_or(0, |data| {
+        info!(?tx, gas_limit=?tx.gas, "Sending transaction.");
+        let bytes4: u32 = tx.input.input().map_or(0, |data| {
             let mut buffer = [0; 4];
             buffer.copy_from_slice(&data.as_ref()[..4]); // TODO: Don't panic.
             u32::from_be_bytes(buffer)
@@ -207,7 +212,7 @@ impl OzRelay {
 impl Inner for OzRelay {
     async fn send_transaction(
         &self,
-        tx: TypedTransaction,
+        tx: TransactionRequest,
         only_once: bool,
         tx_id: Option<String>,
     ) -> Result<TransactionId, TxError> {

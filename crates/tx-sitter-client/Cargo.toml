@@ -9,7 +9,7 @@ publish = false
 telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "aca13762368bcb7ac57c356e03a0586d20e89723" }
 
 anyhow = "1.0"
-ethers = { version = "2.0.10", features = [ ] }
+alloy = { workspace = true }
 reqwest = { version = "0.12.8", features = ["json"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.94"

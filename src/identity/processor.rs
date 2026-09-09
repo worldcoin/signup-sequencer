@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use alloy::primitives::Address;
+use alloy::providers::Provider;
+use alloy::rpc::types::{FilterSet, Log, Topic};
+use alloy::sol_types::SolEvent;
 use anyhow::anyhow;
 use async_trait::async_trait;
-use ethers::abi::RawLog;
-use ethers::addressbook::Address;
-use ethers::contract::EthEvent;
-use ethers::middleware::Middleware;
-use ethers::prelude::{Log, Topic, ValueOrArray};
 use tokio::sync::Notify;
 use tracing::{error, info, instrument};
 
@@ -110,7 +109,6 @@ impl IdentityProcessor for OnChainIdentityProcessor {
     async fn tree_init_correction(&self, initial_root_hash: &Hash) -> anyhow::Result<()> {
         // Prefetch latest root & mark it as mined
         let root_hash = self.identity_manager.latest_root().await?;
-        let root_hash = root_hash.into();
 
         // it's enough to run with read committed here
         // since in the worst case another instance of the sequencer
@@ -140,7 +138,7 @@ impl IdentityProcessor for OnChainIdentityProcessor {
     }
 
     async fn latest_root(&self) -> anyhow::Result<Option<Hash>> {
-        Ok(Some(self.identity_manager.latest_root().await?.into()))
+        Ok(Some(self.identity_manager.latest_root().await?))
     }
 }
 
@@ -157,7 +155,7 @@ impl OnChainIdentityProcessor {
 
         let mainnet_scanner = tokio::sync::Mutex::new(
             BlockScanner::new_latest(
-                mainnet_abi.client().clone(),
+                mainnet_abi.provider().clone(),
                 config.app.scanning_window_size,
             )
             .await?
@@ -168,7 +166,7 @@ impl OnChainIdentityProcessor {
             Self::init_secondary_scanners(secondary_abis, config.app.scanning_window_size).await?,
         );
 
-        let mainnet_address = mainnet_abi.address();
+        let mainnet_address = *mainnet_abi.address();
         Ok(Self {
             ethereum,
             config,
@@ -182,21 +180,20 @@ impl OnChainIdentityProcessor {
     }
 
     async fn init_secondary_scanners<T>(
-        providers: &[BridgedWorldId<T>],
+        providers: &[BridgedWorldId::BridgedWorldIdInstance<Arc<T>>],
         scanning_window_size: u64,
     ) -> anyhow::Result<HashMap<Address, BlockScanner<Arc<T>>>>
     where
-        T: Middleware,
-        <T as Middleware>::Error: 'static,
+        T: Provider,
     {
         let mut secondary_scanners = HashMap::new();
 
         for bridged_abi in providers {
             let scanner =
-                BlockScanner::new_latest(bridged_abi.client().clone(), scanning_window_size)
+                BlockScanner::new_latest(bridged_abi.provider().clone(), scanning_window_size)
                     .await?;
 
-            let address = bridged_abi.address();
+            let address = *bridged_abi.address();
 
             secondary_scanners.insert(address, scanner);
         }
@@ -219,9 +216,9 @@ impl OnChainIdentityProcessor {
         let proof = crate::prover::proof::prepare_insertion_proof(
             prover,
             start_index,
-            pre_root.into(),
+            pre_root,
             &batch.data.0.identities,
-            post_root.into(),
+            post_root,
         )
         .await?;
 
@@ -238,8 +235,8 @@ impl OnChainIdentityProcessor {
             .identity_manager
             .register_identities(
                 start_index,
-                pre_root.into(),
-                post_root.into(),
+                pre_root,
+                post_root,
                 batch.data.0.identities.clone(),
                 proof,
             )
@@ -274,10 +271,10 @@ impl OnChainIdentityProcessor {
         // We prepare the proof before reserving a slot in the pending identities
         let proof = crate::prover::proof::prepare_deletion_proof(
             prover,
-            pre_root.into(),
+            pre_root,
             deletion_indices.clone(),
             batch.data.0.identities.clone(),
-            post_root.into(),
+            post_root,
         )
         .await?;
 
@@ -289,12 +286,7 @@ impl OnChainIdentityProcessor {
         // identity manager and wait for that transaction to be mined.
         let transaction_id = self
             .identity_manager
-            .delete_identities(
-                proof,
-                packed_deletion_indices,
-                pre_root.into(),
-                post_root.into(),
-            )
+            .delete_identities(proof, packed_deletion_indices, pre_root, post_root)
             .await
             .map_err(|e| {
                 error!(?e, "Failed to insert identity to contract.");
@@ -328,18 +320,15 @@ impl OnChainIdentityProcessor {
         Ok(())
     }
 
-    async fn fetch_mainnet_logs(&self) -> anyhow::Result<Vec<Log>>
-    where
-        <ReadProvider as Middleware>::Error: 'static,
-    {
+    async fn fetch_mainnet_logs(&self) -> anyhow::Result<Vec<Log>> {
         let mainnet_topics = [
-            Some(Topic::from(TreeChangedFilter::signature())),
+            Some(Topic::from(TreeChangedFilter::SIGNATURE_HASH)),
             None,
             None,
             None,
         ];
 
-        let mainnet_address = Some(ValueOrArray::Value(self.mainnet_address));
+        let mainnet_address = Some(FilterSet::from(self.mainnet_address));
 
         let mut mainnet_scanner = self.mainnet_scanner.lock().await;
 
@@ -350,12 +339,9 @@ impl OnChainIdentityProcessor {
         Ok(mainnet_logs)
     }
 
-    async fn fetch_secondary_logs(&self) -> anyhow::Result<Vec<Hash>>
-    where
-        <ReadProvider as Middleware>::Error: 'static,
-    {
+    async fn fetch_secondary_logs(&self) -> anyhow::Result<Vec<Hash>> {
         let bridged_topics = [
-            Some(Topic::from(RootAddedFilter::signature())),
+            Some(Topic::from(RootAddedFilter::SIGNATURE_HASH)),
             None,
             None,
             None,
@@ -368,7 +354,7 @@ impl OnChainIdentityProcessor {
 
             for (address, scanner) in secondary_scanners.iter_mut() {
                 let logs = scanner
-                    .next(Some(ValueOrArray::Value(*address)), bridged_topics.clone())
+                    .next(Some(FilterSet::from(*address)), bridged_topics.clone())
                     .await?;
 
                 secondary_logs.extend(logs);
@@ -391,18 +377,14 @@ impl OnChainIdentityProcessor {
                 continue;
             };
 
-            let pre_root: Hash = event.pre_root.into();
-            let post_root: Hash = event.post_root.into();
+            let pre_root: Hash = event.preRoot;
+            let post_root: Hash = event.postRoot;
             let kind = TreeChangeKind::from(event.kind);
 
             info!(?pre_root, ?post_root, ?kind, "Mining batch");
 
             // Double check
-            if !self
-                .identity_manager
-                .is_root_mined(post_root.into())
-                .await?
-            {
+            if !self.identity_manager.is_root_mined(post_root).await? {
                 continue;
             }
 
@@ -445,7 +427,7 @@ impl OnChainIdentityProcessor {
             // Check if mined on all L2s
             if !self
                 .identity_manager
-                .is_root_mined_multi_chain(root.into())
+                .is_root_mined_multi_chain(root)
                 .await?
             {
                 continue;
@@ -482,26 +464,26 @@ impl OnChainIdentityProcessor {
                 continue;
             };
 
-            let post_root = event.post_root;
+            let post_root = event.postRoot;
 
-            roots.push(post_root.into());
+            roots.push(post_root);
         }
         roots
     }
 
     fn raw_log_to_tree_changed(log: &Log) -> Option<TreeChangedFilter> {
-        let raw_log = RawLog::from((log.topics.clone(), log.data.to_vec()));
-
-        TreeChangedFilter::decode_log(&raw_log).ok()
+        log.log_decode::<TreeChangedFilter>()
+            .ok()
+            .map(|log| log.inner.data)
     }
 
     fn extract_roots_from_secondary_logs(logs: &[Log]) -> Vec<Hash> {
         let mut roots = vec![];
 
         for log in logs {
-            let raw_log = RawLog::from((log.topics.clone(), log.data.to_vec()));
-            if let Ok(event) = RootAddedFilter::decode_log(&raw_log) {
-                roots.push(event.root.into());
+            if let Ok(log) = log.log_decode::<RootAddedFilter>() {
+                let event = log.inner.data;
+                roots.push(event.root);
             }
         }
 

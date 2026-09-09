@@ -1,4 +1,4 @@
-use ethers::types::U256;
+use alloy::primitives::U256;
 use serde::{Deserialize, Serialize};
 
 /// A representation of an identity insertion into the merkle tree as used for

@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use clap::Parser;
-use ethers::core::rand::{thread_rng, RngCore};
+use rand::{thread_rng, RngCore};
 use semaphore_rs::identity::Identity;
 use semaphore_rs::poseidon_tree::Proof;
 use semaphore_rs::Field;

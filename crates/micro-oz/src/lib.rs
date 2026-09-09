@@ -2,14 +2,13 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
 
+use alloy::providers::{DynProvider, Provider, ProviderBuilder};
+use alloy::rpc::types::TransactionRequest;
+use alloy::signers::local::PrivateKeySigner;
 use anyhow::Context;
 use chrono::Utc;
-use ethers::prelude::k256::ecdsa::SigningKey;
-use ethers::prelude::SignerMiddleware;
-use ethers::providers::{Http, Middleware, Provider};
-use ethers::signers::{LocalWallet, Signer};
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::{Eip1559TransactionRequest, U64};
+use k256::ecdsa::SigningKey;
+use oz_api::data::transactions::NameOrAddress;
 use oz_api::data::transactions::{RelayerTransactionBase, SendBaseTransactionRequestOwned, Status};
 use tokio::sync::{mpsc, Mutex};
 
@@ -19,7 +18,7 @@ const DEFAULT_GAS_LIMIT: u32 = 1_000_000;
 
 pub use self::server::{spawn, ServerHandle};
 
-type PinheadSigner = SignerMiddleware<Provider<Http>, LocalWallet>;
+type PinheadSigner = DynProvider;
 
 #[derive(Clone)]
 pub struct Pinhead {
@@ -27,6 +26,7 @@ pub struct Pinhead {
 }
 
 struct PinheadInner {
+    address: alloy::primitives::Address,
     signer: Arc<PinheadSigner>,
     is_running: AtomicBool,
     tx_id_counter: AtomicU64,
@@ -72,58 +72,55 @@ async fn runner_inner(inner: &Arc<PinheadInner>, tx_id: String) -> Result<(), an
         .expect("Missing tx")
         .clone();
 
-    let mut typed_tx = {
+    let typed_tx = {
         let tx_guard = tx.lock().await;
 
-        TypedTransaction::Eip1559(Eip1559TransactionRequest {
-            to: Some(tx_guard.to.clone()),
+        TransactionRequest {
+            to: Some(match &tx_guard.to {
+                NameOrAddress::Address(address) => (*address).into(),
+                NameOrAddress::Name(_) => {
+                    anyhow::bail!("The local relayer requires an address, not an ENS name")
+                }
+            }),
             value: tx_guard.value,
             gas: Some(tx_guard.gas_limit.into()),
-            data: tx_guard.data.clone(),
-            ..Eip1559TransactionRequest::default()
-        })
+            input: tx_guard.data.clone().unwrap_or_default().into(),
+            ..TransactionRequest::default()
+        }
     };
 
-    inner.signer.fill_transaction(&mut typed_tx, None).await?;
-
-    let pending_tx = inner.signer.send_transaction(typed_tx, None).await?;
+    let pending_tx = inner.signer.send_transaction(typed_tx).await?;
 
     {
         let mut tx_guard = tx.lock().await;
 
         tx_guard.status = Status::Pending;
-        tx_guard.hash = Some(pending_tx.tx_hash());
+        tx_guard.hash = Some(*pending_tx.tx_hash());
     }
 
     tracing::info!("Awaiting for receipt");
 
-    let receipt = pending_tx.await?;
+    let receipt = pending_tx.get_receipt().await?;
 
     let mut tx_guard = tx.lock().await;
 
-    if let Some(receipt) = receipt {
-        if let Some(U64([0])) = receipt.status {
-            tracing::error!("Receipt: {:?}", receipt);
-        } else {
-            tracing::info!("Receipt: {:?}", receipt);
-        }
-        tx_guard.status = Status::Mined;
+    tx_guard.status = if receipt.status() {
+        Status::Mined
     } else {
-        tracing::error!("Receipt not found");
-        tx_guard.status = Status::Failed;
-    }
+        Status::Failed
+    };
 
     Ok(())
 }
 
 impl Pinhead {
     pub async fn new(rpc_url: String, secret_key: SigningKey) -> anyhow::Result<Self> {
-        let provider = Provider::<Http>::try_from(rpc_url)?;
-
-        let chain_id = provider.get_chainid().await?.as_u64();
-        let wallet = LocalWallet::from(secret_key).with_chain_id(chain_id);
-
-        let signer = SignerMiddleware::new(provider, wallet);
+        let wallet = PrivateKeySigner::from(secret_key);
+        let address = wallet.address();
+        let signer = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect_http(rpc_url.parse()?)
+            .erased();
 
         let is_running = AtomicBool::new(true);
         let tx_id_counter = AtomicU64::new(0);
@@ -132,6 +129,7 @@ impl Pinhead {
         let (tx_sender, tx_receiver) = mpsc::channel(100);
 
         let inner = Arc::new(PinheadInner {
+            address,
             signer: Arc::new(signer),
             tx_id_counter,
             is_running,
@@ -158,7 +156,7 @@ impl Pinhead {
             value: tx_request.value,
             gas_limit: tx_request
                 .gas_limit
-                .map(|gas_limit| gas_limit.as_u32())
+                .map(|gas_limit| gas_limit.to::<u32>())
                 .unwrap_or(DEFAULT_GAS_LIMIT),
             data: tx_request.data,
             status: Status::Pending,

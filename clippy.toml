@@ -2,8 +2,8 @@
 # TODO: These lints don't seem to trigger, even on the example from documentation.
 await-holding-invalid-types = [
     # See <https://docs.rs/tracing/latest/tracing/span/struct.Span.html#in-asynchronous-code>
-    "tracing::trace::Entered",
-    "tracing::trace::EnteredSpan",
+    "tracing::span::Entered",
+    "tracing::span::EnteredSpan",
 ]
 
 # Workaround: Ban the constructor methods instead of `await-holding-invalid-types`.

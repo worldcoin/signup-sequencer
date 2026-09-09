@@ -27,7 +27,7 @@ async fn delete_padded_identity(offchain_mode_enabled: bool) -> anyhow::Result<(
     let deletion_batch_size: usize = 3;
 
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
-    let initial_root: U256 = ref_tree.root().into();
+    let initial_root: U256 = ref_tree.root();
 
     let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, deletion_prover_map, micro_oz) =
@@ -56,7 +56,7 @@ async fn delete_padded_identity(offchain_mode_enabled: bool) -> anyhow::Result<(
         .db_url(&db_url)
         .oz_api_url(&micro_oz.endpoint())
         .oz_address(micro_oz.address())
-        .identity_manager_address(mock_chain.identity_manager.address())
+        .identity_manager_address(*mock_chain.identity_manager.address())
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(mock_insertion_prover)

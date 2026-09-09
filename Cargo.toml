@@ -6,6 +6,7 @@ authors = [
     "Lucas Ege <lucas@worldcoin.org>",
 ]
 edition = "2021"
+rust-version = "1.97.1"
 homepage = "https://github.com/worldcoin/signup-sequencer"
 repository = "https://github.com/worldcoin/signup-sequencer"
 description = "A tool that processes WorldID signups on-chain."
@@ -17,6 +18,9 @@ build = "build.rs"
 
 [workspace]
 members = ["crates/*", "e2e_tests/scenarios"]
+
+[workspace.dependencies]
+alloy = { version = "2.4.2", features = ["json-rpc"] }
 
 [features]
 default = []
@@ -35,11 +39,12 @@ chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "aca13762368bcb7ac57c356e03a0586d20e89723" }
 config = "0.15"
-ethers = { version = "2.0.10", features = ["ws", "ipc", "openssl", "abigen"] }
-ethers-solc = "2.0.10"
+alloy = { workspace = true }
 eyre = "0.6"
 futures = "0.3"
+tower = "0.5"
 futures-util = { version = "^0.3" }
+rand = "0.8"
 hex = "0.4.3"
 hex-literal = "0.4.1"
 # Use AWS-LC instead of the RustCrypto RSA implementation (RUSTSEC-2023-0071).
@@ -54,7 +59,7 @@ oz-api = { path = "crates/oz-api" }
 prometheus = "0.14"
 reqwest = { version = "0.12.8", features = ["json"] }
 regex = { version = "1.11.1" }
-ruint = { version = "1.12.3", features = ["primitive-types", "sqlx"] }
+ruint = { version = "1.12.3", features = ["sqlx"] }
 semaphore-rs = { version = "0.6.0", features = [
     "depth_30",
 ] }
@@ -91,6 +96,9 @@ zeroize = "1.6.0"
 dotenvy = "0.15.0"
 
 [dev-dependencies]
+alloy = { workspace = true, features = ["node-bindings"] }
+foundry-compilers-artifacts = "0.21"
+k256 = "0.13"
 axum-test = "15.7.4"
 hex = "0.4.3"
 lazy_static = "1.4.0"

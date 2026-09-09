@@ -1,13 +1,13 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
+use alloy::primitives::Address;
 use anyhow::Context;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use ethers::prelude::k256::ecdsa::SigningKey;
-use ethers::types::Address;
+use k256::ecdsa::SigningKey;
 use oz_api::data::transactions::{RelayerTransactionBase, SendBaseTransactionRequestOwned, Status};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
@@ -80,7 +80,7 @@ pub struct ServerHandle {
 
 impl ServerHandle {
     pub fn address(&self) -> Address {
-        self.pinhead.inner.signer.address()
+        self.pinhead.inner.address
     }
 
     pub fn addr(&self) -> SocketAddr {

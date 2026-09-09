@@ -1,12 +1,12 @@
-#![allow(clippy::extra_unused_lifetimes)]
+use alloy::sol;
 
-use ethers::prelude::abigen;
+sol! {
+    #[sol(rpc)]
+    #[derive(Debug, serde::Serialize, serde::Deserialize)]
+    interface IWorldIDIdentityManager {
+        struct RootInfo { uint256 root; uint128 supersededTimestamp; bool isValid; }
+        function queryRoot(uint256 root) external view returns (RootInfo memory);
+    }
+}
 
-abigen!(
-    IWorldIDIdentityManager,
-    r#"[
-        struct RootInfo { uint256 root; uint128 supersededTimestamp; bool isValid }
-        function queryRoot(uint256 root) public view virtual returns (RootInfo memory)
-    ]"#,
-    event_derives(serde::Deserialize, serde::Serialize)
-);
+pub use IWorldIDIdentityManager::RootInfo;

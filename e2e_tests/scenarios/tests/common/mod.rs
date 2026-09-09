@@ -4,9 +4,9 @@
 
 use std::time::Duration;
 
+use alloy::primitives::U256;
+use alloy::providers::Provider;
 use anyhow::anyhow;
-use ethers::providers::Middleware;
-use ethers::types::U256;
 use reqwest::Client;
 use serde_json::Value;
 use signup_sequencer::identity_tree::ProcessedStatus::Mined;
@@ -153,13 +153,9 @@ pub async fn mined_inclusion_proof_with_retries(
                             return Ok(());
                         }
                     } else if let Some(root) = inclusion_proof_json.root {
-                        let (root, ..) = chain
-                            .identity_manager
-                            .query_root(root.into())
-                            .call()
-                            .await?;
+                        let root_info = chain.identity_manager.queryRoot(root).call().await?;
 
-                        if root != U256::zero() {
+                        if root_info.root != U256::ZERO {
                             return Ok(());
                         }
                     }

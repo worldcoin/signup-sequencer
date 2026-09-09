@@ -22,7 +22,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
     let batch_size: usize = 3;
 
     let mut ref_tree = PoseidonTree::new(DEFAULT_TREE_DEPTH, ruint::Uint::ZERO);
-    let initial_root: U256 = ref_tree.root().into();
+    let initial_root: U256 = ref_tree.root();
 
     let docker = Cli::default();
     let (mock_chain, db_container, insertion_prover_map, _, micro_oz) = spawn_deps(
@@ -50,7 +50,7 @@ async fn insert_identity_and_proofs(offchain_mode_enabled: bool) -> anyhow::Resu
         .db_url(&db_url)
         .oz_api_url(&micro_oz.endpoint())
         .oz_address(micro_oz.address())
-        .identity_manager_address(mock_chain.identity_manager.address())
+        .identity_manager_address(*mock_chain.identity_manager.address())
         .primary_network_provider(mock_chain.anvil.endpoint())
         .cache_file(temp_dir.path().join("testfile").to_str().unwrap())
         .add_prover(prover_mock)

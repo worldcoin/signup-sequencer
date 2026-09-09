@@ -180,9 +180,9 @@ mod test {
     use std::str::FromStr;
     use std::time::Duration;
 
+    use alloy::primitives::U256;
     use anyhow::Context;
     use chrono::Utc;
-    use ethers::types::U256;
     use postgres_docker_utils::DockerContainer;
     use ruint::Uint;
     use semaphore_rs::poseidon_tree::LazyPoseidonTree;
@@ -275,9 +275,7 @@ mod test {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
         let dec = "1234500000000000000";
-        let commit_hash: Hash = U256::from_dec_str(dec)
-            .expect("cant convert to u256")
-            .into();
+        let commit_hash: Hash = U256::from_str_radix(dec, 10).expect("cant convert to u256");
 
         db.insert_unprocessed_identity(commit_hash).await?;
 
@@ -332,11 +330,11 @@ mod test {
         let docker = Cli::default();
         let (db, _db_container) = setup_db(&docker).await?;
 
-        let zero: Hash = U256::zero().into();
+        let zero: Hash = U256::ZERO;
         let initial_root = LazyPoseidonTree::new(4, zero).root();
-        let zero_root: Hash = U256::from_dec_str("6789")?.into();
-        let root: Hash = U256::from_dec_str("54321")?.into();
-        let commitment: Hash = U256::from_dec_str("12345")?.into();
+        let zero_root: Hash = U256::from_str_radix("6789", 10)?;
+        let root: Hash = U256::from_str_radix("54321", 10)?;
+        let commitment: Hash = U256::from_str_radix("12345", 10)?;
 
         db.insert_pending_identity(0, &commitment, Some(Utc::now()), &root, &initial_root)
             .await?;
@@ -1050,12 +1048,7 @@ mod test {
         let (db, _db_container) = setup_db(&docker).await?;
         let identities: Vec<_> = mock_identities(10)
             .iter()
-            .map(|commitment| {
-                Identity::new(
-                    (*commitment).into(),
-                    mock_roots(10).iter().map(|root| (*root).into()).collect(),
-                )
-            })
+            .map(|commitment| Identity::new(*commitment, mock_roots(10).to_vec()))
             .collect();
         let roots = mock_roots(2);
 
@@ -1078,12 +1071,7 @@ mod test {
         let (db, _db_container) = setup_db(&docker).await?;
         let identities: Vec<_> = mock_identities(10)
             .iter()
-            .map(|commitment| {
-                Identity::new(
-                    (*commitment).into(),
-                    mock_roots(10).iter().map(|root| (*root).into()).collect(),
-                )
-            })
+            .map(|commitment| Identity::new(*commitment, mock_roots(10).to_vec()))
             .collect();
         let indexes = vec![0];
         let roots = mock_roots(2);
@@ -1122,12 +1110,7 @@ mod test {
         let (db, _db_container) = setup_db(&docker).await?;
         let identities: Vec<_> = mock_identities(10)
             .iter()
-            .map(|commitment| {
-                Identity::new(
-                    (*commitment).into(),
-                    mock_roots(10).iter().map(|root| (*root).into()).collect(),
-                )
-            })
+            .map(|commitment| Identity::new(*commitment, mock_roots(10).to_vec()))
             .collect();
         let indexes = vec![0];
         let roots = mock_roots(2);

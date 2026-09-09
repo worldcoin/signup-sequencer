@@ -1,7 +1,11 @@
+use alloy::network::Ethereum;
+use alloy::primitives::U256;
+use alloy::providers::{Provider, RootProvider};
+use alloy::rpc::client::RpcClient;
+use alloy::rpc::types::BlockNumberOrTag;
+use alloy::transports::http::Http;
 use anyhow::anyhow;
 use chrono::{Duration as ChronoDuration, Utc};
-use ethers::providers::{Http, Middleware, Provider};
-use ethers::types::{BlockId, BlockNumber, Chain, U256};
 use futures::try_join;
 use tracing::{error, info};
 use url::Url;
@@ -10,7 +14,7 @@ use self::rpc_logger::RpcLogger;
 
 pub mod rpc_logger;
 
-type InnerProvider = Provider<RpcLogger<Http>>;
+type InnerProvider = RootProvider;
 
 #[derive(Clone, Debug)]
 pub struct ReadProvider {
@@ -34,29 +38,26 @@ impl ReadProvider {
             );
             let transport = Http::new(url);
             let logger = RpcLogger::new(transport);
-            let provider = Provider::new(logger);
+            let provider: RootProvider = RootProvider::new(RpcClient::new(logger, false));
 
             // Fetch state of the chain.
             let (version, chain_id, latest_block) = try_join!(
-                provider.client_version(),
-                provider.get_chainid(),
-                provider.get_block(BlockId::Number(BlockNumber::Latest)),
+                async { provider.get_client_version().await },
+                async { provider.get_chain_id().await },
+                async { provider.get_block_by_number(BlockNumberOrTag::Latest).await },
             )?;
 
             // Identify chain.
-            let chain = Chain::try_from(chain_id)
-                .map_or_else(|_| "Unknown".to_string(), |chain| chain.to_string());
+            let chain = chain_id.to_string();
 
             // Log chain state.
             let latest_block = latest_block
                 .ok_or_else(|| anyhow!("Failed to get latest block from Ethereum provider"))?;
-            let block_hash = latest_block
-                .hash
-                .ok_or_else(|| anyhow!("Could not read latest block hash"))?;
-            let block_number = latest_block
-                .number
-                .ok_or_else(|| anyhow!("Could not read latest block number"))?;
-            let block_time = latest_block.time()?;
+            let block_hash = latest_block.header.hash;
+            let block_number = latest_block.header.number;
+            let block_time =
+                chrono::DateTime::from_timestamp(latest_block.header.timestamp.try_into()?, 0)
+                    .ok_or_else(|| anyhow!("Invalid block timestamp"))?;
             info!(%version, %chain_id, %chain, %block_number, ?block_hash, %block_time, "Connected to Ethereum provider");
 
             // Sanity check the block timestamp
@@ -77,17 +78,13 @@ impl ReadProvider {
 
         Ok(Self {
             inner: provider,
-            chain_id,
+            chain_id: U256::from(chain_id),
         })
     }
 }
 
-impl Middleware for ReadProvider {
-    type Error = <InnerProvider as Middleware>::Error;
-    type Inner = InnerProvider;
-    type Provider = <InnerProvider as Middleware>::Provider;
-
-    fn inner(&self) -> &Self::Inner {
-        &self.inner
+impl Provider<Ethereum> for ReadProvider {
+    fn root(&self) -> &RootProvider<Ethereum> {
+        self.inner.root()
     }
 }

@@ -38,9 +38,9 @@ version = "0.17.14"
 expression = "ISC AND MIT AND OpenSSL"
 license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 
-# Match world-id-protocol's explicitly accepted unmaintained-crate notices.
-# These are maintenance notices, not vulnerability exceptions. Do not add
-# vulnerability IDs here; upgrade or patch the affected dependency instead.
+# Match world-id-protocol's explicitly accepted advisories. Most are
+# unmaintained-crate notices. Add a vulnerability ID only when no safe upgrade
+# exists, and say why it is acceptable; otherwise upgrade or patch instead.
 [advisories]
 ignore = [
     { id = "RUSTSEC-2024-0388", reason = "Unmaintained derivative via Arkworks; same accepted maintenance notice as world-id-protocol." },
@@ -48,4 +48,5 @@ ignore = [
     { id = "RUSTSEC-2026-0441", reason = "Unmaintained pin-utils via AWS Smithy, futures-util and nix; same accepted maintenance notice as world-id-protocol." },
     { id = "RUSTSEC-2026-0542", reason = "Unmaintained humantime, used directly and via humantime-serde; same accepted maintenance notice as world-id-protocol." },
     { id = "RUSTSEC-2026-0543", reason = "Unmaintained chrono via sqlx, cognito_srp, oz-api and telemetry-batteries; same accepted maintenance notice as world-id-protocol." },
+    { id = "RUSTSEC-2026-0387", reason = "Non-constant-time ops in crypto-bigint 0.5 via alloy's k256 0.13; fixed only in >=0.7.6, no safe upgrade. The only secp256k1 signing here is the micro-oz test mock. Same exception as world-id-protocol." },
 ]

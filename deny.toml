@@ -45,4 +45,7 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 ignore = [
     { id = "RUSTSEC-2024-0388", reason = "Unmaintained derivative via Arkworks; same accepted maintenance notice as world-id-protocol." },
     { id = "RUSTSEC-2024-0436", reason = "Unmaintained paste via Alloy/telemetry; same accepted maintenance notice as world-id-protocol." },
+    { id = "RUSTSEC-2026-0441", reason = "Unmaintained pin-utils via AWS Smithy, futures-util and nix; same accepted maintenance notice as world-id-protocol." },
+    { id = "RUSTSEC-2026-0542", reason = "Unmaintained humantime, used directly and via humantime-serde; same accepted maintenance notice as world-id-protocol." },
+    { id = "RUSTSEC-2026-0543", reason = "Unmaintained chrono via sqlx, cognito_srp, oz-api and telemetry-batteries; same accepted maintenance notice as world-id-protocol." },
 ]
